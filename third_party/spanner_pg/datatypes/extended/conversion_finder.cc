@@ -34,11 +34,11 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/cast.h"
-#include "zetasql/public/function.h"
-#include "zetasql/public/types/type.h"
-#include "zetasql/public/types/type_factory.h"
-#include "zetasql/base/no_destructor.h"
+#include "googlesql/public/cast.h"
+#include "googlesql/public/function.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/public/types/type_factory.h"
+#include "googlesql/base/no_destructor.h"
 #include "absl/container/flat_hash_set.h"
 #include "third_party/spanner_pg/datatypes/extended/conversion_functions.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_conversion_functions.h"
@@ -51,24 +51,24 @@
 namespace postgres_translator::spangres {
 namespace datatypes {
 
-using ::zetasql::CastFunctionProperty;
-using ::zetasql::CastFunctionType;
-using ::zetasql::Catalog;
+using ::googlesql::CastFunctionProperty;
+using ::googlesql::CastFunctionType;
+using ::googlesql::Catalog;
 
-const zetasql::Type* gsql_bool = zetasql::types::BoolType();
-const zetasql::Type* gsql_float = zetasql::types::FloatType();
-const zetasql::Type* gsql_double = zetasql::types::DoubleType();
-const zetasql::Type* gsql_int64 = zetasql::types::Int64Type();
-const zetasql::Type* gsql_string = zetasql::types::StringType();
+const googlesql::Type* gsql_bool = googlesql::types::BoolType();
+const googlesql::Type* gsql_float = googlesql::types::FloatType();
+const googlesql::Type* gsql_double = googlesql::types::DoubleType();
+const googlesql::Type* gsql_int64 = googlesql::types::Int64Type();
+const googlesql::Type* gsql_string = googlesql::types::StringType();
 
 class ConversionInfo {
  public:
   ConversionInfo(CastFunctionProperty cast_property,
-                 const zetasql::Function* cast_function)
+                 const googlesql::Function* cast_function)
       : cast_property_(cast_property), cast_function_(cast_function) {}
 
   bool ConversionOptionsMatch(
-      const zetasql::Catalog::FindConversionOptions& options) const {
+      const googlesql::Catalog::FindConversionOptions& options) const {
     switch (cast_property_.type) {
       case CastFunctionType::IMPLICIT:
         return true;
@@ -94,26 +94,26 @@ class ConversionInfo {
 
   const CastFunctionProperty& GetCastProperty() const { return cast_property_; }
 
-  const zetasql::Function* GetCastFunction() const { return cast_function_; }
+  const googlesql::Function* GetCastFunction() const { return cast_function_; }
 
  private:
   const CastFunctionProperty cast_property_;
-  const zetasql::Function* cast_function_;
+  const googlesql::Function* cast_function_;
 };
 
 using ConversionPair =
-    std::pair<const zetasql::Type*, const zetasql::Type*>;
+    std::pair<const googlesql::Type*, const googlesql::Type*>;
 using ConversionMap = absl::flat_hash_map<ConversionPair, const ConversionInfo>;
 
 static const ConversionMap& GetConversionMap() {
-  static const zetasql::Type* gsql_pg_numeric =
+  static const googlesql::Type* gsql_pg_numeric =
       spangres::datatypes::GetPgNumericType();
-  static const zetasql::Type* gsql_pg_jsonb =
+  static const googlesql::Type* gsql_pg_jsonb =
       spangres::datatypes::GetPgJsonbType();
-  static const zetasql::Type* gsql_pg_oid =
+  static const googlesql::Type* gsql_pg_oid =
       spangres::datatypes::GetPgOidType();
 
-  static const zetasql_base::NoDestructor<ConversionMap> kConversionMap(
+  static const googlesql_base::NoDestructor<ConversionMap> kConversionMap(
       {// PG.NUMERIC -> PG.NUMERIC conversion (fixed-precision cast)
        {{gsql_pg_numeric, gsql_pg_numeric},
         {CastFunctionProperty(CastFunctionType::EXPLICIT, /*coercion_cost=*/0),
@@ -186,21 +186,21 @@ static const ConversionMap& GetConversionMap() {
   return *kConversionMap;
 }
 
-absl::StatusOr<zetasql::Conversion> FindExtendedTypeConversion(
-    const zetasql::Type* from, const zetasql::Type* to,
-    const zetasql::Catalog::FindConversionOptions& options) {
+absl::StatusOr<googlesql::Conversion> FindExtendedTypeConversion(
+    const googlesql::Type* from, const googlesql::Type* to,
+    const googlesql::Catalog::FindConversionOptions& options) {
   const ConversionMap& conversion_map = GetConversionMap();
   auto conversion_info = conversion_map.find(ConversionPair(from, to));
 
   if (conversion_info == conversion_map.end() ||
       !conversion_info->second.ConversionOptionsMatch(options)) {
-    return zetasql_base::NotFoundErrorBuilder()
+    return googlesql_base::NotFoundErrorBuilder()
            << (options.is_explicit() ? "Cast" : "Coercion") << " from type "
            << from->DebugString() << " to type " << to->DebugString()
            << " not found in catalog.";
   }
 
-  return zetasql::Conversion::Create(
+  return googlesql::Conversion::Create(
       from, to, conversion_info->second.GetCastFunction(),
       conversion_info->second.GetCastProperty());
 }

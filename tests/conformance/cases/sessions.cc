@@ -20,14 +20,19 @@
 
 #include "google/protobuf/empty.pb.h"
 #include "google/protobuf/timestamp.pb.h"
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/container/btree_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
 #include "tests/conformance/common/database_test_base.h"
+#include "grpcpp/client_context.h"
 
 namespace google {
 namespace spanner {
@@ -36,21 +41,26 @@ namespace test {
 
 namespace {
 
-using zetasql_base::testing::IsOkAndHolds;
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::IsOkAndHolds;
+using googlesql_base::testing::StatusIs;
 
 static constexpr int kMaxBatchCreateSessionsCount = 100;
 
 // Tests APIs for session management. Uses low-level API stubs for session
 // creation/management because these APIs are not exposed by the
 // google::spanner::Client used by the test base class.
-class SessionsTest : public DatabaseTest {
+class SessionsTest
+    : public DatabaseTest,
+      public testing::WithParamInterface<database_api::DatabaseDialect> {
+ public:
+  void SetUp() override {
+    dialect_ = GetParam();
+    DatabaseTest::SetUp();
+  }
+
  public:
   absl::Status SetUpDatabase() override {
-    return SetSchema({R"(
-      CREATE TABLE TestTable()
-      PRIMARY KEY()
-    )"});
+    return SetSchemaFromFile("sessions.test");
   }
 
   // Creates a new session with the given database URI.
@@ -67,7 +77,7 @@ class SessionsTest : public DatabaseTest {
       }
     }
     spanner_api::Session response;
-    ZETASQL_RETURN_IF_ERROR(raw_client()->CreateSession(&context, request, &response));
+    GOOGLESQL_RETURN_IF_ERROR(raw_client()->CreateSession(&context, request, &response));
     return response;
   }
 
@@ -84,7 +94,7 @@ class SessionsTest : public DatabaseTest {
     spanner_api::GetSessionRequest request;
     request.set_name(std::string(session_name));  // NOLINT
     spanner_api::Session response;
-    ZETASQL_RETURN_IF_ERROR(raw_client()->GetSession(&context, request, &response));
+    GOOGLESQL_RETURN_IF_ERROR(raw_client()->GetSession(&context, request, &response));
     return response.approximate_last_use_time();
   }
 
@@ -102,7 +112,7 @@ class SessionsTest : public DatabaseTest {
       request.set_page_token(*page_token);
     }
     grpc::ClientContext context;
-    ZETASQL_RETURN_IF_ERROR(raw_client()->ListSessions(&context, request, &response));
+    GOOGLESQL_RETURN_IF_ERROR(raw_client()->ListSessions(&context, request, &response));
     for (const auto& session : response.sessions()) {
       sessions.push_back(session);
     }
@@ -118,7 +128,7 @@ class SessionsTest : public DatabaseTest {
     spanner_api::GetSessionRequest request;
     request.set_name(std::string(session_name));  // NOLINT
     spanner_api::Session response;
-    ZETASQL_RETURN_IF_ERROR(raw_client()->GetSession(&context, request, &response));
+    GOOGLESQL_RETURN_IF_ERROR(raw_client()->GetSession(&context, request, &response));
     return response.name();
   }
 
@@ -128,7 +138,7 @@ class SessionsTest : public DatabaseTest {
     spanner_api::DeleteSessionRequest request;
     request.set_name(std::string(session_name));  // NOLINT
     google::protobuf::Empty response;
-    ZETASQL_RETURN_IF_ERROR(raw_client()->DeleteSession(&context, request, &response));
+    GOOGLESQL_RETURN_IF_ERROR(raw_client()->DeleteSession(&context, request, &response));
     return absl::OkStatus();
   }
 
@@ -141,7 +151,7 @@ class SessionsTest : public DatabaseTest {
     request.set_database(uri);
     request.set_session_count(num_sessions);
     v1::BatchCreateSessionsResponse response;
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         raw_client()->BatchCreateSessions(&context, request, &response));
     for (const auto& session : *response.mutable_session()) {
       sessions.push_back(session.name());
@@ -150,16 +160,24 @@ class SessionsTest : public DatabaseTest {
   }
 };
 
-TEST_F(SessionsTest, CreateSession) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
+INSTANTIATE_TEST_SUITE_P(
+    PerDialectSessionsTest, SessionsTest,
+    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
+                    database_api::DatabaseDialect::POSTGRESQL),
+    [](const testing::TestParamInfo<SessionsTest::ParamType>& info) {
+      return database_api::DatabaseDialect_Name(info.param);
+    });
+
+TEST_P(SessionsTest, CreateSession) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
   EXPECT_THAT(session.name(), testing::HasSubstr(absl::StrCat(
                                   database()->FullName(), "/sessions/")));
   EXPECT_TRUE(session.has_create_time());
   EXPECT_TRUE(session.has_approximate_last_use_time());
 }
 
-TEST_F(SessionsTest, CreateSessionWithLabel) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto session,
+TEST_P(SessionsTest, CreateSessionWithLabel) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto session,
                        CreateSession({{"test_key", "test_value"}}));
   EXPECT_THAT(session.name(), testing::HasSubstr(absl::StrCat(
                                   database()->FullName(), "/sessions/")));
@@ -169,7 +187,7 @@ TEST_F(SessionsTest, CreateSessionWithLabel) {
   EXPECT_TRUE(session.has_approximate_last_use_time());
 }
 
-TEST_F(SessionsTest, ListSessionsWithNonExistentInstanceReturnsNotFound) {
+TEST_P(SessionsTest, ListSessionsWithNonExistentInstanceReturnsNotFound) {
   // This returns "Instance not found" instead of "Database not found".
   std::string page_token;
   auto status = ListSessionsPage(
@@ -178,7 +196,7 @@ TEST_F(SessionsTest, ListSessionsWithNonExistentInstanceReturnsNotFound) {
   EXPECT_THAT(status, StatusIs(absl::StatusCode::kNotFound));
 }
 
-TEST_F(SessionsTest,
+TEST_P(SessionsTest,
        BatchCreatesSessionWithNonExistentInstanceReturnsNotFound) {
   // This returns "Instance not found" instead of "Database not found".
   auto status = BatchCreateSessions(
@@ -187,61 +205,61 @@ TEST_F(SessionsTest,
   EXPECT_THAT(status, StatusIs(absl::StatusCode::kNotFound));
 }
 
-TEST_F(SessionsTest, CreatesSessionWithNonExistentInstanceReturnsNotFound) {
+TEST_P(SessionsTest, CreatesSessionWithNonExistentInstanceReturnsNotFound) {
   EXPECT_THAT(CreateSession("projects/test-project/instances/fake-instance/"
                             "databases/test-database"),
               StatusIs(absl::StatusCode::kNotFound));
 }
 
-TEST_F(SessionsTest, CreatesSessionWithNonExistentDatabaseReturnsNotFound) {
+TEST_P(SessionsTest, CreatesSessionWithNonExistentDatabaseReturnsNotFound) {
   EXPECT_THAT(CreateSession("projects/test-project/instances/test-instance/"
                             "databases/doesnotexist"),
               StatusIs(absl::StatusCode::kNotFound));
 }
 
-TEST_F(SessionsTest,
+TEST_P(SessionsTest,
        CreatesSessionWithInvalidDatabaseUriReturnsInvalidArgument) {
   EXPECT_THAT(CreateSession("database/test-database"),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-TEST_F(SessionsTest, GetSession) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
+TEST_P(SessionsTest, GetSession) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
   EXPECT_THAT(GetSession(session.name()), IsOkAndHolds(session.name()));
 }
 
-TEST_F(SessionsTest, GetSessionWithInvalidSessionUriReturnsInvalidArgument) {
+TEST_P(SessionsTest, GetSessionWithInvalidSessionUriReturnsInvalidArgument) {
   EXPECT_THAT(GetSession(/*session_name=*/""),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-TEST_F(SessionsTest, DeleteSession) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
-  ZETASQL_EXPECT_OK(DeleteSession(session.name()));
+TEST_P(SessionsTest, DeleteSession) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
+  GOOGLESQL_EXPECT_OK(DeleteSession(session.name()));
 }
 
-TEST_F(SessionsTest, DeleteSessionWithInvalidSessionUriReturnsInvalidArgument) {
+TEST_P(SessionsTest, DeleteSessionWithInvalidSessionUriReturnsInvalidArgument) {
   EXPECT_THAT(DeleteSession(/*session_name=*/""),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-TEST_F(SessionsTest, DeleteSessionAndGetSessionReturnsNotFound) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
-  ZETASQL_EXPECT_OK(DeleteSession(session.name()));
+TEST_P(SessionsTest, DeleteSessionAndGetSessionReturnsNotFound) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
+  GOOGLESQL_EXPECT_OK(DeleteSession(session.name()));
   EXPECT_THAT(GetSession(session.name()),
               StatusIs(absl::StatusCode::kNotFound));
 }
 
-TEST_F(SessionsTest, CanDeleteDeletedSession) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
-  ZETASQL_EXPECT_OK(DeleteSession(session.name()));
-  ZETASQL_EXPECT_OK(DeleteSession(session.name()));
+TEST_P(SessionsTest, CanDeleteDeletedSession) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
+  GOOGLESQL_EXPECT_OK(DeleteSession(session.name()));
+  GOOGLESQL_EXPECT_OK(DeleteSession(session.name()));
 }
 
-TEST_F(SessionsTest, LastUseTimeIncreases) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto t1, GetSessionLastUseTimestamp(session.name()));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto t2, GetSessionLastUseTimestamp(session.name()));
+TEST_P(SessionsTest, LastUseTimeIncreases) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto t1, GetSessionLastUseTimestamp(session.name()));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto t2, GetSessionLastUseTimestamp(session.name()));
   auto less_equal = [](google::protobuf::Timestamp& t1,
                        google::protobuf::Timestamp& t2) {
     if (t1.seconds() < t2.seconds()) {
@@ -255,18 +273,18 @@ TEST_F(SessionsTest, LastUseTimeIncreases) {
   EXPECT_TRUE(less_equal(t1, t2));
 }
 
-TEST_F(SessionsTest, ListSessionsWithPageSize) {
+TEST_P(SessionsTest, ListSessionsWithPageSize) {
   std::vector<std::string> expected;
   expected.reserve(10);
   for (int i = 0; i < 10; ++i) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
     expected.emplace_back(session.name());
   }
 
   std::vector<std::string> actual;
   std::string page_token;
   for (int page_size = 1;; ++page_size) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         auto sessions_list,
         ListSessionsPage(database()->FullName(), page_size, &page_token));
     for (auto& session : sessions_list) {
@@ -281,17 +299,17 @@ TEST_F(SessionsTest, ListSessionsWithPageSize) {
   EXPECT_THAT(actual, testing::IsSupersetOf(expected));
 }
 
-TEST_F(SessionsTest, ListAllSessions) {
+TEST_P(SessionsTest, ListAllSessions) {
   std::vector<std::string> expected;
   expected.reserve(5);
   for (int i = 0; i < 5; ++i) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession());
     expected.emplace_back(session.name());
   }
 
   // Setting page size to -1 returns all sessions.
   std::string page_token;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto sessions_list,
       ListSessionsPage(database()->FullName(), /*page_size=*/-1, &page_token));
   std::vector<std::string> actual;
@@ -304,11 +322,11 @@ TEST_F(SessionsTest, ListAllSessions) {
   EXPECT_THAT(actual, testing::IsSupersetOf(expected));
 }
 
-TEST_F(SessionsTest, ListSessionsWithLabels) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession({{"abc", "def"}}));
+TEST_P(SessionsTest, ListSessionsWithLabels) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto session, CreateSession({{"abc", "def"}}));
 
   std::string page_token;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto sessions_list,
       ListSessionsPage(database()->FullName(), /*page_size=*/-1, &page_token));
   EXPECT_THAT(sessions_list,
@@ -317,8 +335,8 @@ TEST_F(SessionsTest, ListSessionsWithLabels) {
                   testing::UnorderedElementsAre(testing::Pair("abc", "def")))));
 }
 
-TEST_F(SessionsTest, BatchCreateSessionReturnsMultipleSessions) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+TEST_P(SessionsTest, BatchCreateSessionReturnsMultipleSessions) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto sessions,
       BatchCreateSessions(database()->FullName(), /*num_sessions=*/10));
   // Check that we have the right number.
@@ -332,13 +350,13 @@ TEST_F(SessionsTest, BatchCreateSessionReturnsMultipleSessions) {
   EXPECT_EQ(10, session_uris.size());
 }
 
-TEST_F(SessionsTest, BatchCreateSessionsReturnsErrorsOnInvalidArg) {
+TEST_P(SessionsTest, BatchCreateSessionsReturnsErrorsOnInvalidArg) {
   EXPECT_THAT(BatchCreateSessions(database()->FullName(), /*num_sessions=*/-1),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-TEST_F(SessionsTest, BatchCreateSessionSilentlyTruncatesRequestCount) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+TEST_P(SessionsTest, BatchCreateSessionSilentlyTruncatesRequestCount) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto sessions,
       BatchCreateSessions(database()->FullName(),
                           /*num_sessions=*/kMaxBatchCreateSessionsCount * 3));

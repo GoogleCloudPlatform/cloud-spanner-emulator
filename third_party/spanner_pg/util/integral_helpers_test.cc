@@ -35,13 +35,13 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 
 namespace {
 
 using testing::Eq;
 using testing::StrEq;
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 constexpr int32_t kInt32Min = std::numeric_limits<int32_t>::min();
 constexpr int64_t kInt64Min = std::numeric_limits<int64_t>::min();
@@ -52,16 +52,16 @@ constexpr int64_t kInt64Max = std::numeric_limits<int64_t>::max();
 TEST(SafeAddTest, ReturnsSumWhenThereIsNoOverflow) {
   int32_t result;
 
-  ZETASQL_EXPECT_OK(SafeAdd(-1, 1, &result));
+  GOOGLESQL_EXPECT_OK(SafeAdd(-1, 1, &result));
   EXPECT_THAT(result, Eq(0));
 
-  ZETASQL_EXPECT_OK(SafeAdd(kInt32Min, 0, &result));
+  GOOGLESQL_EXPECT_OK(SafeAdd(kInt32Min, 0, &result));
   EXPECT_THAT(result, Eq(kInt32Min));
 
-  ZETASQL_EXPECT_OK(SafeAdd(kInt32Max, 0, &result));
+  GOOGLESQL_EXPECT_OK(SafeAdd(kInt32Max, 0, &result));
   EXPECT_THAT(result, Eq(kInt32Max));
 
-  ZETASQL_EXPECT_OK(SafeAdd(kInt32Max - 1, 1, &result));
+  GOOGLESQL_EXPECT_OK(SafeAdd(kInt32Max - 1, 1, &result));
   EXPECT_THAT(result, Eq(kInt32Max));
 }
 
@@ -90,16 +90,16 @@ TEST(SafeAddTest, ReturnsErroWhenSumOverflows) {
 TEST(SafeSubtract, ReturnsSubtractionWhenThereIsNoUnderflow) {
   int32_t result;
 
-  ZETASQL_EXPECT_OK(SafeSubtract(1, 1, &result));
+  GOOGLESQL_EXPECT_OK(SafeSubtract(1, 1, &result));
   EXPECT_THAT(result, Eq(0));
 
-  ZETASQL_EXPECT_OK(SafeSubtract(kInt32Max, 0, &result));
+  GOOGLESQL_EXPECT_OK(SafeSubtract(kInt32Max, 0, &result));
   EXPECT_THAT(result, Eq(kInt32Max));
 
-  ZETASQL_EXPECT_OK(SafeSubtract(kInt32Min, 0, &result));
+  GOOGLESQL_EXPECT_OK(SafeSubtract(kInt32Min, 0, &result));
   EXPECT_THAT(result, Eq(kInt32Min));
 
-  ZETASQL_EXPECT_OK(SafeSubtract(static_cast<int64_t>(kInt32Min) + 1, 1, &result));
+  GOOGLESQL_EXPECT_OK(SafeSubtract(static_cast<int64_t>(kInt32Min) + 1, 1, &result));
   EXPECT_THAT(result, Eq(kInt32Min));
 }
 

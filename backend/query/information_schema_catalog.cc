@@ -26,10 +26,10 @@
 #include <vector>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/types/type.h"
-#include "zetasql/public/value.h"
-#include "zetasql/base/no_destructor.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/public/value.h"
+#include "googlesql/base/no_destructor.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/log/check.h"
@@ -68,18 +68,18 @@ namespace backend {
 namespace {
 
 using ::google::spanner::admin::database::v1::DatabaseDialect;
-using ::zetasql::Value;
-using ::zetasql::types::BoolType;
-using ::zetasql::types::Int64Type;
-using ::zetasql::types::StringType;
-using ::zetasql::values::Bool;
-using ::zetasql::values::Int64;
-using ::zetasql::values::Json;
-using zetasql::values::NullBytes;
-using ::zetasql::values::NullInt64;
-using ::zetasql::values::NullString;
-using ::zetasql::values::String;
-using ::zetasql::values::Timestamp;
+using ::googlesql::Value;
+using ::googlesql::types::BoolType;
+using ::googlesql::types::Int64Type;
+using ::googlesql::types::StringType;
+using ::googlesql::values::Bool;
+using ::googlesql::values::Int64;
+using ::googlesql::values::Json;
+using googlesql::values::NullBytes;
+using ::googlesql::values::NullInt64;
+using ::googlesql::values::NullString;
+using ::googlesql::values::String;
+using ::googlesql::values::Timestamp;
 
 static constexpr char kInformationSchema[] = "INFORMATION_SCHEMA";
 static constexpr char kCatalogName[] = "CATALOG_NAME";
@@ -96,6 +96,7 @@ static constexpr char kSpannerType[] = "SPANNER_TYPE";
 static constexpr char kIsGenerated[] = "IS_GENERATED";
 static constexpr char kIsStored[] = "IS_STORED";
 static constexpr char kGenerationExpression[] = "GENERATION_EXPRESSION";
+static constexpr char kOnUpdateExpression[] = "ON_UPDATE_EXPRESSION";
 static constexpr char kIsIdentity[] = "IS_IDENTITY";
 static constexpr char kIdentityGeneration[] = "IDENTITY_GENERATION";
 static constexpr char kIdentityKind[] = "IDENTITY_KIND";
@@ -225,7 +226,7 @@ static int kBigintNumericPrecision = 64;
 static int kBinaryRepresentedNumericPrecisionRadix = 2;
 static int kDecimalRepresentedNumericPrecisionRadix = 10;
 
-static const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
+static const googlesql_base::NoDestructor<absl::flat_hash_set<std::string>>
     // For now, this is a set of tables that are created from metadata. Once the
     // migration to auto-create tables is complete, it'll be the tables from
     // https://cloud.google.com/spanner/docs/information-schema.
@@ -260,7 +261,7 @@ static const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
         kPropertyGraphs,
     }};
 
-static const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
+static const googlesql_base::NoDestructor<absl::flat_hash_set<std::string>>
     // For now, this is a set of tables that are created from metadata. Once the
     // migration to auto-create tables is complete, it'll be the tables from
     // https://cloud.google.com/spanner/docs/information-schema-pg.
@@ -290,13 +291,13 @@ static const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
         absl::AsciiStrToLower(kViews),
     }};
 
-static const zetasql_base::NoDestructor<
-    absl::flat_hash_map<zetasql::TypeKind, zetasql::Value>>
+static const googlesql_base::NoDestructor<
+    absl::flat_hash_map<googlesql::TypeKind, googlesql::Value>>
     kGSQLTypeKindToDefaultValue{{
-        {zetasql::TypeKind::TYPE_STRING, String("")},
-        {zetasql::TypeKind::TYPE_INT64, Int64(0)},
-        {zetasql::TypeKind::TYPE_BOOL, Bool(false)},
-        {zetasql::TypeKind::TYPE_TIMESTAMP, Timestamp(absl::UnixEpoch())},
+        {googlesql::TypeKind::TYPE_STRING, String("")},
+        {googlesql::TypeKind::TYPE_INT64, Int64(0)},
+        {googlesql::TypeKind::TYPE_BOOL, Bool(false)},
+        {googlesql::TypeKind::TYPE_TIMESTAMP, Timestamp(absl::UnixEpoch())},
     }};
 
 bool IsNullable(const ColumnsMetaEntry& column) {
@@ -320,8 +321,8 @@ typename std::vector<T>::const_iterator FindMetadata(
 // Returns a reference to an information schema column's metadata. The column's
 // metadata must exist; otherwise, the process crashes with a fatal message.
 const ColumnsMetaEntry& GetColumnMetadata(const DatabaseDialect& dialect,
-                                          const zetasql::Table* table,
-                                          const zetasql::Column* column) {
+                                          const googlesql::Table* table,
+                                          const googlesql::Column* column) {
   std::string error = "Missing metadata for column ";
   if (dialect == DatabaseDialect::POSTGRESQL) {
     std::string table_name = absl::AsciiStrToLower(table->Name());
@@ -343,8 +344,8 @@ const ColumnsMetaEntry& GetColumnMetadata(const DatabaseDialect& dialect,
 // Returns a pointer to an information schema key column's metadata. Returns
 // nullptr if not found.
 const IndexColumnsMetaEntry* FindKeyColumnMetadata(
-    const DatabaseDialect& dialect, const zetasql::Table* table,
-    const zetasql::Column* column) {
+    const DatabaseDialect& dialect, const googlesql::Table* table,
+    const googlesql::Column* column) {
   if (dialect == DatabaseDialect::POSTGRESQL) {
     auto m = FindMetadata(PGIndexColumnsMetadata(),
                           absl::AsciiStrToLower(table->Name()),
@@ -398,13 +399,13 @@ std::string ForeignKeyReferencedIndexName(const ForeignKey* foreign_key) {
 // this function will return the following key-value pairs:
 //
 // {
-//   {"user_id", zetasql::values::Int64(0)},
-//   {"name", zetasql::values::String("")},
-//   {"verified", zetasql::values::Bool(false)},
+//   {"user_id", googlesql::values::Int64(0)},
+//   {"name", googlesql::values::String("")},
+//   {"verified", googlesql::values::Bool(false)},
 // }
-absl::flat_hash_map<std::string, zetasql::Value> GetColumnsWithDefault(
-    const zetasql::Table* table) {
-  absl::flat_hash_map<std::string, zetasql::Value> row;
+absl::flat_hash_map<std::string, googlesql::Value> GetColumnsWithDefault(
+    const googlesql::Table* table) {
+  absl::flat_hash_map<std::string, googlesql::Value> row;
   for (int i = 0; i < table->NumColumns(); ++i) {
     auto column = table->GetColumn(i);
     row[column->Name()] =
@@ -413,7 +414,7 @@ absl::flat_hash_map<std::string, zetasql::Value> GetColumnsWithDefault(
   return row;
 }
 
-// Returns a row to be inserted into a zetasql::SimpleTable that's constructed
+// Returns a row to be inserted into a googlesql::SimpleTable that's constructed
 // using the given specific key-value pairs. If a specific value for a column is
 // not provided, the default value for that type is assigned.
 //
@@ -428,16 +429,16 @@ absl::flat_hash_map<std::string, zetasql::Value> GetColumnsWithDefault(
 // and the following key-value pairs of specific values for certain columns:
 //
 // {
-//   {"USER_ID", zetasql::values::Int64(1234)},
-//   {"NAME", zetasql::values::String("Spanner User")},
+//   {"USER_ID", googlesql::values::Int64(1234)},
+//   {"NAME", googlesql::values::String("Spanner User")},
 // }
 //
 // this function will return the following row of values:
 //
 // {
-//   zetasql::values::Int64(1234),
-//   zetasql::values::String("Spanner User"),
-//   zetasql::values::Bool(false),
+//   googlesql::values::Int64(1234),
+//   googlesql::values::String("Spanner User"),
+//   googlesql::values::Bool(false),
 // }
 //
 // where the first two values are taken from row_kvs and the last value is a
@@ -450,7 +451,7 @@ absl::flat_hash_map<std::string, zetasql::Value> GetColumnsWithDefault(
 // Also note that whenever possible, populate the rows of a table as follows for
 // improved readability:
 //
-// std::vector<std::vector<zetasql::Value>> rows;
+// std::vector<std::vector<googlesql::Value>> rows;
 // for (const Table* table : default_schema_->tables()) {
 //   rows.push_back({
 //       // table_catalog
@@ -462,22 +463,22 @@ absl::flat_hash_map<std::string, zetasql::Value> GetColumnsWithDefault(
 //   });
 // }
 //
-// Only use this function when a table definition for the ZetaSQL dialect
+// Only use this function when a table definition for the GoogleSQL dialect
 // differs from the PostgreSQL dialect where some of the columns values are
 // shared between the two dialects and others are not. See FillTablesTable() for
 // an example.
-std::vector<zetasql::Value> GetRowFromRowKVs(
-    const zetasql::Table* table,
-    const absl::flat_hash_map<std::string, zetasql::Value>& row_kvs) {
+std::vector<googlesql::Value> GetRowFromRowKVs(
+    const googlesql::Table* table,
+    const absl::flat_hash_map<std::string, googlesql::Value>& row_kvs) {
   auto default_row_kvs = GetColumnsWithDefault(table);
-  std::vector<zetasql::Value> row;
+  std::vector<googlesql::Value> row;
   row.reserve(table->NumColumns());
   for (int i = 0; i < table->NumColumns(); ++i) {
     auto column = table->GetColumn(i);
     // Since the row_kvs are constructed using the column name constants defined
     // earlier in the file, all incoming keys in the map must be uppercase so we
     // ensure that if a key is found, it's not the lowercase column name.
-    ZETASQL_VLOG(row_kvs.find(  // crash ok
+    GOOGLESQL_VLOG(row_kvs.find(  // crash ok
               absl::AsciiStrToLower(column->Name())) == row_kvs.end());
     // We convert the column names to uppercase before looking it up on the map.
     if (auto kv = row_kvs.find(absl::AsciiStrToUpper(column->Name()));
@@ -490,10 +491,10 @@ std::vector<zetasql::Value> GetRowFromRowKVs(
   return row;
 }
 
-std::vector<zetasql::Value> GetSchemaRow(const zetasql::Table* table,
-                                           zetasql::Value tableCatalog,
-                                           zetasql::Value schemaName) {
-  absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
+std::vector<googlesql::Value> GetSchemaRow(const googlesql::Table* table,
+                                           googlesql::Value tableCatalog,
+                                           googlesql::Value schemaName) {
+  absl::flat_hash_map<std::string, googlesql::Value> specific_kvs;
   specific_kvs[kCatalogName] = tableCatalog;
   specific_kvs[kSchemaName] = schemaName;
   return GetRowFromRowKVs(table, specific_kvs);
@@ -504,7 +505,7 @@ std::vector<zetasql::Value> GetSchemaRow(const zetasql::Table* table,
 InformationSchemaCatalog::InformationSchemaCatalog(
     const std::string& catalog_name, const Schema* default_schema,
     const SpannerSysCatalog* spanner_sys_catalog)
-    : zetasql::SimpleCatalog(catalog_name),
+    : googlesql::SimpleCatalog(catalog_name),
       default_schema_(default_schema),
       spanner_sys_catalog_(spanner_sys_catalog),
       dialect_(catalog_name == kPGName ? DatabaseDialect::POSTGRESQL
@@ -573,7 +574,7 @@ inline std::string InformationSchemaCatalog::GetNameForDialect(
     absl::string_view name) {
   // The system tables and associated columns are all defined in lowercase for
   // the PG dialect. The constants defined for the InformationSchema are for the
-  // ZetaSQL dialect which are all uppercase. So we lowercase them here for
+  // GoogleSQL dialect which are all uppercase. So we lowercase them here for
   // PG.
   if (dialect_ == DatabaseDialect::POSTGRESQL) {
     return absl::AsciiStrToLower(name);
@@ -581,11 +582,11 @@ inline std::string InformationSchemaCatalog::GetNameForDialect(
   return std::string(name);
 }
 
-inline zetasql::Value InformationSchemaCatalog::DialectDefaultSchema() {
+inline googlesql::Value InformationSchemaCatalog::DialectDefaultSchema() {
   return String(dialect_ == DatabaseDialect::POSTGRESQL ? kPublic : "");
 }
 
-inline zetasql::Value InformationSchemaCatalog::DialectTableCatalog() {
+inline googlesql::Value InformationSchemaCatalog::DialectTableCatalog() {
   if (dialect_ == DatabaseDialect::POSTGRESQL) {
     return String(default_schema_->database_id());
   } else {
@@ -606,7 +607,7 @@ InformationSchemaCatalog::GetSchemaAndNameForInformationSchema(
 
 void InformationSchemaCatalog::FillSchemataTable() {
   auto table = tables_by_name_.at(GetNameForDialect(kSchemata)).get();
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
 
   // Row for the unnamed default schema.
   rows.push_back(
@@ -638,8 +639,8 @@ void InformationSchemaCatalog::FillSchemataTable() {
 
 void InformationSchemaCatalog::FillDatabaseOptionsTable() {
   auto table = tables_by_name_.at(GetNameForDialect(kDatabaseOptions)).get();
-  std::vector<std::vector<zetasql::Value>> rows;
-  absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
+  std::vector<std::vector<googlesql::Value>> rows;
+  absl::flat_hash_map<std::string, googlesql::Value> specific_kvs;
 
   specific_kvs[kCatalogName] = DialectTableCatalog();
   specific_kvs[kSchemaName] = DialectDefaultSchema();
@@ -673,12 +674,36 @@ void InformationSchemaCatalog::FillDatabaseOptionsTable() {
     rows.push_back(GetRowFromRowKVs(table, specific_kvs));
   }
 
+  if (default_schema_->options() != nullptr &&
+      default_schema_->options()->version_retention_period().has_value()) {
+    specific_kvs.clear();
+    specific_kvs[kSchemaName] = DialectDefaultSchema();
+    specific_kvs[kOptionType] = String(
+        dialect_ == DatabaseDialect::POSTGRESQL ? kCharacterVarying : kString);
+    specific_kvs[kOptionName] = String(ddl::kVersionRetentionPeriodOptionName);
+    specific_kvs[kOptionValue] =
+        String(default_schema_->options()->version_retention_period().value());
+    rows.push_back(GetRowFromRowKVs(table, specific_kvs));
+  }
+
+  if (default_schema_->options() != nullptr &&
+      default_schema_->options()->columnar_policy().has_value()) {
+    specific_kvs.clear();
+    specific_kvs[kSchemaName] = DialectDefaultSchema();
+    specific_kvs[kOptionType] = String(
+        dialect_ == DatabaseDialect::POSTGRESQL ? kCharacterVarying : kString);
+    specific_kvs[kOptionName] = String(ddl::kColumnarPolicyOptionName);
+    specific_kvs[kOptionValue] =
+        String(default_schema_->options()->columnar_policy().value());
+    rows.push_back(GetRowFromRowKVs(table, specific_kvs));
+  }
+
   table->SetContents(rows);
 }
 
 // Fills the "information_schema.tables" table based on the specifications
 // provided for each dialect:
-// ZetaSQL: https://cloud.google.com/spanner/docs/information-schema#tables
+// GoogleSQL: https://cloud.google.com/spanner/docs/information-schema#tables
 // PostgreSQL:
 // https://cloud.google.com/spanner/docs/information-schema-pg#tables
 //
@@ -688,11 +713,11 @@ void InformationSchemaCatalog::FillTablesTable() {
   auto tables = tables_by_name_.at(GetNameForDialect(kTables)).get();
 
   // Add table rows.
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
   for (const Table* table : default_schema_->tables()) {
-    absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
+    absl::flat_hash_map<std::string, googlesql::Value> specific_kvs;
     if (dialect_ == DatabaseDialect::POSTGRESQL) {
-      zetasql::Value row_deletion_policy_value = NullString();
+      googlesql::Value row_deletion_policy_value = NullString();
       if (table->row_deletion_policy().has_value()) {
         // Use the PG schema printer to get the row deletion policy in a format
         // expected by the PG dialect.
@@ -745,7 +770,7 @@ void InformationSchemaCatalog::FillTablesTable() {
   }
 
   for (const View* view : default_schema_->views()) {
-    absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
+    absl::flat_hash_map<std::string, googlesql::Value> specific_kvs;
     const auto& [schema_part, name_part] =
         GetSchemaAndNameForInformationSchema(view->Name());
     specific_kvs[kTableCatalog] = DialectTableCatalog();
@@ -762,7 +787,7 @@ void InformationSchemaCatalog::FillTablesTable() {
   }
 
   for (const auto& table : spanner_sys_catalog_->tables()) {
-    absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
+    absl::flat_hash_map<std::string, googlesql::Value> specific_kvs;
     specific_kvs[kTableCatalog] = DialectTableCatalog();
     specific_kvs[kTableSchema] =
         String(GetNameForDialect(SpannerSysCatalog::kName));
@@ -777,7 +802,7 @@ void InformationSchemaCatalog::FillTablesTable() {
   }
 
   for (const auto& table : this->tables()) {
-    absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
+    absl::flat_hash_map<std::string, googlesql::Value> specific_kvs;
     specific_kvs[kTableCatalog] = DialectTableCatalog();
     specific_kvs[kTableSchema] = String(GetNameForDialect(kInformationSchema));
     specific_kvs[kTableName] = String(GetNameForDialect(table->Name()));
@@ -794,7 +819,7 @@ void InformationSchemaCatalog::FillTablesTable() {
 }
 
 // Returns the spanner_type based on the dialect.
-zetasql::Value InformationSchemaCatalog::GetSpannerType(
+googlesql::Value InformationSchemaCatalog::GetSpannerType(
     const Column* column) {
   if (column->vector_length().has_value()) {
     std::string type_string =
@@ -806,8 +831,8 @@ zetasql::Value InformationSchemaCatalog::GetSpannerType(
   return GetSpannerType(column->GetType(), column->declared_max_length());
 }
 
-zetasql::Value InformationSchemaCatalog::GetSpannerType(
-    const zetasql::Type* type, std::optional<int64_t> length) {
+googlesql::Value InformationSchemaCatalog::GetSpannerType(
+    const googlesql::Type* type, std::optional<int64_t> length) {
   if (dialect_ == DatabaseDialect::POSTGRESQL) {
     ddl::ColumnDefinition column_def = GoogleSqlTypeToDDLColumnType(type);
     if (length != std::nullopt) {
@@ -829,14 +854,14 @@ zetasql::Value InformationSchemaCatalog::GetSpannerType(
 
 // Returns the data_type for the PG dialect. If the type is an array, returns
 // "ARRAY". Otherwise returns the spanner_type without the length.
-zetasql::Value InformationSchemaCatalog::PGDataType(
-    const zetasql::Type* type) {
+googlesql::Value InformationSchemaCatalog::PGDataType(
+    const googlesql::Type* type) {
   return type->IsArray() ? String("ARRAY") : GetSpannerType(type, std::nullopt);
 }
 
 // Returns the value to be used by the "numeric_precision" column of the
 // "columns" table, based on the given column type.
-zetasql::Value GetPGNumericPrecision(const zetasql::Type* type) {
+googlesql::Value GetPGNumericPrecision(const googlesql::Type* type) {
   if (type->IsDouble()) {
     return Int64(kDoubleNumericPrecision);
   } else if (type->IsInt64()) {
@@ -849,7 +874,7 @@ zetasql::Value GetPGNumericPrecision(const zetasql::Type* type) {
 
 // Returns the value to be used by the "numeric_precision_radix" column of the
 // "columns" table, based on the given column type.
-zetasql::Value GetPGNumericPrecisionRadix(const zetasql::Type* type) {
+googlesql::Value GetPGNumericPrecisionRadix(const googlesql::Type* type) {
   // Setting the numeric precision radix.
   if (type->IsDouble() || type->IsInt64() || type->IsFloat()) {
     return Int64(kBinaryRepresentedNumericPrecisionRadix);
@@ -862,7 +887,7 @@ zetasql::Value GetPGNumericPrecisionRadix(const zetasql::Type* type) {
 
 // Fills the "information_schema.columns" table based on the specifications
 // provided for each dialect:
-// ZetaSQL: https://cloud.google.com/spanner/docs/information-schema#columns
+// GoogleSQL: https://cloud.google.com/spanner/docs/information-schema#columns
 // PostgreSQL:
 // https://cloud.google.com/spanner/docs/information-schema-pg#columns
 //
@@ -872,8 +897,8 @@ void InformationSchemaCatalog::FillColumnsTable() {
   auto columns = tables_by_name_.at(GetNameForDialect(kColumns)).get();
 
   // Add table rows.
-  std::vector<std::vector<zetasql::Value>> rows;
-  absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
+  std::vector<std::vector<googlesql::Value>> rows;
+  absl::flat_hash_map<std::string, googlesql::Value> specific_kvs;
   for (const Table* table : default_schema_->tables()) {
     int pos = 1;
     for (const Column* column : table->columns()) {
@@ -883,7 +908,7 @@ void InformationSchemaCatalog::FillColumnsTable() {
                 ? String(column->original_expression().value())
                 : NullString();
 
-        const zetasql::Type* type = column->GetType();
+        const googlesql::Type* type = column->GetType();
         if (column->has_allows_commit_timestamp()) {
           specific_kvs[kDataType] = String(kSpannerCommitTimestamp);
           specific_kvs[kSpannerType] = String(kSpannerCommitTimestamp);
@@ -921,6 +946,12 @@ void InformationSchemaCatalog::FillColumnsTable() {
 
         specific_kvs[kDataType] = NullString();
         specific_kvs[kSpannerType] = GetSpannerType(column);
+      }
+
+      specific_kvs[kOnUpdateExpression] = NullString();
+      if (column->has_on_update()) {
+        specific_kvs[kOnUpdateExpression] =
+            String(column->expression().value());
       }
 
       const auto& [table_schema_part, table_name_part] =
@@ -1023,6 +1054,7 @@ void InformationSchemaCatalog::FillColumnsTable() {
       specific_kvs[kIdentityStartWithCounter] = NullString();
       specific_kvs[kIdentitySkipRangeMin] = NullString();
       specific_kvs[kIdentitySkipRangeMax] = NullString();
+      specific_kvs[kOnUpdateExpression] = NullString();
 
       rows.push_back(GetRowFromRowKVs(columns, specific_kvs));
       specific_kvs.clear();
@@ -1037,7 +1069,7 @@ void InformationSchemaCatalog::FillColumnsTable() {
       const auto& metadata = GetColumnMetadata(dialect_, table, column);
 
       if (dialect_ == DatabaseDialect::POSTGRESQL) {
-        const zetasql::Type* type = column->GetType();
+        const googlesql::Type* type = column->GetType();
         // Information schema metadata doesn't store the length of a character
         // varying or bytea type. So we always pass in std::nullopt as the
         // length.
@@ -1072,6 +1104,7 @@ void InformationSchemaCatalog::FillColumnsTable() {
       specific_kvs[kIdentityStartWithCounter] = NullString();
       specific_kvs[kIdentitySkipRangeMin] = NullString();
       specific_kvs[kIdentitySkipRangeMax] = NullString();
+      specific_kvs[kOnUpdateExpression] = NullString();
 
       rows.push_back(GetRowFromRowKVs(columns, specific_kvs));
       specific_kvs.clear();
@@ -1087,7 +1120,7 @@ void InformationSchemaCatalog::FillColumnColumnUsageTable() {
       tables_by_name_.at(GetNameForDialect(kColumnColumnUsage)).get();
 
   // Add table rows.
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
   for (const Table* table : default_schema_->tables()) {
     const auto& [table_schema_part, table_name_part] =
         GetSchemaAndNameForInformationSchema(table->Name());
@@ -1117,7 +1150,7 @@ void InformationSchemaCatalog::FillColumnColumnUsageTable() {
 
 // Returns a value that represents a boolean based on the dialect. I.e. "YES" or
 // "NO" for PG or a true or false for GSQL.
-inline zetasql::Value InformationSchemaCatalog::DialectBoolValue(bool value) {
+inline googlesql::Value InformationSchemaCatalog::DialectBoolValue(bool value) {
   return dialect_ == DatabaseDialect::POSTGRESQL ? String(value ? kYes : kNo)
                                                  : Bool(value);
 }
@@ -1130,7 +1163,7 @@ inline zetasql::Value InformationSchemaCatalog::DialectBoolValue(bool value) {
 // For PG, returns ASC if the order is ASC NULLS LAST, or ASC NULLS FIRST if
 // that's the specified order. If the order is descending, returns DESC if the
 // order is DESC NULLS FIRST, or DESC NULLS LAST if that's the specified order.
-zetasql::Value InformationSchemaCatalog::DialectColumnOrdering(
+googlesql::Value InformationSchemaCatalog::DialectColumnOrdering(
     const KeyColumn* column) {
   if (dialect_ == DatabaseDialect::POSTGRESQL) {
     if (column->is_descending()) {
@@ -1144,7 +1177,7 @@ zetasql::Value InformationSchemaCatalog::DialectColumnOrdering(
 
 // Fills the "information_schema.indexes" table based on the specifications
 // provided for each dialect:
-// ZetaSQL: https://cloud.google.com/spanner/docs/information-schema#indexes
+// GoogleSQL: https://cloud.google.com/spanner/docs/information-schema#indexes
 // PostgreSQL:
 // https://cloud.google.com/spanner/docs/information-schema-pg#indexes
 //
@@ -1154,8 +1187,8 @@ zetasql::Value InformationSchemaCatalog::DialectColumnOrdering(
 void InformationSchemaCatalog::FillIndexesTable() {
   auto indexes = tables_by_name_.at(GetNameForDialect(kIndexes)).get();
 
-  std::vector<std::vector<zetasql::Value>> rows;
-  absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
+  std::vector<std::vector<googlesql::Value>> rows;
+  absl::flat_hash_map<std::string, googlesql::Value> specific_kvs;
   for (const Table* table : default_schema_->tables()) {
     const auto& [table_schema_part, table_name_part] =
         GetSchemaAndNameForInformationSchema(table->Name());
@@ -1183,16 +1216,16 @@ void InformationSchemaCatalog::FillIndexesTable() {
           DialectBoolValue(index->is_null_filtered()),
           // index_state
           String(kReadWrite),
+          // filter
+          index->is_null_filtered() || index->null_filtered_columns().empty()
+              ? NullString()
+              : String(PrintIndexFilter(index)),
           // spanner_is_managed
           DialectBoolValue(index->is_managed()),
       });
       if (dialect_ == DatabaseDialect::POSTGRESQL) {
-        // PG has one more undocumented column than GSQL called "filter". There
-        // is no support in the emulator Index object to print this value so we
-        // leave it as a null string. It also means the value is not tested
-        // since otherwise the tests fail against production which does have a
-        // value for it.
-        rows.back().push_back(NullString());
+        // Swap option_type and option_value as the order is different.
+        std::swap(rows.back()[9], rows.back()[10]);
       }
     }
 
@@ -1216,16 +1249,14 @@ void InformationSchemaCatalog::FillIndexesTable() {
         DialectBoolValue(false),
         // index_state
         NullString(),
+        // filter
+        NullString(),
         // spanner_is_managed
         DialectBoolValue(false),
     });
     if (dialect_ == DatabaseDialect::POSTGRESQL) {
-      // PG has one more undocumented column than GSQL called "filter". There
-      // is no support in the emulator Index object to print this value so we
-      // leave it as a null string. It also means the value is not tested
-      // since otherwise the tests fail against production which does have a
-      // value for it.
-      rows.back().push_back(NullString());
+      // Swap option_type and option_value as the order is different.
+      std::swap(rows.back()[9], rows.back()[10]);
     }
   }
 
@@ -1253,6 +1284,8 @@ void InformationSchemaCatalog::FillIndexesTable() {
           Bool(false),
           // index_state
           NullString(),
+          // filter
+          NullString(),
           // spanner_is_managed
           Bool(false),
       });
@@ -1265,7 +1298,7 @@ void InformationSchemaCatalog::FillIndexesTable() {
 
 // Fills the "information_schema.index_columns" table based on the
 // specifications provided for each dialect:
-// ZetaSQL:
+// GoogleSQL:
 // https://cloud.google.com/spanner/docs/information-schema#index_columns
 // PostgreSQL:
 // https://cloud.google.com/spanner/docs/information-schema-pg#index_columns
@@ -1278,7 +1311,7 @@ void InformationSchemaCatalog::FillIndexColumnsTable() {
       tables_by_name_.at(GetNameForDialect(kIndexColumns)).get();
 
   // Add table rows.
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
   for (const Table* table : default_schema_->tables()) {
     const auto& [table_schema_part, table_name_part] =
         GetSchemaAndNameForInformationSchema(table->Name());
@@ -1415,7 +1448,7 @@ void InformationSchemaCatalog::FillIndexColumnsTable() {
 
 // Fills the "information_schema.column_options" table based on the
 // specifications provided for each dialect:
-// ZetaSQL:
+// GoogleSQL:
 // https://cloud.google.com/spanner/docs/information-schema#column_options
 // PostgreSQL:
 // https://cloud.google.com/spanner/docs/information-schema-pg#column_options
@@ -1426,13 +1459,13 @@ void InformationSchemaCatalog::FillColumnOptionsTable() {
   auto column_options =
       tables_by_name_.at(GetNameForDialect(kColumnOptions)).get();
 
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
   for (const Table* table : default_schema_->tables()) {
     const auto& [schema_part, table_name_part] =
         GetSchemaAndNameForInformationSchema(table->Name());
     for (const Column* column : table->columns()) {
       if (column->allows_commit_timestamp()) {
-        std::vector<zetasql::Value> row = {
+        std::vector<googlesql::Value> row = {
             // table_catalog
             DialectTableCatalog(),
             // table_schema
@@ -1455,7 +1488,7 @@ void InformationSchemaCatalog::FillColumnOptionsTable() {
         rows.push_back(std::move(row));
       }
       if (column->locality_group()) {
-        std::vector<zetasql::Value> row = {
+        std::vector<googlesql::Value> row = {
             // table_catalog
             DialectTableCatalog(),
             // table_schema
@@ -1486,7 +1519,7 @@ void InformationSchemaCatalog::FillColumnOptionsTable() {
 
 // Fills the "information_schema.table_constraints" table based on the
 // specifications provided for each dialect:
-// ZetaSQL:
+// GoogleSQL:
 // https://cloud.google.com/spanner/docs/information-schema#table_constraints
 // PostgreSQL:
 // https://cloud.google.com/spanner/docs/information-schema-pg#table_constraints
@@ -1498,7 +1531,7 @@ void InformationSchemaCatalog::FillTableConstraintsTable() {
   auto table_constraints =
       tables_by_name_.at(GetNameForDialect(kTableConstraints)).get();
 
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
 
   // Add the user table constraints.
   for (const auto* table : default_schema_->tables()) {
@@ -1557,7 +1590,7 @@ void InformationSchemaCatalog::FillTableConstraintsTable() {
       });
     }
 
-    // Add the check constraints defined by the ZETASQL_VLOG keyword.
+    // Add the check constraints defined by the GOOGLESQL_VLOG keyword.
     for (const auto* check_constraint : table->check_constraints()) {
       rows.push_back({
           // constraint_catalog
@@ -1705,7 +1738,7 @@ void InformationSchemaCatalog::FillTableConstraintsTable() {
 
 // Fills the "information_schema.check_constraints" table based on the
 // specifications provided for each dialect:
-// ZetaSQL:
+// GoogleSQL:
 // https://cloud.google.com/spanner/docs/information-schema#check_constraints
 // PostgreSQL:
 // https://cloud.google.com/spanner/docs/information-schema-pg#check_constraints
@@ -1717,7 +1750,7 @@ void InformationSchemaCatalog::FillCheckConstraintsTable() {
   auto check_constraints =
       tables_by_name_.at(GetNameForDialect(kCheckConstraints)).get();
 
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
 
   // Add the user table check constraints.
   for (const auto* table : default_schema_->tables()) {
@@ -1742,7 +1775,7 @@ void InformationSchemaCatalog::FillCheckConstraintsTable() {
       });
     }
 
-    // Add the check constraints defined by the ZETASQL_VLOG keyword.
+    // Add the check constraints defined by the GOOGLESQL_VLOG keyword.
     for (const auto* check_constraint : table->check_constraints()) {
       rows.push_back({
           // constraint_catalog
@@ -1794,7 +1827,7 @@ void InformationSchemaCatalog::FillCheckConstraintsTable() {
 
 // Fills the "information_schema.constraint_table_usage" table based on the
 // specifications provided for each dialect:
-// ZetaSQL:
+// GoogleSQL:
 // https://cloud.google.com/spanner/docs/information-schema#constraint_table_usage
 // PostgreSQL:
 // https://cloud.google.com/spanner/docs/information-schema-pg#constraint_table_usage
@@ -1806,7 +1839,7 @@ void InformationSchemaCatalog::FillConstraintTableUsageTable() {
   auto constraint_table_usage =
       tables_by_name_.at(GetNameForDialect(kConstraintTableUsage)).get();
 
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
 
   // Add the user table constraints.
   for (const auto* table : default_schema_->tables()) {
@@ -1852,7 +1885,7 @@ void InformationSchemaCatalog::FillConstraintTableUsageTable() {
         });
       }
 
-      // Add the check constraints defined by the ZETASQL_VLOG keyword.
+      // Add the check constraints defined by the GOOGLESQL_VLOG keyword.
       for (const auto* check_constraint : table->check_constraints()) {
         rows.push_back({
             // table_catalog
@@ -1962,7 +1995,7 @@ void InformationSchemaCatalog::FillConstraintTableUsageTable() {
 
 // Fills the "information_schema.referential_constraints" table based on the
 // specifications provided for each dialect:
-// ZetaSQL:
+// GoogleSQL:
 // https://cloud.google.com/spanner/docs/information-schema#referential_constraints
 // PostgreSQL:
 // https://cloud.google.com/spanner/docs/information-schema-pg#referential_constraints
@@ -1973,7 +2006,7 @@ void InformationSchemaCatalog::FillReferentialConstraintsTable() {
   auto referential_constraints =
       tables_by_name_.at(GetNameForDialect(kReferentialConstraints)).get();
 
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
 
   // Add the foreign key constraints.
   for (const auto* table : default_schema_->tables()) {
@@ -2017,7 +2050,7 @@ void InformationSchemaCatalog::FillReferentialConstraintsTable() {
 
 // Fills the "information_schema.key_column_usage" table based on the
 // specifications provided for each dialect:
-// ZetaSQL:
+// GoogleSQL:
 // https://cloud.google.com/spanner/docs/information-schema#key_column_usage
 // PostgreSQL:
 // https://cloud.google.com/spanner/docs/information-schema-pg#key_column_usage
@@ -2029,7 +2062,7 @@ void InformationSchemaCatalog::FillKeyColumnUsageTable() {
   auto key_column_usage =
       tables_by_name_.at(GetNameForDialect(kKeyColumnUsage)).get();
 
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
   for (const auto* table : default_schema_->tables()) {
     const auto& [table_schema_part, table_name_part] =
         GetSchemaAndNameForInformationSchema(table->Name());
@@ -2164,7 +2197,7 @@ void InformationSchemaCatalog::FillKeyColumnUsageTable() {
 
 // Fills the "information_schema.constraints_column_usage" table based on the
 // specifications provided for each dialect:
-// ZetaSQL:
+// GoogleSQL:
 // https://cloud.google.com/spanner/docs/information-schema#constraints_column_usage
 // PostgreSQL:
 // https://cloud.google.com/spanner/docs/information-schema-pg#constraints_column_usage
@@ -2176,7 +2209,7 @@ void InformationSchemaCatalog::FillConstraintColumnUsageTable() {
   auto constraint_column_usage =
       tables_by_name_.at(GetNameForDialect(kConstraintColumnUsage)).get();
 
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
   for (const auto* table : default_schema_->tables()) {
     const auto& [table_schema_part, table_name_part] =
         GetSchemaAndNameForInformationSchema(table->Name());
@@ -2223,7 +2256,7 @@ void InformationSchemaCatalog::FillConstraintColumnUsageTable() {
       });
     }
 
-    // Add the check constraints defined by the ZETASQL_VLOG keyword.
+    // Add the check constraints defined by the GOOGLESQL_VLOG keyword.
     for (const auto* check_constraint : table->check_constraints()) {
       for (const auto* dep_column : check_constraint->dependent_columns()) {
         rows.push_back({
@@ -2360,7 +2393,7 @@ void InformationSchemaCatalog::FillConstraintColumnUsageTable() {
 
 // Fills the "information_schema.views" table based on the specifications
 // provided for each dialect:
-// ZetaSQL: https://cloud.google.com/spanner/docs/information-schema#views
+// GoogleSQL: https://cloud.google.com/spanner/docs/information-schema#views
 // PostgreSQL:
 // https://cloud.google.com/spanner/docs/information-schema-pg#views
 //
@@ -2368,8 +2401,8 @@ void InformationSchemaCatalog::FillConstraintColumnUsageTable() {
 void InformationSchemaCatalog::FillViewsTable() {
   auto views = tables_by_name_.at(GetNameForDialect(kViews)).get();
 
-  std::vector<std::vector<zetasql::Value>> rows;
-  absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
+  std::vector<std::vector<googlesql::Value>> rows;
+  absl::flat_hash_map<std::string, googlesql::Value> specific_kvs;
   for (const View* view : default_schema_->views()) {
     const auto& [view_schema_part, view_name_part] =
         GetSchemaAndNameForInformationSchema(view->Name());
@@ -2389,7 +2422,7 @@ void InformationSchemaCatalog::FillViewsTable() {
 }
 
 // Fills the "information_schema.change_treams" table based on the
-// specifications provided for each dialect: ZetaSQL:
+// specifications provided for each dialect: GoogleSQL:
 // https://cloud.google.com/spanner/docs/information-schema#change-streams
 // PostgreSQL:
 // https://cloud.google.com/spanner/docs/information-schema-pg#change-streams
@@ -2398,8 +2431,8 @@ void InformationSchemaCatalog::FillViewsTable() {
 void InformationSchemaCatalog::FillChangeStreamsTable() {
   auto change_streams =
       tables_by_name_.at(GetNameForDialect(kChangeStreams)).get();
-  std::vector<std::vector<zetasql::Value>> rows;
-  absl::flat_hash_map<std::string, zetasql::Value> specific_kvs;
+  std::vector<std::vector<googlesql::Value>> rows;
+  absl::flat_hash_map<std::string, googlesql::Value> specific_kvs;
   for (const ChangeStream* change_stream : default_schema_->change_streams()) {
     rows.push_back({// change_stream_catalog
                     DialectTableCatalog(),
@@ -2414,7 +2447,7 @@ void InformationSchemaCatalog::FillChangeStreamsTable() {
 }
 
 // Fills the "information_schema.change_tream_columns" table based on the
-// specifications provided for each dialect: ZetaSQL:
+// specifications provided for each dialect: GoogleSQL:
 // https://cloud.google.com/spanner/docs/information-schema#change-stream-columns
 // PostgreSQL:
 // https://cloud.google.com/spanner/docs/information-schema-pg#change-strea-columns
@@ -2424,7 +2457,7 @@ void InformationSchemaCatalog::FillChangeStreamsTable() {
 void InformationSchemaCatalog::FillChangeStreamColumnsTable() {
   auto change_stream_columns =
       tables_by_name_.at(GetNameForDialect(kChangeStreamColumns)).get();
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
   for (const ChangeStream* change_stream : default_schema_->change_streams()) {
     // Skip change streams tracking the entire database.
     if (change_stream->track_all()) {
@@ -2467,7 +2500,7 @@ void InformationSchemaCatalog::FillChangeStreamColumnsTable() {
 }
 
 // Fills the "information_schema.change_tream_options" table based on the
-// specifications provided for each dialect: ZetaSQL:
+// specifications provided for each dialect: GoogleSQL:
 // https://cloud.google.com/spanner/docs/information-schema#change-stream-options
 // PostgreSQL:
 // https://cloud.google.com/spanner/docs/information-schema-pg#change-streams-options
@@ -2477,7 +2510,7 @@ void InformationSchemaCatalog::FillChangeStreamColumnsTable() {
 void InformationSchemaCatalog::FillChangeStreamOptionsTable() {
   auto change_stream_options =
       tables_by_name_.at(GetNameForDialect(kChangeStreamOptions)).get();
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
   std::string string_type = (dialect_ == DatabaseDialect::POSTGRESQL)
                                 ? "character varying"
                                 : "STRING";
@@ -2519,7 +2552,7 @@ void InformationSchemaCatalog::FillChangeStreamOptionsTable() {
 }
 
 // Fills the "information_schema.change_tream_tables" table based on the
-// specifications provided for each dialect: ZetaSQL:
+// specifications provided for each dialect: GoogleSQL:
 // https://cloud.google.com/spanner/docs/information-schema#change-stream-tables
 // PostgreSQL:
 // https://cloud.google.com/spanner/docs/information-schema-pg#change-strea-tables
@@ -2529,7 +2562,7 @@ void InformationSchemaCatalog::FillChangeStreamOptionsTable() {
 void InformationSchemaCatalog::FillChangeStreamTablesTable() {
   auto change_stream_tables =
       tables_by_name_.at(GetNameForDialect(kChangeStreamTables)).get();
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
   for (const ChangeStream* change_stream : default_schema_->change_streams()) {
     // Skip change streams tracking the entire database.
     if (change_stream->track_all()) {
@@ -2567,7 +2600,7 @@ void InformationSchemaCatalog::FillChangeStreamTablesTable() {
 }
 
 // Fills the "information_schema.sequences" table based on the
-// specifications provided for each dialect: ZetaSQL:
+// specifications provided for each dialect: GoogleSQL:
 // https://cloud.google.com/spanner/docs/information-schema#sequences
 // PostgreSQL:
 // https://cloud.google.com/spanner/docs/information-schema-pg#sequences
@@ -2575,7 +2608,7 @@ void InformationSchemaCatalog::FillChangeStreamTablesTable() {
 // Rows are added for each sequence defined in the default schema.
 void InformationSchemaCatalog::FillSequencesTable() {
   auto sequences = tables_by_name_.at(GetNameForDialect(kSequences)).get();
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
   for (const Sequence* sequence : default_schema_->user_visible_sequences()) {
     const auto& [sequence_schema_part, sequence_name_part] =
         GetSchemaAndNameForInformationSchema(sequence->Name());
@@ -2633,7 +2666,7 @@ void InformationSchemaCatalog::FillSequencesTable() {
 }
 
 // Fills the "information_schema.sequences" table based on the
-// specifications provided for ZetaSQL:
+// specifications provided for GoogleSQL:
 // https://cloud.google.com/spanner/docs/information-schema#sequence_options //
 // NOLINT
 void InformationSchemaCatalog::FillSequenceOptionsTable() {
@@ -2643,7 +2676,7 @@ void InformationSchemaCatalog::FillSequenceOptionsTable() {
   }
   auto sequences =
       tables_by_name_.at(GetNameForDialect(kSequenceOptions)).get();
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
   for (const Sequence* sequence : default_schema_->user_visible_sequences()) {
     const auto& [sequence_schema_part, sequence_name_part] =
         GetSchemaAndNameForInformationSchema(sequence->Name());
@@ -2711,7 +2744,7 @@ void InformationSchemaCatalog::FillModelsTable() {
     return;
   }
 
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
   for (const Model* model : default_schema_->models()) {
     const auto& [model_schema_part, model_name_part] =
         GetSchemaAndNameForInformationSchema(model->Name());
@@ -2735,7 +2768,7 @@ void InformationSchemaCatalog::FillModelOptionsTable() {
     return;
   }
 
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
   for (const Model* model : default_schema_->models()) {
     const auto& [model_schema_part, model_name_part] =
         GetSchemaAndNameForInformationSchema(model->Name());
@@ -2803,7 +2836,7 @@ void InformationSchemaCatalog::FillModelColumnsTable() {
     return;
   }
 
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
   for (const Model* model : default_schema_->models()) {
     for (int i = 0; i < model->input().size(); ++i) {
       FillModelColumnsTable(*model, model->input().at(i), "INPUT", i + 1,
@@ -2821,7 +2854,7 @@ void InformationSchemaCatalog::FillModelColumnsTable() {
 void InformationSchemaCatalog::FillModelColumnsTable(
     const Model& model, const Model::ModelColumn& column,
     absl::string_view column_kind, int64_t ordinal_position,
-    std::vector<std::vector<zetasql::Value>>* rows) {
+    std::vector<std::vector<googlesql::Value>>* rows) {
   const auto& [model_schema_part, model_name_part] =
       GetSchemaAndNameForInformationSchema(model.Name());
   rows->push_back({
@@ -2849,7 +2882,7 @@ void InformationSchemaCatalog::FillModelColumnOptionsTable() {
     return;
   }
 
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
   for (const Model* model : default_schema_->models()) {
     for (int i = 0; i < model->input().size(); ++i) {
       FillModelColumnOptionsTable(*model, model->input().at(i), "INPUT", &rows);
@@ -2866,7 +2899,7 @@ void InformationSchemaCatalog::FillModelColumnOptionsTable() {
 void InformationSchemaCatalog::FillModelColumnOptionsTable(
     const Model& model, const Model::ModelColumn& column,
     absl::string_view column_kind,
-    std::vector<std::vector<zetasql::Value>>* rows) {
+    std::vector<std::vector<googlesql::Value>>* rows) {
   const auto& [model_schema_part, model_name_part] =
       GetSchemaAndNameForInformationSchema(model.Name());
   rows->push_back({
@@ -2889,7 +2922,7 @@ void InformationSchemaCatalog::FillModelColumnOptionsTable(
   });
 }
 
-zetasql::Value InformationSchemaCatalog::ParseLocalityGroupOptions(
+googlesql::Value InformationSchemaCatalog::ParseLocalityGroupOptions(
     ddl::SetOption option) {
   if (option.has_bool_value()) {
     return String(option.bool_value() ? kTrue : kFalse);
@@ -2901,7 +2934,7 @@ zetasql::Value InformationSchemaCatalog::ParseLocalityGroupOptions(
 }
 
 void InformationSchemaCatalog::FillLocalityGroupOptionsTable() {
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
   for (const LocalityGroup* locality_group :
        default_schema_->locality_groups()) {
     for (const auto& option : locality_group->options()) {
@@ -2928,7 +2961,7 @@ void InformationSchemaCatalog::FillPropertyGraphsTable() {
     return;
   }
 
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
   for (const PropertyGraph* property_graph :
        default_schema_->property_graphs()) {
     const auto& [property_graph_schema_part, property_graph_name_part] =
@@ -2946,7 +2979,7 @@ void InformationSchemaCatalog::FillPropertyGraphsTable() {
         String(property_graph_name_part),
         // json metadata
         Json(
-            zetasql::JSONValue::ParseJSONString(property_graph_json).value()),
+            googlesql::JSONValue::ParseJSONString(property_graph_json).value()),
     });
   }
   tables_by_name_.at(GetNameForDialect(kPropertyGraphs))->SetContents(rows);

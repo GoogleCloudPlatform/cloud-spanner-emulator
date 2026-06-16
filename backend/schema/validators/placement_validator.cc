@@ -23,8 +23,8 @@
 #include "backend/schema/ddl/operations.pb.h"
 #include "backend/schema/updater/global_schema_names.h"
 #include "backend/schema/updater/schema_validation_context.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -35,8 +35,8 @@ namespace {}  // namespace
 
 absl::Status PlacementValidator::Validate(const Placement* placement,
                                           SchemaValidationContext* context) {
-  ZETASQL_RET_CHECK(!placement->name_.empty());
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RET_CHECK(!placement->name_.empty());
+  GOOGLESQL_RETURN_IF_ERROR(
       GlobalSchemaNames::ValidateSchemaName("Placement", placement->name_));
   return absl::OkStatus();
 }

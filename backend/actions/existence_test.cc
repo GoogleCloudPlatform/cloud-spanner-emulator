@@ -21,7 +21,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/memory/memory.h"
 #include "absl/types/variant.h"
@@ -34,9 +34,9 @@ namespace emulator {
 namespace backend {
 namespace {
 
-using zetasql::values::Int64;
-using zetasql::values::String;
-using zetasql_base::testing::StatusIs;
+using googlesql::values::Int64;
+using googlesql::values::String;
+using googlesql_base::testing::StatusIs;
 
 // This unit test works with the following DDL statement:
 //
@@ -53,7 +53,7 @@ class RowExistenceTest : public test::ActionsTest {
 
  protected:
   // Test components.
-  zetasql::TypeFactory type_factory_;
+  googlesql::TypeFactory type_factory_;
   std::unique_ptr<const Schema> schema_;
 
   // Test variables.
@@ -62,12 +62,12 @@ class RowExistenceTest : public test::ActionsTest {
 };
 
 TEST_F(RowExistenceTest, InsertWithNoExistingRowSucceeds) {
-  ZETASQL_EXPECT_OK(validator_->Validate(ctx(), Insert(table_, Key({Int64(1)}))));
+  GOOGLESQL_EXPECT_OK(validator_->Validate(ctx(), Insert(table_, Key({Int64(1)}))));
 }
 
 TEST_F(RowExistenceTest, InsertWithExistingRowFails) {
   // Add row with same key.
-  ZETASQL_EXPECT_OK(store()->Insert(table_, Key({Int64(1)}), {}, {}));
+  GOOGLESQL_EXPECT_OK(store()->Insert(table_, Key({Int64(1)}), {}, {}));
 
   EXPECT_THAT(validator_->Validate(ctx(), Insert(table_, Key({Int64(1)}))),
               StatusIs(absl::StatusCode::kAlreadyExists));
@@ -75,9 +75,9 @@ TEST_F(RowExistenceTest, InsertWithExistingRowFails) {
 
 TEST_F(RowExistenceTest, UpdateWithExistingRowSucceeds) {
   // Add row with same key.
-  ZETASQL_EXPECT_OK(store()->Insert(table_, Key({Int64(1)}), {}, {}));
+  GOOGLESQL_EXPECT_OK(store()->Insert(table_, Key({Int64(1)}), {}, {}));
 
-  ZETASQL_EXPECT_OK(validator_->Validate(
+  GOOGLESQL_EXPECT_OK(validator_->Validate(
       ctx(), Update(table_, Key({Int64(1)}), {table_->FindColumn("string_col")},
                     {String("new")})));
 }

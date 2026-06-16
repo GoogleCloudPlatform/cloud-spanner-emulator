@@ -35,14 +35,14 @@
 #include <cstring>
 #include <string>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
 #include "third_party/spanner_pg/src/backend/utils/fmgroids.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator::function_evaluators {
 
@@ -50,17 +50,17 @@ static absl::StatusOr<Datum> JsonbIn(absl::string_view jsonb_in) {
   std::string jsonb_string = std::string(jsonb_in);
   Datum jsonb_in_cstring = CStringGetDatum(jsonb_string.c_str());
   return postgres_translator::CheckedNullableOidFunctionCall1(
-      F_JSONB_IN, CStringGetDatum(jsonb_in_cstring));
+      F_JSONB_IN, jsonb_in_cstring);
 }
 
 static absl::StatusOr<std::string> JsonbOut(Datum jsonb_datum) {
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       Datum jsonb_out_datum,
       postgres_translator::CheckedOidFunctionCall1(F_JSONB_OUT, jsonb_datum));
   return postgres_translator::CheckedPgCStringDatumToCString(jsonb_out_datum);
 }
 
-absl::StatusOr<zetasql::Value> JsonbArrayElement(
+absl::StatusOr<googlesql::Value> JsonbArrayElement(
     absl::string_view jsonb_string, int64_t element) {
   if (element < std::numeric_limits<int32_t>::min() ||
       element > std::numeric_limits<int32_t>::max()) {
@@ -71,47 +71,47 @@ absl::StatusOr<zetasql::Value> JsonbArrayElement(
   }
 
   Datum element_in = Int64GetDatum(element);
-  ZETASQL_ASSIGN_OR_RETURN(Datum jsonb_in, JsonbIn(jsonb_string));
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum jsonb_in, JsonbIn(jsonb_string));
 
-  ZETASQL_ASSIGN_OR_RETURN(Datum jsonb_out,
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum jsonb_out,
                    postgres_translator::CheckedNullableOidFunctionCall2(
                        F_JSONB_ARRAY_ELEMENT, jsonb_in, element_in));
   if (jsonb_out == NULL_DATUM) {
-    return zetasql::Value::Null(
+    return googlesql::Value::Null(
         postgres_translator::spangres::datatypes::GetPgJsonbType());
   }
 
-  ZETASQL_ASSIGN_OR_RETURN(std::string result, JsonbOut(jsonb_out));
+  GOOGLESQL_ASSIGN_OR_RETURN(std::string result, JsonbOut(jsonb_out));
 
   return postgres_translator::spangres::datatypes::CreatePgJsonbValue(result);
 }
 
-absl::StatusOr<zetasql::Value> JsonbObjectField(
+absl::StatusOr<googlesql::Value> JsonbObjectField(
     absl::string_view jsonb_string, absl::string_view key) {
   Datum key_in = CStringGetTextDatum(std::string(key).c_str());
-  ZETASQL_ASSIGN_OR_RETURN(Datum jsonb_in, JsonbIn(jsonb_string));
-  ZETASQL_ASSIGN_OR_RETURN(Datum jsonb_out,
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum jsonb_in, JsonbIn(jsonb_string));
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum jsonb_out,
                    postgres_translator::CheckedNullableOidFunctionCall2(
                        F_JSONB_OBJECT_FIELD, jsonb_in, key_in));
   if (jsonb_out == NULL_DATUM) {
-    return zetasql::Value::Null(
+    return googlesql::Value::Null(
         postgres_translator::spangres::datatypes::GetPgJsonbType());
   }
-  ZETASQL_ASSIGN_OR_RETURN(std::string result, JsonbOut(jsonb_out));
+  GOOGLESQL_ASSIGN_OR_RETURN(std::string result, JsonbOut(jsonb_out));
   return postgres_translator::spangres::datatypes::CreatePgJsonbValue(result);
 }
 
-absl::StatusOr<zetasql::Value> JsonbTypeof(absl::string_view jsonb_string) {
-  ZETASQL_ASSIGN_OR_RETURN(Datum jsonb_in, JsonbIn(jsonb_string));
-  ZETASQL_ASSIGN_OR_RETURN(Datum type_out,
+absl::StatusOr<googlesql::Value> JsonbTypeof(absl::string_view jsonb_string) {
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum jsonb_in, JsonbIn(jsonb_string));
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum type_out,
                    postgres_translator::CheckedNullableOidFunctionCall1(
                        F_JSONB_TYPEOF, jsonb_in));
   if (type_out == NULL_DATUM) {
-    return zetasql::Value::NullString();
+    return googlesql::Value::NullString();
   }
-  ZETASQL_ASSIGN_OR_RETURN(char* result, CheckedPgTextDatumGetCString(type_out));
+  GOOGLESQL_ASSIGN_OR_RETURN(char* result, CheckedPgTextDatumGetCString(type_out));
 
-  return zetasql::Value::String(result);
+  return googlesql::Value::String(result);
 }
 
 }  // namespace postgres_translator::function_evaluators

@@ -20,9 +20,9 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
-#include "zetasql/base/no_destructor.h"
+#include "googlesql/base/no_destructor.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -42,7 +42,7 @@ namespace {
 
 using ::google::cloud::spanner::PgOid;
 
-static const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
+static const googlesql_base::NoDestructor<absl::flat_hash_set<std::string>>
     kSupportedButEmptyTables{{
         "pg_available_extension_versions",
         "pg_available_extensions",
@@ -63,6 +63,7 @@ class PGCatalogTest : public DatabaseTest {
  public:
   PGCatalogTest()
       : feature_flags_({.enable_postgresql_interface = true,
+                        .enable_user_defined_functions = true,
                         .enable_interleave_in = true}) {}
 
   void SetUp() override {
@@ -151,6 +152,7 @@ TEST_F(PGCatalogTest, PGAttrdef) {
       {20, "length(key2)"},
       {21, "'100'::bigint"},
       {22, "CURRENT_TIMESTAMP"},
+      {25, "spanner.pending_commit_timestamp()"},
   });
   EXPECT_THAT(Query(R"sql(
       SELECT
@@ -169,7 +171,7 @@ TEST_F(PGCatalogTest, PGAttrdef) {
         COUNT(DISTINCT adrelid)
       FROM
         pg_catalog.pg_attrdef)sql"),
-              IsOkAndHoldsRows({{4, 1}}));
+              IsOkAndHoldsRows({{5, 1}}));
 }
 
 TEST_F(PGCatalogTest, PGAttribute) {
@@ -257,6 +259,9 @@ TEST_F(PGCatalogTest, PGAttribute) {
        false, true, false, std::string{'d'}, std::string{'\0'}, false, true, 0},
       {"base", "identity_col", "int8", 24, 0, -1, std::string{'\0'}, false,
        true, false, std::string{'d'}, std::string{'\0'}, false, true, 0},
+      {"base", "on_update_col", "timestamptz", 25, 0, -1, std::string{'\0'},
+       false, true, false, std::string{'\0'}, std::string{'\0'}, false, true,
+       0},
 
       {"cascade_child", "key1", "int8", 1, 0, -1, std::string{'\0'}, true,
        false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
@@ -271,6 +276,13 @@ TEST_F(PGCatalogTest, PGAttribute) {
       {"cascade_child", "created_at", "timestamptz", 6, 0, -1,
        std::string{'\0'}, false, false, false, std::string{'\0'},
        std::string{'\0'}, false, true, 0},
+
+      {"filter_test", "k", "int8", 1, 0, -1, std::string{'\0'}, true, false,
+       false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"filter_test", "v1", "int8", 2, 0, -1, std::string{'\0'}, false, false,
+       false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"filter_test", "v2", "int8", 3, 0, -1, std::string{'\0'}, false, false,
+       false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
 
       {"no_action_child", "key1", "int8", 1, 0, -1, std::string{'\0'}, true,
        false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
@@ -351,6 +363,9 @@ TEST_F(PGCatalogTest, PGAttribute) {
        true, false, false, std::string{'\0'}, std::string{'\0'}, false, true,
        0},
 
+      {"PK_filter_test", "k", "int8", 1, 0, -1, std::string{'\0'}, true, false,
+       false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+
       {"PK_no_action_child", "key1", "int8", 1, 0, -1, std::string{'\0'}, true,
        false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
       {"PK_no_action_child", "key2", "varchar", 2, 0, -1, std::string{'\0'},
@@ -382,6 +397,15 @@ TEST_F(PGCatalogTest, PGAttribute) {
       {"cascade_child_by_value", "value1", "varchar", 5, 0, -1,
        std::string{'\0'}, true, false, false, std::string{'\0'},
        std::string{'\0'}, false, true, 0},
+
+      {"idx_normal", "v1", "int8", 1, 0, -1, std::string{'\0'}, false, false,
+       false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"idx_partial", "v1", "int8", 1, 0, -1, std::string{'\0'}, true, false,
+       false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"idx_partial_multi", "v1", "int8", 1, 0, -1, std::string{'\0'}, true,
+       false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
+      {"idx_partial_multi", "v2", "int8", 2, 0, -1, std::string{'\0'}, true,
+       false, false, std::string{'\0'}, std::string{'\0'}, false, true, 0},
 
       {"no_action_child_by_value", "value", "varchar", 1, 0, -1,
        std::string{'\0'}, false, false, false, std::string{'\0'},
@@ -448,7 +472,7 @@ TEST_F(PGCatalogTest, PGClass) {
   auto expected_sequence_rows = std::vector<ValueRow>({
       {"test_sequence", "public", PgOid(0), false, "p", "S", Ni64(), 0, true},
   });
-  ZETASQL_EXPECT_OK(sequence_results);
+  GOOGLESQL_EXPECT_OK(sequence_results);
   EXPECT_THAT(*sequence_results,
               ExpectedRows(*sequence_results, expected_sequence_rows));
 
@@ -460,12 +484,17 @@ TEST_F(PGCatalogTest, PGClass) {
        false, "p", "i", 2, 0, true},
       {"PK_base", "public", PgOid(75002), false, "p", "i", 2, 0, true},
       {"PK_cascade_child", "public", PgOid(75002), false, "p", "i", 3, 0, true},
+      {"PK_filter_test", "public", PgOid(75002), false, "p", "i", 1, 0, true},
       {"PK_no_action_child", "public", PgOid(75002), false, "p", "i", 3, 0,
        true},
       {"PK_npi_child", "public", PgOid(75002), false, "p", "i", 3, 0, true},
       {"PK_row_deletion_policy", "public", PgOid(75002), false, "p", "i", 1, 0,
        true},
       {"cascade_child_by_value", "public", PgOid(75002), false, "p", "i", 4, 0,
+       true},
+      {"idx_normal", "public", PgOid(75002), false, "p", "i", 1, 0, true},
+      {"idx_partial", "public", PgOid(75002), false, "p", "i", 1, 0, true},
+      {"idx_partial_multi", "public", PgOid(75002), false, "p", "i", 2, 0,
        true},
       {"no_action_child_by_value", "public", PgOid(75002), false, "p", "i", 1,
        0, true},
@@ -479,14 +508,15 @@ TEST_F(PGCatalogTest, PGClass) {
       {"PK_ns_table_1", "named_schema2", PgOid(75002), false, "p", "i", 1, 0,
        true},
   });
-  ZETASQL_EXPECT_OK(index_results);
+  GOOGLESQL_EXPECT_OK(index_results);
   EXPECT_THAT(*index_results,
               ExpectedRows(*index_results, expected_index_rows));
 
   auto table_results = Query(absl::StrFormat(query_template, "r"));
   auto expected_table_rows = std::vector<ValueRow>({
-      {"base", "public", PgOid(75001), true, "p", "r", 24, 2, true},
+      {"base", "public", PgOid(75001), true, "p", "r", 25, 2, true},
       {"cascade_child", "public", PgOid(75001), true, "p", "r", 6, 0, true},
+      {"filter_test", "public", PgOid(75001), true, "p", "r", 3, 0, true},
       {"no_action_child", "public", PgOid(75001), true, "p", "r", 4, 0, true},
       {"npi_child", "public", PgOid(75001), false, "p", "r", 4, 0, true},
       {"row_deletion_policy", "public", PgOid(75001), false, "p", "r", 2, 0,
@@ -498,7 +528,7 @@ TEST_F(PGCatalogTest, PGClass) {
       {"ns_table_1", "named_schema2", PgOid(75001), false, "p", "r", 3, 0,
        true},  // NOLINT
   });
-  ZETASQL_EXPECT_OK(table_results);
+  GOOGLESQL_EXPECT_OK(table_results);
   EXPECT_THAT(*table_results,
               ExpectedRows(*table_results, expected_table_rows));
 
@@ -507,7 +537,7 @@ TEST_F(PGCatalogTest, PGClass) {
       {"base_view", "public", PgOid(0), false, "p", "v", 1, 0, true},
       {"ns_view", "named_schema", PgOid(0), false, "p", "v", 1, 0, true},
   });
-  ZETASQL_EXPECT_OK(view_results);
+  GOOGLESQL_EXPECT_OK(view_results);
   EXPECT_THAT(*view_results, ExpectedRows(*view_results, expected_view_rows));
 
   // Assert oids are distinct.
@@ -627,28 +657,28 @@ TEST_F(PGCatalogTest, PGConstraint) {
   EXPECT_THAT(
       *results,
       ExpectedRows(*results,
-                   {
-                       {"check_constraint_name", "public", "c", true, "base",
-                        " ", " ", std::vector<int>{4}},
-                       {"CK_base_\\w{16}_1", "public", "c", true, "base", " ",
-                        " ", std::vector<int>{4}},
-                       {"PK_base", "public", "p", true, "base", " ", " ",
-                        std::vector<int>{1, 2}},
-                       {"PK_cascade_child", "public", "p", true,
-                        "cascade_child", " ", " ", std::vector<int>{1, 2, 3}},
-                       {"PK_no_action_child", "public", "p", true,
-                        "no_action_child", " ", " ", std::vector<int>{1, 2, 3}},
-                       {"PK_npi_child", "public", "p", true, "npi_child", " ",
-                        " ", std::vector<int>{1, 2, 3}},
-                       {"PK_row_deletion_policy", "public", "p", true,
-                        "row_deletion_policy", " ", " ", std::vector<int>{1}},
-                       {"PK_ns_table_1", "named_schema", "p", true,
-                        "ns_table_1", " ", " ", std::vector<int>{1}},
-                       {"PK_ns_table_2", "named_schema", "p", true,
-                        "ns_table_2", " ", " ", std::vector<int>{1}},
-                       {"PK_ns_table_1", "named_schema2", "p", true,
-                        "ns_table_1", " ", " ", std::vector<int>{1}},
-                   }));
+                   {{"check_constraint_name", "public", "c", true, "base", " ",
+                     " ", std::vector<int>{4}},
+                    {"CK_base_\\w{16}_1", "public", "c", true, "base", " ", " ",
+                     std::vector<int>{4}},
+                    {"PK_base", "public", "p", true, "base", " ", " ",
+                     std::vector<int>{1, 2}},
+                    {"PK_cascade_child", "public", "p", true, "cascade_child",
+                     " ", " ", std::vector<int>{1, 2, 3}},
+                    {"PK_no_action_child", "public", "p", true,
+                     "no_action_child", " ", " ", std::vector<int>{1, 2, 3}},
+                    {"PK_npi_child", "public", "p", true, "npi_child", " ", " ",
+                     std::vector<int>{1, 2, 3}},
+                    {"PK_row_deletion_policy", "public", "p", true,
+                     "row_deletion_policy", " ", " ", std::vector<int>{1}},
+                    {"PK_ns_table_1", "named_schema", "p", true, "ns_table_1",
+                     " ", " ", std::vector<int>{1}},
+                    {"PK_ns_table_2", "named_schema", "p", true, "ns_table_2",
+                     " ", " ", std::vector<int>{1}},
+                    {"PK_ns_table_1", "named_schema2", "p", true, "ns_table_1",
+                     " ", " ", std::vector<int>{1}},
+                    {"PK_filter_test", "public", "p", true, "filter_test", " ",
+                     " ", std::vector<int>{1}}}));
 
   results = Query(R"sql(
       SELECT
@@ -714,6 +744,11 @@ TEST_F(PGCatalogTest, PGIndex) {
        std::vector<int>{1, 2, 3}},
       {"cascade_child_by_value", "cascade_child", 4, 3, true, false,
        std::vector<int>{1, 2, 5, 4}},
+      {"PK_filter_test", "filter_test", 1, 1, true, true, std::vector<int>{1}},
+      {"idx_normal", "filter_test", 1, 1, false, false, std::vector<int>{2}},
+      {"idx_partial", "filter_test", 1, 1, false, false, std::vector<int>{2}},
+      {"idx_partial_multi", "filter_test", 2, 2, false, false,
+       std::vector<int>{2, 3}},
       {"PK_no_action_child", "no_action_child", 3, 3, true, true,
        std::vector<int>{1, 2, 3}},
       {"no_action_child_by_value", "no_action_child", 1, 1, false, false,
@@ -797,6 +832,10 @@ TEST_F(PGCatalogTest, PGIndexes) {
             "IDX_cascade_child_child_key_value1_U_\\w{16}", Ns(), Ns()},
            {"public", "cascade_child", "PK_cascade_child", Ns(), Ns()},
            {"public", "cascade_child", "cascade_child_by_value", Ns(), Ns()},
+           {"public", "filter_test", "PK_filter_test", Ns(), Ns()},
+           {"public", "filter_test", "idx_normal", Ns(), Ns()},
+           {"public", "filter_test", "idx_partial", Ns(), Ns()},
+           {"public", "filter_test", "idx_partial_multi", Ns(), Ns()},
            {"public", "no_action_child", "PK_no_action_child", Ns(), Ns()},
            {"public", "no_action_child", "no_action_child_by_value", Ns(),
             Ns()},
@@ -843,7 +882,7 @@ TEST_F(PGCatalogTest, PGNamespace) {
               IsOkAndHoldsRows(expected));
 
   // Check that the user namespaces have unique OIDs.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto results, Query(R"sql(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto results, Query(R"sql(
       SELECT
         COUNT(DISTINCT oid)
       FROM
@@ -897,6 +936,53 @@ TEST_F(PGCatalogTest, PGProc) {
       ORDER BY
         p.oid)sql"),
               IsOkAndHoldsRows(expected));
+}
+
+TEST_F(PGCatalogTest, PGProc_UDFs) {
+  GTEST_SKIP() << "Temporarily disable this test.";
+  if (in_prod_env()) {
+    GTEST_SKIP() << "Test not applicable to the real Spanner backend (the "
+                    "production pg_proc doesn't fully populate UDFs yet)";
+  }
+
+  GOOGLESQL_ASSERT_OK(UpdateSchema({
+      R"(CREATE FUNCTION my_add(a integer, b integer)
+         RETURNS integer
+         LANGUAGE sql
+         IMMUTABLE
+         RETURN b + a)",
+      R"(CREATE FUNCTION my_concat(a text, b text)
+         RETURNS text
+         LANGUAGE sql
+         VOLATILE
+         RETURN (a || b))"}));
+
+  auto results = Query(R"sql(
+      SELECT
+        p.proname,
+        n.nspname,
+        p.prorettype,
+        p.proargtypes,
+        p.prokind,
+        p.provolatile,
+        p.prosqlbody
+      FROM
+        pg_catalog.pg_proc as p
+      JOIN pg_catalog.pg_namespace as n on n.oid = p.pronamespace
+      WHERE
+        p.proname LIKE 'my_%'
+      ORDER BY
+        p.proname
+  )sql");
+
+  std::vector<ValueRow> expected = {
+      {"my_add", "public", PgOid(20), std::vector<PgOid>{PgOid(20), PgOid(20)},
+       "f", "i", "(b + a)"},
+      {"my_concat", "public", PgOid(25),
+       std::vector<PgOid>{PgOid(25), PgOid(25)}, "f", "v",
+       "((a)::text || (b)::text)"},
+  };
+  EXPECT_THAT(results, IsOkAndHoldsRows(expected));
 }
 
 TEST_F(PGCatalogTest, PGSequence) {
@@ -977,6 +1063,7 @@ TEST_F(PGCatalogTest, PGTables) {
 
       {"public", "base", Ns(), Ns(), true, Nb(), Nb(), Nb()},
       {"public", "cascade_child", Ns(), Ns(), true, Nb(), Nb(), Nb()},
+      {"public", "filter_test", Ns(), Ns(), true, Nb(), Nb(), Nb()},
       {"public", "no_action_child", Ns(), Ns(), true, Nb(), Nb(), Nb()},
       {"public", "npi_child", Ns(), Ns(), false, Nb(), Nb(), Nb()},
       {"public", "row_deletion_policy", Ns(), Ns(), false, Nb(), Nb(), Nb()},

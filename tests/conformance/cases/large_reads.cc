@@ -16,9 +16,10 @@
 
 #include <vector>
 
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "tests/conformance/common/database_test_base.h"
@@ -33,32 +34,41 @@ namespace {
 constexpr int64_t kNumRows = 20;
 constexpr int64_t kStringSize = 409600;
 
-class LargeReadsTest : public DatabaseTest {
+class LargeReadsTest
+    : public DatabaseTest,
+      public testing::WithParamInterface<database_api::DatabaseDialect> {
+ public:
+  void SetUp() override {
+    dialect_ = GetParam();
+    DatabaseTest::SetUp();
+  }
+
  public:
   absl::Status SetUpDatabase() override {
-    ZETASQL_RETURN_IF_ERROR(SetSchema({R"(
-      CREATE TABLE Users(
-        ID   INT64,
-        Name STRING(MAX),
-        List ARRAY<STRING(MAX)>,
-      ) PRIMARY KEY (ID)
-    )"}));
-    return absl::OkStatus();
+    return SetSchemaFromFile("large_reads.test");
   }
 
  protected:
   void PopulateDatabase() {
     // Populate the database with more than 4MB worth of data.
     for (int i = 0; i < kNumRows; ++i) {
-      ZETASQL_EXPECT_OK(Insert("Users", {"ID", "Name"},
+      GOOGLESQL_EXPECT_OK(Insert("Users", {"ID", "Name"},
                        {i, std::string(kStringSize, 'a' + (i % 26))}));
     }
   }
 };
 
-TEST_F(LargeReadsTest, CanPerformLargeReadWithRange) {
+INSTANTIATE_TEST_SUITE_P(
+    PerDialectLargeReadsTest, LargeReadsTest,
+    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
+                    database_api::DatabaseDialect::POSTGRESQL),
+    [](const testing::TestParamInfo<LargeReadsTest::ParamType>& info) {
+      return database_api::DatabaseDialect_Name(info.param);
+    });
+
+TEST_P(LargeReadsTest, CanPerformLargeReadWithRange) {
   PopulateDatabase();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::vector<ValueRow> rows,
       Read("Users", {"ID", "Name"}, ClosedOpen(Key(0), Key(12))));
   EXPECT_THAT(rows.size(), 12);
@@ -70,9 +80,9 @@ TEST_F(LargeReadsTest, CanPerformLargeReadWithRange) {
   }
 }
 
-TEST_F(LargeReadsTest, CanPerformLargeReadWithAllRows) {
+TEST_P(LargeReadsTest, CanPerformLargeReadWithAllRows) {
   PopulateDatabase();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<ValueRow> rows,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<ValueRow> rows,
                        Read("Users", {"ID", "Name"}, KeySet::All()));
   EXPECT_EQ(rows.size(), kNumRows);
   for (int i = 0; i < rows.size(); ++i) {

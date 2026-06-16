@@ -32,14 +32,14 @@
 #include "third_party/spanner_pg/interface/abstract_parser.h"
 
 #include "third_party/spanner_pg/shims/memory_context_pg_arena.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator {
 namespace spangres {
 
 interfaces::ParserBatchOutput AbstractParser::ParseBatch(
     interfaces::ParserParams params) {
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       std::unique_ptr<interfaces::PGArena> arena,
       MemoryContextPGArena::Init(params.TransferMemoryReservationManager()),
       interfaces::ParserBatchOutput::FromFailedGlobalStatus(

@@ -17,9 +17,10 @@
 #include <string>
 #include <vector>
 
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -33,16 +34,19 @@ namespace test {
 
 namespace {
 
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
-class OperationsTest : public DatabaseTest {
+class OperationsTest
+    : public DatabaseTest,
+      public testing::WithParamInterface<database_api::DatabaseDialect> {
  public:
+  void SetUp() override {
+    dialect_ = GetParam();
+    DatabaseTest::SetUp();
+  }
+
   absl::Status SetUpDatabase() override {
-    return SetSchema({R"(
-      CREATE TABLE T(
-        k1 INT64
-      ) PRIMARY KEY(k1)
-    )"});
+    return SetSchemaFromFile("operations.test");
   }
 
   // Updates the schema (using a specified `operation_id`, if provided)
@@ -62,11 +66,11 @@ class OperationsTest : public DatabaseTest {
       *request.mutable_operation_id() = operation_id;
     }
     operations_api::Operation operation;
-    ZETASQL_RETURN_IF_ERROR(raw_database_client()->UpdateDatabaseDdl(&context, request,
+    GOOGLESQL_RETURN_IF_ERROR(raw_database_client()->UpdateDatabaseDdl(&context, request,
                                                              &operation));
-    ZETASQL_RETURN_IF_ERROR(WaitForOperation(operation.name(), &operation));
+    GOOGLESQL_RETURN_IF_ERROR(WaitForOperation(operation.name(), &operation));
     UpdateDatabaseDdlMetadata metadata;
-    ZETASQL_RET_CHECK(operation.metadata().UnpackTo(&metadata));
+    GOOGLESQL_RET_CHECK(operation.metadata().UnpackTo(&metadata));
     google::rpc::Status status = operation.error();
     auto status_code = static_cast<absl::StatusCode>(status.code());
     if (status_code != absl::StatusCode::kOk) {
@@ -85,7 +89,7 @@ class OperationsTest : public DatabaseTest {
     absl::Duration deadline = absl::Seconds(50);
     absl::Time start = absl::Now();
     while (true) {
-      ZETASQL_RETURN_IF_ERROR(GetOperation(operation_uri, op));
+      GOOGLESQL_RETURN_IF_ERROR(GetOperation(operation_uri, op));
       if (op->done()) return absl::OkStatus();
       if (absl::Now() - start > deadline) {
         return absl::Status(absl::StatusCode::kDeadlineExceeded,
@@ -116,7 +120,7 @@ class OperationsTest : public DatabaseTest {
     request.set_page_size(-1);
     operations_api::ListOperationsResponse reply;
     grpc::ClientContext context;
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         raw_operations_client()->ListOperations(&context, request, &reply));
     for (const auto& op : reply.operations()) {
       operations.emplace_back(op);
@@ -125,41 +129,84 @@ class OperationsTest : public DatabaseTest {
   }
 };
 
-TEST_F(OperationsTest, LongRunningOperationIds) {
+INSTANTIATE_TEST_SUITE_P(
+    PerDialectOperationsTest, OperationsTest,
+    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
+                    database_api::DatabaseDialect::POSTGRESQL),
+    [](const testing::TestParamInfo<OperationsTest::ParamType>& info) {
+      return database_api::DatabaseDialect_Name(info.param);
+    });
+
+TEST_P(OperationsTest, LongRunningOperationIds) {
   operations_api::Operation op;
-  ZETASQL_EXPECT_OK(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c1 INT64"},
-                           /*operation_id=*/"a_abc123", &op));
+  if (dialect_ == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    GOOGLESQL_EXPECT_OK(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c1 INT64"},
+                             /*operation_id=*/"a_abc123", &op));
+  } else {
+    GOOGLESQL_EXPECT_OK(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c1 bigint"},
+                             /*operation_id=*/"a_abc123", &op));
+  }
   EXPECT_THAT(op.name(), testing::EndsWith("a_abc123"));
 
   // Uppercase operation IDs are not allowed.
-  EXPECT_THAT(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c2 INT64"},
-                             /*operation_id=*/"a_A"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+  if (dialect_ == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    EXPECT_THAT(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c2 INT64"},
+                               /*operation_id=*/"a_A"),
+                StatusIs(absl::StatusCode::kInvalidArgument));
+  } else {
+    EXPECT_THAT(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c2 bigint"},
+                               /*operation_id=*/"a_A"),
+                StatusIs(absl::StatusCode::kInvalidArgument));
+  }
 
   // Hyphens are not allowed.
-  EXPECT_THAT(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c2 INT64"},
-                             /*operation_id=*/"a-123"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+  if (dialect_ == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    EXPECT_THAT(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c2 INT64"},
+                               /*operation_id=*/"a-123"),
+                StatusIs(absl::StatusCode::kInvalidArgument));
+  } else {
+    EXPECT_THAT(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c2 bigint"},
+                               /*operation_id=*/"a-123"),
+                StatusIs(absl::StatusCode::kInvalidArgument));
+  }
 
   // Operation IDs must be a minumum of 2 characters in length.
-  EXPECT_THAT(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c2 INT64"},
-                             /*operation_id=*/"a"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+  if (dialect_ == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    EXPECT_THAT(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c2 INT64"},
+                               /*operation_id=*/"a"),
+                StatusIs(absl::StatusCode::kInvalidArgument));
+  } else {
+    EXPECT_THAT(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c2 bigint"},
+                               /*operation_id=*/"a"),
+                StatusIs(absl::StatusCode::kInvalidArgument));
+  }
 
   // Operation IDs must be a maximum of 128 characters in length.
-  EXPECT_THAT(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c2 INT64"},
-                             /*operation_id=*/std::string(150, 'a')),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+  if (dialect_ == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    EXPECT_THAT(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c2 INT64"},
+                               /*operation_id=*/std::string(150, 'a')),
+                StatusIs(absl::StatusCode::kInvalidArgument));
+  } else {
+    EXPECT_THAT(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c2 bigint"},
+                               /*operation_id=*/std::string(150, 'a')),
+                StatusIs(absl::StatusCode::kInvalidArgument));
+  }
 }
 
-TEST_F(OperationsTest, ListOperations) {
-  ZETASQL_EXPECT_OK(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c1 INT64"},
-                           /*operation_id=*/"o1"));
+TEST_P(OperationsTest, ListOperations) {
+  if (dialect_ == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    GOOGLESQL_EXPECT_OK(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c1 INT64"},
+                             /*operation_id=*/"o1"));
+    GOOGLESQL_EXPECT_OK(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c2 INT64"},
+                             /*operation_id=*/"o2"));
+  } else {
+    GOOGLESQL_EXPECT_OK(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c1 bigint"},
+                             /*operation_id=*/"o1"));
+    GOOGLESQL_EXPECT_OK(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c2 bigint"},
+                             /*operation_id=*/"o2"));
+  }
 
-  ZETASQL_EXPECT_OK(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c2 INT64"},
-                           /*operation_id=*/"o2"));
-
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto operations, ListDatabaseOperations());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto operations, ListDatabaseOperations());
   std::vector<std::string> op_names;
   for (const auto& operation : operations) {
     EXPECT_TRUE(operation.done());
@@ -169,17 +216,22 @@ TEST_F(OperationsTest, ListOperations) {
   EXPECT_THAT(op_names, testing::Contains(testing::EndsWith("o2")));
 }
 
-TEST_F(OperationsTest, GetOperation) {
-  ZETASQL_EXPECT_OK(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c1 INT64"},
-                           /*operation_id=*/"a_abc123"));
+TEST_P(OperationsTest, GetOperation) {
+  if (dialect_ == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    GOOGLESQL_EXPECT_OK(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c1 INT64"},
+                             /*operation_id=*/"a_abc123"));
+  } else {
+    GOOGLESQL_EXPECT_OK(UpdateSchemaOp({"ALTER TABLE T ADD COLUMN c1 bigint"},
+                             /*operation_id=*/"a_abc123"));
+  }
 
   operations_api::Operation op;
-  ZETASQL_EXPECT_OK(GetOperation(
+  GOOGLESQL_EXPECT_OK(GetOperation(
       absl::StrCat(database()->FullName(), "/operations/a_abc123"), &op));
   EXPECT_THAT(op.name(), testing::EndsWith("a_abc123"));
 }
 
-TEST_F(OperationsTest, NonExistentDatabaseOperation) {
+TEST_P(OperationsTest, NonExistentDatabaseOperation) {
   operations_api::Operation op;
   EXPECT_THAT(GetOperation(absl::StrCat(database()->FullName(),
                                         "/operations/non_existent"),

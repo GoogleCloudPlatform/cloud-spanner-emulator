@@ -118,13 +118,13 @@ char* GetTableNameC(Oid relid);
 char* GetNamespaceNameC(Oid relid);
 
 // Given an oid, looks up a table and its columns info in the thread-local
-// catalog adapter and ZetaSQL catalog. Updates ncolumns with the correct
+// catalog adapter and GoogleSQL catalog. Updates ncolumns with the correct
 // number of columns and real_colnames with palloc'd copy of the column name
 // strings. THIS FUNCTION THROWS EXCEPTIONS if it fails to get the column names.
 void GetColumnNamesC(Oid relid, char*** real_colnames, int* ncolumns);
 
 // Given an oid, looks up a table and its columns info in the thread-local
-// catalog adapter and ZetaSQL catalog. Updates ncolumns with the correct
+// catalog adapter and GoogleSQL catalog. Updates ncolumns with the correct
 // number of columns and coltypes/coltypmods/colcollations with the column type
 // information. Uses InvalidOid if the column type is unsupported.
 // THIS FUNCTION THROWS EXCEPTIONS if it fails to get the column types.
@@ -132,7 +132,7 @@ void GetColumnTypesC(Oid relid, List** coltypes, List** coltypmods,
                      List** colcollations, int* ncolumns);
 
 // Given an oid and column name, looks up a table and its columns info in the
-// thread-local catalog adapter and ZetaSQL catalog.
+// thread-local catalog adapter and GoogleSQL catalog.
 // Returns the column attr number of the column name or InvalidAttrNumber if the
 // column or table don't exist.
 int GetColumnAttrNumber(Oid relid, const char* column_name);

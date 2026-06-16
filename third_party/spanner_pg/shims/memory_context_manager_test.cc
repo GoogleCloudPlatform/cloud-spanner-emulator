@@ -36,7 +36,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/flags/flag.h"
 #include "absl/status/status.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
@@ -48,7 +48,7 @@ namespace postgres_translator {
 
 namespace {
 
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 TEST(MemoryContextHolderTest, Simple) {
   // Bypass reservations to test only the Context and memory shim.
@@ -57,7 +57,7 @@ TEST(MemoryContextHolderTest, Simple) {
   ASSERT_EQ(CurrentMemoryContext, nullptr);
 
   // Init and verify it creates a new context.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(ActiveMemoryContext context,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(ActiveMemoryContext context,
                        MemoryContextManager::Init("TestMemoryContext"));
   EXPECT_NE(CurrentMemoryContext, nullptr);
 
@@ -67,7 +67,7 @@ TEST(MemoryContextHolderTest, Simple) {
   pfree(test_alloc);
 
   // Reset should clean up the current context.
-  ZETASQL_ASSERT_OK(context.Reset());
+  GOOGLESQL_ASSERT_OK(context.Reset());
   EXPECT_TRUE(MemoryContextIsEmpty(CurrentMemoryContext));
 
   // Try allocating with it again. This should still work.
@@ -77,14 +77,14 @@ TEST(MemoryContextHolderTest, Simple) {
 
   // Clear should completely destroy the context and null the slot. We rely on
   // the leak checker a bit here too.
-  ZETASQL_ASSERT_OK(context.Clear());
+  GOOGLESQL_ASSERT_OK(context.Clear());
   EXPECT_EQ(CurrentMemoryContext, nullptr);
 }
 
 TEST(MemoryContextTest, ContextWithChild) {
   auto res_manager = std::make_unique<StubMemoryReservationManager>();
   auto res_holder = MemoryReservationHolder::Create(res_manager.get());
-  ZETASQL_ASSERT_OK_AND_ASSIGN(ActiveMemoryContext context,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(ActiveMemoryContext context,
                        MemoryContextManager::Init("TestMemoryContext"));
   ASSERT_NE(CurrentMemoryContext, nullptr);
 

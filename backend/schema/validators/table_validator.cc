@@ -21,7 +21,7 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/type.h"
+#include "googlesql/public/type.h"
 #include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/functional/function_ref.h"
@@ -42,9 +42,9 @@
 #include "common/errors.h"
 #include "common/feature_flags.h"
 #include "common/limits.h"
-#include "zetasql/base/ret_check.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 #include "absl/status/status.h"
-#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -163,7 +163,7 @@ absl::string_view GetColumnName(const Column* const& column) {
 absl::Status ValidateDescendantTables(
     const Table* table,
     absl::FunctionRef<absl::Status(const Table*)> validateFn) {
-  ZETASQL_RET_CHECK(table != nullptr);
+  GOOGLESQL_RET_CHECK(table != nullptr);
 
   std::vector<const Table*> queue;
   for (auto* children : table->children()) {
@@ -213,7 +213,7 @@ absl::Status ValidateRowDeletionPolicy(
                                                         table_name);
   }
 
-  ZETASQL_RETURN_IF_ERROR(ValidateDescendantTables(table, [&](const Table* children) {
+  GOOGLESQL_RETURN_IF_ERROR(ValidateDescendantTables(table, [&](const Table* children) {
     if (children->has_on_delete_action() &&
         children->on_delete_action() == Table::OnDeleteAction::kNoAction) {
       return error::RowDeletionPolicyHasChildWithOnDeleteNoAction(
@@ -259,7 +259,7 @@ absl::Status ValidateRowDeletionPolicy(
 
 absl::Status ValidateUpdateRowDeletionPolicy(const Table* table,
                                              const Table* old_table) {
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       ValidateRowDeletionPolicy(table->row_deletion_policy(), old_table));
 
   // This handles the case when an alter only affects the child tables.
@@ -278,19 +278,19 @@ absl::Status ValidateUpdateRowDeletionPolicy(const Table* table,
 
 absl::Status TableValidator::Validate(const Table* table,
                                       SchemaValidationContext* context) {
-  ZETASQL_RET_CHECK(!table->name_.empty());
-  ZETASQL_RET_CHECK(!table->id_.empty());
+  GOOGLESQL_RET_CHECK(!table->name_.empty());
+  GOOGLESQL_RET_CHECK(!table->id_.empty());
 
   if (table->is_public()) {
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         GlobalSchemaNames::ValidateSchemaName("Table", table->name_));
     if (context->is_postgresql_dialect()) {
-      ZETASQL_RET_CHECK(table->postgresql_oid().has_value());
+      GOOGLESQL_RET_CHECK(table->postgresql_oid().has_value());
     } else {
-      ZETASQL_RET_CHECK(!table->postgresql_oid().has_value());
+      GOOGLESQL_RET_CHECK(!table->postgresql_oid().has_value());
     }
     if (!table->synonym_.empty()) {
-      ZETASQL_RETURN_IF_ERROR(
+      GOOGLESQL_RETURN_IF_ERROR(
           GlobalSchemaNames::ValidateSchemaName("Synonym", table->synonym_));
     }
   }
@@ -301,9 +301,9 @@ absl::Status TableValidator::Validate(const Table* table,
   // Validate that all columns are unique.
   CaseInsensitiveStringSet unique_columns;
   for (const Column* column : table->columns_) {
-    ZETASQL_RET_CHECK_NE(column, nullptr);
+    GOOGLESQL_RET_CHECK_NE(column, nullptr);
     std::string column_name = column->Name();
-    ZETASQL_RET_CHECK_EQ(column->table(), table);
+    GOOGLESQL_RET_CHECK_EQ(column->table(), table);
     if (unique_columns.contains(column_name)) {
       return error::DuplicateColumnName(column->FullName());
     }
@@ -318,11 +318,11 @@ absl::Status TableValidator::Validate(const Table* table,
   // Validate that all key columns are unique.
   CaseInsensitiveStringSet unique_keys;
   for (const KeyColumn* key_column : table->primary_key_) {
-    ZETASQL_RET_CHECK_NE(key_column, nullptr);
+    GOOGLESQL_RET_CHECK_NE(key_column, nullptr);
     const Column* column = key_column->column();
-    ZETASQL_RET_CHECK_NE(column, nullptr);
+    GOOGLESQL_RET_CHECK_NE(column, nullptr);
     const Column* table_column = table->FindColumn(column->Name());
-    ZETASQL_RET_CHECK_EQ(table_column, column);
+    GOOGLESQL_RET_CHECK_EQ(table_column, column);
     if (unique_keys.contains(column->Name())) {
       return error::MultipleRefsToKeyColumn(object_type, object_name,
                                             column->Name());
@@ -351,12 +351,12 @@ absl::Status TableValidator::Validate(const Table* table,
   }
 
   if (!table->indexes_.empty()) {
-    ZETASQL_RET_CHECK(!table->columns_.empty());
+    GOOGLESQL_RET_CHECK(!table->columns_.empty());
   }
 
   for (const Index* index : table->indexes_) {
-    ZETASQL_RET_CHECK_NE(index, nullptr);
-    ZETASQL_RET_CHECK_EQ(index->indexed_table(), table);
+    GOOGLESQL_RET_CHECK_NE(index, nullptr);
+    GOOGLESQL_RET_CHECK_EQ(index->indexed_table(), table);
   }
 
   if (table->indexes_.size() > limits::kMaxIndexesPerTable) {
@@ -373,7 +373,7 @@ absl::Status TableValidator::Validate(const Table* table,
   } else {
     bool ignore_nullability = table->owner_index() != nullptr &&
                               table->owner_index()->is_null_filtered();
-    ZETASQL_RET_CHECK(table->parent_table_->is_public()
+    GOOGLESQL_RET_CHECK(table->parent_table_->is_public()
               // Change stream partition table should have interleave
               // compatibility even though it's not a public table.
               || table->parent_table_->owner_change_stream() != nullptr);
@@ -386,10 +386,10 @@ absl::Status TableValidator::Validate(const Table* table,
             parent_pk[i]->column()->Name());
       }
 
-      ZETASQL_RETURN_IF_ERROR(CheckKeyPartCompatibility(
+      GOOGLESQL_RETURN_IF_ERROR(CheckKeyPartCompatibility(
           table, parent_pk[i], table->primary_key_[i], ignore_nullability));
     }
-    ZETASQL_RETURN_IF_ERROR(CheckInterleaveDepthLimit(table));
+    GOOGLESQL_RETURN_IF_ERROR(CheckInterleaveDepthLimit(table));
 
     if (table->interleave_type_.has_value() &&
         table->interleave_type_.value() == Table::InterleaveType::kIn &&
@@ -405,44 +405,44 @@ absl::Status TableValidator::Validate(const Table* table,
   }
 
   for (const Table* child : table->child_tables_) {
-    ZETASQL_RET_CHECK_NE(child, nullptr);
-    ZETASQL_RET_CHECK_EQ(child->parent(), table);
+    GOOGLESQL_RET_CHECK_NE(child, nullptr);
+    GOOGLESQL_RET_CHECK_EQ(child->parent(), table);
   }
 
   for (const ForeignKey* foreign_key : table->foreign_keys_) {
-    ZETASQL_RET_CHECK_NE(foreign_key, nullptr);
-    ZETASQL_RET_CHECK_EQ(foreign_key->referencing_table(), table);
+    GOOGLESQL_RET_CHECK_NE(foreign_key, nullptr);
+    GOOGLESQL_RET_CHECK_EQ(foreign_key->referencing_table(), table);
   }
   for (const ForeignKey* referencing_foreign_key :
        table->referencing_foreign_keys_) {
-    ZETASQL_RET_CHECK_NE(referencing_foreign_key, nullptr);
-    ZETASQL_RET_CHECK_EQ(referencing_foreign_key->referenced_table(), table);
+    GOOGLESQL_RET_CHECK_NE(referencing_foreign_key, nullptr);
+    GOOGLESQL_RET_CHECK_EQ(referencing_foreign_key->referenced_table(), table);
   }
 
   if (table->owner_index_) {
-    ZETASQL_RET_CHECK_EQ(table->indexes_.size(), 0);
-    ZETASQL_RET_CHECK_EQ(table->child_tables_.size(), 0);
-    ZETASQL_RET_CHECK(!table->columns_.empty());
-    ZETASQL_RET_CHECK(!table->primary_key_.empty());
-    ZETASQL_RET_CHECK_EQ(table->owner_index_->index_data_table(), table);
+    GOOGLESQL_RET_CHECK_EQ(table->indexes_.size(), 0);
+    GOOGLESQL_RET_CHECK_EQ(table->child_tables_.size(), 0);
+    GOOGLESQL_RET_CHECK(!table->columns_.empty());
+    GOOGLESQL_RET_CHECK(!table->primary_key_.empty());
+    GOOGLESQL_RET_CHECK_EQ(table->owner_index_->index_data_table(), table);
   }
 
   // Validate generated columns.
   GraphDependencyHelper<const Column*, GetColumnName> cycle_detector(
       /*object_type=*/"generated column");
   for (const Column* column : table->columns()) {
-    ZETASQL_RETURN_IF_ERROR(cycle_detector.AddNodeIfNotExists(column));
+    GOOGLESQL_RETURN_IF_ERROR(cycle_detector.AddNodeIfNotExists(column));
   }
   for (const Column* column : table->columns()) {
     if (column->is_generated()) {
       for (const Column* dep : column->dependent_columns()) {
-        ZETASQL_RETURN_IF_ERROR(
+        GOOGLESQL_RETURN_IF_ERROR(
             cycle_detector.AddEdgeIfNotExists(column->Name(), dep->Name()));
       }
     }
   }
-  ZETASQL_RETURN_IF_ERROR(cycle_detector.DetectCycle());
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(cycle_detector.DetectCycle());
+  GOOGLESQL_RETURN_IF_ERROR(
       ValidateRowDeletionPolicy(table->row_deletion_policy(), table));
 
   return absl::OkStatus();
@@ -452,7 +452,7 @@ absl::Status TableValidator::ValidateUpdate(const Table* table,
                                             const Table* old_table,
                                             SchemaValidationContext* context) {
   if (table->is_deleted()) {
-    ZETASQL_RET_CHECK(!table->owner_index_ || table->owner_index_->is_deleted());
+    GOOGLESQL_RET_CHECK(!table->owner_index_ || table->owner_index_->is_deleted());
     if (!table->child_tables_.empty()) {
       // Build a sorted list of interleaved child tables and indexes.
       std::vector<std::string> interleaved_tables;
@@ -501,24 +501,24 @@ absl::Status TableValidator::ValidateUpdate(const Table* table,
   }
 
   // ID should not change during cloning, but the name can.
-  ZETASQL_RET_CHECK_EQ(table->id(), old_table->id());
+  GOOGLESQL_RET_CHECK_EQ(table->id(), old_table->id());
 
   if (table->is_public() && context->is_postgresql_dialect()) {
-    ZETASQL_RET_CHECK(table->postgresql_oid().has_value());
-    ZETASQL_RET_CHECK(old_table->postgresql_oid().has_value());
-    ZETASQL_RET_CHECK_EQ(table->postgresql_oid().value(),
+    GOOGLESQL_RET_CHECK(table->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(old_table->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK_EQ(table->postgresql_oid().value(),
                  old_table->postgresql_oid().value());
   } else {
-    ZETASQL_RET_CHECK(!table->postgresql_oid().has_value());
-    ZETASQL_RET_CHECK(!old_table->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(!table->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(!old_table->postgresql_oid().has_value());
   }
 
   if (table->owner_change_stream_) {
-    ZETASQL_RET_CHECK(!table->owner_change_stream_->is_deleted());
+    GOOGLESQL_RET_CHECK(!table->owner_change_stream_->is_deleted());
   }
 
   if (table->owner_index_) {
-    ZETASQL_RET_CHECK(!table->owner_index_->is_deleted());
+    GOOGLESQL_RET_CHECK(!table->owner_index_->is_deleted());
   }
 
   // Check additional constraints on new columns.
@@ -539,13 +539,13 @@ absl::Status TableValidator::ValidateUpdate(const Table* table,
   }
 
   // Cannot drop key columns, change their order or nullability.
-  ZETASQL_RET_CHECK_EQ(table->primary_key_.size(), old_table->primary_key_.size());
+  GOOGLESQL_RET_CHECK_EQ(table->primary_key_.size(), old_table->primary_key_.size());
   for (int i = 0; i < table->primary_key_.size(); ++i) {
     if (table->primary_key_[i]->is_deleted()) {
       return error::InvalidDropKeyColumn(
           table->primary_key_[i]->column()->Name(), table->name_);
     }
-    ZETASQL_RET_CHECK_EQ(table->primary_key_[i]->is_descending(),
+    GOOGLESQL_RET_CHECK_EQ(table->primary_key_[i]->is_descending(),
                  old_table->primary_key()[i]->is_descending());
     if (table->primary_key_[i]->column()->is_nullable() !=
         old_table->primary_key()[i]->column()->is_nullable()) {
@@ -567,7 +567,7 @@ absl::Status TableValidator::ValidateUpdate(const Table* table,
     return error::CannotAlterSynonym(table->synonym(), table->name_);
   }
 
-  ZETASQL_RETURN_IF_ERROR(ValidateUpdateRowDeletionPolicy(table, old_table));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateUpdateRowDeletionPolicy(table, old_table));
   return absl::OkStatus();
 }
 

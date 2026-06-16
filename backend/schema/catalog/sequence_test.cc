@@ -21,10 +21,10 @@
 #include <thread>  // NOLINT
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/synchronization/mutex.h"
@@ -47,9 +47,9 @@ TEST(SequenceTest, GetSequenceValuesFromMultipleThreads) {
 
   for (int i = 0; i < 100; ++i) {
     threads.emplace_back([&sequence_values, &mu, &sequence]() {
-      ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::Value value,
+      GOOGLESQL_ASSERT_OK_AND_ASSIGN(googlesql::Value value,
                            sequence->GetNextSequenceValue());
-      absl::MutexLock lock(&mu);
+      absl::MutexLock lock(mu);
       ASSERT_FALSE(sequence_values.contains(value.int64_value()));
       sequence_values.insert(value.int64_value());
     });

@@ -23,8 +23,8 @@
 #include "google/spanner/v1/keys.pb.h"
 #include "google/spanner/v1/result_set.pb.h"
 #include "google/spanner/v1/transaction.pb.h"
-#include "zetasql/public/type.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/type.h"
+#include "googlesql/public/value.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "backend/access/write.h"
@@ -46,7 +46,7 @@
 #include "frontend/converters/values.h"
 #include "frontend/proto/partition_token.pb.h"
 #include "absl/status/status.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -62,7 +62,7 @@ absl::Status ResultSetMetadataToProto(backend::RowCursor* cursor,
   for (int i = 0; i < cursor->NumColumns(); ++i) {
     auto* field_pb = metadata_pb->mutable_row_type()->add_fields();
     field_pb->set_name(cursor->ColumnName(i));
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         TypeToProto(cursor->ColumnType(i), field_pb->mutable_type()))
         << " when converting column " << cursor->ColumnName(i) << " of type "
         << cursor->ColumnType(i) << " at position " << i << " in row cursor";
@@ -138,30 +138,30 @@ absl::StatusOr<backend::ReadOnlyOptions> ReadOnlyOptionsFromProto(
   backend::ReadOnlyOptions options;
   switch (proto.timestamp_bound_case()) {
     case ReadOnly::kMinReadTimestamp: {
-      ZETASQL_ASSIGN_OR_RETURN(options.timestamp,
+      GOOGLESQL_ASSIGN_OR_RETURN(options.timestamp,
                        TimestampFromProto(proto.min_read_timestamp()));
-      ZETASQL_RETURN_IF_ERROR(ValidateMinReadTimestamp(options.timestamp));
+      GOOGLESQL_RETURN_IF_ERROR(ValidateMinReadTimestamp(options.timestamp));
       options.bound = backend::TimestampBound::kMinTimestamp;
       break;
     }
     case ReadOnly::kMaxStaleness: {
-      ZETASQL_ASSIGN_OR_RETURN(options.staleness,
+      GOOGLESQL_ASSIGN_OR_RETURN(options.staleness,
                        DurationFromProto(proto.max_staleness()));
-      ZETASQL_RETURN_IF_ERROR(ValidateStaleness(options.staleness));
+      GOOGLESQL_RETURN_IF_ERROR(ValidateStaleness(options.staleness));
       options.bound = backend::TimestampBound::kMaxStaleness;
       break;
     }
     case ReadOnly::kReadTimestamp: {
-      ZETASQL_ASSIGN_OR_RETURN(options.timestamp,
+      GOOGLESQL_ASSIGN_OR_RETURN(options.timestamp,
                        TimestampFromProto(proto.read_timestamp()));
-      ZETASQL_RETURN_IF_ERROR(ValidateExactReadTimestamp(options.timestamp));
+      GOOGLESQL_RETURN_IF_ERROR(ValidateExactReadTimestamp(options.timestamp));
       options.bound = backend::TimestampBound::kExactTimestamp;
       break;
     }
     case ReadOnly::kExactStaleness: {
-      ZETASQL_ASSIGN_OR_RETURN(options.staleness,
+      GOOGLESQL_ASSIGN_OR_RETURN(options.staleness,
                        DurationFromProto(proto.exact_staleness()));
-      ZETASQL_RETURN_IF_ERROR(ValidateStaleness(options.staleness));
+      GOOGLESQL_RETURN_IF_ERROR(ValidateStaleness(options.staleness));
       options.bound = backend::TimestampBound::kExactStaleness;
       break;
     }
@@ -195,9 +195,9 @@ absl::Status ReadArgFromProto(const backend::Schema& schema,
 
   auto key_set = request.key_set();
   if (!request.partition_token().empty()) {
-    ZETASQL_ASSIGN_OR_RETURN(auto partition_token,
+    GOOGLESQL_ASSIGN_OR_RETURN(auto partition_token,
                      PartitionTokenFromString(request.partition_token()));
-    ZETASQL_RETURN_IF_ERROR(ValidatePartitionToken(partition_token, request));
+    GOOGLESQL_RETURN_IF_ERROR(ValidatePartitionToken(partition_token, request));
     key_set = partition_token.partitioned_key_set();
   }
 
@@ -217,13 +217,13 @@ absl::Status ReadArgFromProto(const backend::Schema& schema,
     table = index->index_data_table();
   }
 
-  ZETASQL_ASSIGN_OR_RETURN(read_arg->key_set, KeySetFromProto(key_set, *table));
+  GOOGLESQL_ASSIGN_OR_RETURN(read_arg->key_set, KeySetFromProto(key_set, *table));
   return absl::OkStatus();
 }
 
 absl::Status RowCursorToResultSetProto(backend::RowCursor* cursor, int limit,
                                        spanner_api::ResultSet* result_pb) {
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       ResultSetMetadataToProto(cursor, result_pb->mutable_metadata()));
 
   // Iterate over all rows and populate column values into ResultSet.
@@ -231,7 +231,7 @@ absl::Status RowCursorToResultSetProto(backend::RowCursor* cursor, int limit,
   while (cursor->Next()) {
     auto* row_pb = result_pb->add_rows();
     for (int i = 0; i < cursor->NumColumns(); ++i) {
-      ZETASQL_ASSIGN_OR_RETURN(*row_pb->add_values(),
+      GOOGLESQL_ASSIGN_OR_RETURN(*row_pb->add_values(),
                        ValueToProto(cursor->ColumnValue(i)));
     }
     ++row_count;
@@ -246,7 +246,7 @@ absl::Status RowCursorToResultSetProto(backend::RowCursor* cursor, int limit,
 absl::StatusOr<std::vector<spanner_api::PartialResultSet>>
 RowCursorToPartialResultSetProtos(backend::RowCursor* cursor, int limit) {
   spanner_api::ResultSet result_set;
-  ZETASQL_RETURN_IF_ERROR(RowCursorToResultSetProto(cursor, limit, &result_set));
+  GOOGLESQL_RETURN_IF_ERROR(RowCursorToResultSetProto(cursor, limit, &result_set));
   return ChunkResultSet(result_set, limits::kMaxStreamingChunkSize);
 }
 

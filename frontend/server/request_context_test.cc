@@ -23,7 +23,7 @@
 #include "google/spanner/admin/instance/v1/spanner_instance_admin.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/strings/str_cat.h"
 #include "frontend/common/uris.h"
@@ -56,22 +56,22 @@ class SessionExistenceTest : public testing::Test {
       display_name: ""
       node_count: 3
     )pb");
-    ZETASQL_ASSERT_OK(
+    GOOGLESQL_ASSERT_OK(
         env_->instance_manager()->CreateInstance(instance_uri, instance_pb));
     // Create a database that belongs to the instance created above.
     backend::SchemaChangeOperation empty_schema_operation;
-    ZETASQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Database> database,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Database> database,
                          env_->database_manager()->CreateDatabase(
                              database_uri, empty_schema_operation));
 
     // Create a session that belongs to the database created above.
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         std::shared_ptr<Session> session,
         env_->session_manager()->CreateSession({}, false, database,
                                                /*mux_txn_manager=*/nullptr));
 
     absl::string_view project_id, instance_id, database_id;
-    ZETASQL_EXPECT_OK(ParseSessionUri(session->session_uri(), &project_id, &instance_id,
+    GOOGLESQL_EXPECT_OK(ParseSessionUri(session->session_uri(), &project_id, &instance_id,
                               &database_id, &session_id_));
   }
 
@@ -85,7 +85,7 @@ TEST_F(SessionExistenceTest, CorrectSessionUri) {
       "projects/test-project/instances/test-instance/databases/test-database/"
       "sessions/",
       session_id_);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Session> session,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Session> session,
                        GetSession(request_context_.get(), session_uri));
 }
 
@@ -94,7 +94,7 @@ TEST_F(SessionExistenceTest, WrongSessionId) {
       "projects/test-project/instances/test-instance/databases/test-database/"
       "sessions/nonexist-session";
   EXPECT_THAT(GetSession(request_context_.get(), wrong_session_uri),
-              zetasql_base::testing::StatusIs(
+              googlesql_base::testing::StatusIs(
                   absl::StatusCode::kNotFound,
                   testing::MatchesRegex(".*Session not found.*")));
 }
@@ -105,7 +105,7 @@ TEST_F(SessionExistenceTest, WrongDatabaseId) {
       "sessions/",
       session_id_);
   EXPECT_THAT(GetSession(request_context_.get(), wrong_session_uri),
-              zetasql_base::testing::StatusIs(
+              googlesql_base::testing::StatusIs(
                   absl::StatusCode::kNotFound,
                   testing::MatchesRegex(".*Database not found.*")));
 }
@@ -116,7 +116,7 @@ TEST_F(SessionExistenceTest, WrongInstanceId) {
       "test-database/sessions/",
       session_id_);
   EXPECT_THAT(GetSession(request_context_.get(), wrong_session_uri),
-              zetasql_base::testing::StatusIs(
+              googlesql_base::testing::StatusIs(
                   absl::StatusCode::kNotFound,
                   testing::MatchesRegex(".*Instance not found.*")));
 }

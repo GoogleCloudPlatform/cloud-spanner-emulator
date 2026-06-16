@@ -16,7 +16,7 @@
 
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "tests/conformance/common/database_test_base.h"
 
@@ -27,7 +27,7 @@ namespace test {
 
 namespace {
 
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 class DeleteRangeTest
     : public DatabaseTest,
@@ -53,9 +53,9 @@ INSTANTIATE_TEST_SUITE_P(
 
 TEST_P(DeleteRangeTest, CannotDeleteRangeWithMultipleDifferingKeyParts) {
   // Insert a few rows.
-  ZETASQL_EXPECT_OK(Insert("Users", {"ShardID", "UserID", "ClassID", "Name", "Age"},
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"ShardID", "UserID", "ClassID", "Name", "Age"},
                    {1, 2, "New", "John", 21}));
-  ZETASQL_EXPECT_OK(Insert("Users", {"ShardID", "UserID", "ClassID", "Name", "Age"},
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"ShardID", "UserID", "ClassID", "Name", "Age"},
                    {2, 3, "Cancelled", "Peter", 41}));
 
   // DeleteRange only allows keys to differ in last part.

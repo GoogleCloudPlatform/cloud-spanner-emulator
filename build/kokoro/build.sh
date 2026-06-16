@@ -21,7 +21,7 @@ set -e
 
 # This script assumes that the following variables have been set:
 # ${PATH}          Contains the directory where gnu-sed can be found.
-#                  This is required as ZetaSQL has a build step which depends on
+#                  This is required as GoogleSQL has a build step which depends on
 #                  gnu-sed. MacOS contains an older version of sed which will
 #                  fail. So PATH needs to resolve sed to gnu-sed. On MacOS, we
 #                  install gnu-sed via brew. See kokoro/macos_external/build.sh.

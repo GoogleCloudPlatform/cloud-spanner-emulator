@@ -28,8 +28,10 @@
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
+#include "google/cloud/options.h"
 #include "google/cloud/spanner/admin/database_admin_client.h"
 #include "google/cloud/spanner/backoff_policy.h"
 #include "google/cloud/spanner/batch_dml_result.h"
@@ -95,7 +97,7 @@ void DatabaseTest::SetUp() {
   request.set_create_statement("CREATE DATABASE " + quote +
                                database_->database_id() + quote);
   request.set_database_dialect(dialect_);
-  ZETASQL_ASSERT_OK(ToUtilStatusOr(database_client_->CreateDatabase(request).get()));
+  GOOGLESQL_ASSERT_OK(ToUtilStatusOr(database_client_->CreateDatabase(request).get()));
 
   // Setup a client to interact with the database.
   client_ = std::make_unique<cloud::spanner::Client>(
@@ -112,16 +114,18 @@ void DatabaseTest::SetUp() {
   operations_stub_ = longrunning::Operations::NewStub(channel);
 
   // Allow test suites to customize the database at SetUp time.
-  ZETASQL_ASSERT_OK(SetUpDatabase());
+  GOOGLESQL_ASSERT_OK(SetUpDatabase());
 }
 
 void DatabaseTest::TearDown() {
-  database_client_->DropDatabase(database_->FullName());
+  if (database_client_ && database_) {
+    database_client_->DropDatabase(database_->FullName());
+  }
 }
 
 absl::Status DatabaseTest::ResetDatabase() {
   const ConformanceTestGlobals& globals = GetConformanceTestGlobals();
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       ToUtilStatus(database_client_->DropDatabase(database_->FullName())));
   database_ = std::make_unique<google::cloud::spanner::Database>(
       google::cloud::spanner::Instance(globals.project_id, globals.instance_id),
@@ -151,7 +155,7 @@ absl::Status DatabaseTest::SetSchemaFromFile(const std::string& file_name) {
   const std::string root_dir = GetRunfilesDir(kSchemaTestDataDir);
   const std::string file_path = absl::StrCat(root_dir, "/", file_name);
 
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       auto schema_set,
       ReadSchemaSetFromFile(file_path, FileBasedSchemaSetOptions{}));
 
@@ -206,7 +210,8 @@ absl::StatusOr<PartitionedDmlResult> DatabaseTest::ExecutePartitionedDml(
 
 absl::StatusOr<CommitResult> DatabaseTest::Commit(Mutations mutations) {
   return ToUtilStatusOr(client().Commit(
-      [&](Transaction) -> cloud::StatusOr<Mutations> { return mutations; }));
+      [&](Transaction) -> cloud::StatusOr<Mutations> { return mutations; },
+      cloud::internal::CurrentOptions()));
 }
 
 absl::StatusOr<CommitResult> DatabaseTest::CommitTransaction(
@@ -223,7 +228,8 @@ absl::StatusOr<CommitResult> DatabaseTest::CommitDml(
           if (!result) return result.status();
         }
         return Mutations{};
-      }));
+      },
+      cloud::internal::CurrentOptions()));
 }
 
 absl::StatusOr<CommitResult> DatabaseTest::CommitDmlReturning(
@@ -260,7 +266,8 @@ absl::StatusOr<CommitResult> DatabaseTest::CommitBatchDml(
         if (!result) return result.status();
         if (!result.value().status.ok()) return result.value().status;
         return Mutations{};
-      }));
+      },
+      cloud::internal::CurrentOptions()));
 }
 
 absl::StatusOr<BatchDmlResult> DatabaseTest::BatchDmlTransaction(
@@ -273,7 +280,7 @@ absl::StatusOr<BatchDmlResult> DatabaseTest::BatchDmlTransaction(
 cloud::spanner::BatchedCommitResultStream DatabaseTest::BatchWrite(
     const std::vector<Mutations>& mutations) {
   cloud::spanner::BatchedCommitResultStream result =
-      client().CommitAtLeastOnce(mutations);
+      client().CommitAtLeastOnce(mutations, cloud::internal::CurrentOptions());
   return result;
 }
 

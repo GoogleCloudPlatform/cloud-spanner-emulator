@@ -51,6 +51,7 @@ licenses(["restricted"])
 cc_library(
     name = "mmgr",
     srcs = [
+        "alignedalloc.c",
         "aset.c",
         "dsa.c",
         "freepage.c",

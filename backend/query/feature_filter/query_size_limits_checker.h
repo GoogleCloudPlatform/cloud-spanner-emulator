@@ -21,15 +21,15 @@
 #include <map>
 #include <set>
 
-#include "zetasql/resolved_ast/resolved_node.h"
-#include "zetasql/resolved_ast/resolved_node_kind.pb.h"
+#include "googlesql/resolved_ast/resolved_node.h"
+#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 #include "absl/status/status.h"
 
 namespace google::spanner::emulator::backend {
 
 class QuerySizeLimitsChecker {
  public:
-  absl::Status CheckQueryAgainstLimits(const zetasql::ResolvedNode* ast_root);
+  absl::Status CheckQueryAgainstLimits(const googlesql::ResolvedNode* ast_root);
   virtual ~QuerySizeLimitsChecker() {}
   static const int kMaxJoins;
   static const int kMaxNestedSubqueryExpressions;
@@ -51,40 +51,40 @@ class QuerySizeLimitsChecker {
     int nested_occurrences;
   };
   absl::Status GetNodeMetricsAndRunLocalChecks(
-      const zetasql::ResolvedNode* ast_root,
-      const std::set<zetasql::ResolvedNodeKind>& interest_nodes,
-      std::map<zetasql::ResolvedNodeKind, NodeCounts>* collected_node_counts);
+      const googlesql::ResolvedNode* ast_root,
+      const std::set<googlesql::ResolvedNodeKind>& interest_nodes,
+      std::map<googlesql::ResolvedNodeKind, NodeCounts>* collected_node_counts);
   absl::Status CheckNumPredicates(
-      const std::map<zetasql::ResolvedNodeKind, NodeCounts>&
+      const std::map<googlesql::ResolvedNodeKind, NodeCounts>&
           collected_node_counts);
   absl::Status CheckPredicateBooleanExpressionDepth(
-      const std::map<zetasql::ResolvedNodeKind, NodeCounts>&
+      const std::map<googlesql::ResolvedNodeKind, NodeCounts>&
           collected_node_counts);
-  absl::Status CheckNumJoins(const std::map<zetasql::ResolvedNodeKind,
+  absl::Status CheckNumJoins(const std::map<googlesql::ResolvedNodeKind,
                                             NodeCounts>& collected_node_counts);
   absl::Status CheckSubqueryExpressionDepth(
-      const std::map<zetasql::ResolvedNodeKind, NodeCounts>&
+      const std::map<googlesql::ResolvedNodeKind, NodeCounts>&
           collected_node_counts);
   absl::Status CheckSubselectDepth(
-      const std::map<zetasql::ResolvedNodeKind, NodeCounts>&
+      const std::map<googlesql::ResolvedNodeKind, NodeCounts>&
           collected_node_counts);
   absl::Status CheckGroupByDepth(
-      const std::map<zetasql::ResolvedNodeKind, NodeCounts>&
+      const std::map<googlesql::ResolvedNodeKind, NodeCounts>&
           collected_node_counts);
   absl::Status CheckNumParameters(
-      const std::map<zetasql::ResolvedNodeKind, NodeCounts>&
+      const std::map<googlesql::ResolvedNodeKind, NodeCounts>&
           collected_node_counts);
   absl::Status RunGlobalChecks(
-      const std::map<zetasql::ResolvedNodeKind, NodeCounts>&
+      const std::map<googlesql::ResolvedNodeKind, NodeCounts>&
           collected_node_counts);
-  absl::Status CheckNumColumnsInGroupBy(const zetasql::ResolvedNode* node);
-  absl::Status CheckNumFieldsInStruct(const zetasql::ResolvedNode* node);
+  absl::Status CheckNumColumnsInGroupBy(const googlesql::ResolvedNode* node);
+  absl::Status CheckNumFieldsInStruct(const googlesql::ResolvedNode* node);
   absl::Status CheckStructParameterBreadthAndDepth(
-      const zetasql::ResolvedNode* node);
-  absl::Status CheckNumUnions(const zetasql::ResolvedNode* node);
+      const googlesql::ResolvedNode* node);
+  absl::Status CheckNumUnions(const googlesql::ResolvedNode* node);
   absl::Status CheckNumSubQueriesInSelectList(
-      const zetasql::ResolvedNode* node);
-  absl::Status RunNodeLocalChecks(const zetasql::ResolvedNode* node);
+      const googlesql::ResolvedNode* node);
+  absl::Status RunNodeLocalChecks(const googlesql::ResolvedNode* node);
 };
 
 }  // namespace google::spanner::emulator::backend

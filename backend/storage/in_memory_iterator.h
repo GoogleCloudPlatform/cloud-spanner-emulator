@@ -19,7 +19,7 @@
 
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/status/status.h"
 #include "backend/datamodel/key.h"
 #include "backend/storage/iterator.h"
@@ -37,7 +37,7 @@ namespace backend {
 // class is not thread-safe.
 class FixedRowStorageIterator : public StorageIterator {
  public:
-  using Row = std::pair<class Key, std::vector<zetasql::Value>>;
+  using Row = std::pair<class Key, std::vector<googlesql::Value>>;
 
   FixedRowStorageIterator() = default;
   explicit FixedRowStorageIterator(std::vector<Row>&& rows);
@@ -47,10 +47,10 @@ class FixedRowStorageIterator : public StorageIterator {
   absl::Status Status() const override;
   const class Key& Key() const override;
   int NumColumns() const override;
-  const zetasql::Value& ColumnValue(int i) const override;
+  const googlesql::Value& ColumnValue(int i) const override;
 
  private:
-  const std::vector<zetasql::Value>& GetColumns() const;
+  const std::vector<googlesql::Value>& GetColumns() const;
 
   // Memory buffer of rows.
   const std::vector<Row> rows_;

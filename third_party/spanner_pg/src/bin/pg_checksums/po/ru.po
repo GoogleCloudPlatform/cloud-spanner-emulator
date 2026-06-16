@@ -1,9 +1,9 @@
-# Alexander Lakhin <a.lakhin@postgrespro.ru>, 2019, 2020, 2021, 2022, 2024.
+# SPDX-FileCopyrightText: 2019, 2020, 2021, 2022, 2024, 2025 Alexander Lakhin <a.lakhin@postgrespro.ru>
 msgid ""
 msgstr ""
 "Project-Id-Version: pg_verify_checksums (PostgreSQL) 11\n"
 "Report-Msgid-Bugs-To: pgsql-bugs@lists.postgresql.org\n"
-"POT-Creation-Date: 2024-11-09 07:47+0300\n"
+"POT-Creation-Date: 2024-05-04 16:29+0300\n"
 "PO-Revision-Date: 2022-09-05 13:34+0300\n"
 "Last-Translator: Alexander Lakhin <exclusion@gmail.com>\n"
 "Language-Team: Russian <pgsql-ru-general@postgresql.org>\n"

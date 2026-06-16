@@ -42,7 +42,7 @@
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
 #include "third_party/spanner_pg/src/backend/utils/fmgroids.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator::function_evaluators {
 
@@ -58,7 +58,7 @@ static absl::StatusOr<Datum> NumericIn(
 }
 
 static absl::StatusOr<std::string> NumericOut(Datum numeric_datum) {
-  ZETASQL_ASSIGN_OR_RETURN(Datum numeric_out_datum,
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum numeric_out_datum,
                    postgres_translator::CheckedOidFunctionCall1(F_NUMERIC_OUT,
                                                                 numeric_datum));
 
@@ -66,9 +66,9 @@ static absl::StatusOr<std::string> NumericOut(Datum numeric_datum) {
 }
 
 absl::StatusOr<std::string> Abs(absl::string_view numeric_decimal_string) {
-  ZETASQL_ASSIGN_OR_RETURN(Datum numeric_in, NumericIn(numeric_decimal_string));
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum numeric_in, NumericIn(numeric_decimal_string));
 
-  ZETASQL_ASSIGN_OR_RETURN(Datum result, postgres_translator::CheckedOidFunctionCall1(
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum result, postgres_translator::CheckedOidFunctionCall1(
                                      F_ABS_NUMERIC, numeric_in));
 
   return NumericOut(result);
@@ -76,10 +76,10 @@ absl::StatusOr<std::string> Abs(absl::string_view numeric_decimal_string) {
 
 absl::StatusOr<std::string> Add(absl::string_view numeric_decimal_string_1,
                                 absl::string_view numeric_decimal_string_2) {
-  ZETASQL_ASSIGN_OR_RETURN(Datum numeric_in_1, NumericIn(numeric_decimal_string_1));
-  ZETASQL_ASSIGN_OR_RETURN(Datum numeric_in_2, NumericIn(numeric_decimal_string_2));
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum numeric_in_1, NumericIn(numeric_decimal_string_1));
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum numeric_in_2, NumericIn(numeric_decimal_string_2));
 
-  ZETASQL_ASSIGN_OR_RETURN(Datum result,
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum result,
                    postgres_translator::CheckedOidFunctionCall2(
                        F_NUMERIC_ADD, numeric_in_1, numeric_in_2));
 
@@ -87,18 +87,18 @@ absl::StatusOr<std::string> Add(absl::string_view numeric_decimal_string_1,
 }
 
 absl::StatusOr<std::string> Ceil(absl::string_view numeric_decimal_string) {
-  ZETASQL_ASSIGN_OR_RETURN(Datum numeric_in, NumericIn(numeric_decimal_string));
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum numeric_in, NumericIn(numeric_decimal_string));
 
-  ZETASQL_ASSIGN_OR_RETURN(Datum result, postgres_translator::CheckedOidFunctionCall1(
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum result, postgres_translator::CheckedOidFunctionCall1(
                                      F_CEIL_NUMERIC, numeric_in));
 
   return NumericOut(result);
 }
 
 absl::StatusOr<std::string> Ceiling(absl::string_view numeric_decimal_string) {
-  ZETASQL_ASSIGN_OR_RETURN(Datum numeric_in, NumericIn(numeric_decimal_string));
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum numeric_in, NumericIn(numeric_decimal_string));
 
-  ZETASQL_ASSIGN_OR_RETURN(Datum result, postgres_translator::CheckedOidFunctionCall1(
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum result, postgres_translator::CheckedOidFunctionCall1(
                                      F_CEILING_NUMERIC, numeric_in));
 
   return NumericOut(result);
@@ -106,10 +106,10 @@ absl::StatusOr<std::string> Ceiling(absl::string_view numeric_decimal_string) {
 
 absl::StatusOr<std::string> Divide(absl::string_view numeric_decimal_string_1,
                                    absl::string_view numeric_decimal_string_2) {
-  ZETASQL_ASSIGN_OR_RETURN(Datum numeric_in_1, NumericIn(numeric_decimal_string_1));
-  ZETASQL_ASSIGN_OR_RETURN(Datum numeric_in_2, NumericIn(numeric_decimal_string_2));
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum numeric_in_1, NumericIn(numeric_decimal_string_1));
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum numeric_in_2, NumericIn(numeric_decimal_string_2));
 
-  ZETASQL_ASSIGN_OR_RETURN(Datum result,
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum result,
                    postgres_translator::CheckedOidFunctionCall2(
                        F_NUMERIC_DIV, numeric_in_1, numeric_in_2));
 
@@ -119,10 +119,10 @@ absl::StatusOr<std::string> Divide(absl::string_view numeric_decimal_string_1,
 absl::StatusOr<std::string> DivideTruncateTowardsZero(
     absl::string_view numeric_decimal_string_1,
     absl::string_view numeric_decimal_string_2) {
-  ZETASQL_ASSIGN_OR_RETURN(Datum numeric_in_1, NumericIn(numeric_decimal_string_1));
-  ZETASQL_ASSIGN_OR_RETURN(Datum numeric_in_2, NumericIn(numeric_decimal_string_2));
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum numeric_in_1, NumericIn(numeric_decimal_string_1));
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum numeric_in_2, NumericIn(numeric_decimal_string_2));
 
-  ZETASQL_ASSIGN_OR_RETURN(Datum result,
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum result,
                    postgres_translator::CheckedOidFunctionCall2(
                        F_NUMERIC_DIV_TRUNC, numeric_in_1, numeric_in_2));
 
@@ -130,9 +130,9 @@ absl::StatusOr<std::string> DivideTruncateTowardsZero(
 }
 
 absl::StatusOr<std::string> Floor(absl::string_view numeric_decimal_string) {
-  ZETASQL_ASSIGN_OR_RETURN(Datum numeric_in, NumericIn(numeric_decimal_string));
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum numeric_in, NumericIn(numeric_decimal_string));
 
-  ZETASQL_ASSIGN_OR_RETURN(Datum result, postgres_translator::CheckedOidFunctionCall1(
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum result, postgres_translator::CheckedOidFunctionCall1(
                                      F_FLOOR_NUMERIC, numeric_in));
 
   return NumericOut(result);
@@ -140,10 +140,10 @@ absl::StatusOr<std::string> Floor(absl::string_view numeric_decimal_string) {
 
 absl::StatusOr<std::string> Mod(absl::string_view numeric_decimal_string_1,
                                 absl::string_view numeric_decimal_string_2) {
-  ZETASQL_ASSIGN_OR_RETURN(Datum numeric_in_1, NumericIn(numeric_decimal_string_1));
-  ZETASQL_ASSIGN_OR_RETURN(Datum numeric_in_2, NumericIn(numeric_decimal_string_2));
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum numeric_in_1, NumericIn(numeric_decimal_string_1));
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum numeric_in_2, NumericIn(numeric_decimal_string_2));
 
-  ZETASQL_ASSIGN_OR_RETURN(Datum result,
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum result,
                    postgres_translator::CheckedOidFunctionCall2(
                        F_MOD_NUMERIC_NUMERIC, numeric_in_1, numeric_in_2));
 
@@ -153,10 +153,10 @@ absl::StatusOr<std::string> Mod(absl::string_view numeric_decimal_string_1,
 absl::StatusOr<std::string> Multiply(
     absl::string_view numeric_decimal_string_1,
     absl::string_view numeric_decimal_string_2) {
-  ZETASQL_ASSIGN_OR_RETURN(Datum numeric_in_1, NumericIn(numeric_decimal_string_1));
-  ZETASQL_ASSIGN_OR_RETURN(Datum numeric_in_2, NumericIn(numeric_decimal_string_2));
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum numeric_in_1, NumericIn(numeric_decimal_string_1));
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum numeric_in_2, NumericIn(numeric_decimal_string_2));
 
-  ZETASQL_ASSIGN_OR_RETURN(Datum result,
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum result,
                    postgres_translator::CheckedOidFunctionCall2(
                        F_NUMERIC_MUL, numeric_in_1, numeric_in_2));
 
@@ -166,10 +166,10 @@ absl::StatusOr<std::string> Multiply(
 absl::StatusOr<std::string> Subtract(
     absl::string_view numeric_decimal_string_1,
     absl::string_view numeric_decimal_string_2) {
-  ZETASQL_ASSIGN_OR_RETURN(Datum numeric_in_1, NumericIn(numeric_decimal_string_1));
-  ZETASQL_ASSIGN_OR_RETURN(Datum numeric_in_2, NumericIn(numeric_decimal_string_2));
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum numeric_in_1, NumericIn(numeric_decimal_string_1));
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum numeric_in_2, NumericIn(numeric_decimal_string_2));
 
-  ZETASQL_ASSIGN_OR_RETURN(Datum result,
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum result,
                    postgres_translator::CheckedOidFunctionCall2(
                        F_NUMERIC_SUB, numeric_in_1, numeric_in_2));
 
@@ -186,10 +186,10 @@ absl::StatusOr<std::string> Trunc(absl::string_view numeric_decimal_string,
                      std::numeric_limits<int32_t>::max()));
   }
 
-  ZETASQL_ASSIGN_OR_RETURN(Datum numeric_in, NumericIn(numeric_decimal_string));
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum numeric_in, NumericIn(numeric_decimal_string));
   Datum scale_in = Int64GetDatum(scale);
 
-  ZETASQL_ASSIGN_OR_RETURN(Datum result,
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum result,
                    postgres_translator::CheckedOidFunctionCall2(
                        F_TRUNC_NUMERIC_INT4, numeric_in, scale_in));
 
@@ -198,9 +198,9 @@ absl::StatusOr<std::string> Trunc(absl::string_view numeric_decimal_string,
 
 absl::StatusOr<std::string> UnaryMinus(
     absl::string_view numeric_decimal_string) {
-  ZETASQL_ASSIGN_OR_RETURN(Datum numeric_in, NumericIn(numeric_decimal_string));
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum numeric_in, NumericIn(numeric_decimal_string));
 
-  ZETASQL_ASSIGN_OR_RETURN(Datum result, postgres_translator::CheckedOidFunctionCall1(
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum result, postgres_translator::CheckedOidFunctionCall1(
                                      F_NUMERIC_UMINUS, numeric_in));
 
   return NumericOut(result);

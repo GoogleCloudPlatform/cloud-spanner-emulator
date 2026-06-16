@@ -17,7 +17,7 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_FRONTEND_SERVER_HANDLER_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_FRONTEND_SERVER_HANDLER_H_
 
-#include "zetasql/base/logging.h"
+#include "googlesql/base/logging.h"
 #include "absl/status/status.h"
 #include "common/config.h"
 #include "frontend/server/request_context.h"

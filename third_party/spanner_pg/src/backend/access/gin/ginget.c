@@ -4,7 +4,7 @@
  *	  fetch tuples from a GIN scan.
  *
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -399,7 +399,7 @@ restartScanEntry:
 		{
 			BlockNumber rootPostingTree = GinGetPostingTree(itup);
 			GinBtreeStack *stack;
-			Page		page;
+			Page		entrypage;
 			ItemPointerData minItem;
 
 			/*
@@ -430,13 +430,13 @@ restartScanEntry:
 			 */
 			IncrBufferRefCount(entry->buffer);
 
-			page = BufferGetPage(entry->buffer);
+			entrypage = BufferGetPage(entry->buffer);
 
 			/*
 			 * Load the first page into memory.
 			 */
 			ItemPointerSetMin(&minItem);
-			entry->list = GinDataLeafPageGetItems(page, &entry->nlist, minItem);
+			entry->list = GinDataLeafPageGetItems(entrypage, &entry->nlist, minItem);
 
 			entry->predictNumberResult = stack->predictNumber * entry->nlist;
 
@@ -558,16 +558,18 @@ startScanKey(GinState *ginstate, GinScanOpaque so, GinScanKey key)
 		qsort_arg(entryIndexes, key->nentries, sizeof(int),
 				  entryIndexByFrequencyCmp, key);
 
+		for (i = 1; i < key->nentries; i++)
+			key->entryRes[entryIndexes[i]] = GIN_MAYBE;
 		for (i = 0; i < key->nentries - 1; i++)
 		{
 			/* Pass all entries <= i as FALSE, and the rest as MAYBE */
-			for (j = 0; j <= i; j++)
-				key->entryRes[entryIndexes[j]] = GIN_FALSE;
-			for (j = i + 1; j < key->nentries; j++)
-				key->entryRes[entryIndexes[j]] = GIN_MAYBE;
+			key->entryRes[entryIndexes[i]] = GIN_FALSE;
 
 			if (key->triConsistentFn(key) == GIN_FALSE)
 				break;
+
+			/* Make this loop interruptible in case there are many keys */
+			CHECK_FOR_INTERRUPTS();
 		}
 		/* i is now the last required entry. */
 
@@ -1314,6 +1316,8 @@ scanGetItem(IndexScanDesc scan, ItemPointerData advancePast,
 	 */
 	do
 	{
+		CHECK_FOR_INTERRUPTS();
+
 		ItemPointerSetMin(item);
 		match = true;
 		for (i = 0; i < so->nkeys && match; i++)
@@ -1957,8 +1961,6 @@ gingetbitmap(IndexScanDesc scan, TIDBitmap *tbm)
 
 	for (;;)
 	{
-		CHECK_FOR_INTERRUPTS();
-
 		if (!scanGetItem(scan, iptr, &iptr, &recheck))
 			break;
 

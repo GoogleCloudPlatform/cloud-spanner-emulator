@@ -4,7 +4,7 @@
  *	  POSTGRES error reporting/logging definitions.
  *
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/utils/elog.h
@@ -30,6 +30,12 @@
 #define ELOG_H
 
 #include <setjmp.h>
+
+#include "lib/stringinfo.h"
+
+/* We cannot include nodes.h yet, so forward-declare struct Node */
+struct Node;
+
 
 /* Error level codes */
 #define DEBUG5		10			/* Debugging messages, in categories of
@@ -98,7 +104,7 @@
  */
 #if defined(errno) && defined(__linux__)
 #define pg_prevent_errno_in_scope() int __errno_location pg_attribute_unused()
-#elif defined(errno) && (defined(__darwin__) || defined(__freebsd__))
+#elif defined(errno) && (defined(__darwin__) || defined(__FreeBSD__))
 #define pg_prevent_errno_in_scope() int __error pg_attribute_unused()
 #else
 #define pg_prevent_errno_in_scope()
@@ -148,20 +154,20 @@
  */
 
 #ifdef HAVE__BUILTIN_CONSTANT_P
-#define ereport_domain(elevel, domain, ...)                                 \
+#define ereport_domain(elevel, domain, ...)                                  \
   do {                                                                       \
     spangres_errstart();                                                     \
-    spangres_evaluate(__VA_ARGS__);										\
-    spangres_ereport(elevel, __FILE__, __LINE__, PG_FUNCNAME_MACRO, NULL);   \
+    spangres_evaluate(__VA_ARGS__);                                          \
+    spangres_ereport(elevel, __FILE__, __LINE__, __func__, NULL);            \
     if (__builtin_constant_p(elevel) && (elevel) >= ERROR) pg_unreachable(); \
   } while (0)
 #else							/* !HAVE__BUILTIN_CONSTANT_P */
-#define ereport_domain(elevel, domain, ...)	 \
-  do {                                       \
-    spangres_errstart();                     \
-    spangres_evaluate(__VA_ARGS__);			 \
-    spangres_ereport(elevel, __FILE__, __LINE__, PG_FUNCNAME_MACRO, NULL);  \
-    if ((elevel) >= ERROR) pg_unreachable(); \
+#define ereport_domain(elevel, domain, ...)                       \
+  do {                                                            \
+    spangres_errstart();                                          \
+    spangres_evaluate(__VA_ARGS__);                               \
+    spangres_ereport(elevel, __FILE__, __LINE__, __func__, NULL); \
+    if ((elevel) >= ERROR) pg_unreachable();                      \
   } while (0)
 #endif							/* HAVE__BUILTIN_CONSTANT_P */
 
@@ -235,6 +241,7 @@ extern int	internalerrquery(const char *query);
 extern int	err_generic_string(int field, const char *str);
 
 extern int	geterrcode(void);
+extern int	geterrlevel(void);
 extern int	geterrposition(void);
 extern int	getinternalerrposition(void);
 
@@ -255,26 +262,90 @@ extern int	getinternalerrposition(void);
 #define elog(elevel, ...)                                                    \
   do {                                                                       \
     spangres_errstart();                                                     \
-    spangres_ereport(elevel, __FILE__, __LINE__, PG_FUNCNAME_MACRO, __VA_ARGS__);  \
+    spangres_ereport(elevel, __FILE__, __LINE__, __func__, __VA_ARGS__);     \
     if (__builtin_constant_p(elevel) && (elevel) >= ERROR) pg_unreachable(); \
   } while (0)
 #else							/* !HAVE__BUILTIN_CONSTANT_P */
-#define elog(elevel, ...)                   \
-  do {                                      \
-    spangres_errstart();                    \
-    spangres_ereport(elevel, __FILE__, __LINE__, PG_FUNCNAME_MACRO, __VA_ARGS__);  \
-    if (elevel_ >= ERROR) pg_unreachable(); \
+#define elog(elevel, ...)                                                \
+  do {                                                                   \
+    spangres_errstart();                                                 \
+    spangres_ereport(elevel, __FILE__, __LINE__, __func__, __VA_ARGS__); \
+    if (elevel_ >= ERROR) pg_unreachable();                              \
   } while (0)
 #endif							/* HAVE__BUILTIN_CONSTANT_P */
 #else							/* !HAVE__VA_ARGS */
-#define elog                                           \
-  spangres_errstart();                                 \
-  spangres_ereport(elevel, __FILE__, __LINE__, PG_FUNCNAME_MACRO, "Unknown internal error."); \
+#define elog                                             \
+  spangres_errstart();                                   \
+  spangres_ereport(elevel, __FILE__, __LINE__, __func__, \
+                   "Unknown internal error.");           \
   spangres_evaluate
 #endif							/* HAVE__VA_ARGS */
 
 extern void elog_start(const char *filename, int lineno, const char *funcname);
 extern void elog_finish(int elevel, const char *fmt,...) pg_attribute_printf(2, 3);
+
+
+/*----------
+ * Support for reporting "soft" errors that don't require a full transaction
+ * abort to clean up.  This is to be used in this way:
+ *		errsave(context,
+ *				errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
+ *				errmsg("invalid input syntax for type %s: \"%s\"",
+ *					   "boolean", in_str),
+ *				... other errxxx() fields as needed ...);
+ *
+ * "context" is a node pointer or NULL, and the remaining auxiliary calls
+ * provide the same error details as in ereport().  If context is not a
+ * pointer to an ErrorSaveContext node, then errsave(context, ...)
+ * behaves identically to ereport(ERROR, ...).  If context is a pointer
+ * to an ErrorSaveContext node, then the information provided by the
+ * auxiliary calls is stored in the context node and control returns
+ * normally.  The caller of errsave() must then do any required cleanup
+ * and return control back to its caller.  That caller must check the
+ * ErrorSaveContext node to see whether an error occurred before
+ * it can trust the function's result to be meaningful.
+ *
+ * errsave_domain() allows a message domain to be specified; it is
+ * precisely analogous to ereport_domain().
+ *----------
+ */
+/* SPANGRES BEGIN */
+#define errsave_domain(context, domain, ...)	\
+	do { \
+		struct Node *context_ = (context); \
+    if (context_ == NULL || !IsA(context_, ErrorSaveContext)) {              \
+      ereport_domain(ERROR, domain, __VA_ARGS__);                            \
+    } else {                                                                 \
+      pg_prevent_errno_in_scope();                                           \
+      if (errsave_start(context_, domain))                                   \
+        __VA_ARGS__, errsave_finish(context_, __FILE__, __LINE__, __func__); \
+    }                                                                        \
+	} while(0)
+/* SPANGRES END */
+
+#define errsave(context, ...)	\
+	errsave_domain(context, TEXTDOMAIN, __VA_ARGS__)
+
+/*
+ * "ereturn(context, dummy_value, ...);" is exactly the same as
+ * "errsave(context, ...); return dummy_value;".  This saves a bit
+ * of typing in the common case where a function has no cleanup
+ * actions to take after reporting a soft error.  "dummy_value"
+ * can be empty if the function returns void.
+ */
+#define ereturn_domain(context, dummy_value, domain, ...)	\
+	do { \
+		errsave_domain(context, domain, __VA_ARGS__); \
+		return dummy_value; \
+	} while(0)
+
+#define ereturn(context, dummy_value, ...)	\
+	ereturn_domain(context, dummy_value, TEXTDOMAIN, __VA_ARGS__)
+
+extern bool errsave_start(struct Node *context, const char *domain);
+extern void errsave_finish(struct Node *context,
+						   const char *filename, int lineno,
+						   const char *funcname);
 
 
 /* Support for constructing error strings separately from ereport() calls */
@@ -352,39 +423,47 @@ extern PGDLLIMPORT ErrorContextCallback *error_context_stack;
  * pedantry; we have seen bugs from compilers improperly optimizing code
  * away when such a variable was not marked.  Beware that gcc's -Wclobbered
  * warnings are just about entirely useless for catching such oversights.
+ *
+ * Each of these macros accepts an optional argument which can be specified
+ * to apply a suffix to the variables declared within the macros.  This suffix
+ * can be used to avoid the compiler emitting warnings about shadowed
+ * variables when compiling with -Wshadow in situations where nested PG_TRY()
+ * statements are required.  The optional suffix may contain any character
+ * that's allowed in a variable name.  The suffix, if specified, must be the
+ * same within each component macro of the given PG_TRY() statement.
  *----------
  */
-#define PG_TRY()  \
+#define PG_TRY(...)  \
 	do { \
-		sigjmp_buf *_save_exception_stack = PG_exception_stack; \
-		ErrorContextCallback *_save_context_stack = error_context_stack; \
-		sigjmp_buf _local_sigjmp_buf; \
-		bool _do_rethrow = false; \
-		if (sigsetjmp(_local_sigjmp_buf, 0) == 0) \
+		sigjmp_buf *_save_exception_stack##__VA_ARGS__ = PG_exception_stack; \
+		ErrorContextCallback *_save_context_stack##__VA_ARGS__ = error_context_stack; \
+		sigjmp_buf _local_sigjmp_buf##__VA_ARGS__; \
+		bool _do_rethrow##__VA_ARGS__ = false; \
+		if (sigsetjmp(_local_sigjmp_buf##__VA_ARGS__, 0) == 0) \
 		{ \
-			PG_exception_stack = &_local_sigjmp_buf
+			PG_exception_stack = &_local_sigjmp_buf##__VA_ARGS__
 
-#define PG_CATCH()	\
+#define PG_CATCH(...)	\
 		} \
 		else \
 		{ \
-			PG_exception_stack = _save_exception_stack; \
-			error_context_stack = _save_context_stack
+			PG_exception_stack = _save_exception_stack##__VA_ARGS__; \
+			error_context_stack = _save_context_stack##__VA_ARGS__
 
-#define PG_FINALLY() \
+#define PG_FINALLY(...) \
 		} \
 		else \
-			_do_rethrow = true; \
+			_do_rethrow##__VA_ARGS__ = true; \
 		{ \
-			PG_exception_stack = _save_exception_stack; \
-			error_context_stack = _save_context_stack
+			PG_exception_stack = _save_exception_stack##__VA_ARGS__; \
+			error_context_stack = _save_context_stack##__VA_ARGS__
 
-#define PG_END_TRY()  \
+#define PG_END_TRY(...)  \
 		} \
-		if (_do_rethrow) \
+		if (_do_rethrow##__VA_ARGS__) \
 				PG_RE_THROW(); \
-		PG_exception_stack = _save_exception_stack; \
-		error_context_stack = _save_context_stack; \
+		PG_exception_stack = _save_exception_stack##__VA_ARGS__; \
+		error_context_stack = _save_context_stack##__VA_ARGS__; \
 	} while (0)
 
 /*
@@ -483,6 +562,8 @@ extern PGDLLIMPORT bool syslog_split_messages;
 #define LOG_DESTINATION_JSONLOG	16
 
 /* Other exported functions */
+extern void log_status_format(StringInfo buf, const char *format,
+							  ErrorData *edata);
 extern void DebugFileOpen(void);
 extern char *unpack_sql_state(int sql_state);
 extern bool in_error_recursion_trouble(void);
@@ -500,16 +581,13 @@ extern void write_pipe_chunks(char *data, int len, int dest);
 extern void write_csvlog(ErrorData *edata);
 extern void write_jsonlog(ErrorData *edata);
 
-#ifdef HAVE_SYSLOG
-extern void set_syslog_parameters(const char *ident, int facility);
-#endif
-
 /*
  * Write errors to stderr (or by equal means when stderr is
  * not available). Used before ereport/elog can be used
  * safely (memory context, GUC load etc)
  */
 extern void write_stderr(const char *fmt,...) pg_attribute_printf(1, 2);
+extern void vwrite_stderr(const char *fmt, va_list ap) pg_attribute_printf(1, 0);
 
 /*
  * Write a message to STDERR using only async-signal-safe functions.  This can

@@ -14,6 +14,8 @@
 # limitations under the License.
 #
 
+load("@com_google_protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
+load("@com_google_protobuf//bazel:proto_library.bzl", "proto_library")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
 
@@ -102,13 +104,13 @@ cc_library(
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/types:span",
         "@com_google_googleapis//google/spanner/admin/database/v1:database_cc_proto",
-        "@com_google_zetasql//zetasql/base:ret_check",
-        "@com_google_zetasql//zetasql/public:function",
-        "@com_google_zetasql//zetasql/public:function_cc_proto",
-        "@com_google_zetasql//zetasql/public:options_cc_proto",
-        "@com_google_zetasql//zetasql/public:type",
-        "@com_google_zetasql//zetasql/public:type_cc_proto",
-        "@com_google_zetasql//zetasql/public:value",
+        "@com_google_googlesql//googlesql/base:ret_check",
+        "@com_google_googlesql//googlesql/public:function",
+        "@com_google_googlesql//googlesql/public:function_cc_proto",
+        "@com_google_googlesql//googlesql/public:options_cc_proto",
+        "@com_google_googlesql//googlesql/public:type",
+        "@com_google_googlesql//googlesql/public:type_cc_proto",
+        "@com_google_googlesql//googlesql/public:value",
         "@com_googlesource_code_re2//:re2",
     ],
 )
@@ -131,7 +133,7 @@ cc_library(
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/time",
-        "@com_google_zetasql//zetasql/base:ret_check",
+        "@com_google_googlesql//googlesql/base:ret_check",
     ],
 )
 
@@ -148,9 +150,9 @@ cc_test(
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/synchronization",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
+        "@com_google_googlesql//googlesql/public:value",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
-        "@com_google_zetasql//zetasql/public:value",
     ],
 )
 
@@ -180,9 +182,10 @@ cc_test(
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/time",
         "@com_google_googleapis//google/spanner/admin/database/v1:database_cc_proto",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
+        "@com_google_googlesql//googlesql/public:function",
+        "@com_google_googlesql//googlesql/public:type",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
-        "@com_google_zetasql//zetasql/public:type",
     ],
 )
 
@@ -200,8 +203,8 @@ cc_test(
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/time",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -216,8 +219,8 @@ cc_test(
         "//third_party/spanner_pg/src/backend:backend_with_shims",
         "@com_github_google_benchmark//:benchmark",
         "@com_github_grpc_grpc//:grpc++",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -234,10 +237,10 @@ cc_library(
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:span",
+        "@com_google_googlesql//googlesql/base:ret_check",
+        "@com_google_googlesql//googlesql/public:type",
         "@com_google_protobuf//:protobuf",
         "@com_google_protobuf//:protobuf_headers",
-        "@com_google_zetasql//zetasql/base:ret_check",
-        "@com_google_zetasql//zetasql/public:type",
     ],
 )
 
@@ -257,8 +260,8 @@ cc_test(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest_main",
         "@com_google_protobuf//:protobuf",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )

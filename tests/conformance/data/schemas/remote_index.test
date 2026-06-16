@@ -1,0 +1,11 @@
+@Dialect=GOOGLE_STANDARD_SQL
+CREATE TABLE ParentTable (
+  name STRING(MAX),
+  age INT64
+) PRIMARY KEY (name);
+CREATE TABLE TestTable (
+  id INT64 NOT NULL,
+  testname STRING(MAX),
+  info STRING(MAX)
+) PRIMARY KEY (id);
+CREATE INDEX RemoteIndex ON TestTable(testname) STORING(info), INTERLEAVE IN ParentTable;

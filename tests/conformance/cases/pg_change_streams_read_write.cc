@@ -23,7 +23,7 @@
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/log/check.h"
 #include "absl/status/status.h"
@@ -47,11 +47,11 @@
 #include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/conformance/common/database_test_base.h"
 #include "tests/conformance/common/environment.h"
+#include "googlesql/base/status_macros.h"
 #include "grpcpp/client_context.h"
 #include "grpcpp/support/sync_stream.h"
 #include "nlohmann/json.hpp"
 #include "google/protobuf/json/json.h"
-#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -99,7 +99,7 @@ class PGChangeStreamTest : public DatabaseTest {
   }
 
   absl::Status SetUpDatabase() override {
-    ZETASQL_RETURN_IF_ERROR(SetSchema({
+    GOOGLESQL_RETURN_IF_ERROR(SetSchema({
         R"(
           CREATE TABLE scalar_types_all_keys_table (
           int_val bigint NOT NULL,
@@ -133,7 +133,7 @@ class PGChangeStreamTest : public DatabaseTest {
           value_capture_type = 'NEW_VALUES' )
         )",
     }));
-    ZETASQL_ASSIGN_OR_RETURN(test_session_uri_, CreateTestSession());
+    GOOGLESQL_ASSIGN_OR_RETURN(test_session_uri_, CreateTestSession());
     return absl::OkStatus();
   }
 
@@ -145,7 +145,7 @@ class PGChangeStreamTest : public DatabaseTest {
     spanner_api::CreateSessionRequest request;
     spanner_api::Session response;
     request.set_database(database()->FullName());
-    ZETASQL_RETURN_IF_ERROR(raw_client()->CreateSession(&context, request, &response));
+    GOOGLESQL_RETURN_IF_ERROR(raw_client()->CreateSession(&context, request, &response));
     return response.name();
   }
 
@@ -202,11 +202,11 @@ class PGChangeStreamTest : public DatabaseTest {
     std::vector<spanner_api::PartialResultSet> response;
     grpc::ClientContext context;
     auto client_reader = raw_client()->ExecuteStreamingSql(&context, request);
-    ZETASQL_EXPECT_OK(ReadFromClientReader(std::move(client_reader), response));
+    GOOGLESQL_EXPECT_OK(ReadFromClientReader(std::move(client_reader), response));
 
-    ZETASQL_ASSIGN_OR_RETURN(auto result_set, backend::test::MergePartialResultSets(
+    GOOGLESQL_ASSIGN_OR_RETURN(auto result_set, backend::test::MergePartialResultSets(
                                           response, /*columns_per_row=*/1));
-    ZETASQL_ASSIGN_OR_RETURN(ChangeStreamRecords change_records,
+    GOOGLESQL_ASSIGN_OR_RETURN(ChangeStreamRecords change_records,
                      GetChangeStreamRecordsFromResultSet(result_set));
     return change_records;
   }
@@ -218,7 +218,7 @@ class PGChangeStreamTest : public DatabaseTest {
   absl::StatusOr<std::vector<std::string>> GetActiveTokensFromInitialQuery(
       absl::Time time) {
     std::vector<std::string> active_tokens;
-    ZETASQL_ASSIGN_OR_RETURN(test::ChangeStreamRecords change_records,
+    GOOGLESQL_ASSIGN_OR_RETURN(test::ChangeStreamRecords change_records,
                      ExecuteChangeStreamQuery(BuildChangeStreamQuery(time)));
     for (const auto& child_partition_record :
          change_records.child_partition_records) {
@@ -241,11 +241,11 @@ class PGChangeStreamTest : public DatabaseTest {
   // a list.
   absl::StatusOr<std::vector<DataChangeRecord>> GetDataRecordsFromStartToNow(
       absl::Time start) {
-    ZETASQL_ASSIGN_OR_RETURN(std::vector<std::string> active_tokens,
+    GOOGLESQL_ASSIGN_OR_RETURN(std::vector<std::string> active_tokens,
                      GetActiveTokensFromInitialQuery(start));
     std::vector<DataChangeRecord> merged_data_change_records;
     for (const auto& partition_token : active_tokens) {
-      ZETASQL_ASSIGN_OR_RETURN(test::ChangeStreamRecords change_records,
+      GOOGLESQL_ASSIGN_OR_RETURN(test::ChangeStreamRecords change_records,
                        ExecuteChangeStreamQuery(BuildChangeStreamQuery(
                            start, Clock().Now(), partition_token)));
       merged_data_change_records.insert(
@@ -272,7 +272,7 @@ class PGChangeStreamTest : public DatabaseTest {
         cloud::spanner::MakeTimestamp(absl::UnixEpoch()).value(),
         JsonB(R"("3")"), jsonb_arr,
         cloud::spanner::MakeNumeric("111.1").value(), numeric_arr, 3.14f});
-    ZETASQL_ASSIGN_OR_RETURN(auto commit_result, Commit({mutation_builder.Build()}));
+    GOOGLESQL_ASSIGN_OR_RETURN(auto commit_result, Commit({mutation_builder.Build()}));
     initial_data_population_ts_ = GetCommitTimestampOrDie(commit_result);
     return absl::OkStatus();
   }
@@ -282,7 +282,7 @@ class PGChangeStreamTest : public DatabaseTest {
 };
 
 TEST_F(PGChangeStreamTest, SingleInsertVerifyDataChangeRecordContent) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto data_change_records,
       GetDataRecordsFromStartToNow(initial_data_population_ts_));
   ASSERT_EQ(data_change_records.size(), 1);
@@ -358,9 +358,9 @@ TEST_F(PGChangeStreamTest, SingleUpdateVerifyDataChangeRecordContent) {
       "2015-09-27", 2.2, "hello", Null<Timestamp>(),
       JsonB(R"({"a": [2], "b": [1]})"), Null<Array<JsonB>>(),
       cloud::spanner::MakeNumeric("999.9").value(), numeric_arr, 3.14f});
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result, Commit({mutation_builder.Build()}));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto commit_result, Commit({mutation_builder.Build()}));
   const absl::Time commit_ts = GetCommitTimestampOrDie(commit_result);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<DataChangeRecord> data_change_records,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<DataChangeRecord> data_change_records,
                        GetDataRecordsFromStartToNow(commit_ts));
   ASSERT_EQ(data_change_records.size(), 1);
   EXPECT_EQ(data_change_records[0].commit_timestamp.string_value(),
@@ -422,9 +422,9 @@ TEST_F(PGChangeStreamTest, SingleUpdateVerifyDataChangeRecordContent) {
 TEST_F(PGChangeStreamTest, SingleDeleteVerifyDataChangeRecordContent) {
   auto mutation_builder = DeleteMutationBuilder(
       "scalar_types_table", KeySet().AddKey(cloud::spanner::MakeKey(1)));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result, Commit({mutation_builder.Build()}));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto commit_result, Commit({mutation_builder.Build()}));
   const absl::Time commit_ts = GetCommitTimestampOrDie(commit_result);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto data_change_records,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto data_change_records,
                        GetDataRecordsFromStartToNow(commit_ts));
   ASSERT_EQ(data_change_records.size(), 1);
   EXPECT_EQ(data_change_records[0].commit_timestamp.string_value(),
@@ -480,10 +480,10 @@ TEST_F(PGChangeStreamTest, DiffDataTypesInKey) {
                    cloud::spanner_internal::BytesFromBase64("blue").value()),
                "2014-09-27", 1.1, "test_str",
                cloud::spanner::MakeTimestamp(absl::UnixEpoch()).value()});
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto commit_result, Commit({mutation_builder.Build()}));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto commit_result, Commit({mutation_builder.Build()}));
   absl::Time commit_ts = GetCommitTimestampOrDie(commit_result);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto data_change_records,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto data_change_records,
                        GetDataRecordsFromStartToNow(commit_ts));
   ASSERT_EQ(data_change_records.size(), 1);
   EXPECT_EQ(data_change_records[0].commit_timestamp.string_value(),

@@ -33,9 +33,9 @@
 #include "backend/schema/updater/global_schema_names.h"
 #include "common/errors.h"
 #include "common/limits.h"
-#include "zetasql/base/ret_check.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 #include "absl/status/status.h"
-#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -46,13 +46,13 @@ namespace {}  // namespace
 
 absl::Status ChangeStreamValidator::Validate(const ChangeStream* change_stream,
                                              SchemaValidationContext* context) {
-  ZETASQL_RET_CHECK(!change_stream->name_.empty());
+  GOOGLESQL_RET_CHECK(!change_stream->name_.empty());
   if (context->is_postgresql_dialect()) {
-    ZETASQL_RET_CHECK(change_stream->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(change_stream->postgresql_oid().has_value());
   } else {
-    ZETASQL_RET_CHECK(!change_stream->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(!change_stream->postgresql_oid().has_value());
   }
-  ZETASQL_RETURN_IF_ERROR(GlobalSchemaNames::ValidateSchemaName("Change Stream",
+  GOOGLESQL_RETURN_IF_ERROR(GlobalSchemaNames::ValidateSchemaName("Change Stream",
                                                         change_stream->name_));
   // TODO: Validate TVF name.
   return absl::OkStatus();
@@ -63,23 +63,23 @@ absl::Status ChangeStreamValidator::ValidateUpdate(
     const ChangeStream* change_stream, const ChangeStream* old_change_stream,
     SchemaValidationContext* context) {
   if (change_stream->is_deleted()) {
-    ZETASQL_RET_CHECK(change_stream->change_stream_data_table_->is_deleted());
-    ZETASQL_RET_CHECK(change_stream->change_stream_partition_table_->is_deleted());
+    GOOGLESQL_RET_CHECK(change_stream->change_stream_data_table_->is_deleted());
+    GOOGLESQL_RET_CHECK(change_stream->change_stream_partition_table_->is_deleted());
     context->global_names()->RemoveName(change_stream->Name());
     return absl::OkStatus();
   }
-  ZETASQL_RET_CHECK(!change_stream->change_stream_data_table()->is_deleted());
-  ZETASQL_RET_CHECK(!change_stream->change_stream_partition_table()->is_deleted());
-  ZETASQL_RET_CHECK_EQ(change_stream->Name(), old_change_stream->Name());
-  ZETASQL_RET_CHECK_EQ(change_stream->id(), old_change_stream->id());
+  GOOGLESQL_RET_CHECK(!change_stream->change_stream_data_table()->is_deleted());
+  GOOGLESQL_RET_CHECK(!change_stream->change_stream_partition_table()->is_deleted());
+  GOOGLESQL_RET_CHECK_EQ(change_stream->Name(), old_change_stream->Name());
+  GOOGLESQL_RET_CHECK_EQ(change_stream->id(), old_change_stream->id());
   if (context->is_postgresql_dialect()) {
-    ZETASQL_RET_CHECK(change_stream->postgresql_oid().has_value());
-    ZETASQL_RET_CHECK(old_change_stream->postgresql_oid().has_value());
-    ZETASQL_RET_CHECK_EQ(change_stream->postgresql_oid().value(),
+    GOOGLESQL_RET_CHECK(change_stream->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(old_change_stream->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK_EQ(change_stream->postgresql_oid().value(),
                  old_change_stream->postgresql_oid().value());
   } else {
-    ZETASQL_RET_CHECK(!change_stream->postgresql_oid().has_value());
-    ZETASQL_RET_CHECK(!old_change_stream->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(!change_stream->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(!old_change_stream->postgresql_oid().has_value());
   }
   return absl::OkStatus();
 }

@@ -36,7 +36,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "third_party/spanner_pg/catalog/catalog_adapter.h"
 #include "third_party/spanner_pg/test_catalog/test_catalog.h"
 
@@ -47,8 +47,8 @@ using ::postgres_translator::spangres::test::GetSpangresTestAnalyzerOptions;
 using ::postgres_translator::spangres::test::
     GetSpangresTestCatalogAdapterHolder;
 using ::testing::HasSubstr;
-using ::zetasql_base::testing::IsOkAndHolds;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::IsOkAndHolds;
+using ::googlesql_base::testing::StatusIs;
 
 const TableName kKeyValueTableName({"public", "keyvalue"});
 
@@ -58,20 +58,20 @@ TEST(CatalogAdapterHolderTest, HolderBasicTest) {
   EXPECT_THAT(GetCatalogAdapter(), StatusIs(absl::StatusCode::kInternal,
                                             HasSubstr("is not initialized")));
   {
-    zetasql::AnalyzerOptions analyzer_options =
+    googlesql::AnalyzerOptions analyzer_options =
         GetSpangresTestAnalyzerOptions();
     std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
         GetSpangresTestCatalogAdapterHolder(analyzer_options);
 
     // The thread local catalog adapter should be initialized now.
-    ZETASQL_ASSERT_OK_AND_ASSIGN(CatalogAdapter* catalog_adapter, GetCatalogAdapter());
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(CatalogAdapter* catalog_adapter, GetCatalogAdapter());
 
     // The user and system catalogs should not be nullptrs.
     EXPECT_NE(catalog_adapter->GetEngineUserCatalog(), nullptr);
     EXPECT_NE(catalog_adapter->GetEngineSystemCatalog(), nullptr);
 
     // Insert 1 table to the adapter and validate correct mappings
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         Oid kvtable_oid,
         catalog_adapter->GetOrGenerateOidFromTableName(kKeyValueTableName));
 
@@ -93,13 +93,13 @@ TEST(CatalogAdapterHolderTest, HolderBasicTest) {
 class HolderTestFixture : public testing::Test {
  public:
   static void SetUpTestSuite() {
-    analyzer_options_ = std::make_unique<zetasql::AnalyzerOptions>(
+    analyzer_options_ = std::make_unique<googlesql::AnalyzerOptions>(
         GetSpangresTestAnalyzerOptions());
     adapter_holder_ = GetSpangresTestCatalogAdapterHolder(*analyzer_options_);
-    ZETASQL_ASSERT_OK_AND_ASSIGN(CatalogAdapter * catalog_adapter, GetCatalogAdapter());
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(CatalogAdapter * catalog_adapter, GetCatalogAdapter());
 
     // Insert 1 table to the adapter and validate correct mappings
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         key_value_table_oid_,
         catalog_adapter->GetOrGenerateOidFromTableName(kKeyValueTableName));
 
@@ -116,19 +116,19 @@ class HolderTestFixture : public testing::Test {
 
  protected:
   // A holder for the catalog adapter used by the analyzer and transformer
-  static std::unique_ptr<zetasql::AnalyzerOptions> analyzer_options_;
+  static std::unique_ptr<googlesql::AnalyzerOptions> analyzer_options_;
   static std::unique_ptr<CatalogAdapterHolder> adapter_holder_;
   static Oid key_value_table_oid_;
 };
 
-std::unique_ptr<zetasql::AnalyzerOptions>
+std::unique_ptr<googlesql::AnalyzerOptions>
     HolderTestFixture::analyzer_options_ = nullptr;
 std::unique_ptr<CatalogAdapterHolder> HolderTestFixture::adapter_holder_ =
     nullptr;
 Oid HolderTestFixture::key_value_table_oid_ = InvalidOid;
 
 TEST_F(HolderTestFixture, ValidateOneTable) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(CatalogAdapter* catalog_adapter, GetCatalogAdapter());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(CatalogAdapter* catalog_adapter, GetCatalogAdapter());
 
   // Expect one table:
   EXPECT_THAT(
@@ -139,10 +139,10 @@ TEST_F(HolderTestFixture, ValidateOneTable) {
 }
 
 TEST_F(HolderTestFixture, AddTheSameTable) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(CatalogAdapter* catalog_adapter, GetCatalogAdapter());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(CatalogAdapter* catalog_adapter, GetCatalogAdapter());
 
   // Try getting oid of the same table, expect same oid:
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Oid oid_take2,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Oid oid_take2,
                        catalog_adapter->GetOrGenerateOidFromTableName(
                            TableName({kKeyValueTableName})));
   EXPECT_EQ(oid_take2, key_value_table_oid_);

@@ -33,7 +33,7 @@
 
 #include <string>
 
-#include "zetasql/base/logging.h"
+#include "googlesql/base/logging.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
@@ -42,7 +42,7 @@
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
 #include "third_party/spanner_pg/src/backend/catalog/pg_namespace_d.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator {
 namespace internal {
@@ -64,7 +64,7 @@ static absl::StatusOr<Const*> string_to_const(const char* str, Oid datatype,
                                               bool constisnull) {
   Datum conval = PointerGetDatum(nullptr);
   if (!constisnull) {
-    ZETASQL_ASSIGN_OR_RETURN(conval, CheckedPgStringToDatum(str, datatype));
+    GOOGLESQL_ASSIGN_OR_RETURN(conval, CheckedPgStringToDatum(str, datatype));
   }
   Oid collation;
   int constlen;
@@ -111,7 +111,7 @@ absl::StatusOr<Const*> makeByteConst(const std::string& byte_string,
                                      bool constisnull) {
   Datum conval = PointerGetDatum(nullptr);
   if (!constisnull) {
-    ZETASQL_ASSIGN_OR_RETURN(const text* pg_text,
+    GOOGLESQL_ASSIGN_OR_RETURN(const text* pg_text,
                      CheckedPgCStringToTextWithLen(byte_string.data(),
                                                    byte_string.length()));
     conval = PointerGetDatum(pg_text);
@@ -130,7 +130,7 @@ absl::StatusOr<Param*> makeParam(ParamKind paramkind, int paramid,
                                  Oid paramtype, int32_t paramtypmod,
                                  Oid paramcollid, int location) {
   Param* pg_param;
-  ZETASQL_ASSIGN_OR_RETURN(pg_param, CheckedPgMakeNode(Param));
+  GOOGLESQL_ASSIGN_OR_RETURN(pg_param, CheckedPgMakeNode(Param));
   pg_param->paramkind = paramkind;
   pg_param->paramid = paramid;
   pg_param->paramtype = paramtype;
@@ -144,8 +144,8 @@ absl::StatusOr<NamedArgExpr*> makeNamedArgExpr(Expr* arg,
                                                const std::string& name,
                                                int arg_num) {
   NamedArgExpr* named_arg;
-  ZETASQL_ASSIGN_OR_RETURN(char* name_str, CheckedPgPstrdup(name.c_str()));
-  ZETASQL_ASSIGN_OR_RETURN(named_arg, CheckedPgMakeNode(NamedArgExpr));
+  GOOGLESQL_ASSIGN_OR_RETURN(char* name_str, CheckedPgPstrdup(name.c_str()));
+  GOOGLESQL_ASSIGN_OR_RETURN(named_arg, CheckedPgMakeNode(NamedArgExpr));
   named_arg->arg = arg;
   named_arg->name = name_str;
   named_arg->argnumber = arg_num;
@@ -163,7 +163,7 @@ absl::StatusOr<JoinExpr*> makeJoinExpr(Index rtindex, JoinType join_type,
                                        List* using_clause, Node* quals,
                                        List* join_hints) {
   JoinExpr* join_expr;
-  ZETASQL_ASSIGN_OR_RETURN(join_expr, CheckedPgMakeNode(JoinExpr));
+  GOOGLESQL_ASSIGN_OR_RETURN(join_expr, CheckedPgMakeNode(JoinExpr));
 
   join_expr->rtindex = rtindex;
   join_expr->jointype = join_type;
@@ -180,7 +180,7 @@ absl::StatusOr<JoinExpr*> makeJoinExpr(Index rtindex, JoinType join_type,
 absl::StatusOr<OpExpr*> makeOpExpr(Oid opno, Oid funcid, Oid rettype,
                                    List* args) {
   OpExpr* pg_op;
-  ZETASQL_ASSIGN_OR_RETURN(pg_op, CheckedPgMakeNode(OpExpr));
+  GOOGLESQL_ASSIGN_OR_RETURN(pg_op, CheckedPgMakeNode(OpExpr));
   pg_op->opno = opno;
   pg_op->opfuncid = funcid;
   pg_op->opresulttype = rettype;
@@ -196,7 +196,7 @@ absl::StatusOr<SubLink*> makeSubLink(SubLinkType subLinkType, int subLinkId,
                                      Node* testexpr, List* operName,
                                      Node* subselect, int location) {
   SubLink* pg_sublink;
-  ZETASQL_ASSIGN_OR_RETURN(pg_sublink, CheckedPgMakeNode(SubLink));
+  GOOGLESQL_ASSIGN_OR_RETURN(pg_sublink, CheckedPgMakeNode(SubLink));
   pg_sublink->subLinkType = subLinkType;
   pg_sublink->subLinkId = subLinkId;
   pg_sublink->testexpr = testexpr;
@@ -211,7 +211,7 @@ absl::StatusOr<CoerceViaIO*> makeCoerceViaIO(Expr* arg, Oid resulttype,
                                              CoercionForm coerceformat,
                                              int location) {
   CoerceViaIO* pg_coerce_via_io;
-  ZETASQL_ASSIGN_OR_RETURN(pg_coerce_via_io, CheckedPgMakeNode(CoerceViaIO));
+  GOOGLESQL_ASSIGN_OR_RETURN(pg_coerce_via_io, CheckedPgMakeNode(CoerceViaIO));
   pg_coerce_via_io->arg = arg;
   pg_coerce_via_io->resulttype = resulttype;
   pg_coerce_via_io->resultcollid = resultcollid;
@@ -223,7 +223,7 @@ absl::StatusOr<CoerceViaIO*> makeCoerceViaIO(Expr* arg, Oid resulttype,
 absl::StatusOr<SetToDefault*> makeSetToDefault(Oid typeId, int32_t typeMod,
                                                Oid collation, int location) {
   SetToDefault* set_to_default;
-  ZETASQL_ASSIGN_OR_RETURN(set_to_default, CheckedPgMakeNode(SetToDefault));
+  GOOGLESQL_ASSIGN_OR_RETURN(set_to_default, CheckedPgMakeNode(SetToDefault));
   set_to_default->typeId = typeId;
   set_to_default->typeMod = typeMod;
   set_to_default->collation = collation;
@@ -238,7 +238,7 @@ absl::StatusOr<Aggref*> makeAggref(
     bool aggvariadic, char aggkind, Index agglevelsup, AggSplit aggsplit,
     int location) {
   Aggref* aggref;
-  ZETASQL_ASSIGN_OR_RETURN(aggref, CheckedPgMakeNode(Aggref));
+  GOOGLESQL_ASSIGN_OR_RETURN(aggref, CheckedPgMakeNode(Aggref));
   aggref->aggfnoid = aggfuncid;
   aggref->aggtype = aggresulttype;
   aggref->aggcollid = aggcollid;
@@ -266,7 +266,7 @@ absl::StatusOr<SortGroupClause*> makeSortGroupClause(Index targetlistreference,
                                                      bool nulls_first,
                                                      bool hashable) {
   SortGroupClause* sort_clause;
-  ZETASQL_ASSIGN_OR_RETURN(sort_clause, CheckedPgMakeNode(SortGroupClause));
+  GOOGLESQL_ASSIGN_OR_RETURN(sort_clause, CheckedPgMakeNode(SortGroupClause));
   sort_clause->tleSortGroupRef = targetlistreference;
   sort_clause->eqop = equals_operator;
   sort_clause->sortop = sort_operator;
@@ -279,7 +279,7 @@ absl::StatusOr<CoalesceExpr*> makeCoalesceExpr(Oid coalesce_type, List* args,
                                                Oid coalesce_collid,
                                                int location) {
   CoalesceExpr* coalesce_expr;
-  ZETASQL_ASSIGN_OR_RETURN(coalesce_expr, CheckedPgMakeNode(CoalesceExpr));
+  GOOGLESQL_ASSIGN_OR_RETURN(coalesce_expr, CheckedPgMakeNode(CoalesceExpr));
   coalesce_expr->coalescetype = coalesce_type;
   coalesce_expr->coalescecollid = coalesce_collid;
   coalesce_expr->args = args;
@@ -290,7 +290,7 @@ absl::StatusOr<CoalesceExpr*> makeCoalesceExpr(Oid coalesce_type, List* args,
 absl::StatusOr<NullTest*> makeNullTest(Expr* arg, NullTestType null_test_type,
                                        bool arg_is_row, int location) {
   NullTest* null_test;
-  ZETASQL_ASSIGN_OR_RETURN(null_test, CheckedPgMakeNode(NullTest));
+  GOOGLESQL_ASSIGN_OR_RETURN(null_test, CheckedPgMakeNode(NullTest));
   null_test->arg = arg;
   null_test->nulltesttype = null_test_type;
   null_test->argisrow = arg_is_row;
@@ -302,7 +302,7 @@ absl::StatusOr<BooleanTest*> makeBooleanTest(Expr* arg,
                                              BoolTestType bool_test_type,
                                              int location) {
   BooleanTest* bool_test;
-  ZETASQL_ASSIGN_OR_RETURN(bool_test, CheckedPgMakeNode(BooleanTest));
+  GOOGLESQL_ASSIGN_OR_RETURN(bool_test, CheckedPgMakeNode(BooleanTest));
   bool_test->arg = arg;
   bool_test->booltesttype = bool_test_type;
   bool_test->location = location;
@@ -312,7 +312,7 @@ absl::StatusOr<BooleanTest*> makeBooleanTest(Expr* arg,
 absl::StatusOr<CaseWhen*> makeCaseWhen(Expr* case_expr, Expr* then_expr,
                                        int location) {
   CaseWhen* case_when;
-  ZETASQL_ASSIGN_OR_RETURN(case_when, CheckedPgMakeNode(CaseWhen));
+  GOOGLESQL_ASSIGN_OR_RETURN(case_when, CheckedPgMakeNode(CaseWhen));
   case_when->expr = case_expr;
   case_when->result = then_expr;
   case_when->location = location;
@@ -323,7 +323,7 @@ absl::StatusOr<CaseExpr*> makeCaseExpr(Oid output_type, List* case_when_args,
                                        Expr* else_arg, Expr* test_expr,
                                        Oid casecollid, int location) {
   CaseExpr* case_expr;
-  ZETASQL_ASSIGN_OR_RETURN(case_expr, CheckedPgMakeNode(CaseExpr));
+  GOOGLESQL_ASSIGN_OR_RETURN(case_expr, CheckedPgMakeNode(CaseExpr));
   case_expr->casetype = output_type;
   case_expr->casecollid = casecollid;
   case_expr->arg = test_expr;
@@ -336,7 +336,7 @@ absl::StatusOr<CaseExpr*> makeCaseExpr(Oid output_type, List* case_when_args,
 absl::StatusOr<CaseTestExpr*> makeCaseTestExpr(Oid type_id, int32_t type_mod,
                                                Oid collation) {
   CaseTestExpr* case_test;
-  ZETASQL_ASSIGN_OR_RETURN(case_test, CheckedPgMakeNode(CaseTestExpr));
+  GOOGLESQL_ASSIGN_OR_RETURN(case_test, CheckedPgMakeNode(CaseTestExpr));
   case_test->typeId = type_id;
   case_test->typeMod = type_mod;
   case_test->collation = collation;
@@ -348,7 +348,7 @@ absl::StatusOr<MinMaxExpr*> makeMinMaxExpr(Oid min_max_type, List* args,
                                            Oid min_max_collid, Oid input_collid,
                                            int location) {
   MinMaxExpr* min_max_expr;
-  ZETASQL_ASSIGN_OR_RETURN(min_max_expr, CheckedPgMakeNode(MinMaxExpr));
+  GOOGLESQL_ASSIGN_OR_RETURN(min_max_expr, CheckedPgMakeNode(MinMaxExpr));
   min_max_expr->minmaxtype = min_max_type;
   min_max_expr->minmaxcollid = min_max_collid;
   min_max_expr->inputcollid = input_collid;
@@ -363,7 +363,7 @@ absl::StatusOr<NullIfExpr*> makeNullIfExpr(Oid rettype, List* args, Oid opno,
                                            Oid opcollid, Oid inputcollid,
                                            int location) {
   NullIfExpr* nullif_expr;
-  ZETASQL_ASSIGN_OR_RETURN(nullif_expr, CheckedPgMakeNode(NullIfExpr));
+  GOOGLESQL_ASSIGN_OR_RETURN(nullif_expr, CheckedPgMakeNode(NullIfExpr));
   nullif_expr->opno = opno;
   nullif_expr->opfuncid = opfuncid;
   nullif_expr->opresulttype = rettype;
@@ -380,7 +380,7 @@ absl::StatusOr<DistinctExpr*> makeDistinctExpr(Oid rettype, List* args,
                                                bool opretset, Oid opcollid,
                                                Oid inputcollid, int location) {
   DistinctExpr* distinctexpr;
-  ZETASQL_ASSIGN_OR_RETURN(distinctexpr, CheckedPgMakeNode(DistinctExpr));
+  GOOGLESQL_ASSIGN_OR_RETURN(distinctexpr, CheckedPgMakeNode(DistinctExpr));
   distinctexpr->opno = opno;
   distinctexpr->opfuncid = opfuncid;
   distinctexpr->opresulttype = rettype;
@@ -396,7 +396,7 @@ absl::StatusOr<SetOperationStmt*> makeSetOperationStmt(
     SetOperation op, bool all, Node* larg, Node* rarg, List* colTypes,
     List* colTypmods, List* colCollations, List* groupClauses) {
   SetOperationStmt* set_op_stmt;
-  ZETASQL_ASSIGN_OR_RETURN(set_op_stmt, CheckedPgMakeNode(SetOperationStmt));
+  GOOGLESQL_ASSIGN_OR_RETURN(set_op_stmt, CheckedPgMakeNode(SetOperationStmt));
   set_op_stmt->op = op;
   set_op_stmt->all = all;
   set_op_stmt->larg = larg;
@@ -414,7 +414,7 @@ absl::StatusOr<ScalarArrayOpExpr*> makeScalarArrayOpExpr(List* args, Oid opno,
                                                          Oid inputcollid,
                                                          int location) {
   ScalarArrayOpExpr* scalar_array;
-  ZETASQL_ASSIGN_OR_RETURN(scalar_array, CheckedPgMakeNode(ScalarArrayOpExpr));
+  GOOGLESQL_ASSIGN_OR_RETURN(scalar_array, CheckedPgMakeNode(ScalarArrayOpExpr));
   scalar_array->opno = opno;
   scalar_array->opfuncid = opfuncid;
   scalar_array->useOr = useOr;
@@ -428,7 +428,7 @@ absl::StatusOr<ArrayExpr*> makeArrayExpr(List* elements, Oid array_typeid,
                                          Oid element_typeid, bool multidims,
                                          Oid array_collid, int location) {
   ArrayExpr* array_expr;
-  ZETASQL_ASSIGN_OR_RETURN(array_expr, CheckedPgMakeNode(ArrayExpr));
+  GOOGLESQL_ASSIGN_OR_RETURN(array_expr, CheckedPgMakeNode(ArrayExpr));
   array_expr->array_typeid = array_typeid;
   array_expr->array_collid = array_collid;
   array_expr->element_typeid = element_typeid;
@@ -441,7 +441,7 @@ absl::StatusOr<ArrayExpr*> makeArrayExpr(List* elements, Oid array_typeid,
 absl::StatusOr<SQLValueFunction*> makeSQLValueFunction(
     SQLValueFunctionOp function_op, Oid rettype, int32_t typmod, int location) {
   SQLValueFunction* function;
-  ZETASQL_ASSIGN_OR_RETURN(function, CheckedPgMakeNode(SQLValueFunction));
+  GOOGLESQL_ASSIGN_OR_RETURN(function, CheckedPgMakeNode(SQLValueFunction));
   function->op = function_op;
   function->type = rettype;
   function->typmod = typmod;
@@ -454,7 +454,7 @@ absl::StatusOr<SubscriptingRef*> makeSubscriptingRef(
     Oid ref_collid, List* upper_index_exprs, List* lower_index_exprs,
     Expr* ref_expr, Expr* assign_expr) {
   SubscriptingRef* subscripting_ref;
-  ZETASQL_ASSIGN_OR_RETURN(subscripting_ref, CheckedPgMakeNode(SubscriptingRef));
+  GOOGLESQL_ASSIGN_OR_RETURN(subscripting_ref, CheckedPgMakeNode(SubscriptingRef));
   subscripting_ref->refcontainertype = container_type;
   subscripting_ref->refelemtype = element_type;
   subscripting_ref->refrestype = result_type;
@@ -469,7 +469,7 @@ absl::StatusOr<SubscriptingRef*> makeSubscriptingRef(
 
 absl::StatusOr<RangeTblRef*> makeRangeTblRef(Index rtindex) {
   RangeTblRef* rtr;
-  ZETASQL_ASSIGN_OR_RETURN(rtr, CheckedPgMakeNode(RangeTblRef));
+  GOOGLESQL_ASSIGN_OR_RETURN(rtr, CheckedPgMakeNode(RangeTblRef));
   rtr->rtindex = rtindex;
   return rtr;
 }
@@ -477,18 +477,11 @@ absl::StatusOr<RangeTblRef*> makeRangeTblRef(Index rtindex) {
 absl::StatusOr<RangeTblEntry*> makePartialRangeTblEntry(bool inFromCl,
                                                         AclMode acl_mode) {
   RangeTblEntry* rte;
-  ZETASQL_ASSIGN_OR_RETURN(rte, CheckedPgMakeNode(RangeTblEntry));
+  GOOGLESQL_ASSIGN_OR_RETURN(rte, CheckedPgMakeNode(RangeTblEntry));
   rte->lateral = false;
 
   rte->inh = true;  // Callers should set this, but true is a safe default.
   rte->inFromCl = inFromCl;
-  rte->checkAsUser =
-      InvalidOid;  // User access check is not relevant in this context
-  rte->selectedCols = nullptr;
-  rte->insertedCols = nullptr;
-  rte->updatedCols = nullptr;
-  rte->extraUpdatedCols = nullptr;
-  rte->requiredPerms = acl_mode;
 
   return rte;
 }
@@ -496,7 +489,7 @@ absl::StatusOr<RangeTblEntry*> makePartialRangeTblEntry(bool inFromCl,
 absl::StatusOr<RangeTblFunction*> makeRangeTblFunction(FuncExpr* func_expr,
                                                        bool ordinality) {
   RangeTblFunction* function;
-  ZETASQL_ASSIGN_OR_RETURN(function, CheckedPgMakeNode(RangeTblFunction));
+  GOOGLESQL_ASSIGN_OR_RETURN(function, CheckedPgMakeNode(RangeTblFunction));
   function->funcexpr = internal::PostgresCastToNode(func_expr);
   // These fields are only used if the function has a column definition list
   // (see struct definition for details)
@@ -516,7 +509,7 @@ absl::StatusOr<RowMarkClause*> makeRowMarkClause(Index rti,
                                                  LockWaitPolicy wait_policy,
                                                  bool pushed_down) {
   RowMarkClause* row_mark_clause;
-  ZETASQL_ASSIGN_OR_RETURN(row_mark_clause, CheckedPgMakeNode(RowMarkClause));
+  GOOGLESQL_ASSIGN_OR_RETURN(row_mark_clause, CheckedPgMakeNode(RowMarkClause));
   row_mark_clause->rti = rti;
   row_mark_clause->strength = strength;
   row_mark_clause->waitPolicy = wait_policy;
@@ -695,6 +688,8 @@ std::string PostgresJoinTypeToString(JoinType join_type) {
       return "JOIN_UNIQUE_OUTER";
     case JOIN_UNIQUE_INNER:
       return "JOIN_UNIQUE_INNER";
+    case JOIN_RIGHT_ANTI:
+      return "JOIN_RIGHT_ANTI";
   }
   ABSL_LOG(ERROR) << "Unknown PostgreSQL join type: " << join_type;
   return "unknown PostgreSQL join type";
@@ -702,7 +697,7 @@ std::string PostgresJoinTypeToString(JoinType join_type) {
 
 absl::StatusOr<Oid> GetArrayUnnestProcOid() {
   constexpr absl::string_view kUnnestName = "unnest";
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       const char* pg_catalog_namespace_name,
       PgBootstrapCatalog::Default()->GetNamespaceName(PG_CATALOG_NAMESPACE));
   return PgBootstrapCatalog::Default()->GetProcOid(pg_catalog_namespace_name,

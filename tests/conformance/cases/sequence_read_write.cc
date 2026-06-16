@@ -20,7 +20,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -36,7 +36,7 @@ namespace test {
 
 namespace {
 
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 
 class SequenceReadWriteTest
     : public DatabaseTest,
@@ -65,14 +65,14 @@ class SequenceReadWriteTest
     } else {
       query = "SELECT GET_INTERNAL_SEQUENCE_STATE(SEQUENCE $0)";
     }
-    ZETASQL_ASSIGN_OR_RETURN(std::vector<ValueRow> query_result,
+    GOOGLESQL_ASSIGN_OR_RETURN(std::vector<ValueRow> query_result,
                      Query(absl::Substitute(query, name)));
-    ZETASQL_RET_CHECK(query_result[0].values()[0].get<int64_t>().ok());
+    GOOGLESQL_RET_CHECK(query_result[0].values()[0].get<int64_t>().ok());
     return *(query_result[0].values()[0].get<int64_t>());
   }
 
   void InsertThreeRowsWithDML() {
-    ZETASQL_ASSERT_OK(CommitDml(
+    GOOGLESQL_ASSERT_OK(CommitDml(
         {SqlStatement("INSERT INTO users(name, age) VALUES ('Levin', 27), "
                       "('Mark', 32), ('Douglas', 31)")}));
     EXPECT_THAT(
@@ -112,7 +112,7 @@ TEST_P(SequenceReadWriteTest, Dml_Basic) {
   InsertThreeRowsWithDML();
 
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    ZETASQL_EXPECT_OK(CommitDml({SqlStatement(
+    GOOGLESQL_EXPECT_OK(CommitDml({SqlStatement(
         R"(UPDATE users SET age =
                 nextval('mysequence')
                 WHERE name = 'Levin' )")}));
@@ -121,7 +121,7 @@ TEST_P(SequenceReadWriteTest, Dml_Basic) {
               "is true"),
         IsOkAndHoldsRows({{true}}));
   } else {
-    ZETASQL_EXPECT_OK(CommitDml({SqlStatement(
+    GOOGLESQL_EXPECT_OK(CommitDml({SqlStatement(
         R"(UPDATE users SET age =
                 GET_NEXT_SEQUENCE_VALUE(SEQUENCE mysequence)
                 WHERE name = "Levin" )")}));
@@ -136,14 +136,14 @@ TEST_P(SequenceReadWriteTest, Mutation_Basic) {
   ExpectEmptyInternalState("mysequence");
 
   // Insert 3 rows
-  ZETASQL_ASSERT_OK(MultiInsert("users", {"name", "age"},
+  GOOGLESQL_ASSERT_OK(MultiInsert("users", {"name", "age"},
                         {{"Levin", 27}, {"Mark", 32}, {"Douglas", 31}}));
   EXPECT_THAT(ReadAll("users", {"name", "age"}),
               IsOkAndHoldsUnorderedRows(
                   {{"Levin", 27}, {"Mark", 32}, {"Douglas", 31}}));
 
   // Insert another 3 rows using InsertOrUpdate
-  ZETASQL_ASSERT_OK(MultiInsertOrUpdate("users", {"name", "age"},
+  GOOGLESQL_ASSERT_OK(MultiInsertOrUpdate("users", {"name", "age"},
                                 {{"Alex", 10}, {"Bob", 11}, {"Carol", 12}}));
   EXPECT_THAT(ReadAll("users", {"name", "age"}),
               IsOkAndHoldsUnorderedRows({{"Alex", 10},
@@ -173,13 +173,13 @@ TEST_P(SequenceReadWriteTest, WithThenReturn) {
   // Insert THEN RETURN
   std::vector<ValueRow> returning_result;
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    ZETASQL_EXPECT_OK(CommitDmlReturning(
+    GOOGLESQL_EXPECT_OK(CommitDmlReturning(
         {SqlStatement("INSERT INTO users(name, age) VALUES "
                       "('Levin', 27), ('Douglas', 31), ('Mark', 32)"
                       "RETURNING id;")},
         returning_result));
   } else {
-    ZETASQL_EXPECT_OK(CommitDmlReturning(
+    GOOGLESQL_EXPECT_OK(CommitDmlReturning(
         {SqlStatement("INSERT INTO users(name, age) VALUES "
                       "('Levin', 27), ('Douglas', 31), ('Mark', 32)"
                       "THEN RETURN id;")},
@@ -195,11 +195,11 @@ TEST_P(SequenceReadWriteTest, WithThenReturn) {
   EXPECT_THAT(Query("SELECT id FROM users"),
               IsOkAndHoldsUnorderedRows(returning_result));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<ValueRow> query_result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<ValueRow> query_result,
                        Query("SELECT counter FROM users ORDER BY age ASC"));
   EXPECT_EQ(query_result.size(), 3);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(int64_t counter, GetCurrentSequenceState("mysequence"));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(int64_t counter, GetCurrentSequenceState("mysequence"));
   EXPECT_LE(*(query_result[0].values()[0].get<std::int64_t>()), counter);
   EXPECT_LE(*(query_result[1].values()[0].get<std::int64_t>()), counter);
   EXPECT_LE(*(query_result[2].values()[0].get<std::int64_t>()), counter);
@@ -207,11 +207,11 @@ TEST_P(SequenceReadWriteTest, WithThenReturn) {
 
 TEST_P(SequenceReadWriteTest, WithCustomStartWithCounter) {
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    ZETASQL_ASSERT_OK(UpdateSchema({R"(
+    GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
        ALTER SEQUENCE mysequence RESTART COUNTER 50001;
     )"}));
   } else {
-    ZETASQL_ASSERT_OK(UpdateSchema({R"(
+    GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
        ALTER SEQUENCE mysequence SET OPTIONS (
         start_with_counter = 50001
        )
@@ -220,7 +220,7 @@ TEST_P(SequenceReadWriteTest, WithCustomStartWithCounter) {
 
   InsertThreeRowsWithDML();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::vector<ValueRow> query_result,
       Query("SELECT counter, br_id FROM users ORDER BY age ASC"));
   EXPECT_EQ(query_result.size(), 3);
@@ -238,11 +238,11 @@ TEST_P(SequenceReadWriteTest, WithCustomStartWithCounter) {
 TEST_P(SequenceReadWriteTest, WithSmallHalfSkippedRange) {
   // Skip half of the positive int64_t range, from 0 - 2^62
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    ZETASQL_ASSERT_OK(UpdateSchema({R"(
+    GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
         ALTER SEQUENCE mysequence SKIP RANGE 0 4611686018427387904;
     )"}));
   } else {
-    ZETASQL_ASSERT_OK(UpdateSchema({R"(
+    GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
         ALTER SEQUENCE mysequence SET OPTIONS (
           skip_range_min = 0,
           skip_range_max = 4611686018427387904
@@ -254,7 +254,7 @@ TEST_P(SequenceReadWriteTest, WithSmallHalfSkippedRange) {
 
   InsertThreeRowsWithDML();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<ValueRow> query_result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<ValueRow> query_result,
                        Query("SELECT id FROM users ORDER BY age ASC"));
   EXPECT_EQ(query_result.size(), 3);
 
@@ -269,12 +269,12 @@ TEST_P(SequenceReadWriteTest, WithSmallHalfSkippedRange) {
 TEST_P(SequenceReadWriteTest, WithBigHalfSkippedRange) {
   // Skip half of the positive int64_t range, from 2^62 - 2^63-1
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    ZETASQL_ASSERT_OK(UpdateSchema({R"(
+    GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
         ALTER SEQUENCE mysequence
             SKIP RANGE 4611686018427387904 9223372036854775807;
     )"}));
   } else {
-    ZETASQL_ASSERT_OK(UpdateSchema({R"(
+    GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
         ALTER SEQUENCE mysequence SET OPTIONS (
           skip_range_min = 4611686018427387904,
           skip_range_max = 9223372036854775807
@@ -286,7 +286,7 @@ TEST_P(SequenceReadWriteTest, WithBigHalfSkippedRange) {
 
   InsertThreeRowsWithDML();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<ValueRow> query_result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<ValueRow> query_result,
                        Query("SELECT id FROM users ORDER BY age ASC"));
   EXPECT_EQ(query_result.size(), 3);
 
@@ -306,12 +306,12 @@ TEST_P(SequenceReadWriteTest, SkippedRangeExhaustsSequence) {
   // Skip the entire positive int64_t range, from 0 - 2^63-1, the sequence
   // API should fail fast.
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    ZETASQL_ASSERT_OK(UpdateSchema({R"(
+    GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
         ALTER SEQUENCE mysequence
             SKIP RANGE 0 9223372036854775807;
     )"}));
   } else {
-    ZETASQL_ASSERT_OK(UpdateSchema({R"(
+    GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
         ALTER SEQUENCE mysequence SET OPTIONS (
           skip_range_min = 0,
           skip_range_max = 9223372036854775807
@@ -330,18 +330,18 @@ TEST_P(SequenceReadWriteTest, SkippedRangeExhaustsSequence) {
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     return;
   }
-  ZETASQL_ASSERT_OK_AND_ASSIGN(int64_t counter, GetCurrentSequenceState("mysequence"));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(int64_t counter, GetCurrentSequenceState("mysequence"));
   // Check that we have tried retrieving the values, but can't find a valid one.
   EXPECT_GT(counter, 1);
 
   // Now remove the skipped range, the sequence should see the new schema change
   // and produces valid values.
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    ZETASQL_ASSERT_OK(UpdateSchema({R"(
+    GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
         ALTER SEQUENCE mysequence SKIP RANGE 0 0;
     )"}));
   } else {
-    ZETASQL_ASSERT_OK(UpdateSchema({R"(
+    GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
         ALTER SEQUENCE mysequence SET OPTIONS (
           skip_range_min = NULL,
           skip_range_max = NULL
@@ -350,7 +350,7 @@ TEST_P(SequenceReadWriteTest, SkippedRangeExhaustsSequence) {
   }
   InsertThreeRowsWithDML();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::vector<ValueRow> query_result,
       Query("SELECT counter, br_id FROM users ORDER BY age ASC"));
   EXPECT_EQ(query_result.size(), 3);
@@ -367,12 +367,12 @@ TEST_P(SequenceReadWriteTest, SkippedRangeExhaustsSequence) {
 // sequence is altered
 TEST_P(SequenceReadWriteTest, AlterSequenceMultipleTimes) {
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    ZETASQL_ASSERT_OK(UpdateSchema({R"(
+    GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
         ALTER SEQUENCE mysequence
             SKIP RANGE 0 1000;
     )"}));
   } else {
-    ZETASQL_ASSERT_OK(UpdateSchema({R"(
+    GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
         ALTER SEQUENCE mysequence SET OPTIONS (
           skip_range_min = 0,
           skip_range_max = 1000
@@ -385,12 +385,12 @@ TEST_P(SequenceReadWriteTest, AlterSequenceMultipleTimes) {
   InsertThreeRowsWithDML();
 
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    ZETASQL_ASSERT_OK(UpdateSchema({R"(
+    GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
         ALTER SEQUENCE mysequence
             RESTART COUNTER 10001;
     )"}));
   } else {
-    ZETASQL_ASSERT_OK(UpdateSchema({R"(
+    GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
         ALTER SEQUENCE mysequence SET OPTIONS (
           start_with_counter = 10001
         )
@@ -398,11 +398,11 @@ TEST_P(SequenceReadWriteTest, AlterSequenceMultipleTimes) {
   }
 
   // Insert another 3 rows
-  ZETASQL_ASSERT_OK(CommitDml(
+  GOOGLESQL_ASSERT_OK(CommitDml(
       {SqlStatement("INSERT INTO users(name, age) VALUES ('Alex', 5), "
                     "('Bob', 6), ('Carol', 7)")}));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<ValueRow> query_result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<ValueRow> query_result,
                        Query("SELECT counter FROM users ORDER BY counter ASC"));
   EXPECT_EQ(query_result.size(), 6);
 
@@ -417,12 +417,12 @@ TEST_P(SequenceReadWriteTest, AlterSequenceMultipleTimes) {
 
 TEST_P(SequenceReadWriteTest, MovesStartWithCounterBackward) {
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    ZETASQL_ASSERT_OK(UpdateSchema({R"(
+    GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
         ALTER SEQUENCE mysequence
             RESTART COUNTER 10000;
     )"}));
   } else {
-    ZETASQL_ASSERT_OK(UpdateSchema({R"(
+    GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
         ALTER SEQUENCE mysequence SET OPTIONS (
           start_with_counter = 10000
         )
@@ -433,29 +433,29 @@ TEST_P(SequenceReadWriteTest, MovesStartWithCounterBackward) {
 
   InsertThreeRowsWithDML();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(int64_t counter, GetCurrentSequenceState("mysequence"));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(int64_t counter, GetCurrentSequenceState("mysequence"));
   // Check that we have moved the counter at least 3 times
   EXPECT_GT(counter, 10000);
 
   // Moves the counter backward
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    ZETASQL_ASSERT_OK(UpdateSchema({R"(
+    GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
         ALTER SEQUENCE mysequence
             RESTART COUNTER 1;
     )"}));
   } else {
-    ZETASQL_ASSERT_OK(UpdateSchema({R"(
+    GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
         ALTER SEQUENCE mysequence SET OPTIONS (
           start_with_counter = 1
         )
     )"}));
   }
 
-  ZETASQL_ASSERT_OK(CommitDml(
+  GOOGLESQL_ASSERT_OK(CommitDml(
       {SqlStatement("INSERT INTO users(name, age) VALUES ('Alex', 5), "
                     "('Bob', 6), ('Carol', 7)")}));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::vector<ValueRow> query_result,
       Query("SELECT counter, br_id FROM users WHERE age < 10"));
   EXPECT_EQ(query_result.size(), 3);
@@ -476,11 +476,11 @@ TEST_P(SequenceReadWriteTest, DropAndRecreateSequence) {
 
   InsertThreeRowsWithDML();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(int64_t counter, GetCurrentSequenceState("mysequence"));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(int64_t counter, GetCurrentSequenceState("mysequence"));
   // Check that we have moved the counter at least 3 times
   EXPECT_GT(counter, 3);
 
-  ZETASQL_ASSERT_OK(UpdateSchema({R"(
+  GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
       ALTER TABLE users DROP CONSTRAINT id_gt_0
     )",
                           R"(
@@ -500,7 +500,7 @@ TEST_P(SequenceReadWriteTest, DropAndRecreateSequence) {
     )"}));
 
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    ZETASQL_ASSERT_OK(UpdateSchema({R"(
+    GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
         CREATE SEQUENCE mysequence BIT_REVERSED_POSITIVE
       )",
                             R"(
@@ -511,7 +511,7 @@ TEST_P(SequenceReadWriteTest, DropAndRecreateSequence) {
               spanner.get_internal_sequence_state('mysequence')
       )"}));
   } else {
-    ZETASQL_ASSERT_OK(UpdateSchema({R"(
+    GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
         CREATE SEQUENCE mysequence OPTIONS (
           sequence_kind = "bit_reversed_positive"
         )
@@ -536,26 +536,26 @@ TEST_P(SequenceReadWriteTest, AddColumn) {
 
   InsertThreeRowsWithDML();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(int64_t counter, GetCurrentSequenceState("mysequence"));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(int64_t counter, GetCurrentSequenceState("mysequence"));
   // Check that we have moved the counter at least 3 times
   EXPECT_GT(counter, 3);
 
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    ZETASQL_ASSERT_OK(UpdateSchema({R"(
+    GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
         ALTER TABLE users ADD COLUMN col1 bigint DEFAULT nextval('mysequence')
     )"}));
   } else {
-    ZETASQL_ASSERT_OK(UpdateSchema({R"(
+    GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
         ALTER TABLE users ADD COLUMN col1 INT64
             DEFAULT (GET_NEXT_SEQUENCE_VALUE(SEQUENCE mysequence))
     )"}));
   }
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(int64_t new_counter,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(int64_t new_counter,
                        GetCurrentSequenceState("mysequence"));
   EXPECT_GE(new_counter, counter);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<ValueRow> query_result,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<ValueRow> query_result,
                        Query("SELECT col1 FROM users"));
   EXPECT_EQ(query_result.size(), 3);
 
@@ -595,12 +595,12 @@ TEST_P(SequenceReadWriteTest,
        GetNextSequenceValueCanBeUsedInReadWriteTransaction) {
   std::vector<ValueRow> value_row;
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         value_row,
         QueryTransaction(Transaction(Transaction::ReadWriteOptions()),
                          "SELECT nextval('mysequence')"));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         value_row, QueryTransaction(
                        Transaction(Transaction::ReadWriteOptions()),
                        "SELECT GET_NEXT_SEQUENCE_VALUE(SEQUENCE mysequence)"));
@@ -612,19 +612,19 @@ TEST_P(SequenceReadWriteTest,
   std::vector<ValueRow> value_row;
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         value_row,
         QueryTransaction(
             Transaction(Transaction::ReadOnlyOptions()),
             "SELECT GET_INTERNAL_SEQUENCE_STATE(SEQUENCE mysequence)"));
 
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         value_row,
         QueryTransaction(
             Transaction(Transaction::ReadWriteOptions()),
             "SELECT GET_INTERNAL_SEQUENCE_STATE(SEQUENCE mysequence)"));
 
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         value_row,
         QuerySingleUseTransaction(
             Transaction::SingleUseOptions{Transaction::ReadOnlyOptions{}},
@@ -676,32 +676,32 @@ TEST_P(SequenceReadWriteTest, InsertAfterIfNotExistsSchemaUpdate) {
       ))"};
 
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    ZETASQL_ASSERT_OK(UpdateSchema(pg_ddl_statements));
+    GOOGLESQL_ASSERT_OK(UpdateSchema(pg_ddl_statements));
   } else {
-    ZETASQL_ASSERT_OK(UpdateSchema(gsql_ddl_statements));
+    GOOGLESQL_ASSERT_OK(UpdateSchema(gsql_ddl_statements));
   }
 
-  ZETASQL_ASSERT_OK(MultiInsert("test_table", {"value"}, {{1}, {2}, {3}}));
+  GOOGLESQL_ASSERT_OK(MultiInsert("test_table", {"value"}, {{1}, {2}, {3}}));
 
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    ZETASQL_ASSERT_OK(UpdateSchema(pg_ddl_statements));
+    GOOGLESQL_ASSERT_OK(UpdateSchema(pg_ddl_statements));
   } else {
-    ZETASQL_ASSERT_OK(UpdateSchema(gsql_ddl_statements));
+    GOOGLESQL_ASSERT_OK(UpdateSchema(gsql_ddl_statements));
   }
 
-  ZETASQL_ASSERT_OK(MultiInsert("test_table", {"value"}, {{4}, {5}, {6}}));
+  GOOGLESQL_ASSERT_OK(MultiInsert("test_table", {"value"}, {{4}, {5}, {6}}));
 }
 
 TEST_P(SequenceReadWriteTest, SequenceFunctionInWhereClause) {
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-    ZETASQL_ASSERT_OK(UpdateSchema({"CREATE SEQUENCE seq bit_reversed_positive",
+    GOOGLESQL_ASSERT_OK(UpdateSchema({"CREATE SEQUENCE seq bit_reversed_positive",
                             R"(
     CREATE TABLE test_table (
       id BIGINT DEFAULT (nextval('seq')),
       value BIGINT,
       PRIMARY KEY(id)
     ))"}));
-    ZETASQL_ASSERT_OK(CommitDml(
+    GOOGLESQL_ASSERT_OK(CommitDml(
         {SqlStatement("INSERT INTO test_table(value) VALUES (1), (2), (3)")}));
     // Check that counter has incremented at least 3 times.
     EXPECT_THAT(Query("select spanner.GET_INTERNAL_SEQUENCE_STATE('seq') >= 3"),
@@ -720,14 +720,14 @@ TEST_P(SequenceReadWriteTest, SequenceFunctionInWhereClause) {
                 testing::ContainsRegex("(not supported in a WHERE clause|can "
                                        "only be used in a read-write)"));
   } else {
-    ZETASQL_ASSERT_OK(UpdateSchema({R"(
+    GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
     CREATE SEQUENCE seq OPTIONS (sequence_kind = 'bit_reversed_positive'))",
                             R"(
     CREATE TABLE test_table (
       id INT64 DEFAULT (GET_NEXT_SEQUENCE_VALUE(SEQUENCE seq)),
       value INT64
     ) PRIMARY KEY(id))"}));
-    ZETASQL_ASSERT_OK(CommitDml(
+    GOOGLESQL_ASSERT_OK(CommitDml(
         {SqlStatement("INSERT INTO test_table(value) VALUES (1), (2), (3)")}));
     // Check that counter has incremented at least 3 times.
     EXPECT_THAT(Query("select GET_INTERNAL_SEQUENCE_STATE(SEQUENCE seq) >= 3"),
@@ -750,12 +750,12 @@ TEST_P(SequenceReadWriteTest, SequenceFunctionInWhereClause) {
 
 TEST_P(SequenceReadWriteTest, DropTableShouldNotImpactSequenceInternalState) {
   if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
-    ZETASQL_ASSERT_OK(
+    GOOGLESQL_ASSERT_OK(
         UpdateSchema({"ALTER DATABASE db SET OPTIONS (default_sequence_kind = "
                       "'bit_reversed_positive')",
                       "CREATE TABLE test (id INT64 AUTO_INCREMENT primary key, "
                       "val STRING(MAX))"}));
-    ZETASQL_ASSERT_OK(
+    GOOGLESQL_ASSERT_OK(
         CommitDml({SqlStatement("INSERT INTO test (val) VALUES ('test-1')"),
                    SqlStatement("INSERT INTO test (val) VALUES ('test-2')"),
                    SqlStatement("INSERT INTO test (val) VALUES ('test-3')")}));
@@ -764,7 +764,7 @@ TEST_P(SequenceReadWriteTest, DropTableShouldNotImpactSequenceInternalState) {
     EXPECT_THAT(Query("select get_table_column_identity_state('test.id') >= 4"),
                 IsOkAndHoldsRows({{true}}));
 
-    ZETASQL_ASSERT_OK(UpdateSchema(
+    GOOGLESQL_ASSERT_OK(UpdateSchema(
         {"CREATE TABLE parents (id INT64 AUTO_INCREMENT PRIMARY KEY,deleted_at "
          "TIMESTAMP)",
          "CREATE INDEX IF NOT EXISTS idx_parents_deleted_at ON parents "
@@ -780,11 +780,11 @@ TEST_P(SequenceReadWriteTest, DropTableShouldNotImpactSequenceInternalState) {
     EXPECT_THAT(Query("select get_table_column_identity_state('test.id') >= 4"),
                 IsOkAndHoldsRows({{true}}));
   } else {
-    ZETASQL_ASSERT_OK(UpdateSchema(
+    GOOGLESQL_ASSERT_OK(UpdateSchema(
         {"alter database db set spanner.default_sequence_kind = "
          "'bit_reversed_positive'",
          R"(create table test (id serial primary key, val text))"}));
-    ZETASQL_ASSERT_OK(
+    GOOGLESQL_ASSERT_OK(
         CommitDml({SqlStatement("insert into test (val) values ('test-1')"),
                    SqlStatement("insert into test (val) values ('test-2')"),
                    SqlStatement("insert into test (val) values ('test-3')")}));
@@ -794,7 +794,7 @@ TEST_P(SequenceReadWriteTest, DropTableShouldNotImpactSequenceInternalState) {
         Query("select spanner.get_table_column_identity_state('test.id') >= 4"),
         IsOkAndHoldsRows({{true}}));
 
-    ZETASQL_ASSERT_OK(UpdateSchema(
+    GOOGLESQL_ASSERT_OK(UpdateSchema(
         {"create table parents (id bigserial,deleted_at timestamptz,primary "
          "key "
          "(id))",
@@ -818,13 +818,13 @@ TEST_P(SequenceReadWriteTest, GetNextSequenceValueWithCaseSensitiveSequence) {
   if (GetParam() == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
     GTEST_SKIP();
   }
-  ZETASQL_ASSERT_OK(UpdateSchema(
+  GOOGLESQL_ASSERT_OK(UpdateSchema(
       {R"(CREATE SEQUENCE "CaseSensitiveSequence" BIT_REVERSED_POSITIVE)"}));
   auto txn = Transaction(Transaction::ReadWriteOptions());
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       QueryTransaction(txn, R"(SELECT nextval('"CaseSensitiveSequence"'))"));
-  ZETASQL_EXPECT_OK(Rollback(txn));  // Rollback to close the transaction.
-  ZETASQL_ASSERT_OK(UpdateSchema({R"(DROP SEQUENCE "CaseSensitiveSequence")"}));
+  GOOGLESQL_EXPECT_OK(Rollback(txn));  // Rollback to close the transaction.
+  GOOGLESQL_ASSERT_OK(UpdateSchema({R"(DROP SEQUENCE "CaseSensitiveSequence")"}));
 }
 
 }  // namespace

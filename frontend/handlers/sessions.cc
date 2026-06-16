@@ -29,8 +29,8 @@
 #include "frontend/entities/session.h"
 #include "frontend/server/environment.h"
 #include "frontend/server/handler.h"
+#include "googlesql/base/status_macros.h"
 #include "absl/status/status.h"
-#include "zetasql/base/status_macros.h"
 
 namespace protobuf_api = ::google::protobuf;
 
@@ -45,23 +45,23 @@ absl::Status CreateSession(RequestContext* ctx,
                            spanner_api::Session* response) {
   // Validate the request.
   absl::string_view project_id, instance_id, database_id;
-  ZETASQL_RETURN_IF_ERROR(ParseDatabaseUri(request->database(), &project_id,
+  GOOGLESQL_RETURN_IF_ERROR(ParseDatabaseUri(request->database(), &project_id,
                                    &instance_id, &database_id));
-  ZETASQL_RETURN_IF_ERROR(ValidateLabels(request->session().labels()));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateLabels(request->session().labels()));
 
   // Check that the instance is valid.
-  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Instance> instance,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::shared_ptr<Instance> instance,
                    GetInstance(ctx, MakeInstanceUri(project_id, instance_id)));
 
   // Fetch the database.
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       std::shared_ptr<Database> database,
       ctx->env()->database_manager()->GetDatabase(request->database()));
 
   // Create a session.
   Labels labels(request->session().labels().begin(),
                 request->session().labels().end());
-  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Session> session,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::shared_ptr<Session> session,
                    ctx->env()->session_manager()->CreateSession(
                        labels, request->session().multiplexed(), database,
                        ctx->env()->mux_txn_manager()));
@@ -77,9 +77,9 @@ absl::Status BatchCreateSessions(
     spanner_api::BatchCreateSessionsResponse* response) {
   // Validate the request.
   absl::string_view project_id, instance_id, database_id;
-  ZETASQL_RETURN_IF_ERROR(ParseDatabaseUri(request->database(), &project_id,
+  GOOGLESQL_RETURN_IF_ERROR(ParseDatabaseUri(request->database(), &project_id,
                                    &instance_id, &database_id));
-  ZETASQL_RETURN_IF_ERROR(ValidateLabels(request->session_template().labels()));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateLabels(request->session_template().labels()));
   if (request->session_count() < 0) {
     return error::TooFewSessions(request->session_count());
   }
@@ -89,11 +89,11 @@ absl::Status BatchCreateSessions(
   }
 
   // Check that the instance is valid.
-  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Instance> instance,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::shared_ptr<Instance> instance,
                    GetInstance(ctx, MakeInstanceUri(project_id, instance_id)));
 
   // Fetch the database to ensure that it exists.
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       std::shared_ptr<Database> database,
       ctx->env()->database_manager()->GetDatabase(request->database()));
 
@@ -108,7 +108,7 @@ absl::Status BatchCreateSessions(
   for (int i = 0; i < sessions.size(); ++i) {
     // Mux does not support batch create sessions. So its ok to set the
     // mux_txn_manager to null.
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         sessions[i],
         ctx->env()->session_manager()->CreateSession(
             labels, request->session_template().multiplexed(), database,
@@ -117,7 +117,7 @@ absl::Status BatchCreateSessions(
 
   // Return details about the newly created session.
   for (const auto& session : sessions) {
-    ZETASQL_RETURN_IF_ERROR(session->ToProto(response->add_session()));
+    GOOGLESQL_RETURN_IF_ERROR(session->ToProto(response->add_session()));
   }
   return absl::OkStatus();
 }
@@ -128,9 +128,9 @@ absl::Status GetSession(RequestContext* ctx,
                         const spanner_api::GetSessionRequest* request,
                         spanner_api::Session* response) {
   absl::string_view project_id, instance_id, database_id, session_id;
-  ZETASQL_RETURN_IF_ERROR(ParseSessionUri(request->name(), &project_id, &instance_id,
+  GOOGLESQL_RETURN_IF_ERROR(ParseSessionUri(request->name(), &project_id, &instance_id,
                                   &database_id, &session_id));
-  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Session> session,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::shared_ptr<Session> session,
                    ctx->env()->session_manager()->GetSession(request->name()));
   return session->ToProto(response, /*include_labels=*/false);
 }
@@ -142,20 +142,20 @@ absl::Status ListSessions(RequestContext* ctx,
                           spanner_api::ListSessionsResponse* response) {
   // Validate the request.
   absl::string_view project_id, instance_id, database_id;
-  ZETASQL_RETURN_IF_ERROR(ParseDatabaseUri(request->database(), &project_id,
+  GOOGLESQL_RETURN_IF_ERROR(ParseDatabaseUri(request->database(), &project_id,
                                    &instance_id, &database_id));
 
   // Check that the instance is valid.
-  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Instance> instance,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::shared_ptr<Instance> instance,
                    GetInstance(ctx, MakeInstanceUri(project_id, instance_id)));
 
   // Fetch the database to ensure that it exists.
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       std::shared_ptr<Database> database,
       ctx->env()->database_manager()->GetDatabase(request->database()));
 
   // List all sessions for the given database.
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       std::vector<std::shared_ptr<Session>> sessions,
       ctx->env()->session_manager()->ListSessions(database->database_uri()));
 
@@ -173,7 +173,7 @@ absl::Status ListSessions(RequestContext* ctx,
       break;
     }
     if (session->session_uri() >= request->page_token()) {
-      ZETASQL_RETURN_IF_ERROR(session->ToProto(response->add_sessions(),
+      GOOGLESQL_RETURN_IF_ERROR(session->ToProto(response->add_sessions(),
                                        /*include_labels=*/true));
     }
   }
@@ -186,7 +186,7 @@ absl::Status DeleteSession(RequestContext* ctx,
                            const spanner_api::DeleteSessionRequest* request,
                            protobuf_api::Empty* response) {
   absl::string_view project_id, instance_id, database_id, session_id;
-  ZETASQL_RETURN_IF_ERROR(ParseSessionUri(request->name(), &project_id, &instance_id,
+  GOOGLESQL_RETURN_IF_ERROR(ParseSessionUri(request->name(), &project_id, &instance_id,
                                   &database_id, &session_id));
   return ctx->env()->session_manager()->DeleteSession(request->name());
 }

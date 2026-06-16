@@ -31,7 +31,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "third_party/spanner_pg/function_evaluators/tests/test_base.h"
 #include "third_party/spanner_pg/interface/regexp_evaluators.h"
 
@@ -40,7 +40,7 @@ namespace {
 
 using ::testing::IsFalse;
 using ::testing::IsTrue;
-using ::zetasql_base::testing::IsOkAndHolds;
+using ::googlesql_base::testing::IsOkAndHolds;
 
 class TextregexeqTest : public PgEvaluatorTest {
  protected:

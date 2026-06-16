@@ -17,6 +17,7 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_BUILDERS_PROPERTY_GRAPH_BUILDER_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_BUILDERS_PROPERTY_GRAPH_BUILDER_H_
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <utility>
@@ -66,7 +67,17 @@ class PropertyGraph::Builder {
     return *this;
   }
 
-  std::unique_ptr<const PropertyGraph> build() { return std::move(instance_); }
+  std::unique_ptr<const PropertyGraph> build() {
+    std::sort(instance_->node_tables_.begin(), instance_->node_tables_.end(),
+              [](const GraphElementTable& a, const GraphElementTable& b) {
+                return a.alias() < b.alias();
+              });
+    std::sort(instance_->edge_tables_.begin(), instance_->edge_tables_.end(),
+              [](const GraphElementTable& a, const GraphElementTable& b) {
+                return a.alias() < b.alias();
+              });
+    return std::move(instance_);
+  }
 
  private:
   std::unique_ptr<PropertyGraph> instance_;

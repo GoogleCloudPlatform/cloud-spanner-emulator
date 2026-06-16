@@ -19,7 +19,11 @@
 #include <utility>
 #include <vector>
 
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
+#include "gtest/gtest.h"
+#include "googlesql/base/testing/status_matchers.h"
+#include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "tests/conformance/common/database_test_base.h"
 
@@ -30,32 +34,32 @@ namespace test {
 
 namespace {
 
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
-class MalformedWritesTest : public DatabaseTest {
+class MalformedWritesTest
+    : public DatabaseTest,
+      public testing::WithParamInterface<database_api::DatabaseDialect> {
+ public:
+  void SetUp() override {
+    dialect_ = GetParam();
+    DatabaseTest::SetUp();
+  }
+
  public:
   absl::Status SetUpDatabase() override {
-    return SetSchema({
-        R"(
-          CREATE TABLE Users(
-            UserId     INT64 NOT NULL,
-            Name       STRING(MAX),
-            Age        INT64,
-            Updated    TIMESTAMP,
-          ) PRIMARY KEY (UserId)
-        )",
-        R"(
-          CREATE TABLE Threads (
-            UserId     INT64 NOT NULL,
-            ThreadId   INT64 NOT NULL,
-            Starred    BOOL
-          ) PRIMARY KEY (UserId, ThreadId),
-          INTERLEAVE IN PARENT Users ON DELETE CASCADE
-        )"});
+    return SetSchemaFromFile("malformed_writes.test");
   }
 };
 
-TEST_F(MalformedWritesTest, CannotSpecifySameColumnMultipleTimes) {
+INSTANTIATE_TEST_SUITE_P(
+    PerDialectMalformedWritesTest, MalformedWritesTest,
+    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
+                    database_api::DatabaseDialect::POSTGRESQL),
+    [](const testing::TestParamInfo<MalformedWritesTest::ParamType>& info) {
+      return database_api::DatabaseDialect_Name(info.param);
+    });
+
+TEST_P(MalformedWritesTest, CannotSpecifySameColumnMultipleTimes) {
   // Cannot specify a key column multiple times in a write.
   EXPECT_THAT(Insert("Users", {"UserId", "UserId", "Name"},
                      {"1", "2", "Suzanne Collins"}),
@@ -89,38 +93,38 @@ TEST_F(MalformedWritesTest, CannotSpecifySameColumnMultipleTimes) {
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-TEST_F(MalformedWritesTest, CannotInsertValueWithMismatchingType) {
+TEST_P(MalformedWritesTest, CannotInsertValueWithMismatchingType) {
   // Insert with all types match is successful.
-  ZETASQL_EXPECT_OK(Insert("Users", {"UserId", "Name", "Age", "Updated"},
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"UserId", "Name", "Age", "Updated"},
                    {"1", "Douglas Adams", 27, MakeNowTimestamp()}));
 
   // Type for int key does not match.
   EXPECT_THAT(Insert("Users", {"UserId", "Name", "Age"},
                      {MakeNowTimestamp(), "Suzanne Collins", 27}),
-              StatusIs(absl::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   // Type for int column does not match.
   EXPECT_THAT(Insert("Users", {"UserId", "Name", "Age"},
                      {"1", "Suzanne Collins", MakeNowTimestamp()}),
-              StatusIs(absl::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 
   // Type for timestamp column does not match.
   EXPECT_THAT(Insert("Users", {"UserId", "Name", "Updated"},
                      {"1", "Suzanne Collins", 27}),
-              StatusIs(absl::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-TEST_F(MalformedWritesTest, CannotHaveDifferentNumberOfColumnsAndValues) {
+TEST_P(MalformedWritesTest, CannotHaveDifferentNumberOfColumnsAndValues) {
   EXPECT_THAT(
       Insert("Users", {"UserId", "Name", "Updated"}, {"1", "Douglas Adams"}),
       StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-TEST_F(MalformedWritesTest, CannotSpecifyPartialKey) {
-  ZETASQL_EXPECT_OK(Insert("Users", {"UserId", "Name"}, {1, "Douglas Adams"}));
-  ZETASQL_EXPECT_OK(Insert("Threads", {"UserId", "ThreadId", "Starred"}, {1, 1, true}));
+TEST_P(MalformedWritesTest, CannotSpecifyPartialKey) {
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"UserId", "Name"}, {1, "Douglas Adams"}));
+  GOOGLESQL_EXPECT_OK(Insert("Threads", {"UserId", "ThreadId", "Starred"}, {1, 1, true}));
 
-  // Can perform a succesful read by specifying the full primary key.
+  // Can perform a successful read by specifying the full primary key.
   EXPECT_THAT(Read("Threads", {"UserId", "ThreadId", "Starred"}, Key(1, 1)),
               IsOkAndHoldsRow({1, 1, true}));
 
@@ -133,7 +137,7 @@ TEST_F(MalformedWritesTest, CannotSpecifyPartialKey) {
               StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
-TEST_F(MalformedWritesTest, CannotWriteToNonExistentColumn) {
+TEST_P(MalformedWritesTest, CannotWriteToNonExistentColumn) {
   EXPECT_THAT(Insert("Users", {"bad-key", "Name"}, {1, "Douglas Adams"}),
               StatusIs(absl::StatusCode::kNotFound));
 
@@ -141,7 +145,7 @@ TEST_F(MalformedWritesTest, CannotWriteToNonExistentColumn) {
               StatusIs(absl::StatusCode::kNotFound));
 }
 
-TEST_F(MalformedWritesTest, CannotWriteToEmptyTableName) {
+TEST_P(MalformedWritesTest, CannotWriteToEmptyTableName) {
   // Check that empty table name cannot be specified for all mutation types:
   // insert, update, delete and replace.
   EXPECT_THAT(Insert("", {"UserId", "Name"}, {1, "Douglas Adams"}),
@@ -160,12 +164,12 @@ TEST_F(MalformedWritesTest, CannotWriteToEmptyTableName) {
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-TEST_F(MalformedWritesTest, CannotWriteToNonExistentTable) {
+TEST_P(MalformedWritesTest, CannotWriteToNonExistentTable) {
   EXPECT_THAT(Insert("bad-table", {"UserId", "Name"}, {1, "Douglas Adams"}),
               StatusIs(absl::StatusCode::kNotFound));
 }
 
-TEST_F(MalformedWritesTest, CannotWriteStructToStringColumn) {
+TEST_P(MalformedWritesTest, CannotWriteStructToStringColumn) {
   // Check that struct type cannot be passed to a string column for all mutation
   // types: insert, update, delete and replace.
   using StructType = std::tuple<std::pair<std::string, std::string>>;
@@ -187,7 +191,7 @@ TEST_F(MalformedWritesTest, CannotWriteStructToStringColumn) {
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
-TEST_F(MalformedWritesTest, CannotWriteListStructToStringColumn) {
+TEST_P(MalformedWritesTest, CannotWriteListStructToStringColumn) {
   // Check that list of struct cannot be passed to a string column for all
   // mutation types: insert, update, delete and replace.
   using StructType = std::tuple<std::pair<std::string, std::string>>;

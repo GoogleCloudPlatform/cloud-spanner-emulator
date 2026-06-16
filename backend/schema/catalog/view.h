@@ -23,7 +23,7 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/type.h"
+#include "googlesql/public/type.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
@@ -51,10 +51,10 @@ class Index;
 class View : public SchemaNode {
  public:
   struct Column {
-    Column(const std::string& name, const zetasql::Type* type)
+    Column(const std::string& name, const googlesql::Type* type)
         : name(name), type(type) {}
     const std::string name;
-    const zetasql::Type* const type = nullptr;
+    const googlesql::Type* const type = nullptr;
   };
 
   enum SqlSecurity {

@@ -18,11 +18,11 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "frontend/entities/instance.h"
 #include "tests/common/proto_matchers.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -36,7 +36,7 @@ namespace instance_api = ::google::spanner::admin::instance::v1;
 using ::google::spanner::emulator::test::EqualsProto;
 using ::google::spanner::emulator::test::proto::Partially;
 using ::testing::MatchesRegex;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 
 TEST(InstanceManagerTest, CreateInstanceWithNode) {
   InstanceManager instance_manager;
@@ -46,7 +46,7 @@ TEST(InstanceManagerTest, CreateInstanceWithNode) {
   instance_proto.set_state(admin::instance::v1::Instance::READY);
   instance_proto.set_display_name("Test Instance");
   instance_proto.set_node_count(3);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Instance> instance,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Instance> instance,
                        instance_manager.CreateInstance(
                            "projects/123/instances/456", instance_proto));
 
@@ -69,7 +69,7 @@ TEST(InstanceManagerTest, CreateInstanceWithTime) {
   instance_proto.set_config("projects/123/instanceConfigs/emulator-config");
   instance_proto.set_display_name("Test Instance");
   instance_proto.set_node_count(3);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Instance> instance,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Instance> instance,
                        instance_manager.CreateInstance(
                            "projects/123/instances/456", instance_proto));
 
@@ -91,7 +91,7 @@ TEST(InstanceManagerTest, CreateInstanceWithMultipleof100ProcessingUnits) {
   instance_proto.set_config("projects/123/instanceConfigs/emulator-config");
   instance_proto.set_display_name("Test Instance");
   instance_proto.set_processing_units(300);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Instance> instance,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Instance> instance,
                        instance_manager.CreateInstance(
                            "projects/123/instances/456", instance_proto));
 
@@ -111,7 +111,7 @@ TEST(InstanceManagerTest, CreateInstanceWithMultipleof1000ProcessingUnits) {
   instance_proto.set_config("projects/123/instanceConfigs/emulator-config");
   instance_proto.set_display_name("Test Instance");
   instance_proto.set_processing_units(2000);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Instance> instance,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Instance> instance,
                        instance_manager.CreateInstance(
                            "projects/123/instances/456", instance_proto));
 
@@ -131,7 +131,7 @@ TEST(InstanceManagerTest, CreateInstanceWithoutEitherNodesOrProcessingUnits) {
   admin::instance::v1::Instance instance_proto;
   instance_proto.set_config("projects/123/instanceConfigs/emulator-config");
   instance_proto.set_display_name("Test Instance");
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Instance> instance,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::shared_ptr<Instance> instance,
                        instance_manager.CreateInstance(
                            "projects/123/instances/456", instance_proto));
   instance->ToProto(&instance_proto);
@@ -193,14 +193,14 @@ TEST(InstanceManagerTest,
 
 TEST(InstanceManagerTest, GetInstance) {
   InstanceManager instance_manager;
-  ZETASQL_ASSERT_OK(instance_manager.CreateInstance(
+  GOOGLESQL_ASSERT_OK(instance_manager.CreateInstance(
       "projects/123/instances/456", PARSE_TEXT_PROTO(R"pb(
         config: 'projects/123/instanceConfigs/emulator-config'
         display_name: 'Test Instance'
         node_count: 3
       )pb")));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Instance> instance,
       instance_manager.GetInstance("projects/123/instances/456"));
 
@@ -219,20 +219,20 @@ TEST(InstanceManagerTest, GetInstance) {
 
 TEST(InstanceManagerTest, ListInstances) {
   InstanceManager instance_manager;
-  ZETASQL_ASSERT_OK(instance_manager.CreateInstance(
+  GOOGLESQL_ASSERT_OK(instance_manager.CreateInstance(
       "projects/123/instances/456", PARSE_TEXT_PROTO(R"pb(
         config: 'projects/123/instanceConfigs/emulator-config'
         display_name: 'Test Instance'
         node_count: 3
       )pb")));
-  ZETASQL_ASSERT_OK(instance_manager.CreateInstance(
+  GOOGLESQL_ASSERT_OK(instance_manager.CreateInstance(
       "projects/123/instances/789", PARSE_TEXT_PROTO(R"pb(
         config: 'projects/123/instanceConfigs/emulator-config'
         display_name: 'Test Instance'
         node_count: 6
       )pb")));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<std::shared_ptr<Instance>> instances,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<std::shared_ptr<Instance>> instances,
                        instance_manager.ListInstances("projects/123"));
 
   instance_api::Instance instance_proto;
@@ -261,7 +261,7 @@ TEST(InstanceManagerTest, ListInstances) {
 
 TEST(InstanceManagerTest, DeleteInstance) {
   InstanceManager instance_manager;
-  ZETASQL_ASSERT_OK(instance_manager.CreateInstance(
+  GOOGLESQL_ASSERT_OK(instance_manager.CreateInstance(
       "projects/123/instances/456", PARSE_TEXT_PROTO(R"pb(
         config: 'projects/123/instanceConfigs/emulator-config'
         display_name: 'Test Instance'

@@ -30,7 +30,7 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -91,9 +91,9 @@ class ProtoBundle {
   // defined in a previous proto bundle.
   // Example usage:
   //
-  // ZETASQL_ASSIGN_OR_RETURN(auto builder, ProtoBundle::Builder::New(descriptors));
-  // ZETASQL_RETURN_IF_ERROR(builder->InsertTypes("package.name.Type"));
-  // ZETASQL_ASSIGN_OR_RETURN(auto proto_bundle, builder->Build());
+  // GOOGLESQL_ASSIGN_OR_RETURN(auto builder, ProtoBundle::Builder::New(descriptors));
+  // GOOGLESQL_RETURN_IF_ERROR(builder->InsertTypes("package.name.Type"));
+  // GOOGLESQL_ASSIGN_OR_RETURN(auto proto_bundle, builder->Build());
   //
   // When there's a previous ProtoBundle, use that as a base to load the
   // types into the new ProtoBundle. Note that this only loads the type list
@@ -116,7 +116,7 @@ class ProtoBundle {
         const ProtoBundle* prev_proto_bundle = nullptr) {
       auto builder = absl::WrapUnique(new Builder());
 
-      ZETASQL_RETURN_IF_ERROR(
+      GOOGLESQL_RETURN_IF_ERROR(
           builder->ParseProtoDescriptorBytes(proto_descriptor_bytes));
 
       if (prev_proto_bundle != nullptr) {
@@ -137,7 +137,7 @@ class ProtoBundle {
             seen_files.insert(std::string(file_desc->name()));
           }
         }
-        ZETASQL_RETURN_IF_ERROR(
+        GOOGLESQL_RETURN_IF_ERROR(
             builder->LoadTypesFromPreviousProtoBundle(prev_proto_bundle));
       }
       return builder;

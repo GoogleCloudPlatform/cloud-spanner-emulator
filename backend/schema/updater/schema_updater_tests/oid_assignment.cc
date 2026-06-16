@@ -19,7 +19,7 @@
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
@@ -103,7 +103,7 @@ TEST_P(SchemaUpdaterTest, OidAssignment_RevertOnError) {
                            /*use_gsql_to_pg_translation=*/false),
               StatusIs(error::DuplicateColumnName("t.col1")));
   // Expect oid assigner to revert any assigned oids for unsuccessful changes.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema({R"(
     CREATE TABLE T(
       col1 bigint PRIMARY KEY,
@@ -113,12 +113,12 @@ TEST_P(SchemaUpdaterTest, OidAssignment_RevertOnError) {
                                     /*use_gsql_to_pg_translation=*/false));
   // Expect 3 oids to be assigned:
   // 1 table, 1 primary key index, 1 primary key constraint
-  ZETASQL_EXPECT_OK(ValidateSchema(*schema.get(), 3));
+  GOOGLESQL_EXPECT_OK(ValidateSchema(*schema.get(), 3));
 }
 
 TEST_P(SchemaUpdaterTest, OidAssignment_BasicTable) {
   if (GetParam() == GOOGLE_STANDARD_SQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema({R"(
   CREATE TABLE T (
     id bigint,
@@ -133,12 +133,12 @@ TEST_P(SchemaUpdaterTest, OidAssignment_BasicTable) {
   // Expect 7 oids to be assigned:
   // 1 table, 1 primary key index, 2 primary key constraints,
   // 1 check constraint, 2 columns (default and generated)
-  ZETASQL_EXPECT_OK(ValidateSchema(*schema.get(), 7));
+  GOOGLESQL_EXPECT_OK(ValidateSchema(*schema.get(), 7));
 }
 
 TEST_P(SchemaUpdaterTest, OidAssignment_InterleaveTable) {
   if (GetParam() == GOOGLE_STANDARD_SQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(
                            {
                                R"(CREATE TABLE parent(
@@ -154,12 +154,12 @@ TEST_P(SchemaUpdaterTest, OidAssignment_InterleaveTable) {
   // Expect 7 oids to be assigned:
   // 2 tables, 2 primary key indexes, 2 primary key constraints,
   // 1 interleave IN PARENT constraint
-  ZETASQL_EXPECT_OK(ValidateSchema(*schema.get(), 7));
+  GOOGLESQL_EXPECT_OK(ValidateSchema(*schema.get(), 7));
 }
 
 TEST_P(SchemaUpdaterTest, OidAssignment_ForeignKey) {
   if (GetParam() == GOOGLE_STANDARD_SQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(
                            {
                                R"(CREATE TABLE Customers (
@@ -181,24 +181,24 @@ TEST_P(SchemaUpdaterTest, OidAssignment_ForeignKey) {
   // Expect 9 oids to be assigned:
   // 2 tables, 2 primary key indexes, 2 primary key constraints,
   // 1 foreign key constraint, 1 foreign key index, 1 unique constraint index
-  ZETASQL_EXPECT_OK(ValidateSchema(*schema.get(), 9));
+  GOOGLESQL_EXPECT_OK(ValidateSchema(*schema.get(), 9));
 }
 
 TEST_P(SchemaUpdaterTest, OidAssignment_NamedSchema) {
   if (GetParam() == GOOGLE_STANDARD_SQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema({R"(CREATE SCHEMA named_schema)"},
                                     /*proto_descriptor_bytes=*/"",
                                     database_api::DatabaseDialect::POSTGRESQL,
                                     /*use_gsql_to_pg_translation=*/false));
   // Expect 1 oid to be assigned:
   // 1 schema
-  ZETASQL_EXPECT_OK(ValidateSchema(*schema.get(), 1));
+  GOOGLESQL_EXPECT_OK(ValidateSchema(*schema.get(), 1));
 }
 
 TEST_P(SchemaUpdaterTest, OidAssignment_View) {
   if (GetParam() == GOOGLE_STANDARD_SQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto schema,
       CreateSchema(
           {R"(CREATE VIEW named_view SQL SECURITY INVOKER AS select 123;)"},
@@ -207,12 +207,12 @@ TEST_P(SchemaUpdaterTest, OidAssignment_View) {
           /*use_gsql_to_pg_translation=*/false));
   // Expect 1 oid to be assigned:
   // 1 view
-  ZETASQL_EXPECT_OK(ValidateSchema(*schema.get(), 1));
+  GOOGLESQL_EXPECT_OK(ValidateSchema(*schema.get(), 1));
 }
 
 TEST_P(SchemaUpdaterTest, OidAssignment_Index) {
   if (GetParam() == GOOGLE_STANDARD_SQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(
                            {
                                R"(CREATE TABLE T(
@@ -224,12 +224,12 @@ TEST_P(SchemaUpdaterTest, OidAssignment_Index) {
                            /*use_gsql_to_pg_translation=*/false));
   // Expect 4 oids to be assigned:
   // 1 tables, 1 primary key index, 1 primary key constraint, 1 index
-  ZETASQL_EXPECT_OK(ValidateSchema(*schema.get(), 4));
+  GOOGLESQL_EXPECT_OK(ValidateSchema(*schema.get(), 4));
 }
 
 TEST_P(SchemaUpdaterTest, OidAssignment_Sequence) {
   if (GetParam() == GOOGLE_STANDARD_SQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto schema,
       CreateSchema({R"(CREATE SEQUENCE Seq BIT_REVERSED_POSITIVE)"},
                    /*proto_descriptor_bytes=*/"",
@@ -237,12 +237,12 @@ TEST_P(SchemaUpdaterTest, OidAssignment_Sequence) {
                    /*use_gsql_to_pg_translation=*/false));
   // Expect 1 oid to be assigned:
   // 1 sequence
-  ZETASQL_EXPECT_OK(ValidateSchema(*schema.get(), 1));
+  GOOGLESQL_EXPECT_OK(ValidateSchema(*schema.get(), 1));
 }
 
 TEST_P(SchemaUpdaterTest, OidAssignment_ChangeStream) {
   if (GetParam() == GOOGLE_STANDARD_SQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(
                            {
                                R"(CREATE TABLE T(
@@ -255,7 +255,7 @@ TEST_P(SchemaUpdaterTest, OidAssignment_ChangeStream) {
   // Expect 5 oids to be assigned:
   // 1 table, 1 primary key index, 1 primary key constraint, 1 change stream,
   // 1 change stream TVF
-  ZETASQL_EXPECT_OK(ValidateSchema(*schema.get(), 5));
+  GOOGLESQL_EXPECT_OK(ValidateSchema(*schema.get(), 5));
 }
 
 }  // namespace

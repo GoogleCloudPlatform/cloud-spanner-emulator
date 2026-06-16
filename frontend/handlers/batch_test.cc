@@ -21,7 +21,7 @@
 #include "google/spanner/v1/commit_response.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/strings/ascii.h"
@@ -51,14 +51,14 @@ class BatchWriteApiTest : public test::ServerTest,
                           public testing::WithParamInterface<SessionType> {
  protected:
   void SetUp() override {
-    ZETASQL_ASSERT_OK(CreateTestInstance());
-    ZETASQL_ASSERT_OK(CreateTestDatabase());
-    ZETASQL_ASSERT_OK_AND_ASSIGN(test_session_uri_, CreateTestSession(
+    GOOGLESQL_ASSERT_OK(CreateTestInstance());
+    GOOGLESQL_ASSERT_OK(CreateTestDatabase());
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(test_session_uri_, CreateTestSession(
                                                 /*multiplexed=*/false));
-    ZETASQL_ASSERT_OK_AND_ASSIGN(test_multiplexed_session_uri_,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(test_multiplexed_session_uri_,
                          CreateTestSession(
                              /*multiplexed=*/true));
-    ZETASQL_ASSERT_OK(PopulateTestTable());
+    GOOGLESQL_ASSERT_OK(PopulateTestTable());
   }
 
   std::string GetSessionUri(bool multiplexed) {
@@ -81,7 +81,7 @@ class BatchWriteApiTest : public test::ServerTest,
     return Commit(commit_request, &commit_response);
   }
 
-  void TearDown() override { ZETASQL_ASSERT_OK(ClearTestTable()); }
+  void TearDown() override { GOOGLESQL_ASSERT_OK(ClearTestTable()); }
 
   absl::Status PopulateTestTable() {
     spanner_api::CommitRequest commit_request = PARSE_TEXT_PROTO(R"pb(
@@ -140,7 +140,7 @@ TEST_P(BatchWriteApiTest, BatchWriteInsert) {
 
   std::vector<spanner_api::BatchWriteResponse> response;
   grpc::ClientContext context;
-  ZETASQL_EXPECT_OK(BatchWrite(request, &response));
+  GOOGLESQL_EXPECT_OK(BatchWrite(request, &response));
 
   EXPECT_THAT(response,
               ElementsAre(AllOf(
@@ -170,7 +170,7 @@ TEST_P(BatchWriteApiTest, BatchWriteUpdate) {
 
   std::vector<spanner_api::BatchWriteResponse> response;
   grpc::ClientContext context;
-  ZETASQL_EXPECT_OK(BatchWrite(request, &response));
+  GOOGLESQL_EXPECT_OK(BatchWrite(request, &response));
 
   EXPECT_THAT(response,
               ElementsAre(AllOf(
@@ -200,7 +200,7 @@ TEST_P(BatchWriteApiTest, BatchWriteInsertOrUpdate) {
 
   std::vector<spanner_api::BatchWriteResponse> response;
   grpc::ClientContext context;
-  ZETASQL_EXPECT_OK(BatchWrite(request, &response));
+  GOOGLESQL_EXPECT_OK(BatchWrite(request, &response));
 
   EXPECT_THAT(response, ElementsAre(Partially(EqualsProto(R"pb(
                 indexes: 0
@@ -226,7 +226,7 @@ TEST_P(BatchWriteApiTest, BatchWriteDelete) {
 
   std::vector<spanner_api::BatchWriteResponse> response;
   grpc::ClientContext context;
-  ZETASQL_EXPECT_OK(BatchWrite(request, &response));
+  GOOGLESQL_EXPECT_OK(BatchWrite(request, &response));
 
   EXPECT_THAT(response, ElementsAre(AllOf(Partially(EqualsProto(R"pb(
                 indexes: 0
@@ -245,7 +245,7 @@ TEST_P(BatchWriteApiTest, BatchWriteDelete) {
   spanner_api::ResultSet read_response;
   grpc::ClientContext read_context;
   absl::Status read_status = Read(read_request, &read_response);
-  ZETASQL_EXPECT_OK(read_status);
+  GOOGLESQL_EXPECT_OK(read_status);
   EXPECT_EQ(read_response.rows_size(), 0);
 }
 
@@ -290,7 +290,7 @@ TEST_P(BatchWriteApiTest, BatchWriteMultipleMutationGroups) {
 
   std::vector<spanner_api::BatchWriteResponse> response;
   grpc::ClientContext context;
-  ZETASQL_EXPECT_OK(BatchWrite(request, &response));
+  GOOGLESQL_EXPECT_OK(BatchWrite(request, &response));
 
   EXPECT_THAT(response, UnorderedElementsAre(AllOf(Partially(EqualsProto(R"pb(
                                                indexes: 0
@@ -387,7 +387,7 @@ TEST_P(BatchWriteApiTest, TestInsertMultipleMutationGroupsWithFailure) {
   EXPECT_THAT(response[2].status().code(), Eq(0));
 
   // Overall status should be an OK status
-  ZETASQL_EXPECT_OK(status);
+  GOOGLESQL_EXPECT_OK(status);
 }
 
 TEST_P(BatchWriteApiTest, TestInsertMutationGroupWithSuccessAndFailure) {
@@ -461,7 +461,7 @@ TEST_P(BatchWriteApiTest, TestInsertMutationGroupWithSuccessAndFailure) {
   EXPECT_THAT(response[1].status().code(), Eq(0));
 
   // Overall status should be an OK status
-  ZETASQL_EXPECT_OK(status);
+  GOOGLESQL_EXPECT_OK(status);
 }
 
 TEST_P(BatchWriteApiTest, ConcurrentTransactions) {
@@ -473,7 +473,7 @@ TEST_P(BatchWriteApiTest, ConcurrentTransactions) {
 
   // 1. Start a normal read/write transaction and execute a DML statement.
   spanner_api::Transaction transaction_response;
-  ZETASQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(begin_request, &transaction_response));
 
   spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(
       R"""(
@@ -485,7 +485,7 @@ TEST_P(BatchWriteApiTest, ConcurrentTransactions) {
   request.mutable_transaction()->set_id(transaction_response.id());
 
   spanner_api::ResultSet response;
-  ZETASQL_ASSERT_OK(ExecuteSql(request, &response));
+  GOOGLESQL_ASSERT_OK(ExecuteSql(request, &response));
 
   // 2. Execute a BatchWrite with a couple of mutation groups.
   spanner_api::BatchWriteRequest batch_write_request;
@@ -515,7 +515,7 @@ TEST_P(BatchWriteApiTest, ConcurrentTransactions) {
   // Simulate a BatchWrite call
   std::vector<spanner_api::BatchWriteResponse> batch_write_responses;
   grpc::ClientContext batch_write_context;
-  ZETASQL_ASSERT_OK(BatchWrite(batch_write_request, &batch_write_responses));
+  GOOGLESQL_ASSERT_OK(BatchWrite(batch_write_request, &batch_write_responses));
 
   // 3. Then try to commit the first transaction.
   spanner_api::CommitRequest commit_request;
@@ -552,9 +552,9 @@ TEST_P(BatchWriteApiTest, ConcurrentTransactions) {
   }
   if (num_committed_mutation_groups > 0) {
     EXPECT_THAT(rw_commit_status,
-                zetasql_base::testing::StatusIs(absl::StatusCode::kAborted));
+                googlesql_base::testing::StatusIs(absl::StatusCode::kAborted));
   } else {
-    ZETASQL_EXPECT_OK(rw_commit_status);
+    GOOGLESQL_EXPECT_OK(rw_commit_status);
   }
   // Construct a new BatchWrite request with a single mutation group
   spanner_api::BatchWriteRequest new_batch_write_request;
@@ -573,7 +573,7 @@ TEST_P(BatchWriteApiTest, ConcurrentTransactions) {
   // Simulate a new BatchWrite call after the first transaction was committed
   std::vector<spanner_api::BatchWriteResponse> new_batch_write_response;
   grpc::ClientContext new_batch_write_context;
-  ZETASQL_ASSERT_OK(BatchWrite(new_batch_write_request, &new_batch_write_response));
+  GOOGLESQL_ASSERT_OK(BatchWrite(new_batch_write_request, &new_batch_write_response));
 
   // Check that all mutation groups completed successfully
   for (const auto& response : new_batch_write_response) {

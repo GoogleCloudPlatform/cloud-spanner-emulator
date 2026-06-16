@@ -38,7 +38,7 @@
 #include "third_party/spanner_pg/interface/parser_output.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
 #include "third_party/spanner_pg/util/postgres.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator::spangres {
 
@@ -66,6 +66,9 @@ ParserOutputMetadata MetadataFromProto(const ParserOutputProto& proto) {
     metadata.serialized_parse_tree_size = proto.serialized_parse_tree().size();
   }
 
+  metadata.literal_sensitive_hash = proto.literal_sensitive_hash();
+  metadata.literal_insensitive_hash = proto.literal_insensitive_hash();
+
   return metadata;
 }
 
@@ -85,14 +88,14 @@ absl::StatusOr<void*> DeserializeParseTree(
   // that points to an instance of a struct that is effectively a subclass
   // of `Node`.  Specifically, in our use case it is always a `List` node.
   // So we take the void* and immediately perform a checked cast to List*.
-  ZETASQL_ASSIGN_OR_RETURN(void* generic_node_ptr,
+  GOOGLESQL_ASSIGN_OR_RETURN(void* generic_node_ptr,
                    CheckedPgStringToNode(parse_tree_c_str));
   return generic_node_ptr;
 }
 
 absl::StatusOr<List*> DeserializeParseQuery(
     const std::string& serialized_parse_tree) {
-  ZETASQL_ASSIGN_OR_RETURN(void* generic_node_ptr,
+  GOOGLESQL_ASSIGN_OR_RETURN(void* generic_node_ptr,
                    DeserializeParseTree(serialized_parse_tree));
 
   return generic_node_ptr == nullptr
@@ -102,7 +105,7 @@ absl::StatusOr<List*> DeserializeParseQuery(
 
 absl::StatusOr<Node*> DeserializeParseExpression(
     const std::string& serialized_parse_tree) {
-  ZETASQL_ASSIGN_OR_RETURN(void* generic_node_ptr,
+  GOOGLESQL_ASSIGN_OR_RETURN(void* generic_node_ptr,
                    DeserializeParseTree(serialized_parse_tree));
 
   return generic_node_ptr == nullptr
@@ -113,7 +116,7 @@ absl::StatusOr<Node*> DeserializeParseExpression(
 absl::StatusOr<ParserOutputProto> ParserOutputToProto(
     const interfaces::ParserOutput& output) {
   ParserOutputProto proto;
-  ZETASQL_ASSIGN_OR_RETURN(char* serialized_parse_tree,
+  GOOGLESQL_ASSIGN_OR_RETURN(char* serialized_parse_tree,
                    CheckedPgNodeToString(output.parse_tree()));
   proto.set_serialized_parse_tree(serialized_parse_tree);
   for (const auto& start_end_pair : output.token_locations()) {
@@ -127,7 +130,7 @@ absl::StatusOr<ParserOutputProto> ParserOutputToProto(
 absl::StatusOr<interfaces::ParserOutput> ParserOutputFromProto(
     const ParserOutputProto& proto) {
   List* parse_tree;
-  ZETASQL_ASSIGN_OR_RETURN(parse_tree,
+  GOOGLESQL_ASSIGN_OR_RETURN(parse_tree,
                    DeserializeParseQuery(proto.serialized_parse_tree()));
   return interfaces::ParserOutput(parse_tree, MetadataFromProto(proto));
 }

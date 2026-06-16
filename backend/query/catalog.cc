@@ -22,12 +22,12 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/function.h"
-#include "zetasql/public/function_signature.h"
-#include "zetasql/public/property_graph.h"
-#include "zetasql/public/types/type.h"
-#include "zetasql/public/types/type_factory.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/function.h"
+#include "googlesql/public/function_signature.h"
+#include "googlesql/public/property_graph.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/public/types/type_factory.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/log/check.h"
@@ -62,7 +62,7 @@
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_oid_type.h"
 #include "google/protobuf/descriptor.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -74,7 +74,7 @@ using postgres_translator::spangres::datatypes::GetPgNumericType;
 using postgres_translator::spangres::datatypes::GetPgOidType;
 
 // A sub-catalog used for resolving NET function lookups.
-class NetCatalog : public zetasql::Catalog {
+class NetCatalog : public googlesql::Catalog {
  public:
   explicit NetCatalog(backend::Catalog* root_catalog)
       : root_catalog_(root_catalog) {}
@@ -90,9 +90,40 @@ class NetCatalog : public zetasql::Catalog {
     return name;
   }
 
-  // Implementation of the zetasql::Catalog interface.
+  // Implementation of the googlesql::Catalog interface.
   absl::Status GetFunction(const std::string& name,
-                           const zetasql::Function** function,
+                           const googlesql::Function** function,
+                           const FindOptions& options) final {
+    // The list of all functions is maintained in the root catalog in the
+    // form of their fully-qualified names. Just prefix the function name
+    // with the name of 'this' catalog and delegate the request to parent.
+    return root_catalog_->GetFunction(absl::StrJoin({FullName(), name}, "."),
+                                      function, options);
+  }
+
+ private:
+  backend::Catalog* root_catalog_;
+};
+
+// A sub-catalog used for resolving AI function lookups.
+class AiCatalog : public googlesql::Catalog {
+ public:
+  explicit AiCatalog(backend::Catalog* root_catalog)
+      : root_catalog_(root_catalog) {}
+  static constexpr char kName[] = "AI";
+
+  std::string FullName() const final {
+    std::string name = root_catalog_->FullName();
+    if (name.empty()) {
+      return kName;
+    }
+    absl::StrAppend(&name, kName);
+    return name;
+  }
+
+  // Implementation of the googlesql::Catalog interface.
+  absl::Status GetFunction(const std::string& name,
+                           const googlesql::Function** function,
                            const FindOptions& options) final {
     // The list of all functions is maintained in the root catalog in the
     // form of their fully-qualified names. Just prefix the function name
@@ -108,7 +139,7 @@ class NetCatalog : public zetasql::Catalog {
 // A sub-catalog used for resolving PG function lookups from GSQL queries.
 // Required for supporting check constraints as PG queries are translated to
 // GSQL queries before storing in the DDL statement.
-class PGFunctionCatalog : public zetasql::Catalog {
+class PGFunctionCatalog : public googlesql::Catalog {
  public:
   explicit PGFunctionCatalog(backend::Catalog* root_catalog)
       : root_catalog_(root_catalog) {}
@@ -127,9 +158,9 @@ class PGFunctionCatalog : public zetasql::Catalog {
     return name;
   }
 
-  // Implementation of the zetasql::Catalog interface.
+  // Implementation of the googlesql::Catalog interface.
   absl::Status GetFunction(const std::string& name,
-                           const zetasql::Function** function,
+                           const googlesql::Function** function,
                            const FindOptions& options) final {
     // The list of all functions is maintained in the root catalog in the
     // form of their fully-qualified names. Just prefix the function name
@@ -141,7 +172,7 @@ class PGFunctionCatalog : public zetasql::Catalog {
   // Similar to GetFunction. Types are maintained in the root catalog in the
   // form of their fully-qualified names, such as PG.NUMERIC and PG.JSONB.
   // Redirect the request to the parent.
-  absl::Status GetType(const std::string& name, const zetasql::Type** type,
+  absl::Status GetType(const std::string& name, const googlesql::Type** type,
                        const FindOptions& options) final {
     std::string full_name = absl::StrJoin({FullName(), name}, ".");
     if (root_catalog_->schema_ != nullptr &&
@@ -166,8 +197,8 @@ class PGFunctionCatalog : public zetasql::Catalog {
 };
 
 Catalog::Catalog(const Schema* schema, const FunctionCatalog* function_catalog,
-                 zetasql::TypeFactory* type_factory,
-                 const zetasql::AnalyzerOptions& options, RowReader* reader,
+                 googlesql::TypeFactory* type_factory,
+                 const googlesql::AnalyzerOptions& options, RowReader* reader,
                  QueryEvaluator* query_evaluator,
                  std::optional<std::string> change_stream_internal_lookup)
     : schema_(schema),
@@ -180,17 +211,22 @@ Catalog::Catalog(const Schema* schema, const FunctionCatalog* function_catalog,
 
   for (const auto* udf : schema->udfs()) {
     std::string udf_name = udf->Name();
+    auto queryable_udf = QueryableUdf::Create(udf, schema->default_time_zone(),
+                                              this, type_factory);
+    if (!queryable_udf.ok()) {
+      ABSL_LOG(ERROR) << "Skipping UDF: " << udf_name
+                 << " due to a failure: " << queryable_udf.status().message();
+      continue;
+    }
+
     if (SDLObjectName::IsFullyQualifiedName(udf_name)) {
       const auto [schema_part, name_part] =
           SDLObjectName::SplitSchemaName(udf_name);
-      absl::Status status = AddObjectToNamedSchema(
-          std::string(schema_part),
-          std::make_unique<QueryableUdf>(udf, schema->default_time_zone(), this,
-                                         type_factory));
+      absl::Status status = AddObjectToNamedSchema(std::string(schema_part),
+                                                   *std::move(queryable_udf));
       LOG_IF(ERROR, !status.ok()) << status.message();
     } else {
-      udfs_[udf->Name()] = std::make_unique<QueryableUdf>(
-          udf, schema->default_time_zone(), this, type_factory);
+      udfs_[udf->Name()] = *std::move(queryable_udf);
     }
   }
 
@@ -251,6 +287,20 @@ Catalog::Catalog(const Schema* schema, const FunctionCatalog* function_catalog,
     }
   }
 
+  // Pass the query_evaluator to views.
+  for (const auto* view : schema->views()) {
+    std::string name = view->Name();
+    if (SDLObjectName::IsFullyQualifiedName(name)) {
+      absl::Status status = AddObjectToNamedSchema(
+          std::string(SDLObjectName::GetSchemaName(name)),
+          std::make_unique<QueryableView>(view, query_evaluator));
+      LOG_IF(ERROR, !status.ok()) << status.message();
+    } else {
+      views_[view->Name()] =
+          std::make_unique<QueryableView>(view, query_evaluator);
+    }
+  }
+
   for (const auto* graph : schema->property_graphs()) {
     std::string name = graph->Name();
     // Confirm that the property graph is not in a named schema as that is not
@@ -279,20 +329,6 @@ Catalog::Catalog(const Schema* schema, const FunctionCatalog* function_catalog,
     }
   }
 
-  // Pass the query_evaluator to views.
-  for (const auto* view : schema->views()) {
-    std::string name = view->Name();
-    if (SDLObjectName::IsFullyQualifiedName(name)) {
-      absl::Status status = AddObjectToNamedSchema(
-          std::string(SDLObjectName::GetSchemaName(name)),
-          std::make_unique<QueryableView>(view, query_evaluator));
-      LOG_IF(ERROR, !status.ok()) << status.message();
-    } else {
-      views_[view->Name()] =
-          std::make_unique<QueryableView>(view, query_evaluator);
-    }
-  }
-
   if (change_stream_internal_lookup.has_value()) {
     auto change_stream =
         schema->FindChangeStream(change_stream_internal_lookup.value());
@@ -316,7 +352,7 @@ Catalog::Catalog(const Schema* schema, const FunctionCatalog* function_catalog,
     const QueryableTable* table = tablepair.second.get();
     for (int i = 0; i < table->NumColumns(); ++i) {
       std::string type_name = table->GetColumn(i)->GetType()->TypeName(
-          zetasql::PRODUCT_EXTERNAL, /*use_external_float32=*/true);
+          googlesql::PRODUCT_EXTERNAL, /*use_external_float32=*/true);
       types_[type_name] = table->GetColumn(i)->GetType();
     }
   }
@@ -333,11 +369,11 @@ absl::Status Catalog::PopulateSystemProcedureMap() {
   // required here.
   auto [_, inserted] = procedures_.emplace(
       "cancel_query",
-      std::make_unique<zetasql::Procedure>(
+      std::make_unique<googlesql::Procedure>(
           std::vector<std::string>{"cancel_query"},
-          zetasql::FunctionSignature(
-              zetasql::types::BoolType(),
-              {zetasql::FunctionArgumentType(zetasql::types::StringType())},
+          googlesql::FunctionSignature(
+              googlesql::types::BoolType(),
+              {googlesql::FunctionArgumentType(googlesql::types::StringType())},
               /*context_id=*/-1)));
   if (!inserted) {
     return absl::InternalError("Unable to populate system procedure map.");
@@ -346,7 +382,7 @@ absl::Status Catalog::PopulateSystemProcedureMap() {
 }
 
 absl::Status Catalog::GetCatalog(const std::string& name,
-                                 zetasql::Catalog** catalog,
+                                 googlesql::Catalog** catalog,
                                  const FindOptions& options) {
   if (absl::EqualsIgnoreCase(name, InformationSchemaCatalog::kName)) {
     *catalog = GetInformationSchemaCatalog();
@@ -356,6 +392,8 @@ absl::Status Catalog::GetCatalog(const std::string& name,
     *catalog = GetSpannerSysCatalog();
   } else if (absl::EqualsIgnoreCase(name, NetCatalog::kName)) {
     *catalog = GetNetFunctionsCatalog();
+  } else if (absl::EqualsIgnoreCase(name, AiCatalog::kName)) {
+    *catalog = GetAiFunctionsCatalog();
   } else if (absl::EqualsIgnoreCase(name, PGFunctionCatalog::kName)) {
     *catalog = GetPGFunctionsCatalog();
   } else if (absl::EqualsIgnoreCase(name,
@@ -371,7 +409,7 @@ absl::Status Catalog::GetCatalog(const std::string& name,
 }
 
 absl::Status Catalog::GetTable(const std::string& name,
-                               const zetasql::Table** table,
+                               const googlesql::Table** table,
                                const FindOptions& options) {
   *table = nullptr;
   if (auto it = views_.find(name); it != views_.end()) {
@@ -388,7 +426,7 @@ absl::Status Catalog::GetTable(const std::string& name,
 }
 
 absl::Status Catalog::GetModel(const std::string& name,
-                               const zetasql::Model** model,
+                               const googlesql::Model** model,
                                const FindOptions& options) {
   *model = nullptr;
   if (auto it = models_.find(name); it != models_.end()) {
@@ -399,10 +437,10 @@ absl::Status Catalog::GetModel(const std::string& name,
 }
 
 absl::Status Catalog::FindConversion(
-    const zetasql::Type* from_type, const zetasql::Type* to_type,
-    const zetasql::Catalog::FindConversionOptions& options,
-    zetasql::Conversion* conversion) {
-  ZETASQL_ASSIGN_OR_RETURN(
+    const googlesql::Type* from_type, const googlesql::Type* to_type,
+    const googlesql::Catalog::FindConversionOptions& options,
+    googlesql::Conversion* conversion) {
+  GOOGLESQL_ASSIGN_OR_RETURN(
       *conversion,
       postgres_translator::spangres::datatypes::FindExtendedTypeConversion(
           from_type, to_type, options));
@@ -410,7 +448,7 @@ absl::Status Catalog::FindConversion(
 }
 
 absl::Status Catalog::GetPropertyGraph(std::string_view name,
-                                       const zetasql::PropertyGraph*& graph,
+                                       const googlesql::PropertyGraph*& graph,
                                        const FindOptions& options) {
   if (auto it = property_graphs_.find(std::string(name));
       it != property_graphs_.end()) {
@@ -422,7 +460,7 @@ absl::Status Catalog::GetPropertyGraph(std::string_view name,
 
 absl::Status Catalog::FindTableValuedFunction(
     const absl::Span<const std::string>& path,
-    const zetasql::TableValuedFunction** function,
+    const googlesql::TableValuedFunction** function,
     const FindOptions& options) {
   *function = nullptr;
   std::string name = absl::StrJoin(path, ".");
@@ -440,7 +478,7 @@ absl::Status Catalog::FindTableValuedFunction(
 }
 
 absl::Status Catalog::GetFunction(const std::string& name,
-                                  const zetasql::Function** function,
+                                  const googlesql::Function** function,
                                   const FindOptions& options) {
   auto it = udfs_.find(name);
   if (it != udfs_.end()) {
@@ -453,7 +491,7 @@ absl::Status Catalog::GetFunction(const std::string& name,
 }
 
 absl::Status Catalog::GetProcedure(const std::string& full_name,
-                                   const zetasql::Procedure** procedure,
+                                   const googlesql::Procedure** procedure,
                                    const FindOptions& options) {
   auto it = procedures_.find(absl::AsciiStrToLower(full_name));
   if (it == procedures_.end()) {
@@ -464,7 +502,7 @@ absl::Status Catalog::GetProcedure(const std::string& full_name,
 }
 
 absl::Status Catalog::GetSequence(const std::string& name,
-                                  const zetasql::Sequence** sequence,
+                                  const googlesql::Sequence** sequence,
                                   const FindOptions& options) {
   *sequence = nullptr;
   if (auto it = sequences_.find(name); it != sequences_.end()) {
@@ -475,17 +513,18 @@ absl::Status Catalog::GetSequence(const std::string& name,
 }
 
 absl::Status Catalog::GetCatalogs(
-    absl::flat_hash_set<const zetasql::Catalog*>* output) const {
+    absl::flat_hash_set<const googlesql::Catalog*>* output) const {
   output->insert(GetInformationSchemaCatalog());
   output->insert(GetSpannerSysCatalog());
   output->insert(GetNetFunctionsCatalog());
-  ZETASQL_RETURN_IF_ERROR(GetNamedSchemas(output));
+  output->insert(GetAiFunctionsCatalog());
+  GOOGLESQL_RETURN_IF_ERROR(GetNamedSchemas(output));
 
   return absl::OkStatus();
 }
 
 absl::Status Catalog::GetTables(
-    absl::flat_hash_set<const zetasql::Table*>* output) const {
+    absl::flat_hash_set<const googlesql::Table*>* output) const {
   for (auto iter = tables_.begin(); iter != tables_.end(); ++iter) {
     output->insert(iter->second.get());
   }
@@ -496,7 +535,7 @@ absl::Status Catalog::GetTables(
 }
 
 absl::Status Catalog::GetTypes(
-    absl::flat_hash_set<const zetasql::Type*>* output) const {
+    absl::flat_hash_set<const googlesql::Type*>* output) const {
   for (const auto& [unused_name, type] : types_) {
     output->insert(type);
   }
@@ -504,7 +543,7 @@ absl::Status Catalog::GetTypes(
 }
 
 absl::Status Catalog::GetType(const std::string& name,
-                              const zetasql::Type** type,
+                              const googlesql::Type** type,
                               const FindOptions& options) {
   *type = nullptr;
   if (auto it = types_.find(name); it != types_.end()) {
@@ -514,12 +553,12 @@ absl::Status Catalog::GetType(const std::string& name,
   absl::StatusOr<const google::protobuf::Descriptor*> descriptor =
       schema_->proto_bundle()->GetTypeDescriptor(name);
   if (descriptor.ok()) {
-    ZETASQL_RETURN_IF_ERROR(type_factory_->MakeProtoType(descriptor.value(), type));
+    GOOGLESQL_RETURN_IF_ERROR(type_factory_->MakeProtoType(descriptor.value(), type));
     return absl::OkStatus();
   } else {
     auto enum_descriptor = schema_->proto_bundle()->GetEnumTypeDescriptor(name);
     if (enum_descriptor.ok()) {
-      ZETASQL_RETURN_IF_ERROR(
+      GOOGLESQL_RETURN_IF_ERROR(
           type_factory_->MakeEnumType(enum_descriptor.value(), type));
       return absl::OkStatus();
     }
@@ -529,7 +568,7 @@ absl::Status Catalog::GetType(const std::string& name,
 }
 
 absl::Status Catalog::GetFunctions(
-    absl::flat_hash_set<const zetasql::Function*>* output) const {
+    absl::flat_hash_set<const googlesql::Function*>* output) const {
   for (const auto& [unused_name, function] : udfs_) {
     output->insert(function.get());
   }
@@ -539,15 +578,15 @@ absl::Status Catalog::GetFunctions(
 }
 
 absl::Status Catalog::GetTableValuedFunctions(
-    absl::flat_hash_set<const zetasql::TableValuedFunction*>* output) const {
+    absl::flat_hash_set<const googlesql::TableValuedFunction*>* output) const {
   for (const auto& [unused_name, function] : tvfs_) {
     output->insert(function.get());
   }
   return absl::OkStatus();
 }
 
-zetasql::Catalog* Catalog::GetInformationSchemaCatalog() const {
-  absl::MutexLock lock(&mu_);
+googlesql::Catalog* Catalog::GetInformationSchemaCatalog() const {
+  absl::MutexLock lock(mu_);
   auto spanner_sys_catalog = GetSpannerSysCatalogWithoutLocks();
   if (!information_schema_catalog_) {
     information_schema_catalog_ = std::make_unique<InformationSchemaCatalog>(
@@ -557,7 +596,7 @@ zetasql::Catalog* Catalog::GetInformationSchemaCatalog() const {
 }
 
 SpannerSysCatalog* Catalog::GetSpannerSysCatalog() const {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   return GetSpannerSysCatalogWithoutLocks();
 }
 
@@ -568,8 +607,8 @@ SpannerSysCatalog* Catalog::GetSpannerSysCatalogWithoutLocks() const {
   return spanner_sys_catalog_.get();
 }
 
-zetasql::Catalog* Catalog::GetPGInformationSchemaCatalog() const {
-  absl::MutexLock lock(&mu_);
+googlesql::Catalog* Catalog::GetPGInformationSchemaCatalog() const {
+  absl::MutexLock lock(mu_);
   auto spanner_sys_catalog = GetSpannerSysCatalogWithoutLocks();
   if (!pg_information_schema_catalog_) {
     pg_information_schema_catalog_ = std::make_unique<InformationSchemaCatalog>(
@@ -578,16 +617,24 @@ zetasql::Catalog* Catalog::GetPGInformationSchemaCatalog() const {
   return pg_information_schema_catalog_.get();
 }
 
-zetasql::Catalog* Catalog::GetNetFunctionsCatalog() const {
-  absl::MutexLock lock(&mu_);
+googlesql::Catalog* Catalog::GetNetFunctionsCatalog() const {
+  absl::MutexLock lock(mu_);
   if (!net_catalog_) {
     net_catalog_ = std::make_unique<NetCatalog>(const_cast<Catalog*>(this));
   }
   return net_catalog_.get();
 }
 
-zetasql::Catalog* Catalog::GetPGFunctionsCatalog() const {
-  absl::MutexLock lock(&mu_);
+googlesql::Catalog* Catalog::GetAiFunctionsCatalog() const {
+  absl::MutexLock lock(mu_);
+  if (!ai_catalog_) {
+    ai_catalog_ = std::make_unique<AiCatalog>(const_cast<Catalog*>(this));
+  }
+  return ai_catalog_.get();
+}
+
+googlesql::Catalog* Catalog::GetPGFunctionsCatalog() const {
+  absl::MutexLock lock(mu_);
   if (!pg_function_catalog_) {
     pg_function_catalog_ =
         std::make_unique<PGFunctionCatalog>(const_cast<Catalog*>(this));
@@ -595,8 +642,8 @@ zetasql::Catalog* Catalog::GetPGFunctionsCatalog() const {
   return pg_function_catalog_.get();
 }
 
-zetasql::Catalog* Catalog::GetPGCatalog() const {
-  absl::MutexLock lock(&mu_);
+googlesql::Catalog* Catalog::GetPGCatalog() const {
+  absl::MutexLock lock(mu_);
   if (schema_->dialect() == database_api::DatabaseDialect::POSTGRESQL) {
     if (!pg_catalog_) {
       pg_catalog_ =
@@ -615,7 +662,7 @@ QueryableNamedSchema* Catalog::GetNamedSchema(const std::string& name) {
 }
 
 absl::Status Catalog::GetNamedSchemas(
-    absl::flat_hash_set<const zetasql::Catalog*>* output) const {
+    absl::flat_hash_set<const googlesql::Catalog*>* output) const {
   for (auto iter = named_schemas_.begin(); iter != named_schemas_.end();
        ++iter) {
     output->insert(iter->second.get());

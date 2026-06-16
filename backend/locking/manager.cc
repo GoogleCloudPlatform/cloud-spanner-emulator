@@ -30,7 +30,7 @@
 #include "backend/common/ids.h"
 #include "common/config.h"
 #include "common/errors.h"
-#include "zetasql/base/ret_check.h"
+#include "googlesql/base/ret_check.h"
 
 namespace google {
 namespace spanner {
@@ -44,7 +44,7 @@ std::unique_ptr<LockHandle> LockManager::CreateHandle(
 }
 
 void LockManager::EnqueueLock(LockHandle* handle, const LockRequest& request) {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
 
   // Don't hand out locks to aborted handles.
   if (handle->IsAborted()) {
@@ -84,7 +84,7 @@ void LockManager::EnqueueLock(LockHandle* handle, const LockRequest& request) {
 }
 
 void LockManager::UnlockAll(LockHandle* handle) {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
 
   // If the transaction does not hold the lock, there is nothing to do.
   if (active_handle_ == nullptr || active_handle_->tid() != handle->tid()) {
@@ -99,7 +99,7 @@ void LockManager::UnlockAll(LockHandle* handle) {
 
 absl::StatusOr<absl::Time> LockManager::ReserveCommitTimestamp(
     LockHandle* handle) {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
 
   // If there is no transaction holding the lock, we grant it to the transaction
   // requesting commit timestamp. This can happen if transaction has empty
@@ -117,10 +117,10 @@ absl::StatusOr<absl::Time> LockManager::ReserveCommitTimestamp(
 }
 
 absl::Status LockManager::MarkCommitted(LockHandle* handle) {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
 
   // This transaction should have been set as the active transaction.
-  ZETASQL_RET_CHECK_EQ(active_handle_->tid(), handle->tid())
+  GOOGLESQL_RET_CHECK_EQ(active_handle_->tid(), handle->tid())
       << absl::Substitute("Transaction $0 is not active.", handle->tid());
 
   last_commit_timestamp_ = pending_commit_timestamp_;
@@ -130,7 +130,7 @@ absl::Status LockManager::MarkCommitted(LockHandle* handle) {
 }
 
 void LockManager::WaitForSafeRead(absl::Time read_time) {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
 
   // Wait for read time to become current if passed a future timestamp  for the
   // case of exact timestamp bound for snapshot read.
@@ -144,7 +144,7 @@ void LockManager::WaitForSafeRead(absl::Time read_time) {
 }
 
 absl::Time LockManager::LastCommitTimestamp() {
-  absl::ReaderMutexLock lock(&mu_);
+  absl::ReaderMutexLock lock(mu_);
   return last_commit_timestamp_;
 }
 

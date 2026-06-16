@@ -19,9 +19,9 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/options.pb.h"
-#include "zetasql/public/type.h"
-#include "zetasql/public/types/type_factory.h"
+#include "googlesql/public/options.pb.h"
+#include "googlesql/public/type.h"
+#include "googlesql/public/types/type_factory.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
@@ -38,8 +38,8 @@
 #include "backend/schema/updater/global_schema_names.h"
 #include "backend/schema/updater/sql_expression_validators.h"
 #include "common/errors.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -52,7 +52,7 @@ absl::Status ValidateViewSignatureChange(absl::string_view modify_action,
                                          absl::string_view dependency_name,
                                          const View* dependent_view,
                                          const Schema* temp_new_schema,
-                                         zetasql::TypeFactory* type_factory) {
+                                         googlesql::TypeFactory* type_factory) {
   // Re-analyze the dependent view based on the new definition of the dependency
   // in the temporary new schema.
   std::vector<View::Column> new_columns;
@@ -67,7 +67,7 @@ absl::Status ValidateViewSignatureChange(absl::string_view modify_action,
   }
   // The number of columns of the dependent view should not change after
   // re-analysis.
-  ZETASQL_RET_CHECK_EQ(new_columns.size(), dependent_view->columns().size());
+  GOOGLESQL_RET_CHECK_EQ(new_columns.size(), dependent_view->columns().size());
   auto original_columns = dependent_view->columns();
   for (int i = 0; i < new_columns.size(); i++) {
     if (!absl::EqualsIgnoreCase(original_columns[i].name,
@@ -79,9 +79,9 @@ absl::Status ValidateViewSignatureChange(absl::string_view modify_action,
     if (original_columns[i].type != new_columns[i].type) {
       return error::DependentViewColumnRetype(
           modify_action, dependency_name, dependent_view->Name(),
-          original_columns[i].type->TypeName(zetasql::PRODUCT_EXTERNAL,
+          original_columns[i].type->TypeName(googlesql::PRODUCT_EXTERNAL,
                                              /*use_external_float32=*/true),
-          new_columns[i].type->TypeName(zetasql::PRODUCT_EXTERNAL,
+          new_columns[i].type->TypeName(googlesql::PRODUCT_EXTERNAL,
                                         /*use_external_float32=*/true));
     }
   }
@@ -92,14 +92,14 @@ absl::Status ValidateViewSignatureChange(absl::string_view modify_action,
 
 absl::Status ViewValidator::Validate(const View* view,
                                      SchemaValidationContext* context) {
-  ZETASQL_RET_CHECK(!view->name_.empty());
+  GOOGLESQL_RET_CHECK(!view->name_.empty());
   if (context->is_postgresql_dialect()) {
-    ZETASQL_RET_CHECK(view->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(view->postgresql_oid().has_value());
   } else {
-    ZETASQL_RET_CHECK(!view->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(!view->postgresql_oid().has_value());
   }
   for (const SchemaNode* dependency : view->dependencies()) {
-    ZETASQL_RET_CHECK(!dependency->is_deleted());
+    GOOGLESQL_RET_CHECK(!dependency->is_deleted());
   }
 
   return absl::OkStatus();
@@ -110,22 +110,22 @@ absl::Status ViewValidator::ValidateUpdate(const View* view,
                                            SchemaValidationContext* context) {
   // During a REPLACE, the view name's case can change.
   if (context->IsModifiedNode(view)) {
-    ZETASQL_RET_CHECK(absl::EqualsIgnoreCase(view->Name(), old_view->Name()));
+    GOOGLESQL_RET_CHECK(absl::EqualsIgnoreCase(view->Name(), old_view->Name()));
   } else {
-    ZETASQL_RET_CHECK_EQ(view->Name(), old_view->Name());
+    GOOGLESQL_RET_CHECK_EQ(view->Name(), old_view->Name());
   }
   if (view->is_deleted()) {
     context->global_names()->RemoveName(view->Name());
     return absl::OkStatus();
   }
   if (context->is_postgresql_dialect()) {
-    ZETASQL_RET_CHECK(view->postgresql_oid().has_value());
-    ZETASQL_RET_CHECK(old_view->postgresql_oid().has_value());
-    ZETASQL_RET_CHECK_EQ(view->postgresql_oid().value(),
+    GOOGLESQL_RET_CHECK(view->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(old_view->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK_EQ(view->postgresql_oid().value(),
                  old_view->postgresql_oid().value());
   } else {
-    ZETASQL_RET_CHECK(!view->postgresql_oid().has_value());
-    ZETASQL_RET_CHECK(!old_view->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(!view->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(!old_view->postgresql_oid().has_value());
   }
 
   for (const SchemaNode* dependency : view->dependencies()) {
@@ -177,7 +177,7 @@ absl::Status ViewValidator::ValidateUpdate(const View* view,
       }
       // No need to check modifications on index dependencies as indexes
       // cannot currently be altered.
-      ZETASQL_RETURN_IF_ERROR(ValidateViewSignatureChange(
+      GOOGLESQL_RETURN_IF_ERROR(ValidateViewSignatureChange(
           modify_action, dependency_name, view, context->tmp_new_schema(),
           context->type_factory()));
     }

@@ -14,7 +14,11 @@
 // limitations under the License.
 //
 
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
+#include "gtest/gtest.h"
+#include "googlesql/base/testing/status_matchers.h"
+#include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "common/feature_flags.h"
 #include "tests/common/scoped_feature_flags_setter.h"
@@ -28,54 +32,30 @@ namespace test {
 namespace {
 
 using testing::HasSubstr;
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
-class InterleavingTest : public DatabaseTest {
+class InterleavingTest
+    : public DatabaseTest,
+      public testing::WithParamInterface<database_api::DatabaseDialect> {
+ public:
+  void SetUp() override {
+    dialect_ = GetParam();
+    DatabaseTest::SetUp();
+  }
+
  public:
   absl::Status SetUpDatabase() override {
-    return SetSchema({
-        R"(
-        CREATE TABLE Users (
-          UserId     INT64 NOT NULL,
-          Name       STRING(MAX),
-        ) PRIMARY KEY (UserId)
-      )",
-        R"(
-        CREATE TABLE Threads (
-          UserId     INT64 NOT NULL,
-          ThreadId   INT64 NOT NULL,
-          Starred    BOOL
-        ) PRIMARY KEY (UserId, ThreadId),
-        INTERLEAVE IN PARENT Users ON DELETE CASCADE
-      )",
-        R"(
-        CREATE TABLE Messages (
-          UserId     INT64 NOT NULL,
-          ThreadId   INT64 NOT NULL,
-          MessageId  INT64 NOT NULL,
-          Subject    STRING(MAX),
-        ) PRIMARY KEY (UserId, ThreadId, MessageId),
-        INTERLEAVE IN PARENT Threads ON DELETE CASCADE
-      )",
-        R"(
-        CREATE TABLE Snoozes (
-          UserId     INT64 NOT NULL,
-          ThreadId   INT64 NOT NULL,
-          SnoozeId   INT64 NOT NULL,
-          SnoozeTs   Timestamp,
-        ) PRIMARY KEY (UserId, ThreadId, SnoozeId),
-        INTERLEAVE IN PARENT Threads ON DELETE NO ACTION
-      )"});
+    return SetSchemaFromFile("interleaving.test");
   }
 
  protected:
   void PopulateDatabase() {
     // Write fixure data to use in delete tests.
-    ZETASQL_EXPECT_OK(MultiInsert(
+    GOOGLESQL_EXPECT_OK(MultiInsert(
         "Users", {"UserId", "Name"},
         {{1, "Douglas Adams"}, {2, "Suzanne Collins"}, {3, "J.R.R. Tolkien"}}));
 
-    ZETASQL_EXPECT_OK(MultiInsert("Threads", {"UserId", "ThreadId", "Starred"},
+    GOOGLESQL_EXPECT_OK(MultiInsert("Threads", {"UserId", "ThreadId", "Starred"},
                           {{1, 1, true},
                            {1, 2, true},
                            {1, 3, true},
@@ -84,7 +64,7 @@ class InterleavingTest : public DatabaseTest {
                            {2, 2, true},
                            {3, 1, false}}));
 
-    ZETASQL_EXPECT_OK(MultiInsert("Messages",
+    GOOGLESQL_EXPECT_OK(MultiInsert("Messages",
                           {"UserId", "ThreadId", "MessageId", "Subject"},
                           {{1, 1, 1, "a code review"},
                            {1, 1, 2, "Re: a code review"},
@@ -98,7 +78,7 @@ class InterleavingTest : public DatabaseTest {
 
   void PopulateDatabaseWithNoActionChildren() {
     PopulateDatabase();
-    ZETASQL_EXPECT_OK(MultiInsert(
+    GOOGLESQL_EXPECT_OK(MultiInsert(
         "Snoozes", {"UserId", "ThreadId", "SnoozeId", "SnoozeTs"},
         {
             {1, 1, 1, MakeFutureTimestamp(std::chrono::seconds(600))},
@@ -107,22 +87,30 @@ class InterleavingTest : public DatabaseTest {
   }
 };
 
-TEST_F(InterleavingTest, CannotInsertChildWithoutParent) {
+INSTANTIATE_TEST_SUITE_P(
+    PerDialectInterleavingTest, InterleavingTest,
+    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
+                    database_api::DatabaseDialect::POSTGRESQL),
+    [](const testing::TestParamInfo<InterleavingTest::ParamType>& info) {
+      return database_api::DatabaseDialect_Name(info.param);
+    });
+
+TEST_P(InterleavingTest, CannotInsertChildWithoutParent) {
   EXPECT_THAT(Insert("Threads", {"UserId", "ThreadId"}, {1, 1}),
               StatusIs(absl::StatusCode::kNotFound));
 }
 
-TEST_F(InterleavingTest, CanInsertChildWithExistingParent) {
-  ZETASQL_EXPECT_OK(Insert("Users", {"UserId", "Name"}, {1, "Douglas Adams"}));
+TEST_P(InterleavingTest, CanInsertChildWithExistingParent) {
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"UserId", "Name"}, {1, "Douglas Adams"}));
 
-  ZETASQL_EXPECT_OK(Insert("Threads", {"UserId", "ThreadId"}, {1, 1}));
+  GOOGLESQL_EXPECT_OK(Insert("Threads", {"UserId", "ThreadId"}, {1, 1}));
 
   EXPECT_THAT(ReadAll("Threads", {"UserId", "ThreadId"}),
               IsOkAndHoldsRows({{1, 1}}));
 }
 
-TEST_F(InterleavingTest, CanInsertParentAndChildInSameTransaction) {
-  ZETASQL_EXPECT_OK(Commit({
+TEST_P(InterleavingTest, CanInsertParentAndChildInSameTransaction) {
+  GOOGLESQL_EXPECT_OK(Commit({
       MakeInsert("Users", {"UserId", "Name"}, 1, "Douglas Adams"),
       MakeInsert("Threads", {"UserId", "ThreadId"}, 1, 1),
   }));
@@ -139,11 +127,11 @@ TEST_F(InterleavingTest, CanInsertParentAndChildInSameTransaction) {
                                      : absl::StatusCode::kNotFound));
 }
 
-TEST_F(InterleavingTest, CanPerformCascadingDeletes) {
+TEST_P(InterleavingTest, CanPerformCascadingDeletes) {
   PopulateDatabase();
 
   // Delete a leaf, parent tables are not affected.
-  ZETASQL_EXPECT_OK(Delete("Messages", Key(2, 2, 1)));
+  GOOGLESQL_EXPECT_OK(Delete("Messages", Key(2, 2, 1)));
 
   EXPECT_THAT(ReadAll("Users", {"UserId", "Name"}),
               IsOkAndHoldsRows({{1, "Douglas Adams"},
@@ -154,7 +142,7 @@ TEST_F(InterleavingTest, CanPerformCascadingDeletes) {
                   {{1, 1}, {1, 2}, {1, 3}, {1, 4}, {2, 1}, {2, 2}, {3, 1}}));
 
   // Delete a subtree, children are deleted but parent tables are not affected.
-  ZETASQL_EXPECT_OK(Delete("Threads", Key(2, 1)));
+  GOOGLESQL_EXPECT_OK(Delete("Threads", Key(2, 1)));
 
   EXPECT_THAT(ReadAll("Users", {"UserId", "Name"}),
               IsOkAndHoldsRows({{1, "Douglas Adams"},
@@ -173,11 +161,11 @@ TEST_F(InterleavingTest, CanPerformCascadingDeletes) {
                         {3, 1, 1, "Interview Notification"}}));
 }
 
-TEST_F(InterleavingTest, CascadingDeletesAreIdempotent) {
+TEST_P(InterleavingTest, CascadingDeletesAreIdempotent) {
   PopulateDatabase();
 
   // Delete all the rows from all the tables starting with key part 1.
-  ZETASQL_EXPECT_OK(Delete("Users", Key(1)));
+  GOOGLESQL_EXPECT_OK(Delete("Users", Key(1)));
   EXPECT_THAT(Read("Users", {"UserId", "Name"}, Key(1)), IsOkAndHoldsRows({}));
   EXPECT_THAT(ReadAll("Threads", {"UserId", "ThreadId", "Starred"}),
               IsOkAndHoldsRows({{2, 1, false}, {2, 2, true}, {3, 1, false}}));
@@ -188,16 +176,16 @@ TEST_F(InterleavingTest, CascadingDeletesAreIdempotent) {
                         {3, 1, 1, "Interview Notification"}}));
 
   // Trying to re-delete keys with key part 1 is a no-op at any level.
-  ZETASQL_EXPECT_OK(Delete("Users", Key(1)));
-  ZETASQL_EXPECT_OK(Delete("Threads", Key(1, 1)));
-  ZETASQL_EXPECT_OK(Delete("Messages", Key(1, 1, 1)));
+  GOOGLESQL_EXPECT_OK(Delete("Users", Key(1)));
+  GOOGLESQL_EXPECT_OK(Delete("Threads", Key(1, 1)));
+  GOOGLESQL_EXPECT_OK(Delete("Messages", Key(1, 1, 1)));
 }
 
-TEST_F(InterleavingTest, CanPerformCascadingRangeDeletes) {
+TEST_P(InterleavingTest, CanPerformCascadingRangeDeletes) {
   PopulateDatabase();
 
   // Delete all threads with key part user_id 2.
-  ZETASQL_EXPECT_OK(Delete("Threads", OpenClosed(Key(1), Key(2))));
+  GOOGLESQL_EXPECT_OK(Delete("Threads", OpenClosed(Key(1), Key(2))));
   EXPECT_THAT(ReadAll("Threads", {"UserId", "ThreadId", "Starred"}),
               IsOkAndHoldsRows({{1, 1, true},
                                 {1, 2, true},
@@ -216,7 +204,7 @@ TEST_F(InterleavingTest, CanPerformCascadingRangeDeletes) {
                         {3, 1, 1, "Interview Notification"}}));
 }
 
-TEST_F(InterleavingTest, CannotDeleteRowWithNoActionChildren) {
+TEST_P(InterleavingTest, CannotDeleteRowWithNoActionChildren) {
   PopulateDatabaseWithNoActionChildren();
 
   // Attempt to delete a Thread fails since an ON DELETE NO ACTION child exists
@@ -226,12 +214,12 @@ TEST_F(InterleavingTest, CannotDeleteRowWithNoActionChildren) {
 
   // Deleting following thread works since there doesn't exist a corresponding
   // row in Snoozes table.
-  ZETASQL_EXPECT_OK(Delete("Threads", Key(1, 2)));
+  GOOGLESQL_EXPECT_OK(Delete("Threads", Key(1, 2)));
 
   // Delete the child in the ON DELETE NO ACTION table, deleting the parent row
   // now succeeds.
-  ZETASQL_EXPECT_OK(Delete("Snoozes", Key(1, 1, 1)));
-  ZETASQL_EXPECT_OK(Delete("Threads", Key(1, 1)));
+  GOOGLESQL_EXPECT_OK(Delete("Snoozes", Key(1, 1, 1)));
+  GOOGLESQL_EXPECT_OK(Delete("Threads", Key(1, 1)));
 
   EXPECT_THAT(ReadAll("Threads", {"UserId", "ThreadId", "Starred"}),
               IsOkAndHoldsRows({{1, 3, true},
@@ -241,7 +229,7 @@ TEST_F(InterleavingTest, CannotDeleteRowWithNoActionChildren) {
                                 {3, 1, false}}));
 }
 
-TEST_F(InterleavingTest, CannotDeleteRowWithNoActionGrandChildren) {
+TEST_P(InterleavingTest, CannotDeleteRowWithNoActionGrandChildren) {
   PopulateDatabaseWithNoActionChildren();
 
   // Attempt to delete a row in Users fails since an ON DELETE NO ACTION grand
@@ -251,22 +239,22 @@ TEST_F(InterleavingTest, CannotDeleteRowWithNoActionGrandChildren) {
 
   // Deleting following user works since there doesn't exist a corresponding
   // row in Snoozes table.
-  ZETASQL_EXPECT_OK(Delete("Users", Key(2)));
+  GOOGLESQL_EXPECT_OK(Delete("Users", Key(2)));
 
   // Delete all the corresponding grand children in the ON DELETE NO ACTION
   // table, deleting the grand parent row now succeeds.
-  ZETASQL_EXPECT_OK(Delete("Snoozes", Key(1, 1, 1)));
-  ZETASQL_EXPECT_OK(Delete("Snoozes", Key(1, 3, 1)));
-  ZETASQL_EXPECT_OK(Delete("Users", Key(1)));
+  GOOGLESQL_EXPECT_OK(Delete("Snoozes", Key(1, 1, 1)));
+  GOOGLESQL_EXPECT_OK(Delete("Snoozes", Key(1, 3, 1)));
+  GOOGLESQL_EXPECT_OK(Delete("Users", Key(1)));
 
   EXPECT_THAT(ReadAll("Users", {"UserId", "Name"}),
               IsOkAndHoldsRows({{3, "J.R.R. Tolkien"}}));
 }
 
-TEST_F(InterleavingTest, CannotDeleteRowWithNoActionChildrenSameTransaction) {
+TEST_P(InterleavingTest, CannotDeleteRowWithNoActionChildrenSameTransaction) {
   PopulateDatabaseWithNoActionChildren();
 
-  // Attemp to delete a parent, then delete no-action child does not work.
+  // Attempt to delete a parent, then delete no-action child does not work.
   KeySet parent_key_set;
   parent_key_set.AddKey(Key(1, 1));
   KeySet child_key_set;
@@ -278,7 +266,7 @@ TEST_F(InterleavingTest, CannotDeleteRowWithNoActionChildrenSameTransaction) {
               StatusIs(absl::StatusCode::kFailedPrecondition));
 
   // Deleting the no-action child first works.
-  ZETASQL_EXPECT_OK(Commit({
+  GOOGLESQL_EXPECT_OK(Commit({
       MakeDelete("Snoozes", child_key_set),
       MakeDelete("Threads", parent_key_set),
   }));
@@ -292,7 +280,7 @@ TEST_F(InterleavingTest, CannotDeleteRowWithNoActionChildrenSameTransaction) {
                                 {3, 1, false}}));
 }
 
-TEST_F(InterleavingTest, CannotInsertAndDeleteRowWithNoActionChild) {
+TEST_P(InterleavingTest, CannotInsertAndDeleteRowWithNoActionChild) {
   KeySet parent_key_set;
   parent_key_set.AddKey(Key(1, 1));
   KeySet child_key_set;
@@ -310,7 +298,7 @@ TEST_F(InterleavingTest, CannotInsertAndDeleteRowWithNoActionChild) {
       StatusIs(absl::StatusCode::kFailedPrecondition));
 
   // Deleting the no-action child first works.
-  ZETASQL_EXPECT_OK(Commit({
+  GOOGLESQL_EXPECT_OK(Commit({
       MakeInsert("Users", {"UserId"}, 1),
       MakeInsert("Threads", {"UserId", "ThreadId"}, 1, 1),
       MakeInsert("Snoozes", {"UserId", "ThreadId", "SnoozeId"}, 1, 1, 1),
@@ -319,7 +307,7 @@ TEST_F(InterleavingTest, CannotInsertAndDeleteRowWithNoActionChild) {
   }));
 }
 
-TEST_F(InterleavingTest, CannotReplaceRowWithNoActionChild) {
+TEST_P(InterleavingTest, CannotReplaceRowWithNoActionChild) {
   PopulateDatabaseWithNoActionChildren();
   EXPECT_THAT(Read("Threads", {"UserId", "ThreadId", "Starred"}, Key(1, 1)),
               IsOkAndHoldsRow({1, 1, true}));
@@ -338,7 +326,7 @@ TEST_F(InterleavingTest, CannotReplaceRowWithNoActionChild) {
   // transaction.
   KeySet child_key_set;
   child_key_set.AddKey(Key(1, 1, 1));
-  ZETASQL_EXPECT_OK(Commit({
+  GOOGLESQL_EXPECT_OK(Commit({
       MakeDelete("Snoozes", child_key_set),
       MakeReplace("Threads", {"UserId", "ThreadId", "Starred"}, 1, 1, false),
   }));
@@ -347,7 +335,7 @@ TEST_F(InterleavingTest, CannotReplaceRowWithNoActionChild) {
               IsOkAndHoldsRow({1, 1, false}));
 }
 
-TEST_F(InterleavingTest, CanReplaceRowWithDeleteActionChild) {
+TEST_P(InterleavingTest, CanReplaceRowWithDeleteActionChild) {
   PopulateDatabase();
   // Parent & child rows exist.
   EXPECT_THAT(Read("Threads", {"UserId", "ThreadId", "Starred"}, Key(1, 1)),
@@ -358,7 +346,7 @@ TEST_F(InterleavingTest, CanReplaceRowWithDeleteActionChild) {
                                 {1, 1, 2, "Re: a code review"}}));
 
   // Replace on a parent triggers cascading deletes to child table.
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       Replace("Threads", {"UserId", "ThreadId", "Starred"}, {1, 1, false}));
 
   // Child rows are deleted.
@@ -367,7 +355,15 @@ TEST_F(InterleavingTest, CanReplaceRowWithDeleteActionChild) {
               IsOkAndHoldsRows({}));
 }
 
-class InterleavingNonParentTest : public DatabaseTest {
+class InterleavingNonParentTest
+    : public DatabaseTest,
+      public testing::WithParamInterface<database_api::DatabaseDialect> {
+ public:
+  void SetUp() override {
+    dialect_ = GetParam();
+    DatabaseTest::SetUp();
+  }
+
  public:
   absl::Status SetUpDatabase() override {
     EmulatorFeatureFlags::Flags flags;
@@ -376,48 +372,16 @@ class InterleavingNonParentTest : public DatabaseTest {
 
     // The hierarchy is Users ->(IN) Threads -->(IN) Messages
     //                                       |->(IN PARENT) Snoozes*.
-    return SetSchema({
-        R"(
-        CREATE TABLE Users (
-          UserId     INT64,
-          Name       STRING(MAX),
-        ) PRIMARY KEY (UserId)
-      )",
-        R"(
-        CREATE TABLE Threads (
-          UserId     INT64,
-          ThreadId   INT64,
-          Starred    BOOL
-        ) PRIMARY KEY (UserId, ThreadId),
-        INTERLEAVE IN Users
-      )",
-        R"(
-        CREATE TABLE Messages (
-          UserId     INT64,
-          ThreadId   INT64,
-          MessageId  INT64,
-          Subject    STRING(MAX),
-        ) PRIMARY KEY (UserId, ThreadId, MessageId),
-        INTERLEAVE IN Threads
-      )",
-        R"(
-        CREATE TABLE Snoozes (
-          UserId     INT64,
-          ThreadId   INT64,
-          SnoozeId   INT64,
-          SnoozeTs   Timestamp,
-        ) PRIMARY KEY (UserId, ThreadId, SnoozeId),
-        INTERLEAVE IN PARENT Threads ON DELETE NO ACTION
-      )"});
+    return SetSchemaFromFile("interleaving_non_parent.test");
   }
 
  protected:
   void PopulateDatabaseWithInterleaveInChildren() {
     // Write fixure data to use in delete tests.
-    ZETASQL_EXPECT_OK(MultiInsert("Users", {"UserId", "Name"},
+    GOOGLESQL_EXPECT_OK(MultiInsert("Users", {"UserId", "Name"},
                           {{1, "Douglas Adams"}, {2, "Suzanne Collins"}}));
 
-    ZETASQL_EXPECT_OK(MultiInsert("Threads", {"UserId", "ThreadId", "Starred"},
+    GOOGLESQL_EXPECT_OK(MultiInsert("Threads", {"UserId", "ThreadId", "Starred"},
                           {{1, 11, true},
                            {1, 12, true},
                            {1, 13, true},
@@ -426,7 +390,7 @@ class InterleavingNonParentTest : public DatabaseTest {
                            {3, 31, false},
                            {4, 42, false}}));
 
-    ZETASQL_EXPECT_OK(MultiInsert("Messages",
+    GOOGLESQL_EXPECT_OK(MultiInsert("Messages",
                           {"UserId", "ThreadId", "MessageId", "Subject"},
                           {{1, 11, 111, "a code review"},
                            {1, 11, 112, "Re: a code review"},
@@ -441,7 +405,7 @@ class InterleavingNonParentTest : public DatabaseTest {
 
   void PopulateDatabaseWithInParentChildren() {
     PopulateDatabaseWithInterleaveInChildren();
-    ZETASQL_EXPECT_OK(MultiInsert(
+    GOOGLESQL_EXPECT_OK(MultiInsert(
         "Snoozes", {"UserId", "ThreadId", "SnoozeId", "SnoozeTs"},
         {
             {1, 11, 111, MakeFutureTimestamp(std::chrono::seconds(600))},
@@ -452,27 +416,35 @@ class InterleavingNonParentTest : public DatabaseTest {
   }
 };
 
-TEST_F(InterleavingNonParentTest, InsertChildWithOrWithoutExistingParent) {
-  ZETASQL_EXPECT_OK(Insert("Users", {"UserId", "Name"}, {1, "Douglas Adams"}));
+INSTANTIATE_TEST_SUITE_P(
+    PerDialectInterleavingNonParentTest, InterleavingNonParentTest,
+    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
+                    database_api::DatabaseDialect::POSTGRESQL),
+    [](const testing::TestParamInfo<InterleavingTest::ParamType>& info) {
+      return database_api::DatabaseDialect_Name(info.param);
+    });
 
-  ZETASQL_EXPECT_OK(Insert("Threads", {"UserId", "ThreadId"}, {1, 11}));
-  ZETASQL_EXPECT_OK(Insert("Threads", {"UserId", "ThreadId"}, {2, 21}));  // no parent
+TEST_P(InterleavingNonParentTest, InsertChildWithOrWithoutExistingParent) {
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"UserId", "Name"}, {1, "Douglas Adams"}));
+
+  GOOGLESQL_EXPECT_OK(Insert("Threads", {"UserId", "ThreadId"}, {1, 11}));
+  GOOGLESQL_EXPECT_OK(Insert("Threads", {"UserId", "ThreadId"}, {2, 21}));  // no parent
   EXPECT_THAT(ReadAll("Threads", {"UserId", "ThreadId"}),
               IsOkAndHoldsRows({{1, 11}, {2, 21}}));
 
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       Insert("Messages", {"UserId", "ThreadId", "MessageId"}, {1, 11, 111}));
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       Insert("Messages", {"UserId", "ThreadId", "MessageId"}, {2, 21, 211}));
-  ZETASQL_EXPECT_OK(Insert("Messages", {"UserId", "ThreadId", "MessageId"},
+  GOOGLESQL_EXPECT_OK(Insert("Messages", {"UserId", "ThreadId", "MessageId"},
                    {3, 31, 311}));  // no parent
   EXPECT_THAT(ReadAll("Messages", {"UserId", "ThreadId", "MessageId"}),
               IsOkAndHoldsRows({{1, 11, 111}, {2, 21, 211}, {3, 31, 311}}));
 
   // Snoozes is an IN PARENT table.
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       Insert("Snoozes", {"UserId", "ThreadId", "SnoozeId"}, {1, 11, 111}));
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       Insert("Snoozes", {"UserId", "ThreadId", "SnoozeId"}, {2, 21, 211}));
   EXPECT_THAT(
       Insert("Snoozes", {"UserId", "ThreadId", "SnoozeId"}, {3, 31, 311}),
@@ -481,8 +453,8 @@ TEST_F(InterleavingNonParentTest, InsertChildWithOrWithoutExistingParent) {
               IsOkAndHoldsRows({{1, 11, 111}, {2, 21, 211}}));
 }
 
-TEST_F(InterleavingNonParentTest, CanInsertParentAndChildInSameTransaction) {
-  ZETASQL_EXPECT_OK(Commit({
+TEST_P(InterleavingNonParentTest, CanInsertParentAndChildInSameTransaction) {
+  GOOGLESQL_EXPECT_OK(Commit({
       MakeInsert("Users", {"UserId", "Name"}, 1, "Douglas Adams"),
       MakeInsert("Threads", {"UserId", "ThreadId"}, 1, 11),
       MakeInsert("Threads", {"UserId", "ThreadId"}, 2, 21),
@@ -492,17 +464,17 @@ TEST_F(InterleavingNonParentTest, CanInsertParentAndChildInSameTransaction) {
               IsOkAndHoldsRows({{1, 11}, {2, 21}}));
 
   // The child can be inserted before the parent in the same transaction.
-  ZETASQL_EXPECT_OK(Commit({
+  GOOGLESQL_EXPECT_OK(Commit({
       MakeInsert("Threads", {"UserId", "ThreadId"}, 3, 31),
       MakeInsert("Users", {"UserId", "Name"}, 3, "Bill Goods"),
   }));
 }
 
-TEST_F(InterleavingNonParentTest, DeletesDoNotAffectParentOrChildren) {
+TEST_P(InterleavingNonParentTest, DeletesDoNotAffectParentOrChildren) {
   PopulateDatabaseWithInParentChildren();
 
   // Delete a leaf, parent tables are not affected.
-  ZETASQL_EXPECT_OK(Delete("Messages", Key(2, 22, 221)));
+  GOOGLESQL_EXPECT_OK(Delete("Messages", Key(2, 22, 221)));
 
   EXPECT_THAT(ReadAll("Users", {"UserId", "Name"}),
               IsOkAndHoldsRows({{1, "Douglas Adams"}, {2, "Suzanne Collins"}}));
@@ -512,7 +484,7 @@ TEST_F(InterleavingNonParentTest, DeletesDoNotAffectParentOrChildren) {
           {{1, 11}, {1, 12}, {1, 13}, {2, 21}, {2, 22}, {3, 31}, {4, 42}}));
 
   // Delete a row in the middle table, children or parent are not affected.
-  ZETASQL_EXPECT_OK(Delete("Threads", Key(2, 21)));
+  GOOGLESQL_EXPECT_OK(Delete("Threads", Key(2, 21)));
 
   EXPECT_THAT(ReadAll("Users", {"UserId", "Name"}),
               IsOkAndHoldsRows({{1, "Douglas Adams"}, {2, "Suzanne Collins"}}));
@@ -535,7 +507,7 @@ TEST_F(InterleavingNonParentTest, DeletesDoNotAffectParentOrChildren) {
                   {{1, 11, 111}, {1, 13, 131}, {3, 31, 311}, {4, 42, 421}}));
 }
 
-TEST_F(InterleavingNonParentTest, CannotDeleteRowWithNoActionChildren) {
+TEST_P(InterleavingNonParentTest, CannotDeleteRowWithNoActionChildren) {
   PopulateDatabaseWithInParentChildren();
 
   // Attempt to delete a Thread fails since an ON DELETE NO ACTION child exists
@@ -545,15 +517,15 @@ TEST_F(InterleavingNonParentTest, CannotDeleteRowWithNoActionChildren) {
 
   // Deleting following thread works since there doesn't exist a corresponding
   // row in Snoozes table.
-  ZETASQL_EXPECT_OK(Delete("Threads", Key(1, 12)));
+  GOOGLESQL_EXPECT_OK(Delete("Threads", Key(1, 12)));
 
   // Deleting a row in the top level table works.
-  ZETASQL_EXPECT_OK(Delete("Users", Key(1)));
+  GOOGLESQL_EXPECT_OK(Delete("Users", Key(1)));
 
   // Delete the child in the ON DELETE NO ACTION table, deleting the parent row
   // now succeeds.
-  ZETASQL_EXPECT_OK(Delete("Snoozes", Key(1, 11, 111)));
-  ZETASQL_EXPECT_OK(Delete("Threads", Key(1, 11)));
+  GOOGLESQL_EXPECT_OK(Delete("Snoozes", Key(1, 11, 111)));
+  GOOGLESQL_EXPECT_OK(Delete("Threads", Key(1, 11)));
 
   EXPECT_THAT(ReadAll("Threads", {"UserId", "ThreadId", "Starred"}),
               IsOkAndHoldsRows({{1, 13, true},
@@ -563,11 +535,11 @@ TEST_F(InterleavingNonParentTest, CannotDeleteRowWithNoActionChildren) {
                                 {4, 42, false}}));
 }
 
-TEST_F(InterleavingNonParentTest,
+TEST_P(InterleavingNonParentTest,
        CannotDeleteRowWithNoActionChildrenSameTransaction) {
   PopulateDatabaseWithInParentChildren();
 
-  // Attemp to delete a parent, then delete no-action child does not work.
+  // Attempt to delete a parent, then delete no-action child does not work.
   KeySet parent_key_set;
   parent_key_set.AddKey(Key(1, 11));
   KeySet child_key_set;
@@ -579,7 +551,7 @@ TEST_F(InterleavingNonParentTest,
               StatusIs(absl::StatusCode::kFailedPrecondition));
 
   // Deleting the no-action child first works.
-  ZETASQL_EXPECT_OK(Commit({
+  GOOGLESQL_EXPECT_OK(Commit({
       MakeDelete("Snoozes", child_key_set),
       MakeDelete("Threads", parent_key_set),
   }));
@@ -593,7 +565,7 @@ TEST_F(InterleavingNonParentTest,
                                 {4, 42, false}}));
 }
 
-TEST_F(InterleavingNonParentTest,
+TEST_P(InterleavingNonParentTest,
        DeleteTopLevelRowWithInterleaveInChildrenAndInParentGrandChildren) {
   KeySet parent_key_set;
   parent_key_set.AddKey(Key(1, 11));
@@ -614,7 +586,7 @@ TEST_F(InterleavingNonParentTest,
       StatusIs(absl::StatusCode::kFailedPrecondition));
 
   // Deleting the no-action child first works.
-  ZETASQL_EXPECT_OK(Commit({
+  GOOGLESQL_EXPECT_OK(Commit({
       MakeInsert("Users", {"UserId"}, 1),
       MakeInsert("Threads", {"UserId", "ThreadId"}, 1, 11),
       MakeInsert("Snoozes", {"UserId", "ThreadId", "SnoozeId"}, 1, 11, 111),
@@ -623,17 +595,21 @@ TEST_F(InterleavingNonParentTest,
   }));
 
   // Deleting the top level row works.
-  ZETASQL_EXPECT_OK(Commit({
+  GOOGLESQL_EXPECT_OK(Commit({
       MakeInsert("Threads", {"UserId", "ThreadId"}, 1, 12),
       MakeInsert("Snoozes", {"UserId", "ThreadId", "SnoozeId"}, 1, 12, 121),
       MakeDelete("Users", top_level_key_set),
   }));
 }
 
-TEST_F(InterleavingNonParentTest, CannotMigrateToInParentWithMissingParentRow) {
-  ZETASQL_EXPECT_OK(Insert("Threads", {"UserId"}, {1}));  // ThreadId is NULL
-  ZETASQL_EXPECT_OK(Insert("Messages", {"UserId", "MessageId"}, {1, 1}));
-  ZETASQL_EXPECT_OK(Insert("Messages", {"UserId", "ThreadId", "MessageId"}, {2, 2, 2}));
+TEST_P(InterleavingNonParentTest, CannotMigrateToInParentWithMissingParentRow) {
+  if (dialect_ == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP() << "PostgreSQL dialect does not allow NULLABLE primary keys";
+  }
+
+  GOOGLESQL_EXPECT_OK(Insert("Threads", {"UserId"}, {1}));  // ThreadId is NULL
+  GOOGLESQL_EXPECT_OK(Insert("Messages", {"UserId", "MessageId"}, {1, 1}));
+  GOOGLESQL_EXPECT_OK(Insert("Messages", {"UserId", "ThreadId", "MessageId"}, {2, 2, 2}));
 
   EXPECT_THAT(UpdateSchema({
                   R"(
@@ -645,20 +621,20 @@ TEST_F(InterleavingNonParentTest, CannotMigrateToInParentWithMissingParentRow) {
                                  "validation failed")));
 }
 
-TEST_F(InterleavingNonParentTest,
+TEST_P(InterleavingNonParentTest,
        CanDeleteAndReplaceRowWithDeleteCascadeGrandChild) {
-  ZETASQL_EXPECT_OK(UpdateSchema({
+  GOOGLESQL_EXPECT_OK(UpdateSchema({
       R"(
           ALTER TABLE Snoozes SET INTERLEAVE IN PARENT Threads ON DELETE CASCADE
         )",
   }));
 
-  ZETASQL_EXPECT_OK(Insert("Users", {"UserId"}, 1));
+  GOOGLESQL_EXPECT_OK(Insert("Users", {"UserId"}, 1));
 
-  ZETASQL_EXPECT_OK(MultiInsert("Threads", {"UserId", "ThreadId", "Starred"},
+  GOOGLESQL_EXPECT_OK(MultiInsert("Threads", {"UserId", "ThreadId", "Starred"},
                         {{1, 11, true}, {3, 31, true}, {4, 41, true}}));
 
-  ZETASQL_EXPECT_OK(MultiInsert(
+  GOOGLESQL_EXPECT_OK(MultiInsert(
       "Snoozes", {"UserId", "ThreadId", "SnoozeId", "SnoozeTs"},
       {
           {1, 11, 111, MakeFutureTimestamp(std::chrono::seconds(600))},
@@ -674,14 +650,14 @@ TEST_F(InterleavingNonParentTest,
               IsOkAndHoldsRows({{1, 11, 111}, {3, 31, 311}, {4, 41, 411}}));
 
   // Replace on the top level row doesn't affect the child nor the grand child.
-  ZETASQL_EXPECT_OK(Replace("Users",
+  GOOGLESQL_EXPECT_OK(Replace("Users",
                     {
                         "UserId",
                         "Name",
                     },
                     {1, "Billy Adams"}));
   // Delete on the top level row doesn't affect the child nor the grand child.
-  ZETASQL_EXPECT_OK(Delete("Users", Key(1)));
+  GOOGLESQL_EXPECT_OK(Delete("Users", Key(1)));
 
   // Verify that all rows are not affected.
   EXPECT_THAT(ReadAll("Threads", {"UserId", "ThreadId", "Starred"}),
@@ -691,13 +667,13 @@ TEST_F(InterleavingNonParentTest,
               IsOkAndHoldsRows({{1, 11, 111}, {3, 31, 311}, {4, 41, 411}}));
 
   // Replace on a parent triggers cascading delete to child table.
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       Replace("Threads", {"UserId", "ThreadId", "Starred"}, {1, 11, false}));
   EXPECT_THAT(ReadAll("Snoozes", {"UserId", "ThreadId", "SnoozeId"}),
               IsOkAndHoldsRows({{3, 31, 311}, {4, 41, 411}}));
 
   // Delete on the parent triggers cascading deletes to grand child table.
-  ZETASQL_EXPECT_OK(Delete("Threads", Key(3, 31)));
+  GOOGLESQL_EXPECT_OK(Delete("Threads", Key(3, 31)));
   EXPECT_THAT(ReadAll("Snoozes", {"UserId", "ThreadId", "SnoozeId"}),
               IsOkAndHoldsRows({{4, 41, 411}}));
 }

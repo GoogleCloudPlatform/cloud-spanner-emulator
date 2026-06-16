@@ -29,8 +29,8 @@
 # MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 #------------------------------------------------------------------------------
 
-load("@com_google_zetasql//bazel:flex.bzl", "genlex")
 load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("@rules_hdl//dependency_support/com_github_westes_flex:flex.bzl", "genlex")
 
 
 

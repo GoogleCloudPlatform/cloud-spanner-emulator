@@ -1,0 +1,51 @@
+@Dialect=GOOGLE_STANDARD_SQL
+CREATE TABLE Users (
+  UserId     INT64 NOT NULL,
+  Name       STRING(MAX),
+) PRIMARY KEY (UserId);
+CREATE TABLE Threads (
+  UserId     INT64 NOT NULL,
+  ThreadId   INT64 NOT NULL,
+  Starred    BOOL
+) PRIMARY KEY (UserId, ThreadId),
+INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+CREATE TABLE Messages (
+  UserId     INT64 NOT NULL,
+  ThreadId   INT64 NOT NULL,
+  MessageId  INT64 NOT NULL,
+  Subject    STRING(MAX),
+) PRIMARY KEY (UserId, ThreadId, MessageId),
+INTERLEAVE IN PARENT Threads ON DELETE CASCADE;
+CREATE TABLE Snoozes (
+  UserId     INT64 NOT NULL,
+  ThreadId   INT64 NOT NULL,
+  SnoozeId   INT64 NOT NULL,
+  SnoozeTs   Timestamp,
+) PRIMARY KEY (UserId, ThreadId, SnoozeId),
+INTERLEAVE IN PARENT Threads ON DELETE NO ACTION;
+===
+@Dialect=POSTGRESQL
+CREATE TABLE Users (
+  UserId     int8 NOT NULL PRIMARY KEY,
+  Name       text
+);
+CREATE TABLE Threads (
+  UserId     int8 NOT NULL,
+  ThreadId   int8 NOT NULL,
+  Starred    boolean,
+  PRIMARY KEY (UserId, ThreadId)
+) INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+CREATE TABLE Messages (
+  UserId     int8 NOT NULL,
+  ThreadId   int8 NOT NULL,
+  MessageId  int8 NOT NULL,
+  Subject    text,
+  PRIMARY KEY (UserId, ThreadId, MessageId)
+) INTERLEAVE IN PARENT Threads ON DELETE CASCADE;
+CREATE TABLE Snoozes (
+  UserId     int8 NOT NULL,
+  ThreadId   int8 NOT NULL,
+  SnoozeId   int8 NOT NULL,
+  SnoozeTs   timestamptz,
+  PRIMARY KEY (UserId, ThreadId, SnoozeId)
+) INTERLEAVE IN PARENT Threads ON DELETE NO ACTION;

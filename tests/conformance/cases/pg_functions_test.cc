@@ -23,7 +23,7 @@
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
@@ -51,7 +51,7 @@ using cloud::spanner::PgOid;
 using postgres_translator::spangres::datatypes::common::MaxNumericString;
 using postgres_translator::spangres::datatypes::common::MinNumericString;
 using testing::HasSubstr;
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 class PGFunctionsTest : public DatabaseTest {
  public:
@@ -68,7 +68,7 @@ class PGFunctionsTest : public DatabaseTest {
 
  protected:
   void PopulateDatabase(bool insert_nan = false) {
-    ZETASQL_EXPECT_OK(MultiInsert(
+    GOOGLESQL_EXPECT_OK(MultiInsert(
         "values", {"id", "int_value", "double_value", "numeric_value"},
         {{1, 1, 1.0, *MakePgNumeric("123.0")},
          {2, 0, 2.0, *MakePgNumeric("12.0")},
@@ -78,7 +78,7 @@ class PGFunctionsTest : public DatabaseTest {
     if (insert_nan) {
       // Only inserting a NaN value if requested by a test since inserting a NaN
       // more generally prevents us from testing the correctness of sums.
-      ZETASQL_EXPECT_OK(Insert("values",
+      GOOGLESQL_EXPECT_OK(Insert("values",
                        {"id", "int_value", "double_value", "numeric_value"},
                        {5, 2, 5.0, *MakePgNumeric("NaN")}));
     }
@@ -92,7 +92,7 @@ class PGFunctionsTest : public DatabaseTest {
   void VerifySingleNumericRowValue(const std::string& query,
                                    const std::string& exp) {
     auto rows = Query(query);
-    ZETASQL_EXPECT_OK(rows);
+    GOOGLESQL_EXPECT_OK(rows);
     EXPECT_THAT(rows->size(), 1);
     auto row = (*rows)[0];
     EXPECT_THAT(row.values().size(), 1);

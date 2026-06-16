@@ -61,6 +61,9 @@ struct ParserOutputMetadata {
 
   // The size of the serialized parse tree received from the parser.
   size_t serialized_parse_tree_size = 0;
+
+  uint64_t literal_sensitive_hash = 0;
+  uint64_t literal_insensitive_hash = 0;
 };
 
 // The results returned by the parser for each SQL expression.

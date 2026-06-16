@@ -28,8 +28,8 @@
 #include "frontend/entities/session.h"
 #include "frontend/entities/transaction.h"
 #include "frontend/server/handler.h"
+#include "googlesql/base/status_macros.h"
 #include "absl/status/status.h"
-#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -66,18 +66,23 @@ absl::Status ValidateTransactionSelectorForRead(
 absl::Status Read(RequestContext* ctx, const spanner_api::ReadRequest* request,
                   spanner_api::ResultSet* response) {
   // Get session information.
-  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Session> session,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::shared_ptr<Session> session,
                    GetSession(ctx, request->session()));
 
   // Get underlying transaction.
-  ZETASQL_RETURN_IF_ERROR(ValidateTransactionSelectorForRead(request->transaction()));
-  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
+  GOOGLESQL_RETURN_IF_ERROR(ValidateTransactionSelectorForRead(request->transaction()));
+  GOOGLESQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
                    session->FindOrInitTransaction(request->transaction()));
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       ValidateDirectedReadsOption(request->directed_read_options(), txn));
 
   // Wrap all operations on this transaction so they are atomic .
   return txn->GuardedCall(Transaction::OpType::kRead, [&]() -> absl::Status {
+    if (request->data_boost_enabled()) {
+      if (request->partition_token().empty()) {
+        return error::DataBoostRequiresPartitionToken();
+      }
+    }
     // Cannot read after commit, rollback, or non-recoverable error.
     if (txn->IsInvalid()) {
       return error::CannotUseTransactionAfterConstraintError();
@@ -86,14 +91,14 @@ absl::Status Read(RequestContext* ctx, const spanner_api::ReadRequest* request,
       return error::CannotReadOrQueryAfterCommitOrRollback();
     }
     if (txn->IsReadOnly()) {
-      ZETASQL_ASSIGN_OR_RETURN(absl::Time read_timestamp, txn->GetReadTimestamp());
-      ZETASQL_RETURN_IF_ERROR(ValidateReadTimestampNotTooFarInFuture(
+      GOOGLESQL_ASSIGN_OR_RETURN(absl::Time read_timestamp, txn->GetReadTimestamp());
+      GOOGLESQL_RETURN_IF_ERROR(ValidateReadTimestampNotTooFarInFuture(
           read_timestamp, ctx->env()->clock()->Now()));
     }
 
     // Parse read request.
     backend::ReadArg read_arg;
-    ZETASQL_RETURN_IF_ERROR(ReadArgFromProto(*txn->schema(), *request, &read_arg));
+    GOOGLESQL_RETURN_IF_ERROR(ReadArgFromProto(*txn->schema(), *request, &read_arg));
 
     // Execute read on backend.
     std::unique_ptr<backend::RowCursor> cursor;
@@ -110,7 +115,7 @@ absl::Status Read(RequestContext* ctx, const spanner_api::ReadRequest* request,
 
     // Populate transaction metadata.
     if (ShouldReturnTransaction(request->transaction())) {
-      ZETASQL_ASSIGN_OR_RETURN(*response->mutable_metadata()->mutable_transaction(),
+      GOOGLESQL_ASSIGN_OR_RETURN(*response->mutable_metadata()->mutable_transaction(),
                        txn->ToProto());
     }
 
@@ -134,18 +139,23 @@ absl::Status StreamingRead(
     RequestContext* ctx, const spanner_api::ReadRequest* request,
     ServerStream<spanner_api::PartialResultSet>* stream) {
   // Get session information.
-  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Session> session,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::shared_ptr<Session> session,
                    GetSession(ctx, request->session()));
 
   // Get underlying transaction.
-  ZETASQL_RETURN_IF_ERROR(ValidateTransactionSelectorForRead(request->transaction()));
-  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
+  GOOGLESQL_RETURN_IF_ERROR(ValidateTransactionSelectorForRead(request->transaction()));
+  GOOGLESQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
                    session->FindOrInitTransaction(request->transaction()));
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       ValidateDirectedReadsOption(request->directed_read_options(), txn));
 
   // Wrap all operations on this transaction so they are atomic.
   return txn->GuardedCall(Transaction::OpType::kRead, [&]() -> absl::Status {
+    if (request->data_boost_enabled()) {
+      if (request->partition_token().empty()) {
+        return error::DataBoostRequiresPartitionToken();
+      }
+    }
     // Cannot read after commit, rollback, or non-recoverable error.
     if (txn->IsInvalid()) {
       return error::CannotUseTransactionAfterConstraintError();
@@ -154,14 +164,14 @@ absl::Status StreamingRead(
       return error::CannotReadOrQueryAfterCommitOrRollback();
     }
     if (txn->IsReadOnly()) {
-      ZETASQL_ASSIGN_OR_RETURN(absl::Time read_timestamp, txn->GetReadTimestamp());
-      ZETASQL_RETURN_IF_ERROR(ValidateReadTimestampNotTooFarInFuture(
+      GOOGLESQL_ASSIGN_OR_RETURN(absl::Time read_timestamp, txn->GetReadTimestamp());
+      GOOGLESQL_RETURN_IF_ERROR(ValidateReadTimestampNotTooFarInFuture(
           read_timestamp, ctx->env()->clock()->Now()));
     }
 
     // Parse read request.
     backend::ReadArg read_arg;
-    ZETASQL_RETURN_IF_ERROR(ReadArgFromProto(*txn->schema(), *request, &read_arg));
+    GOOGLESQL_RETURN_IF_ERROR(ReadArgFromProto(*txn->schema(), *request, &read_arg));
 
     // Execute read on backend.
     std::unique_ptr<backend::RowCursor> cursor;
@@ -177,13 +187,13 @@ absl::Status StreamingRead(
     }
 
     // Convert read results to protos.
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         std::vector<spanner_api::PartialResultSet> responses,
         RowCursorToPartialResultSetProtos(cursor.get(), request->limit()));
 
     // Populate transaction metadata.
     if (ShouldReturnTransaction(request->transaction())) {
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           *responses.front().mutable_metadata()->mutable_transaction(),
           txn->ToProto());
     }

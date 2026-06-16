@@ -14,6 +14,9 @@
 # limitations under the License.
 #
 
+load("@rules_python//python:py_library.bzl", "py_library")
+load("@rules_python//python:py_test.bzl", "py_test")
+
 package(
     default_visibility = ["//:__subpackages__"],
 )
@@ -29,7 +32,7 @@ py_library(
     ],
     deps = [
         "@bazel_tools//tools/python/runfiles",
-        "@org_python_pypi_portpicker//:portpicker",
+        "@pypi_cloud_spanner_emulator//portpicker",
     ],
 )
 

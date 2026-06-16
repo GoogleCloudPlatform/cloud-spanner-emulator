@@ -20,7 +20,7 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/functions/string.h"
+#include "googlesql/public/functions/string.h"
 #include "absl/log/check.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
@@ -36,7 +36,7 @@
 #include "backend/query/search/Token.h"
 #include "backend/query/search/query_char_stream.h"
 #include "common/errors.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -114,10 +114,10 @@ class SearchQueryParserErrorHandler : public ErrorHandler {
 
 }  // namespace
 
-QueryParser::QueryParser(absl::string_view search_query)
-    : search_query_(search_query), tree_(nullptr) {}
+RQueryParser::RQueryParser(absl::string_view query)
+    : query_(query), tree_(nullptr) {}
 
-absl::Status QueryParser::NormalizeParsedTree(SimpleNode* tree) {
+absl::Status RQueryParser::NormalizeParsedTree(SimpleNode* tree) {
   if (tree == nullptr) {
     return absl::OkStatus();
   }
@@ -126,10 +126,10 @@ absl::Status QueryParser::NormalizeParsedTree(SimpleNode* tree) {
     std::string normalized_str;
     absl::Status status;
 
-    zetasql::functions::LowerUtf8(tree->image(), &normalized_str, &status);
+    googlesql::functions::LowerUtf8(tree->image(), &normalized_str, &status);
     if (!status.ok()) {
       return error::FailToParseSearchQuery(
-          search_query_, "Failed to normalize search query tree.");
+          query_, "Failed to normalize search query tree.");
     }
 
     tree->set_image(normalized_str);
@@ -137,30 +137,30 @@ absl::Status QueryParser::NormalizeParsedTree(SimpleNode* tree) {
 
   for (int i = 0; i < tree->jjtGetNumChildren(); i++) {
     SimpleNode* child = dynamic_cast<SimpleNode*>(tree->jjtGetChild(i));
-    ZETASQL_RETURN_IF_ERROR(NormalizeParsedTree(child));
+    GOOGLESQL_RETURN_IF_ERROR(NormalizeParsedTree(child));
   }
 
   return absl::OkStatus();
 }
 
-absl::Status QueryParser::ParseSearchQuery() {
+absl::Status RQueryParser::Parse() {
   // Trim leading and trailing separators to avoid parsing errors.
-  auto start = search_query_.find_first_not_of(kSeparators.data(), 0,
-                                               kSeparators.size());
+  auto start =
+      query_.find_first_not_of(kSeparators.data(), 0, kSeparators.size());
   if (start == std::string::npos) {
-    search_query_.clear();
+    query_.clear();
   } else {
-    auto end = search_query_.find_last_not_of(
-        kSeparators.data(), std::string::npos, kSeparators.size());
-    search_query_.erase(end + 1);
-    search_query_.erase(0, start);
+    auto end = query_.find_last_not_of(kSeparators.data(), std::string::npos,
+                                       kSeparators.size());
+    query_.erase(end + 1);
+    query_.erase(0, start);
   }
-  if (search_query_.empty()) {
+  if (query_.empty()) {
     return absl::OkStatus();
   }
 
   // Create the JavaCC generated parser.
-  SearchQueryCharStream char_stream(search_query_);
+  SearchQueryCharStream char_stream(query_);
   SearchQueryParserTokenManager token_manager(&char_stream);
   SearchQueryParser parser(&token_manager);
 
@@ -168,7 +168,7 @@ absl::Status QueryParser::ParseSearchQuery() {
   // The parser owns the error handler and deletes it.
   parser.setErrorHandler(new SearchQueryParserErrorHandler(&errors));
 
-  tree_ = absl::WrapUnique<SimpleNode>(parser.ParseSearchQuery());
+  tree_ = absl::WrapUnique<SimpleNode>(parser.ParseRQuery());
 
   if (tree_ == nullptr) {
     std::string errors_string;
@@ -183,10 +183,10 @@ absl::Status QueryParser::ParseSearchQuery() {
         errors_string = absl::StrJoin(errors, "\n-");
         break;
     }
-    return error::FailToParseSearchQuery(search_query_, errors_string);
+    return error::FailToParseSearchQuery(query_, errors_string);
   }
 
-  ZETASQL_RETURN_IF_ERROR(NormalizeParsedTree(tree_.get()));
+  GOOGLESQL_RETURN_IF_ERROR(NormalizeParsedTree(tree_.get()));
 
   return absl::OkStatus();
 }

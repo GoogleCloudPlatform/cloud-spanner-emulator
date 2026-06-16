@@ -40,19 +40,11 @@
 
 #include <ctype.h>
 #include <limits.h>
-
-/*
- * towlower() and friends should be in <wctype.h>, but some pre-C99 systems
- * declare them in <wchar.h>, so include that too.
- */
-#include <wchar.h>
-#ifdef HAVE_WCTYPE_H
 #include <wctype.h>
-#endif
 
 #include "mb/pg_wchar.h"
 
-#include "miscadmin.h"			/* needed by rcancelrequested/rstacktoodeep */
+#include "miscadmin.h"			/* needed by rstacktoodeep */
 
 
 /* overrides for regguts.h definitions, if any */
@@ -63,9 +55,10 @@
 // not use any state across function calls, because it is not thread-safe. Thus,
 // we make all the state thread-local and bind to the PostgreSQL memory arena,
 // which is cleaned up after the function execution.
-#define MALLOC(n) palloc(n)
+#define MALLOC(n)		palloc_extended((n), MCXT_ALLOC_NO_OOM)
 #define FREE(p) pfree(VS(p))
-#define REALLOC(p, n) repalloc(VS(p), n)
+#define REALLOC(p,n)	repalloc_extended(VS(p),(n), MCXT_ALLOC_NO_OOM)
+#define INTERRUPT(re)	CHECK_FOR_INTERRUPTS()
 // SPANGRES END
 #define assert(x)		Assert(x)
 

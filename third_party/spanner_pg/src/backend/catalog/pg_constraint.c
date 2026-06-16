@@ -3,7 +3,7 @@
  * pg_constraint.c
  *	  routines to support manipulation of the pg_constraint relation
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -111,8 +111,7 @@ CreateConstraintEntry(const char *constraintName,
 		conkey = (Datum *) palloc(constraintNKeys * sizeof(Datum));
 		for (i = 0; i < constraintNKeys; i++)
 			conkey[i] = Int16GetDatum(constraintKey[i]);
-		conkeyArray = construct_array(conkey, constraintNKeys,
-									  INT2OID, 2, true, TYPALIGN_SHORT);
+		conkeyArray = construct_array_builtin(conkey, constraintNKeys, INT2OID);
 	}
 	else
 		conkeyArray = NULL;
@@ -120,31 +119,27 @@ CreateConstraintEntry(const char *constraintName,
 	if (foreignNKeys > 0)
 	{
 		Datum	   *fkdatums;
+		int			nkeys = Max(foreignNKeys, numFkDeleteSetCols);
 
-		fkdatums = (Datum *) palloc(foreignNKeys * sizeof(Datum));
+		fkdatums = (Datum *) palloc(nkeys * sizeof(Datum));
 		for (i = 0; i < foreignNKeys; i++)
 			fkdatums[i] = Int16GetDatum(foreignKey[i]);
-		confkeyArray = construct_array(fkdatums, foreignNKeys,
-									   INT2OID, 2, true, TYPALIGN_SHORT);
+		confkeyArray = construct_array_builtin(fkdatums, foreignNKeys, INT2OID);
 		for (i = 0; i < foreignNKeys; i++)
 			fkdatums[i] = ObjectIdGetDatum(pfEqOp[i]);
-		conpfeqopArray = construct_array(fkdatums, foreignNKeys,
-										 OIDOID, sizeof(Oid), true, TYPALIGN_INT);
+		conpfeqopArray = construct_array_builtin(fkdatums, foreignNKeys, OIDOID);
 		for (i = 0; i < foreignNKeys; i++)
 			fkdatums[i] = ObjectIdGetDatum(ppEqOp[i]);
-		conppeqopArray = construct_array(fkdatums, foreignNKeys,
-										 OIDOID, sizeof(Oid), true, TYPALIGN_INT);
+		conppeqopArray = construct_array_builtin(fkdatums, foreignNKeys, OIDOID);
 		for (i = 0; i < foreignNKeys; i++)
 			fkdatums[i] = ObjectIdGetDatum(ffEqOp[i]);
-		conffeqopArray = construct_array(fkdatums, foreignNKeys,
-										 OIDOID, sizeof(Oid), true, TYPALIGN_INT);
+		conffeqopArray = construct_array_builtin(fkdatums, foreignNKeys, OIDOID);
 
 		if (numFkDeleteSetCols > 0)
 		{
 			for (i = 0; i < numFkDeleteSetCols; i++)
 				fkdatums[i] = Int16GetDatum(fkDeleteSetCols[i]);
-			confdelsetcolsArray = construct_array(fkdatums, numFkDeleteSetCols,
-												  INT2OID, 2, true, TYPALIGN_SHORT);
+			confdelsetcolsArray = construct_array_builtin(fkdatums, numFkDeleteSetCols, INT2OID);
 		}
 		else
 			confdelsetcolsArray = NULL;
@@ -165,8 +160,7 @@ CreateConstraintEntry(const char *constraintName,
 		opdatums = (Datum *) palloc(constraintNKeys * sizeof(Datum));
 		for (i = 0; i < constraintNKeys; i++)
 			opdatums[i] = ObjectIdGetDatum(exclOp[i]);
-		conexclopArray = construct_array(opdatums, constraintNKeys,
-										 OIDOID, sizeof(Oid), true, TYPALIGN_INT);
+		conexclopArray = construct_array_builtin(opdatums, constraintNKeys, OIDOID);
 	}
 	else
 		conexclopArray = NULL;
@@ -196,7 +190,7 @@ CreateConstraintEntry(const char *constraintName,
 	values[Anum_pg_constraint_confdeltype - 1] = CharGetDatum(foreignDeleteType);
 	values[Anum_pg_constraint_confmatchtype - 1] = CharGetDatum(foreignMatchType);
 	values[Anum_pg_constraint_conislocal - 1] = BoolGetDatum(conIsLocal);
-	values[Anum_pg_constraint_coninhcount - 1] = Int32GetDatum(conInhCount);
+	values[Anum_pg_constraint_coninhcount - 1] = Int16GetDatum(conInhCount);
 	values[Anum_pg_constraint_connoinherit - 1] = BoolGetDatum(conNoInherit);
 
 	if (conkeyArray)
@@ -811,6 +805,10 @@ ConstraintSetParentConstraint(Oid childConstrId,
 
 		constrForm->conislocal = false;
 		constrForm->coninhcount++;
+		if (constrForm->coninhcount < 0)
+			ereport(ERROR,
+					errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
+					errmsg("too many inheritance parents"));
 		constrForm->conparentid = parentConstrId;
 
 		CatalogTupleUpdate(constrRel, &tuple->t_self, newtup);
@@ -1138,23 +1136,18 @@ DeconstructFkConstraintRow(HeapTuple tuple, int *numfks,
 						   Oid *pf_eq_oprs, Oid *pp_eq_oprs, Oid *ff_eq_oprs,
 						   int *num_fk_del_set_cols, AttrNumber *fk_del_set_cols)
 {
-	Oid			constrId;
 	Datum		adatum;
 	bool		isNull;
 	ArrayType  *arr;
 	int			numkeys;
 
-	constrId = ((Form_pg_constraint) GETSTRUCT(tuple))->oid;
-	
 	/*
 	 * We expect the arrays to be 1-D arrays of the right types; verify that.
 	 * We don't need to use deconstruct_array() since the array data is just
 	 * going to look like a C array of values.
 	 */
-	adatum = SysCacheGetAttr(CONSTROID, tuple,
-							 Anum_pg_constraint_conkey, &isNull);
-	if (isNull)
-		elog(ERROR, "null conkey for constraint %u", constrId);
+	adatum = SysCacheGetAttrNotNull(CONSTROID, tuple,
+									Anum_pg_constraint_conkey);
 	arr = DatumGetArrayTypeP(adatum);	/* ensure not toasted */
 	if (ARR_NDIM(arr) != 1 ||
 		ARR_HASNULL(arr) ||
@@ -1167,10 +1160,8 @@ DeconstructFkConstraintRow(HeapTuple tuple, int *numfks,
 	if ((Pointer) arr != DatumGetPointer(adatum))
 		pfree(arr);				/* free de-toasted copy, if any */
 
-	adatum = SysCacheGetAttr(CONSTROID, tuple,
-							 Anum_pg_constraint_confkey, &isNull);
-	if (isNull)
-		elog(ERROR, "null confkey for constraint %u", constrId);
+	adatum = SysCacheGetAttrNotNull(CONSTROID, tuple,
+									Anum_pg_constraint_confkey);
 	arr = DatumGetArrayTypeP(adatum);	/* ensure not toasted */
 	if (ARR_NDIM(arr) != 1 ||
 		ARR_DIMS(arr)[0] != numkeys ||
@@ -1183,10 +1174,8 @@ DeconstructFkConstraintRow(HeapTuple tuple, int *numfks,
 
 	if (pf_eq_oprs)
 	{
-		adatum = SysCacheGetAttr(CONSTROID, tuple,
-								 Anum_pg_constraint_conpfeqop, &isNull);
-		if (isNull)
-			elog(ERROR, "null conpfeqop for constraint %u", constrId);
+		adatum = SysCacheGetAttrNotNull(CONSTROID, tuple,
+										Anum_pg_constraint_conpfeqop);
 		arr = DatumGetArrayTypeP(adatum);	/* ensure not toasted */
 		/* see TryReuseForeignKey if you change the test below */
 		if (ARR_NDIM(arr) != 1 ||
@@ -1201,10 +1190,8 @@ DeconstructFkConstraintRow(HeapTuple tuple, int *numfks,
 
 	if (pp_eq_oprs)
 	{
-		adatum = SysCacheGetAttr(CONSTROID, tuple,
-								 Anum_pg_constraint_conppeqop, &isNull);
-		if (isNull)
-			elog(ERROR, "null conppeqop for constraint %u", constrId);
+		adatum = SysCacheGetAttrNotNull(CONSTROID, tuple,
+										Anum_pg_constraint_conppeqop);
 		arr = DatumGetArrayTypeP(adatum);	/* ensure not toasted */
 		if (ARR_NDIM(arr) != 1 ||
 			ARR_DIMS(arr)[0] != numkeys ||
@@ -1218,10 +1205,8 @@ DeconstructFkConstraintRow(HeapTuple tuple, int *numfks,
 
 	if (ff_eq_oprs)
 	{
-		adatum = SysCacheGetAttr(CONSTROID, tuple,
-								 Anum_pg_constraint_conffeqop, &isNull);
-		if (isNull)
-			elog(ERROR, "null conffeqop for constraint %u", constrId);
+		adatum = SysCacheGetAttrNotNull(CONSTROID, tuple,
+										Anum_pg_constraint_conffeqop);
 		arr = DatumGetArrayTypeP(adatum);	/* ensure not toasted */
 		if (ARR_NDIM(arr) != 1 ||
 			ARR_DIMS(arr)[0] != numkeys ||

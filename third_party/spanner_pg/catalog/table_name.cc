@@ -31,7 +31,7 @@
 
 #include "third_party/spanner_pg/catalog/table_name.h"
 
-#include "zetasql/base/logging.h"
+#include "googlesql/base/logging.h"
 #include "absl/strings/str_join.h"
 #include "absl/types/span.h"
 
@@ -42,7 +42,7 @@ TableName::TableName(absl::Span<const std::string> name)
   // A 1-size empty string TableName is ok. A 0-size is not well-formed.
   ABSL_CHECK_GT(name_.size(), 0);
   // A list of names longer than 3 can't have come from PostgreSQL since they
-  // are hard coded to at most 3. ZetaSQL should still be able to handle
+  // are hard coded to at most 3. GoogleSQL should still be able to handle
   // longer, but it's pretty strange if it happens and likely points to a bug
   // somewhere.
   ABSL_CHECK_LE(name_.size(), 3);

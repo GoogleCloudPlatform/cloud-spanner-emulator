@@ -1,0 +1,7 @@
+@Dialect=GOOGLE_STANDARD_SQL
+CREATE TABLE Users(
+  ID     INT64 NOT NULL,
+  Name   STRING(MAX),
+  Config JSON
+) PRIMARY KEY (ID);
+CREATE INDEX UsersByNameStoringConfig ON Users(Name) STORING (Config);

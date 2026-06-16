@@ -34,7 +34,7 @@
 #include "common/errors.h"
 #include "common/limits.h"
 #include "frontend/common/uris.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 ABSL_FLAG(int, override_max_databases_per_instance, 100,
           "overrides the allowed maximum number of databases per instance if "
@@ -77,11 +77,11 @@ absl::StatusOr<std::shared_ptr<Database>> DatabaseManager::CreateDatabase(
   // Create/Drop a database per unit test, and run unit tests in parallel. So
   // we want to optimize this use case.
   absl::string_view project_id, instance_id, database_id;
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       ParseDatabaseUri(database_uri, &project_id, &instance_id, &database_id));
   std::string instance_uri = MakeInstanceUri(project_id, instance_id);
 
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       std::unique_ptr<backend::Database> backend_db,
       backend::Database::Create(clock_, database_id, schema_change_operation,
                                 std::move(wal_writer), database_uri));
@@ -128,7 +128,7 @@ absl::Status DatabaseManager::DeleteDatabase(const std::string& database_uri) {
   absl::MutexLock lock(&mu_);
   if (database_map_.erase(database_uri) > 0) {
     absl::string_view project_id, instance_id, database_id;
-    ZETASQL_RETURN_IF_ERROR(ParseDatabaseUri(database_uri, &project_id, &instance_id,
+    GOOGLESQL_RETURN_IF_ERROR(ParseDatabaseUri(database_uri, &project_id, &instance_id,
                                      &database_id));
     std::string instance_uri = MakeInstanceUri(project_id, instance_id);
     num_databases_per_instance_[instance_uri] -= 1;

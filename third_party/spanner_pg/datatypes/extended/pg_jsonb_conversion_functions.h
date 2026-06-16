@@ -32,32 +32,32 @@
 #ifndef DATATYPES_EXTENDED_PG_JSONB_CONVERSION_FUNCTIONS_H_
 #define DATATYPES_EXTENDED_PG_JSONB_CONVERSION_FUNCTIONS_H_
 
-#include "zetasql/public/function.h"
+#include "googlesql/public/function.h"
 
 namespace postgres_translator::spangres {
 namespace datatypes {
 
 // PG.JSONB conversion functions
-absl::StatusOr<zetasql::Value> PgJsonbToBoolConversion(
-    const absl::Span<const zetasql::Value> args);
-absl::StatusOr<zetasql::Value> PgJsonbToInt64Conversion(
-    const absl::Span<const zetasql::Value> args);
-absl::StatusOr<zetasql::Value> PgJsonbToDoubleConversion(
-    const absl::Span<const zetasql::Value> args);
-absl::StatusOr<zetasql::Value> PgJsonbToFloatConversion(
-    const absl::Span<const zetasql::Value> args);
-absl::StatusOr<zetasql::Value> PgJsonbToPgNumericConversion(
-    const absl::Span<const zetasql::Value> args);
-absl::StatusOr<zetasql::Value> PgJsonbToStringConversion(
-    const absl::Span<const zetasql::Value> args);
+absl::StatusOr<googlesql::Value> PgJsonbToBoolConversion(
+    const absl::Span<const googlesql::Value> args);
+absl::StatusOr<googlesql::Value> PgJsonbToInt64Conversion(
+    const absl::Span<const googlesql::Value> args);
+absl::StatusOr<googlesql::Value> PgJsonbToDoubleConversion(
+    const absl::Span<const googlesql::Value> args);
+absl::StatusOr<googlesql::Value> PgJsonbToFloatConversion(
+    const absl::Span<const googlesql::Value> args);
+absl::StatusOr<googlesql::Value> PgJsonbToPgNumericConversion(
+    const absl::Span<const googlesql::Value> args);
+absl::StatusOr<googlesql::Value> PgJsonbToStringConversion(
+    const absl::Span<const googlesql::Value> args);
 
-const zetasql::Function* GetStringToPgJsonbConversion();
-const zetasql::Function* GetPgJsonbToBoolConversion();
-const zetasql::Function* GetPgJsonbToInt64Conversion();
-const zetasql::Function* GetPgJsonbToDoubleConversion();
-const zetasql::Function* GetPgJsonbToFloatConversion();
-const zetasql::Function* GetPgJsonbToPgNumericConversion();
-const zetasql::Function* GetPgJsonbToStringConversion();
+const googlesql::Function* GetStringToPgJsonbConversion();
+const googlesql::Function* GetPgJsonbToBoolConversion();
+const googlesql::Function* GetPgJsonbToInt64Conversion();
+const googlesql::Function* GetPgJsonbToDoubleConversion();
+const googlesql::Function* GetPgJsonbToFloatConversion();
+const googlesql::Function* GetPgJsonbToPgNumericConversion();
+const googlesql::Function* GetPgJsonbToStringConversion();
 }  // namespace datatypes
 }  // namespace postgres_translator::spangres
 

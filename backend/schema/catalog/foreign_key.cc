@@ -54,18 +54,18 @@ absl::Status ForeignKey::ValidateUpdate(
 absl::Status ForeignKey::DeepClone(SchemaGraphEditor* editor,
                                    const SchemaNode* orig) {
   for (const Table** table : {&referencing_table_, &referenced_table_}) {
-    ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(*table));
+    GOOGLESQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(*table));
     *table = schema_node->As<const Table>();
   }
   for (auto* columns : {&referencing_columns_, &referenced_columns_}) {
     for (const Column*& column : *columns) {
-      ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(column));
+      GOOGLESQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(column));
       column = schema_node->As<const Column>();
     }
   }
   for (const Index** index : {&referencing_index_, &referenced_index_}) {
     if (*index != nullptr) {
-      ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(*index));
+      GOOGLESQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(*index));
       *index = schema_node->As<const Index>();
     }
   }

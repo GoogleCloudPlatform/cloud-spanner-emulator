@@ -14,22 +14,22 @@
 // limitations under the License.
 //
 
-#include "zetasql/public/catalog.h"
+#include "googlesql/public/catalog.h"
 
 #include <cassert>
 #include <memory>
 #include <string>
 
 #include "google/spanner/admin/database/v1/spanner_database_admin.pb.h"
-#include "zetasql/public/analyzer.h"
-#include "zetasql/public/analyzer_output.h"
-#include "zetasql/public/function.h"
-#include "zetasql/public/property_graph.h"
-#include "zetasql/public/types/type.h"
-#include "zetasql/public/types/type_factory.h"
+#include "googlesql/public/analyzer.h"
+#include "googlesql/public/analyzer_output.h"
+#include "googlesql/public/function.h"
+#include "googlesql/public/property_graph.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/public/types/type_factory.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_join.h"
@@ -60,9 +60,9 @@ using postgres_translator::spangres::datatypes::GetPgNumericType;
 using postgres_translator::spangres::datatypes::GetPgOidType;
 using ::testing::Contains;
 using ::testing::Property;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 
-// An integration test that uses Catalog to call zetasql::AnalyzeStatement.
+// An integration test that uses Catalog to call googlesql::AnalyzeStatement.
 class AnalyzeStatementTest : public testing::Test {
  protected:
   absl::Status AnalyzeStatement(
@@ -73,7 +73,7 @@ class AnalyzeStatementTest : public testing::Test {
       postgres_translator::spangres::test::GetSpangresTestSystemCatalog(
           MakeGoogleSqlLanguageOptions());
     }
-    zetasql::TypeFactory type_factory{};
+    googlesql::TypeFactory type_factory{};
     std::unique_ptr<const Schema> schema =
         test::CreateSchemaWithOneTable(&type_factory, dialect);
     FunctionCatalog function_catalog{
@@ -84,14 +84,14 @@ class AnalyzeStatementTest : public testing::Test {
     auto analyzer_options = MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone);
     Catalog catalog{schema.get(), &function_catalog, &type_factory,
                     analyzer_options};
-    std::unique_ptr<const zetasql::AnalyzerOutput> output{};
-    return zetasql::AnalyzeStatement(sql, analyzer_options, &catalog,
+    std::unique_ptr<const googlesql::AnalyzerOutput> output{};
+    return googlesql::AnalyzeStatement(sql, analyzer_options, &catalog,
                                        &type_factory, &output);
   }
 };
 
 TEST_F(AnalyzeStatementTest, SelectOneFromExistingTableReturnsOk) {
-  ZETASQL_EXPECT_OK(AnalyzeStatement("SELECT 1 FROM test_table"));
+  GOOGLESQL_EXPECT_OK(AnalyzeStatement("SELECT 1 FROM test_table"));
 }
 
 TEST_F(AnalyzeStatementTest, SelectOneFromNonexistentTableReturnsError) {
@@ -100,7 +100,7 @@ TEST_F(AnalyzeStatementTest, SelectOneFromNonexistentTableReturnsError) {
 }
 
 TEST_F(AnalyzeStatementTest, SelectExistingColumnReturnsOk) {
-  ZETASQL_EXPECT_OK(AnalyzeStatement("SELECT int64_col FROM test_table"));
+  GOOGLESQL_EXPECT_OK(AnalyzeStatement("SELECT int64_col FROM test_table"));
 }
 
 TEST_F(AnalyzeStatementTest, SelectNonexistentColumnReturnsError) {
@@ -109,45 +109,45 @@ TEST_F(AnalyzeStatementTest, SelectNonexistentColumnReturnsError) {
 }
 
 TEST_F(AnalyzeStatementTest, SelectNestedCatalogNetFunctions) {
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       AnalyzeStatement("SELECT "
                        "NET.IPV4_TO_INT64(b\"\\x00\\x00\\x00\\x00\")"));
 }
 
 TEST_F(AnalyzeStatementTest, SelectNestedCatalogPGFunctions) {
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       AnalyzeStatement("SELECT pg.map_double_to_int(CAST(1.1 as float64)) "
                        "IN (pg.map_double_to_int(1.1), "
                        "pg.map_double_to_int(2.0)) as col"));
 }
 
 TEST_F(AnalyzeStatementTest, SelectIdentityColumnFieldsInformationSchema) {
-  ZETASQL_EXPECT_OK(AnalyzeStatement(
+  GOOGLESQL_EXPECT_OK(AnalyzeStatement(
       "SELECT is_identity, identity_generation, identity_kind, "
       "identity_start_with_counter, identity_skip_range_min, "
       "identity_skip_range_max FROM information_schema.columns"));
 }
 
 TEST_F(AnalyzeStatementTest, SelectIdentityColumnFieldsPGInformationSchema) {
-  ZETASQL_EXPECT_OK(AnalyzeStatement(
+  GOOGLESQL_EXPECT_OK(AnalyzeStatement(
       "SELECT is_identity, identity_generation, identity_kind, "
       "identity_start_with_counter, identity_skip_range_min, "
       "identity_skip_range_max FROM pg_information_schema.columns"));
 }
 
 TEST_F(AnalyzeStatementTest, SelectFromPGInformationSchema) {
-  ZETASQL_EXPECT_OK(AnalyzeStatement(
+  GOOGLESQL_EXPECT_OK(AnalyzeStatement(
       "SELECT column_name FROM pg_information_schema.columns"));
 }
 
-TEST_F(AnalyzeStatementTest, SelectFromPGCatalog_ZetaSQL) {
-  // pg_catalog is not available in ZetaSQL.
+TEST_F(AnalyzeStatementTest, SelectFromPGCatalog_GoogleSQL) {
+  // pg_catalog is not available in GoogleSQL.
   EXPECT_THAT(AnalyzeStatement("SELECT tablename FROM pg_catalog.pg_tables"),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(AnalyzeStatementTest, SelectFromPGCatalog_PostgreSQL) {
-  ZETASQL_EXPECT_OK(AnalyzeStatement("SELECT tablename FROM pg_catalog.pg_tables",
+  GOOGLESQL_EXPECT_OK(AnalyzeStatement("SELECT tablename FROM pg_catalog.pg_tables",
                              DatabaseDialect::POSTGRESQL));
 }
 
@@ -169,7 +169,7 @@ class CatalogTest : public testing::Test {
   void MakeCatalog(absl::Span<const std::string> statements,
                    database_api::DatabaseDialect dialect =
                        database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema_, test::CreateSchemaFromDDL(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema_, test::CreateSchemaFromDDL(
                                       statements, &type_factory_, "", dialect));
     catalog_ = std::make_unique<Catalog>(
         schema_.get(), function_catalog_.get(), &type_factory_,
@@ -178,7 +178,7 @@ class CatalogTest : public testing::Test {
 
   void MakeChangeStreamInternalQueryCatalog(
       absl::Span<const std::string> statements) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema_,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema_,
                          test::CreateSchemaFromDDL(statements, &type_factory_));
     catalog_ = std::make_unique<Catalog>(
         schema_.get(), function_catalog_.get(), &type_factory_,
@@ -191,13 +191,13 @@ class CatalogTest : public testing::Test {
   }
 
  protected:
-  zetasql::EnumerableCatalog& catalog() { return *catalog_; }
-  zetasql::EnumerableCatalog& change_stream_internal_query_catalog() {
+  googlesql::EnumerableCatalog& catalog() { return *catalog_; }
+  googlesql::EnumerableCatalog& change_stream_internal_query_catalog() {
     return *change_stream_internal_query_catalog_;
   }
 
  private:
-  zetasql::TypeFactory type_factory_;
+  googlesql::TypeFactory type_factory_;
   std::unique_ptr<test::ScopedEmulatorFeatureFlagsSetter> flag_setter_;
   std::unique_ptr<const Schema> schema_ = nullptr;
   std::unique_ptr<FunctionCatalog> function_catalog_;
@@ -210,45 +210,45 @@ TEST_F(CatalogTest, FullNameNameIsAlwaysEmpty) {
 }
 
 TEST_F(CatalogTest, FindTableTableIsFound) {
-  const zetasql::Table* table;
-  ZETASQL_EXPECT_OK(catalog().FindTable({"test_table"}, &table, {}));
+  const googlesql::Table* table;
+  GOOGLESQL_EXPECT_OK(catalog().FindTable({"test_table"}, &table, {}));
   EXPECT_EQ(table->FullName(), "test_table");
 }
 
 TEST_F(CatalogTest, FindTableTableIsNotFound) {
-  const zetasql::Table* table;
+  const googlesql::Table* table;
   EXPECT_THAT(catalog().FindTable({"BAR"}, &table, {}),
               StatusIs(absl::StatusCode::kNotFound));
   EXPECT_EQ(table, nullptr);
 }
 
 TEST_F(CatalogTest, FindFunctionFindsCountFunction) {
-  const zetasql::Function* function;
-  ZETASQL_ASSERT_OK(catalog().FindFunction({"COUNT"}, &function, {}));
+  const googlesql::Function* function;
+  GOOGLESQL_ASSERT_OK(catalog().FindFunction({"COUNT"}, &function, {}));
   EXPECT_EQ(function->Name(), "count");
 }
 
 TEST_F(CatalogTest, FindFunctionFindsSoundexFunction) {
-  const zetasql::Function* function;
-  ZETASQL_ASSERT_OK(catalog().FindFunction({"SOUNDEX"}, &function, {}));
+  const googlesql::Function* function;
+  GOOGLESQL_ASSERT_OK(catalog().FindFunction({"SOUNDEX"}, &function, {}));
   EXPECT_EQ(function->Name(), "soundex");
 }
 
 TEST_F(CatalogTest, FunctionOptionsAreUpdatedForPGFunctions) {
-  const zetasql::Function* function;
+  const googlesql::Function* function;
 
-  ZETASQL_ASSERT_OK(catalog().FindFunction({"pg.least"}, &function, {}));
+  GOOGLESQL_ASSERT_OK(catalog().FindFunction({"pg.least"}, &function, {}));
   EXPECT_NE(function->GetFunctionEvaluatorFactory(), nullptr);
   EXPECT_EQ(function->GetAggregateFunctionEvaluatorFactory(), nullptr);
 
-  ZETASQL_ASSERT_OK(catalog().FindFunction({"pg.min"}, &function, {}));
+  GOOGLESQL_ASSERT_OK(catalog().FindFunction({"pg.min"}, &function, {}));
   EXPECT_EQ(function->GetFunctionEvaluatorFactory(), nullptr);
   EXPECT_NE(function->GetAggregateFunctionEvaluatorFactory(), nullptr);
 }
 
 TEST_F(CatalogTest,
        FindFunctionDoesNotFindNonSoundexAdditionalStringFunctions) {
-  const zetasql::Function* function;
+  const googlesql::Function* function;
   EXPECT_THAT(catalog().FindFunction({"INSTR"}, &function, {}),
               StatusIs(absl::StatusCode::kNotFound));
   EXPECT_THAT(catalog().FindFunction({"TRANSLATE"}, &function, {}),
@@ -258,9 +258,9 @@ TEST_F(CatalogTest,
 }
 
 TEST_F(CatalogTest, GetTablesGetsTheOnlyTable) {
-  using zetasql::Table;
+  using googlesql::Table;
   absl::flat_hash_set<const Table*> output;
-  ZETASQL_EXPECT_OK(catalog().GetTables(&output));
+  GOOGLESQL_EXPECT_OK(catalog().GetTables(&output));
   EXPECT_EQ(output.size(), 1);
   EXPECT_THAT(output, Contains(Property(&Table::Name, "test_table")));
 }
@@ -282,8 +282,8 @@ TEST_F(CatalogTest, FindViewTable) {
       )",
   });
 
-  const zetasql::Table* view;
-  ZETASQL_EXPECT_OK(catalog().FindTable({"test_view"}, &view, {}));
+  const googlesql::Table* view;
+  GOOGLESQL_EXPECT_OK(catalog().FindTable({"test_view"}, &view, {}));
   EXPECT_EQ(view->FullName(), "test_view");
 
   EXPECT_EQ(view->NumColumns(), 1);
@@ -292,17 +292,17 @@ TEST_F(CatalogTest, FindViewTable) {
   EXPECT_EQ(view_col->FullName(), "test_view.view_col");
   EXPECT_EQ(view_col->IsWritableColumn(), false);
   EXPECT_EQ(view_col->IsPseudoColumn(), false);
-  EXPECT_EQ(view_col->GetType(), zetasql::types::StringType());
+  EXPECT_EQ(view_col->GetType(), googlesql::types::StringType());
   EXPECT_EQ(view->FindColumnByName("view_col"), view_col);
 }
 
 TEST_F(CatalogTest, FindBuiltInTableValuedFunction) {
-  const zetasql::TableValuedFunction* tvf;
-  ZETASQL_EXPECT_OK(catalog().FindTableValuedFunction({"ML.PREDICT"}, &tvf, {}));
+  const googlesql::TableValuedFunction* tvf;
+  GOOGLESQL_EXPECT_OK(catalog().FindTableValuedFunction({"ML.PREDICT"}, &tvf, {}));
   EXPECT_EQ(tvf->FullName(), "ML.PREDICT");
-  ZETASQL_EXPECT_OK(catalog().FindTableValuedFunction({"SAFE.ML.PREDICT"}, &tvf, {}));
+  GOOGLESQL_EXPECT_OK(catalog().FindTableValuedFunction({"SAFE.ML.PREDICT"}, &tvf, {}));
   EXPECT_EQ(tvf->FullName(), "SAFE.ML.PREDICT");
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       catalog().FindTableValuedFunction({"pg.jsonb_array_elements"}, &tvf, {}));
   EXPECT_EQ(tvf->FullName(), "pg.jsonb_array_elements");
 }
@@ -320,8 +320,8 @@ TEST_F(CatalogTest, FindTableValuedFunction) {
       )",
   });
 
-  const zetasql::TableValuedFunction* tvf;
-  ZETASQL_EXPECT_OK(catalog().FindTableValuedFunction({"READ_test_stream"}, &tvf, {}));
+  const googlesql::TableValuedFunction* tvf;
+  GOOGLESQL_EXPECT_OK(catalog().FindTableValuedFunction({"READ_test_stream"}, &tvf, {}));
   EXPECT_EQ(tvf->FullName(), "READ_test_stream");
 }
 
@@ -338,7 +338,7 @@ TEST_F(CatalogTest, FindTableValuedFunctionIsNotFound) {
       )",
   });
 
-  const zetasql::TableValuedFunction* tvf;
+  const googlesql::TableValuedFunction* tvf;
   EXPECT_THAT(catalog().FindTableValuedFunction({"BAR_tvf"}, &tvf, {}),
               StatusIs(absl::StatusCode::kNotFound));
   EXPECT_EQ(tvf, nullptr);
@@ -357,8 +357,8 @@ TEST_F(CatalogTest, FindChangeStreamInternalPartitionTable) {
       )",
   });
 
-  const zetasql::Table* partition_table;
-  ZETASQL_EXPECT_OK(change_stream_internal_query_catalog().FindTable(
+  const googlesql::Table* partition_table;
+  GOOGLESQL_EXPECT_OK(change_stream_internal_query_catalog().FindTable(
       {"_change_stream_partition_test_stream"}, &partition_table, {}));
   EXPECT_EQ(partition_table->FullName(),
             "_change_stream_partition_test_stream");
@@ -377,8 +377,8 @@ TEST_F(CatalogTest, FindChangeStreamInternalDataTable) {
       )",
   });
 
-  const zetasql::Table* data_table;
-  ZETASQL_EXPECT_OK(change_stream_internal_query_catalog().FindTable(
+  const googlesql::Table* data_table;
+  GOOGLESQL_EXPECT_OK(change_stream_internal_query_catalog().FindTable(
       {"_change_stream_data_test_stream"}, &data_table, {}));
   EXPECT_EQ(data_table->FullName(), "_change_stream_data_test_stream");
 }
@@ -397,7 +397,7 @@ TEST_F(CatalogTest,
       )",
   });
 
-  const zetasql::Table* partition_table;
+  const googlesql::Table* partition_table;
   EXPECT_THAT(catalog().FindTable({"_change_stream_partition_test_stream"},
                                   &partition_table, {}),
               StatusIs(absl::StatusCode::kNotFound));
@@ -417,7 +417,7 @@ TEST_F(CatalogTest, FindChangeStreamInternalDataTableNotValidFromExternalUser) {
       )",
   });
 
-  const zetasql::Table* data_table;
+  const googlesql::Table* data_table;
   EXPECT_THAT(
       catalog().FindTable({"_change_stream_dat_test_stream"}, &data_table, {}),
       StatusIs(absl::StatusCode::kNotFound));
@@ -450,15 +450,15 @@ TEST_F(CatalogTest, FindSequence) {
       )",
   });
 
-  const zetasql::Sequence* myseq;
-  ZETASQL_EXPECT_OK(catalog().FindSequence({"myseq"}, &myseq, {}));
+  const googlesql::Sequence* myseq;
+  GOOGLESQL_EXPECT_OK(catalog().FindSequence({"myseq"}, &myseq, {}));
   EXPECT_NE(myseq, nullptr);
   EXPECT_EQ(myseq->Name(), "myseq");
-  const zetasql::Sequence* myseq2;
-  ZETASQL_EXPECT_OK(catalog().FindSequence({"myseq2"}, &myseq2, {}));
+  const googlesql::Sequence* myseq2;
+  GOOGLESQL_EXPECT_OK(catalog().FindSequence({"myseq2"}, &myseq2, {}));
   EXPECT_NE(myseq2, nullptr);
   EXPECT_EQ(myseq2->Name(), "myseq2");
-  const zetasql::Sequence* myseq3;
+  const googlesql::Sequence* myseq3;
   EXPECT_THAT(catalog().FindSequence({"myseq3"}, &myseq3, {}),
               StatusIs(absl::StatusCode::kNotFound));
   EXPECT_EQ(myseq3, nullptr);
@@ -494,119 +494,119 @@ TEST_F(CatalogTest, FindPropertyGraph) {
       )",
   });
   // Test property graph.
-  const zetasql::PropertyGraph* graph;
-  ZETASQL_EXPECT_OK(catalog().FindPropertyGraph({"test_graph"}, graph, {}));
+  const googlesql::PropertyGraph* graph;
+  GOOGLESQL_EXPECT_OK(catalog().FindPropertyGraph({"test_graph"}, graph, {}));
   EXPECT_EQ(graph->FullName(), "test_graph");
 
-  absl::flat_hash_set<const zetasql::GraphElementLabel*> all_graph_labels;
-  ZETASQL_EXPECT_OK(graph->GetLabels(all_graph_labels));
+  absl::flat_hash_set<const googlesql::GraphElementLabel*> all_graph_labels;
+  GOOGLESQL_EXPECT_OK(graph->GetLabels(all_graph_labels));
   EXPECT_EQ(all_graph_labels.size(), 3);
 
   // Test labels from graph.
   {
-    const zetasql::GraphElementLabel* graph_label;
-    ZETASQL_EXPECT_OK(graph->FindLabelByName("NodeTest", graph_label));
+    const googlesql::GraphElementLabel* graph_label;
+    GOOGLESQL_EXPECT_OK(graph->FindLabelByName("NodeTest", graph_label));
     EXPECT_NE(graph_label, nullptr);
     EXPECT_EQ(graph_label->FullName(), "test_graph.NodeTest");
 
-    absl::flat_hash_set<const zetasql::GraphPropertyDeclaration*>
+    absl::flat_hash_set<const googlesql::GraphPropertyDeclaration*>
         property_declarations_from_label;
-    ZETASQL_EXPECT_OK(
+    GOOGLESQL_EXPECT_OK(
         graph_label->GetPropertyDeclarations(property_declarations_from_label));
     EXPECT_EQ(property_declarations_from_label.size(), 1);
-    const zetasql::GraphPropertyDeclaration* decl_from_label =
+    const googlesql::GraphPropertyDeclaration* decl_from_label =
         *property_declarations_from_label.begin();
     EXPECT_EQ(decl_from_label->FullName(), "test_graph.Id");
   }
   {
-    const zetasql::GraphElementLabel* graph_label;
-    ZETASQL_EXPECT_OK(graph->FindLabelByName("EdgeNoPropLabel", graph_label));
+    const googlesql::GraphElementLabel* graph_label;
+    GOOGLESQL_EXPECT_OK(graph->FindLabelByName("EdgeNoPropLabel", graph_label));
     EXPECT_NE(graph_label, nullptr);
     EXPECT_EQ(graph_label->FullName(), "test_graph.EdgeNoPropLabel");
 
     // Ensure there are NO PROPERTIES
-    absl::flat_hash_set<const zetasql::GraphPropertyDeclaration*>
+    absl::flat_hash_set<const googlesql::GraphPropertyDeclaration*>
         property_declarations_from_label;
-    ZETASQL_EXPECT_OK(
+    GOOGLESQL_EXPECT_OK(
         graph_label->GetPropertyDeclarations(property_declarations_from_label));
     EXPECT_EQ(property_declarations_from_label.size(), 0);
   }
   {
-    const zetasql::GraphElementLabel* graph_label;
-    ZETASQL_EXPECT_OK(graph->FindLabelByName("edge_test", graph_label));
+    const googlesql::GraphElementLabel* graph_label;
+    GOOGLESQL_EXPECT_OK(graph->FindLabelByName("edge_test", graph_label));
     EXPECT_NE(graph_label, nullptr);
     EXPECT_EQ(graph_label->FullName(), "test_graph.edge_test");
 
     // Ensure all PROPERTIES are linked to this label EXCEPT (ToId)
-    absl::flat_hash_set<const zetasql::GraphPropertyDeclaration*>
+    absl::flat_hash_set<const googlesql::GraphPropertyDeclaration*>
         property_declarations_from_label;
-    ZETASQL_EXPECT_OK(
+    GOOGLESQL_EXPECT_OK(
         graph_label->GetPropertyDeclarations(property_declarations_from_label));
     EXPECT_EQ(property_declarations_from_label.size(), 1);
-    const zetasql::GraphPropertyDeclaration* decl_from_label =
+    const googlesql::GraphPropertyDeclaration* decl_from_label =
         *property_declarations_from_label.begin();
     EXPECT_EQ(decl_from_label->FullName(), "test_graph.FromId");
   }
 
   // Test property declarations from graph.
-  const zetasql::GraphPropertyDeclaration* property_declaration;
-  ZETASQL_EXPECT_OK(graph->FindPropertyDeclarationByName("Id", property_declaration));
+  const googlesql::GraphPropertyDeclaration* property_declaration;
+  GOOGLESQL_EXPECT_OK(graph->FindPropertyDeclarationByName("Id", property_declaration));
   EXPECT_NE(property_declaration, nullptr);
   EXPECT_EQ(property_declaration->FullName(), "test_graph.Id");
-  EXPECT_EQ(property_declaration->Type(), zetasql::types::Int64Type());
+  EXPECT_EQ(property_declaration->Type(), googlesql::types::Int64Type());
 
   // Test node tables from graph.
-  absl::flat_hash_set<const zetasql::GraphNodeTable*> node_tables;
-  ZETASQL_EXPECT_OK(graph->GetNodeTables(node_tables));
+  absl::flat_hash_set<const googlesql::GraphNodeTable*> node_tables;
+  GOOGLESQL_EXPECT_OK(graph->GetNodeTables(node_tables));
   EXPECT_EQ(node_tables.size(), 1);
-  const zetasql::GraphNodeTable* node_table = *node_tables.begin();
+  const googlesql::GraphNodeTable* node_table = *node_tables.begin();
   EXPECT_EQ(node_table->FullName(), "test_graph.node_test");
   EXPECT_EQ(node_table->Name(), "node_test");
-  EXPECT_EQ(node_table->kind(), zetasql::GraphNodeTable::Kind::kNode);
+  EXPECT_EQ(node_table->kind(), googlesql::GraphNodeTable::Kind::kNode);
   EXPECT_EQ(absl::StrJoin(node_table->PropertyGraphNamePath(), "."),
             "test_graph");
   EXPECT_NE(node_table->GetTable(), nullptr);
   EXPECT_EQ(node_table->GetKeyColumns().size(), 1);
-  absl::flat_hash_set<const zetasql::GraphPropertyDefinition*> node_prop_defs;
-  ZETASQL_EXPECT_OK(node_table->GetPropertyDefinitions(node_prop_defs));
+  absl::flat_hash_set<const googlesql::GraphPropertyDefinition*> node_prop_defs;
+  GOOGLESQL_EXPECT_OK(node_table->GetPropertyDefinitions(node_prop_defs));
   EXPECT_EQ(node_prop_defs.size(), 1);
-  absl::flat_hash_set<const zetasql::GraphElementLabel*> node_labels;
-  ZETASQL_EXPECT_OK(node_table->GetLabels(node_labels));
+  absl::flat_hash_set<const googlesql::GraphElementLabel*> node_labels;
+  GOOGLESQL_EXPECT_OK(node_table->GetLabels(node_labels));
   EXPECT_EQ(node_labels.size(), 1);
 
-  const zetasql::GraphElementLabel* node_label;
-  ZETASQL_EXPECT_OK(node_table->FindLabelByName("NodeTest", node_label));
+  const googlesql::GraphElementLabel* node_label;
+  GOOGLESQL_EXPECT_OK(node_table->FindLabelByName("NodeTest", node_label));
   EXPECT_NE(node_label, nullptr);
 
   // Test property declarations from node table's label.
-  absl::flat_hash_set<const zetasql::GraphPropertyDeclaration*>
+  absl::flat_hash_set<const googlesql::GraphPropertyDeclaration*>
       property_declarations_from_node_label;
-  ZETASQL_EXPECT_OK(node_label->GetPropertyDeclarations(
+  GOOGLESQL_EXPECT_OK(node_label->GetPropertyDeclarations(
       property_declarations_from_node_label));
   EXPECT_EQ(property_declarations_from_node_label.size(), 1);
-  const zetasql::GraphPropertyDeclaration* decl_from_node_label =
+  const googlesql::GraphPropertyDeclaration* decl_from_node_label =
       *property_declarations_from_node_label.begin();
   EXPECT_EQ(decl_from_node_label->FullName(), "test_graph.Id");
 
   // Test property definitions from node table.
-  const zetasql::GraphPropertyDefinition* property_definition;
-  ZETASQL_EXPECT_OK(
+  const googlesql::GraphPropertyDefinition* property_definition;
+  GOOGLESQL_EXPECT_OK(
       node_table->FindPropertyDefinitionByName("Id", property_definition));
   EXPECT_NE(property_definition, nullptr);
   EXPECT_EQ(property_definition->expression_sql(), "Id");
   EXPECT_NE(property_definition->GetValueExpression().value(), nullptr);
 
   // Test edge tables from graph.
-  absl::flat_hash_set<const zetasql::GraphEdgeTable*> edge_tables;
-  ZETASQL_EXPECT_OK(graph->GetEdgeTables(edge_tables));
+  absl::flat_hash_set<const googlesql::GraphEdgeTable*> edge_tables;
+  GOOGLESQL_EXPECT_OK(graph->GetEdgeTables(edge_tables));
   EXPECT_EQ(edge_tables.size(), 1);
-  const zetasql::GraphEdgeTable* edge_table = *edge_tables.begin();
+  const googlesql::GraphEdgeTable* edge_table = *edge_tables.begin();
   EXPECT_EQ(edge_table->FullName(), "test_graph.edge_test");
   EXPECT_EQ(edge_table->Name(), "edge_test");
-  EXPECT_EQ(edge_table->kind(), zetasql::GraphEdgeTable::Kind::kEdge);
+  EXPECT_EQ(edge_table->kind(), googlesql::GraphEdgeTable::Kind::kEdge);
 
   // Test source and destination node table references.
-  const zetasql::GraphNodeTableReference* source_node_table_reference =
+  const googlesql::GraphNodeTableReference* source_node_table_reference =
       edge_table->GetSourceNodeTable();
   EXPECT_NE(source_node_table_reference, nullptr);
   EXPECT_NE(source_node_table_reference->GetReferencedNodeTable(), nullptr);
@@ -615,7 +615,7 @@ TEST_F(CatalogTest, FindPropertyGraph) {
   EXPECT_GE(source_node_table_reference->GetEdgeTableColumns().size(), 1);
   EXPECT_GE(source_node_table_reference->GetNodeTableColumns().size(), 1);
 
-  const zetasql::GraphNodeTableReference* dest_node_table_reference =
+  const googlesql::GraphNodeTableReference* dest_node_table_reference =
       edge_table->GetDestNodeTable();
   EXPECT_NE(dest_node_table_reference, nullptr);
   EXPECT_NE(dest_node_table_reference->GetReferencedNodeTable(), nullptr);
@@ -625,22 +625,22 @@ TEST_F(CatalogTest, FindPropertyGraph) {
   EXPECT_GE(dest_node_table_reference->GetNodeTableColumns().size(), 1);
 
   // Test each public API for the NOT FOUND cases
-  const zetasql::GraphElementTable* not_found_graph_element_table;
+  const googlesql::GraphElementTable* not_found_graph_element_table;
   EXPECT_THAT(graph->FindElementTableByName("NONEXISTENT_ELEMENT",
                                             not_found_graph_element_table),
               StatusIs(absl::StatusCode::kNotFound));
 
-  const zetasql::GraphElementLabel* not_found_graph_label;
+  const googlesql::GraphElementLabel* not_found_graph_label;
   EXPECT_THAT(
       graph->FindLabelByName("NONEXISTENT_LABEL", not_found_graph_label),
       StatusIs(absl::StatusCode::kNotFound));
 
-  const zetasql::GraphPropertyDeclaration* not_found_property_declaration;
+  const googlesql::GraphPropertyDeclaration* not_found_property_declaration;
   EXPECT_THAT(graph->FindPropertyDeclarationByName(
                   "NONEXISTENT_PROPERTY_DECL", not_found_property_declaration),
               StatusIs(absl::StatusCode::kNotFound));
 
-  const zetasql::GraphPropertyDefinition* not_found_property_definition;
+  const googlesql::GraphPropertyDefinition* not_found_property_definition;
   EXPECT_THAT(node_table->FindPropertyDefinitionByName(
                   "NONEXISTENT_PROPERTY", not_found_property_definition),
               StatusIs(absl::StatusCode::kNotFound));
@@ -682,80 +682,80 @@ TEST_F(CatalogTest, FindPropertyGraphWithDynamicLabelAndProperties) {
   )",
   });
   // Test property graph.
-  const zetasql::PropertyGraph* graph;
-  ZETASQL_EXPECT_OK(catalog().FindPropertyGraph({"aml"}, graph, {}));
+  const googlesql::PropertyGraph* graph;
+  GOOGLESQL_EXPECT_OK(catalog().FindPropertyGraph({"aml"}, graph, {}));
   EXPECT_EQ(graph->FullName(), "aml");
 
-  absl::flat_hash_set<const zetasql::GraphElementLabel*> all_graph_labels;
-  ZETASQL_EXPECT_OK(graph->GetLabels(all_graph_labels));
+  absl::flat_hash_set<const googlesql::GraphElementLabel*> all_graph_labels;
+  GOOGLESQL_EXPECT_OK(graph->GetLabels(all_graph_labels));
   EXPECT_EQ(all_graph_labels.size(), 2);
 
   // Test labels from graph.
   {
-    const zetasql::GraphElementLabel* graph_label;
-    ZETASQL_EXPECT_OK(graph->FindLabelByName("GraphNode", graph_label));
+    const googlesql::GraphElementLabel* graph_label;
+    GOOGLESQL_EXPECT_OK(graph->FindLabelByName("GraphNode", graph_label));
     EXPECT_NE(graph_label, nullptr);
     EXPECT_EQ(graph_label->FullName(), "aml.GraphNode");
 
-    absl::flat_hash_set<const zetasql::GraphPropertyDeclaration*>
+    absl::flat_hash_set<const googlesql::GraphPropertyDeclaration*>
         property_declarations_from_label;
-    ZETASQL_EXPECT_OK(
+    GOOGLESQL_EXPECT_OK(
         graph_label->GetPropertyDeclarations(property_declarations_from_label));
     EXPECT_EQ(property_declarations_from_label.size(), 3);
   }
   {
-    const zetasql::GraphElementLabel* graph_label;
-    ZETASQL_EXPECT_OK(graph->FindLabelByName("GraphEdge", graph_label));
+    const googlesql::GraphElementLabel* graph_label;
+    GOOGLESQL_EXPECT_OK(graph->FindLabelByName("GraphEdge", graph_label));
     EXPECT_NE(graph_label, nullptr);
     EXPECT_EQ(graph_label->FullName(), "aml.GraphEdge");
 
-    absl::flat_hash_set<const zetasql::GraphPropertyDeclaration*>
+    absl::flat_hash_set<const googlesql::GraphPropertyDeclaration*>
         property_declarations_from_label;
-    ZETASQL_EXPECT_OK(
+    GOOGLESQL_EXPECT_OK(
         graph_label->GetPropertyDeclarations(property_declarations_from_label));
     EXPECT_EQ(property_declarations_from_label.size(), 5);
   }
 
   // Test property declarations from graph.
-  const zetasql::GraphPropertyDeclaration* property_declaration;
-  ZETASQL_EXPECT_OK(graph->FindPropertyDeclarationByName("id", property_declaration));
+  const googlesql::GraphPropertyDeclaration* property_declaration;
+  GOOGLESQL_EXPECT_OK(graph->FindPropertyDeclarationByName("id", property_declaration));
   EXPECT_NE(property_declaration, nullptr);
   EXPECT_EQ(property_declaration->FullName(), "aml.id");
-  EXPECT_EQ(property_declaration->Type(), zetasql::types::Int64Type());
+  EXPECT_EQ(property_declaration->Type(), googlesql::types::Int64Type());
 
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       graph->FindPropertyDeclarationByName("label", property_declaration));
   EXPECT_NE(property_declaration, nullptr);
   EXPECT_EQ(property_declaration->FullName(), "aml.label");
-  EXPECT_EQ(property_declaration->Type(), zetasql::types::StringType());
+  EXPECT_EQ(property_declaration->Type(), googlesql::types::StringType());
 
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       graph->FindPropertyDeclarationByName("properties", property_declaration));
   EXPECT_NE(property_declaration, nullptr);
   EXPECT_EQ(property_declaration->FullName(), "aml.properties");
-  EXPECT_EQ(property_declaration->Type(), zetasql::types::JsonType());
+  EXPECT_EQ(property_declaration->Type(), googlesql::types::JsonType());
 
   // Test node tables from graph.
-  absl::flat_hash_set<const zetasql::GraphNodeTable*> node_tables;
-  ZETASQL_EXPECT_OK(graph->GetNodeTables(node_tables));
+  absl::flat_hash_set<const googlesql::GraphNodeTable*> node_tables;
+  GOOGLESQL_EXPECT_OK(graph->GetNodeTables(node_tables));
   EXPECT_EQ(node_tables.size(), 1);
-  const zetasql::GraphNodeTable* node_table = *node_tables.begin();
+  const googlesql::GraphNodeTable* node_table = *node_tables.begin();
   EXPECT_EQ(node_table->FullName(), "aml.GraphNode");
   EXPECT_TRUE(node_table->HasDynamicLabel());
   EXPECT_TRUE(node_table->HasDynamicProperties());
 
   // Test edge tables from graph.
-  absl::flat_hash_set<const zetasql::GraphEdgeTable*> edge_tables;
-  ZETASQL_EXPECT_OK(graph->GetEdgeTables(edge_tables));
+  absl::flat_hash_set<const googlesql::GraphEdgeTable*> edge_tables;
+  GOOGLESQL_EXPECT_OK(graph->GetEdgeTables(edge_tables));
   EXPECT_EQ(edge_tables.size(), 1);
-  const zetasql::GraphEdgeTable* edge_table = *edge_tables.begin();
+  const googlesql::GraphEdgeTable* edge_table = *edge_tables.begin();
   EXPECT_EQ(edge_table->FullName(), "aml.GraphEdge");
   EXPECT_TRUE(edge_table->HasDynamicLabel());
   EXPECT_TRUE(edge_table->HasDynamicProperties());
 }
 
 TEST_F(CatalogTest, FindPropertyGraphIsNotFound) {
-  const zetasql::PropertyGraph* graph;
+  const googlesql::PropertyGraph* graph;
   EXPECT_THAT(catalog().FindPropertyGraph({"BAR"}, graph, {}),
               StatusIs(absl::StatusCode::kNotFound));
   EXPECT_EQ(graph, nullptr);
@@ -770,14 +770,14 @@ TEST_F(CatalogTest, FindTableWithSynonym) {
       )",
       R"(ALTER TABLE mytable ADD SYNONYM syn)"});
 
-  const zetasql::Table* mytable;
-  ZETASQL_ASSERT_OK(catalog().FindTable({"mytable"}, &mytable, {}));
+  const googlesql::Table* mytable;
+  GOOGLESQL_ASSERT_OK(catalog().FindTable({"mytable"}, &mytable, {}));
   ASSERT_NE(mytable, nullptr);
   EXPECT_EQ(mytable->Name(), "mytable");
   EXPECT_EQ(mytable->FullName(), "mytable");
 
-  const zetasql::Table* syn;
-  ZETASQL_ASSERT_OK(catalog().FindTable({"syn"}, &syn, {}));
+  const googlesql::Table* syn;
+  GOOGLESQL_ASSERT_OK(catalog().FindTable({"syn"}, &syn, {}));
   ASSERT_NE(syn, nullptr);
   EXPECT_EQ(syn->Name(), "syn");
   EXPECT_EQ(syn->FullName(), "syn");
@@ -811,50 +811,50 @@ TEST_F(CatalogTest, CatalogGettersWithNamedSchema) {
 
   // GetCatalog is a protected member of EnumerableCatalog, so it will be tested
   // through Catalog objects.
-  const zetasql::Table* mytable1;
-  ZETASQL_ASSERT_OK(catalog().FindTable({"mynamedschema1", "mytable"}, &mytable1, {}));
+  const googlesql::Table* mytable1;
+  GOOGLESQL_ASSERT_OK(catalog().FindTable({"mynamedschema1", "mytable"}, &mytable1, {}));
   ASSERT_NE(mytable1, nullptr);
   EXPECT_EQ(mytable1->Name(), "mytable");
   EXPECT_EQ(mytable1->FullName(), "mynamedschema1.mytable");
 
-  const zetasql::Table* mytable2;
-  ZETASQL_ASSERT_OK(catalog().FindTable({"mynamedschema2", "mytable"}, &mytable2, {}));
+  const googlesql::Table* mytable2;
+  GOOGLESQL_ASSERT_OK(catalog().FindTable({"mynamedschema2", "mytable"}, &mytable2, {}));
   ASSERT_NE(mytable2, nullptr);
   EXPECT_EQ(mytable2->Name(), "mytable");
   EXPECT_EQ(mytable2->FullName(), "mynamedschema2.mytable");
 
-  const zetasql::Table* mytable3;
+  const googlesql::Table* mytable3;
   EXPECT_THAT(catalog().FindTable({"mynamedschema3", "mytable"}, &mytable3, {}),
               StatusIs(absl::StatusCode::kNotFound));
   EXPECT_EQ(mytable3, nullptr);
 
-  const zetasql::Table* myview;
-  ZETASQL_ASSERT_OK(catalog().FindTable({"mynamedschema1", "myview"}, &myview, {}));
+  const googlesql::Table* myview;
+  GOOGLESQL_ASSERT_OK(catalog().FindTable({"mynamedschema1", "myview"}, &myview, {}));
   ASSERT_NE(myview, nullptr);
   EXPECT_EQ(myview->Name(), "myview");
   EXPECT_EQ(myview->FullName(), "mynamedschema1.myview");
 
-  const zetasql::Function* udf_1;
-  ZETASQL_ASSERT_OK(catalog().FindFunction({"mynamedschema1", "udf_1"}, &udf_1, {}));
+  const googlesql::Function* udf_1;
+  GOOGLESQL_ASSERT_OK(catalog().FindFunction({"mynamedschema1", "udf_1"}, &udf_1, {}));
   ASSERT_NE(udf_1, nullptr);
   EXPECT_EQ(udf_1->Name(), "udf_1");
   EXPECT_EQ(udf_1->FullName(false), "mynamedschema1.udf_1");
 
-  absl::flat_hash_set<const zetasql::Catalog*> catalogs;
-  ZETASQL_ASSERT_OK(catalog().GetCatalogs(&catalogs));
-  EXPECT_THAT(catalogs, Contains(Property(&zetasql::Catalog::FullName,
+  absl::flat_hash_set<const googlesql::Catalog*> catalogs;
+  GOOGLESQL_ASSERT_OK(catalog().GetCatalogs(&catalogs));
+  EXPECT_THAT(catalogs, Contains(Property(&googlesql::Catalog::FullName,
                                           "mynamedschema1")));
-  EXPECT_THAT(catalogs, Contains(Property(&zetasql::Catalog::FullName,
+  EXPECT_THAT(catalogs, Contains(Property(&googlesql::Catalog::FullName,
                                           "mynamedschema2")));
 
-  for (const zetasql::Catalog* catalog : catalogs) {
+  for (const googlesql::Catalog* catalog : catalogs) {
     if (!catalog->Is<QueryableNamedSchema>()) continue;
     QueryableNamedSchema* non_const_named_schema =
         const_cast<QueryableNamedSchema*>(
             catalog->GetAs<QueryableNamedSchema>());
 
-    const zetasql::Table* mytable;
-    ZETASQL_ASSERT_OK(non_const_named_schema->GetTable("mytable", &mytable, {}));
+    const googlesql::Table* mytable;
+    GOOGLESQL_ASSERT_OK(non_const_named_schema->GetTable("mytable", &mytable, {}));
     ASSERT_NE(mytable, nullptr);
     EXPECT_EQ(mytable->FullName(), catalog->FullName() + ".mytable");
   }
@@ -875,23 +875,30 @@ TEST_F(CatalogTest, CatalogGettersWithUDFs) {
                   WHEN x > y THEN 1
                   ELSE -1
               END))",
+      R"(CREATE FUNCTION remote_udf_2(x INT64) RETURNS
+        INT64 NOT DETERMINISTIC LANGUAGE REMOTE OPTIONS (endpoint = "test"))",
   });
 
-  const zetasql::Function* udf_1;
-  ZETASQL_ASSERT_OK(catalog().FindFunction({"udf_1"}, &udf_1, {}));
+  const googlesql::Function* udf_1;
+  GOOGLESQL_ASSERT_OK(catalog().FindFunction({"udf_1"}, &udf_1, {}));
   ASSERT_NE(udf_1, nullptr);
   EXPECT_EQ(udf_1->Name(), "udf_1");
 
-  const zetasql::Function* strcmp_custom;
-  ZETASQL_ASSERT_OK(catalog().FindFunction({"STRCMP_CUSTOM"}, &strcmp_custom, {}));
+  const googlesql::Function* strcmp_custom;
+  GOOGLESQL_ASSERT_OK(catalog().FindFunction({"STRCMP_CUSTOM"}, &strcmp_custom, {}));
   ASSERT_NE(strcmp_custom, nullptr);
   EXPECT_EQ(strcmp_custom->Name(), "STRCMP_CUSTOM");
 
-  const zetasql::Table* t1;
-  ZETASQL_ASSERT_OK(catalog().FindTable({"t1"}, &t1, {}));
+  const googlesql::Table* t1;
+  GOOGLESQL_ASSERT_OK(catalog().FindTable({"t1"}, &t1, {}));
   ASSERT_NE(t1, nullptr);
   EXPECT_EQ(t1->Name(), "t1");
   EXPECT_EQ(t1->FullName(), "t1");
+
+  const googlesql::Function* remote_udf_2;
+  GOOGLESQL_ASSERT_OK(catalog().FindFunction({"remote_udf_2"}, &remote_udf_2, {}));
+  ASSERT_NE(remote_udf_2, nullptr);
+  EXPECT_EQ(remote_udf_2->Name(), "remote_udf_2");
 };
 
 TEST_F(CatalogTest, GetExtendedTypes) {
@@ -905,23 +912,23 @@ TEST_F(CatalogTest, GetExtendedTypes) {
       },
       database_api::DatabaseDialect::POSTGRESQL);
 
-  const zetasql::Type* int64_t;
-  ZETASQL_ASSERT_OK(catalog().FindType({"INT64"}, &int64_t));
-  EXPECT_EQ(int64_t, zetasql::types::Int64Type());
+  const googlesql::Type* int64_t;
+  GOOGLESQL_ASSERT_OK(catalog().FindType({"INT64"}, &int64_t));
+  EXPECT_EQ(int64_t, googlesql::types::Int64Type());
 
-  const zetasql::Type* pg_numeric_type;
-  ZETASQL_ASSERT_OK(catalog().FindType({"Pg", "Numeric"}, &pg_numeric_type));
+  const googlesql::Type* pg_numeric_type;
+  GOOGLESQL_ASSERT_OK(catalog().FindType({"Pg", "Numeric"}, &pg_numeric_type));
   EXPECT_EQ(pg_numeric_type, GetPgNumericType());
 
-  const zetasql::Type* pg_jsonb_type;
-  ZETASQL_ASSERT_OK(catalog().FindType({"PG", "JSONB"}, &pg_jsonb_type));
+  const googlesql::Type* pg_jsonb_type;
+  GOOGLESQL_ASSERT_OK(catalog().FindType({"PG", "JSONB"}, &pg_jsonb_type));
   EXPECT_EQ(pg_jsonb_type, GetPgJsonbType());
 
-  const zetasql::Type* pg_oid_type;
-  ZETASQL_ASSERT_OK(catalog().FindType({"pg", "oid"}, &pg_oid_type));
+  const googlesql::Type* pg_oid_type;
+  GOOGLESQL_ASSERT_OK(catalog().FindType({"pg", "oid"}, &pg_oid_type));
   EXPECT_EQ(pg_oid_type, GetPgOidType());
 
-  const zetasql::Type* empty_type;
+  const googlesql::Type* empty_type;
   EXPECT_THAT(catalog().FindType({"UNKNOWN"}, &empty_type),
               StatusIs(absl::StatusCode::kNotFound));
 }
@@ -936,9 +943,9 @@ TEST_F(CatalogTest, GetUuidType) {
         ) PRIMARY KEY (k))",
       },
       database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
-  const zetasql::Type* uuid_type;
-  ZETASQL_ASSERT_OK(catalog().FindType({"UUID"}, &uuid_type));
-  EXPECT_EQ(uuid_type, zetasql::types::UuidType());
+  const googlesql::Type* uuid_type;
+  GOOGLESQL_ASSERT_OK(catalog().FindType({"UUID"}, &uuid_type));
+  EXPECT_EQ(uuid_type, googlesql::types::UuidType());
 }
 
 }  // namespace

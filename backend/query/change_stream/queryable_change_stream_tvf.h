@@ -21,25 +21,25 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/table_valued_function.h"
+#include "googlesql/public/table_valued_function.h"
 #include "backend/schema/catalog/change_stream.h"
 
 namespace google {
 namespace spanner {
 namespace emulator {
 namespace backend {
-class QueryableChangeStreamTvf : public zetasql::TableValuedFunction {
+class QueryableChangeStreamTvf : public googlesql::TableValuedFunction {
  public:
   explicit QueryableChangeStreamTvf(
       std::vector<std::string> function_name_path,
-      const zetasql::FunctionSignature& signature,
-      const zetasql::TVFRelation& result_schema)
-      : zetasql::TableValuedFunction(function_name_path, signature),
+      const googlesql::FunctionSignature& signature,
+      const googlesql::TVFRelation& result_schema)
+      : googlesql::TableValuedFunction(function_name_path, signature),
         result_schema_(result_schema) {}
 
   static absl::StatusOr<std::unique_ptr<QueryableChangeStreamTvf>> Create(
-      const std::string& tvf_name, zetasql::AnalyzerOptions options,
-      zetasql::Catalog* catalog, zetasql::TypeFactory* type_factory,
+      const std::string& tvf_name, googlesql::AnalyzerOptions options,
+      googlesql::Catalog* catalog, googlesql::TypeFactory* type_factory,
       bool is_pg);
 
   static constexpr char kChangeStreamTvfStartTimestamp[] = "start_timestamp";
@@ -51,24 +51,24 @@ class QueryableChangeStreamTvf : public zetasql::TableValuedFunction {
   ~QueryableChangeStreamTvf() override = default;
 
   // Resolves the output schema which is fixed for change stream TVFs.
-  // See details at `zetasql::TableValuedFunction`
+  // See details at `googlesql::TableValuedFunction`
   absl::Status Resolve(
-      const zetasql::AnalyzerOptions* analyzer_options,
-      const std::vector<zetasql::TVFInputArgumentType>& actual_arguments,
-      const zetasql::FunctionSignature& concrete_signature,
-      zetasql::Catalog* catalog, zetasql::TypeFactory* type_factory,
-      std::shared_ptr<zetasql::TVFSignature>* output_tvf_signature)
+      const googlesql::AnalyzerOptions* analyzer_options,
+      const std::vector<googlesql::TVFInputArgumentType>& actual_arguments,
+      const googlesql::FunctionSignature& concrete_signature,
+      googlesql::Catalog* catalog, googlesql::TypeFactory* type_factory,
+      std::shared_ptr<googlesql::TVFSignature>* output_tvf_signature)
       const final {
     output_tvf_signature->reset(
-        new zetasql::TVFSignature(actual_arguments, result_schema_));
+        new googlesql::TVFSignature(actual_arguments, result_schema_));
     return absl::OkStatus();
   }
 
-  zetasql::TVFRelation result_schema() const { return result_schema_; }
+  googlesql::TVFRelation result_schema() const { return result_schema_; }
 
  private:
   // Output schema of the TVF.
-  const zetasql::TVFRelation result_schema_;
+  const googlesql::TVFRelation result_schema_;
 };
 }  // namespace backend
 }  // namespace emulator

@@ -22,7 +22,7 @@
 #include "absl/time/time.h"
 #include "common/errors.h"
 #include "absl/status/status.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {

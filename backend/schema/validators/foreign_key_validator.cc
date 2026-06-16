@@ -30,9 +30,9 @@
 #include "backend/schema/updater/global_schema_names.h"
 #include "common/errors.h"
 #include "common/limits.h"
-#include "zetasql/base/ret_check.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 #include "absl/status/status.h"
-#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -76,29 +76,29 @@ std::string ColumnUses(const Column* column) {
 
 absl::Status ForeignKeyValidator::Validate(const ForeignKey* foreign_key,
                                            SchemaValidationContext* context) {
-  ZETASQL_RET_CHECK_NE(foreign_key->referencing_table_, nullptr);
-  ZETASQL_RET_CHECK_NE(foreign_key->referenced_table_, nullptr);
+  GOOGLESQL_RET_CHECK_NE(foreign_key->referencing_table_, nullptr);
+  GOOGLESQL_RET_CHECK_NE(foreign_key->referenced_table_, nullptr);
   if (context->is_postgresql_dialect()) {
-    ZETASQL_RET_CHECK(foreign_key->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(foreign_key->postgresql_oid().has_value());
   } else {
-    ZETASQL_RET_CHECK(!foreign_key->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(!foreign_key->postgresql_oid().has_value());
   }
-  ZETASQL_RET_CHECK_EQ(
+  GOOGLESQL_RET_CHECK_EQ(
       foreign_key->referencing_table_->FindForeignKey(foreign_key->Name()),
       foreign_key);
-  ZETASQL_RET_CHECK_EQ(foreign_key->referenced_table_->FindReferencingForeignKey(
+  GOOGLESQL_RET_CHECK_EQ(foreign_key->referenced_table_->FindReferencingForeignKey(
                    foreign_key->Name()),
                foreign_key);
   if (foreign_key->enforced()) {
-    ZETASQL_RET_CHECK_EQ(foreign_key->referencing_data_table(),
+    GOOGLESQL_RET_CHECK_EQ(foreign_key->referencing_data_table(),
                  foreign_key->referencing_index_ == nullptr
                      ? foreign_key->referencing_table_
                      : foreign_key->referencing_index_->index_data_table());
   } else {
-    ZETASQL_RET_CHECK_EQ(foreign_key->referencing_index_, nullptr);
+    GOOGLESQL_RET_CHECK_EQ(foreign_key->referencing_index_, nullptr);
   }
 
-  ZETASQL_RET_CHECK_EQ(foreign_key->referenced_data_table(),
+  GOOGLESQL_RET_CHECK_EQ(foreign_key->referenced_data_table(),
                foreign_key->referenced_index_ == nullptr
                    ? foreign_key->referenced_table_
                    : foreign_key->referenced_index_->index_data_table());
@@ -106,7 +106,7 @@ absl::Status ForeignKeyValidator::Validate(const ForeignKey* foreign_key,
   std::string referencing_table_name = foreign_key->referencing_table_->Name();
   std::string referenced_table_name = foreign_key->referenced_table_->Name();
   const std::string& foreign_key_name = foreign_key->Name();
-  ZETASQL_RETURN_IF_ERROR(GlobalSchemaNames::ValidateConstraintName(
+  GOOGLESQL_RETURN_IF_ERROR(GlobalSchemaNames::ValidateConstraintName(
       referencing_table_name, "Foreign Key", foreign_key_name));
 
   if (foreign_key->referencing_columns_.empty() ||
@@ -158,25 +158,25 @@ absl::Status ForeignKeyValidator::ValidateUpdate(
     return absl::OkStatus();
   }
   // If the table was deleted, the foreign key should have been marked deleted.
-  ZETASQL_RET_CHECK(!foreign_key->referencing_table_->is_deleted());
+  GOOGLESQL_RET_CHECK(!foreign_key->referencing_table_->is_deleted());
 
   // Foreign keys cannot be modified once created.
-  ZETASQL_RET_CHECK_EQ(foreign_key->constraint_name_,
+  GOOGLESQL_RET_CHECK_EQ(foreign_key->constraint_name_,
                old_foreign_key->constraint_name_);
-  ZETASQL_RET_CHECK_EQ(foreign_key->generated_name_, old_foreign_key->generated_name_);
-  ZETASQL_RET_CHECK_EQ(foreign_key->referencing_table_->Name(),
+  GOOGLESQL_RET_CHECK_EQ(foreign_key->generated_name_, old_foreign_key->generated_name_);
+  GOOGLESQL_RET_CHECK_EQ(foreign_key->referencing_table_->Name(),
                old_foreign_key->referencing_table_->Name());
-  ZETASQL_RET_CHECK_EQ(foreign_key->referenced_table_->Name(),
+  GOOGLESQL_RET_CHECK_EQ(foreign_key->referenced_table_->Name(),
                old_foreign_key->referenced_table_->Name());
 
   if (context->is_postgresql_dialect()) {
-    ZETASQL_RET_CHECK(foreign_key->postgresql_oid().has_value());
-    ZETASQL_RET_CHECK(old_foreign_key->postgresql_oid().has_value());
-    ZETASQL_RET_CHECK_EQ(foreign_key->postgresql_oid().value(),
+    GOOGLESQL_RET_CHECK(foreign_key->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(old_foreign_key->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK_EQ(foreign_key->postgresql_oid().value(),
                  old_foreign_key->postgresql_oid().value());
   } else {
-    ZETASQL_RET_CHECK(!foreign_key->postgresql_oid().has_value());
-    ZETASQL_RET_CHECK(!old_foreign_key->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(!foreign_key->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(!old_foreign_key->postgresql_oid().has_value());
   }
 
   // Foreign keys must be dropped before their referenced tables.
@@ -193,12 +193,12 @@ absl::Status ForeignKeyValidator::ValidateUpdate(
         std::make_pair(&foreign_key->referenced_columns_,
                        &old_foreign_key->referenced_columns_)}) {
     // The list of referencing and referenced columns cannot be modified.
-    ZETASQL_RET_CHECK_EQ(columns->size(), old_columns->size());
+    GOOGLESQL_RET_CHECK_EQ(columns->size(), old_columns->size());
     for (int i = 0; i < columns->size(); ++i) {
       const Column* column = columns->at(i);
       const Column* old_column = old_columns->at(i);
       // The order of columns cannot change.
-      ZETASQL_RET_CHECK_EQ(column->Name(), old_column->Name());
+      GOOGLESQL_RET_CHECK_EQ(column->Name(), old_column->Name());
       // Validate column updates.
       if (column->is_deleted()) {
         return error::ForeignKeyColumnDropNotAllowed(

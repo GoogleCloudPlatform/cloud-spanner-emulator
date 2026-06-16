@@ -75,10 +75,10 @@ cc_test(
         "@com_google_absl//absl/synchronization",
         "@com_google_googleapis//google/spanner/admin/database/v1:database_cc_proto",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_proto",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest_main",
         "@com_google_protobuf//:cc_wkt_protos",
         "@com_google_protobuf//:protobuf",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -123,9 +123,9 @@ cc_test(
         "@com_google_absl//absl/types:optional",
         "@com_google_googleapis//google/longrunning:longrunning_cc_grpc",
         "@com_google_googleapis//google/spanner/admin/instance/v1:instance_cc_grpc",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest_main",
         "@com_google_protobuf//:cc_wkt_protos",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -152,8 +152,8 @@ cc_test(
         "//tests/common:test_env",
         "@com_github_google_benchmark//:benchmark",
         "@com_github_grpc_grpc//:grpc++",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -194,8 +194,8 @@ cc_test(
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/status",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -213,8 +213,8 @@ cc_test(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/types:span",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -241,8 +241,8 @@ cc_test(
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_googleapis//google/iam/v1:iam_policy_cc_proto",
         "@com_google_googleapis//google/iam/v1:policy_cc_proto",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -275,8 +275,8 @@ cc_library(
         "@com_google_absl//absl/types:variant",
         "@com_google_farmhash//:farmhash_fingerprint",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
+        "@com_google_googlesql//googlesql/public:analyzer_options",
         "@com_google_protobuf//:cc_wkt_protos",
-        "@com_google_zetasql//zetasql/public:analyzer_options",
     ],
     alwayslink = 1,
 )
@@ -300,8 +300,8 @@ cc_test(
         "@com_google_googleapis//google/spanner/admin/database/v1:database_cc_proto",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_proto",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -342,8 +342,8 @@ cc_test(
         "@com_google_absl//absl/strings",
         "@com_google_googleapis//google/spanner/admin/database/v1:database_cc_proto",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_proto",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -361,6 +361,7 @@ cc_library(
         "//frontend/server:handler",
         "@com_google_absl//absl/status",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
+        "@com_google_googlesql//googlesql/base:status",
     ],
     alwayslink = 1,
 )
@@ -380,8 +381,8 @@ cc_test(
         "@com_google_absl//absl/strings:string_view",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_proto",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -402,6 +403,7 @@ cc_library(
         "//frontend/server:handler",
         "@com_google_absl//absl/status",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
+        "@com_google_googlesql//googlesql/base:status",
         "@com_google_protobuf//:cc_wkt_protos",
     ],
     alwayslink = 1,
@@ -421,9 +423,9 @@ cc_test(
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_googleapis//google/spanner/admin/database/v1:database_cc_proto",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest_main",
         "@com_google_protobuf//:cc_wkt_protos",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -443,6 +445,7 @@ cc_library(
         "@com_google_absl//absl/time",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_proto",
+        "@com_google_googlesql//googlesql/base:status",
         "@com_google_protobuf//:cc_wkt_protos",
     ],
     alwayslink = 1,
@@ -470,8 +473,8 @@ cc_test(
         "@com_google_absl//absl/strings",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_proto",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -499,7 +502,7 @@ cc_library(
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
-        "@com_google_zetasql//zetasql/base:ret_check",
+        "@com_google_googlesql//googlesql/base:ret_check",
     ],
     alwayslink = 1,
 )
@@ -536,10 +539,10 @@ cc_test(
         "@com_google_googleapis//google/spanner/admin/database/v1:database_cc_proto",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_proto",
+        "@com_google_googlesql//googlesql/base:ret_check",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest_main",
         "@com_google_protobuf//:cc_wkt_protos",
-        "@com_google_zetasql//zetasql/base:ret_check",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 

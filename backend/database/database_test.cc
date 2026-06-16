@@ -23,7 +23,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "backend/access/read.h"
@@ -40,8 +40,8 @@ namespace emulator {
 namespace backend {
 namespace {
 
-using zetasql::values::Int64;
-using zetasql_base::testing::StatusIs;
+using googlesql::values::Int64;
+using googlesql_base::testing::StatusIs;
 
 constexpr char kDatabaseId[] = "test-db";
 
@@ -62,10 +62,10 @@ class DatabaseTest : public ::testing::Test {
 };
 
 TEST_F(DatabaseTest, CreateSuccessful) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<Database> database,
       Database::Create(&clock_, kDatabaseId, SchemaChangeOperation{}));
-  // Verifies that by default, a ZetaSQL database is created.
+  // Verifies that by default, a GoogleSQL database is created.
   EXPECT_EQ(database->dialect(),
             database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
 
@@ -78,17 +78,17 @@ TEST_F(DatabaseTest, CreateSuccessful) {
                                                 R"(
     CREATE INDEX I on T(k1))"};
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       database,
       Database::Create(&clock_, kDatabaseId,
                        SchemaChangeOperation{.statements = create_statements}));
-  // Verifies that by default, a ZetaSQL database is created.
+  // Verifies that by default, a GoogleSQL database is created.
   EXPECT_EQ(database->dialect(),
             database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
 }
 
 TEST_F(DatabaseTest, CreateWithGSQLDialectSuccessful) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<Database> database,
       Database::Create(
           &clock_, kDatabaseId,
@@ -107,7 +107,7 @@ TEST_F(DatabaseTest, CreateWithGSQLDialectSuccessful) {
                                                 R"(
     CREATE INDEX I on T(k1))"};
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       database,
       Database::Create(
           &clock_, kDatabaseId,
@@ -120,7 +120,7 @@ TEST_F(DatabaseTest, CreateWithGSQLDialectSuccessful) {
 }
 
 TEST_F(DatabaseTest, CreateWithPostgresDialectSuccessful) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<Database> database,
       Database::Create(
           &clock_, kDatabaseId,
@@ -137,7 +137,7 @@ TEST_F(DatabaseTest, CreateWithPostgresDialectSuccessful) {
                                                 R"(
     CREATE INDEX I on T(k1))"};
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       database,
       Database::Create(
           &clock_, kDatabaseId,
@@ -148,7 +148,7 @@ TEST_F(DatabaseTest, CreateWithPostgresDialectSuccessful) {
 }
 
 TEST_F(DatabaseTest, UpdateSchemaSuccessful) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto db, Database::Create(&clock_, kDatabaseId, SchemaChangeOperation{}));
 
   std::vector<std::string> update_statements = {R"(
@@ -164,10 +164,10 @@ TEST_F(DatabaseTest, UpdateSchemaSuccessful) {
   absl::Status backfill_status;
   int completed_statements;
   absl::Time commit_ts;
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       db->UpdateSchema(SchemaChangeOperation{.statements = update_statements},
                        &completed_statements, &commit_ts, &backfill_status));
-  ZETASQL_EXPECT_OK(backfill_status);
+  GOOGLESQL_EXPECT_OK(backfill_status);
 }
 
 TEST_F(DatabaseTest, UpdateSchemaPartialSuccess) {
@@ -177,12 +177,12 @@ TEST_F(DatabaseTest, UpdateSchemaPartialSuccess) {
       k2 INT64,
     ) PRIMARY KEY(k1)
   )"};
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto db,
       Database::Create(&clock_, kDatabaseId,
                        SchemaChangeOperation{.statements = create_statements}));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<ReadWriteTransaction> txn,
       db->CreateReadWriteTransaction(ReadWriteOptions(), RetryState()));
 
@@ -193,8 +193,8 @@ TEST_F(DatabaseTest, UpdateSchemaPartialSuccess) {
                {{Int64(2), Int64(2)}});
   m.AddWriteOp(MutationOpType::kInsert, "T", {"k1", "k2"},
                {{Int64(3), Int64(2)}});
-  ZETASQL_ASSERT_OK(txn->Write(m));
-  ZETASQL_ASSERT_OK(txn->Commit());
+  GOOGLESQL_ASSERT_OK(txn->Write(m));
+  GOOGLESQL_ASSERT_OK(txn->Commit());
 
   std::vector<std::string> update_statements = {R"(
     CREATE TABLE T1(
@@ -215,7 +215,7 @@ TEST_F(DatabaseTest, UpdateSchemaPartialSuccess) {
   absl::Time commit_ts;
 
   // The statements are semantically valid, indicated by an OK return status.
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       db->UpdateSchema(SchemaChangeOperation{.statements = update_statements},
                        &completed_statements, &commit_ts, &backfill_status));
 
@@ -237,17 +237,17 @@ TEST_F(DatabaseTest, ConcurrentSchemaChangeIsAborted) {
       k2 INT64,
     ) PRIMARY KEY(k1)
   )"};
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto db,
       Database::Create(&clock_, kDatabaseId,
                        SchemaChangeOperation{.statements = create_statements}));
 
   // Initiate a Read inside a read-write transaction to acquire locks.
   std::unique_ptr<RowCursor> row_cursor;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<ReadWriteTransaction> txn,
       db->CreateReadWriteTransaction(ReadWriteOptions(), RetryState()));
-  ZETASQL_EXPECT_OK(txn->Read(read_column("T", "k1"), &row_cursor));
+  GOOGLESQL_EXPECT_OK(txn->Read(read_column("T", "k1"), &row_cursor));
 
   std::vector<std::string> update_statements = {R"(
     CREATE TABLE T(
@@ -273,7 +273,7 @@ TEST_F(DatabaseTest, SchemaChangeLocksSuccesfullyReleased) {
       k2 INT64,
     ) PRIMARY KEY(k1)
   )"};
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto db,
       Database::Create(&clock_, kDatabaseId,
                        SchemaChangeOperation{.statements = create_statements}));
@@ -295,11 +295,11 @@ TEST_F(DatabaseTest, SchemaChangeLocksSuccesfullyReleased) {
 
   // Can still run transactions as locks would have been released.
   std::unique_ptr<RowCursor> row_cursor;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<ReadWriteTransaction> txn,
       db->CreateReadWriteTransaction(ReadWriteOptions(), RetryState()));
-  ZETASQL_EXPECT_OK(txn->Read(read_column("T", "k1"), &row_cursor));
-  ZETASQL_EXPECT_OK(txn->Commit());
+  GOOGLESQL_EXPECT_OK(txn->Read(read_column("T", "k1"), &row_cursor));
+  GOOGLESQL_EXPECT_OK(txn->Commit());
 }
 
 }  // namespace

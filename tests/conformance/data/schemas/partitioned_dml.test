@@ -1,0 +1,19 @@
+@Dialect=GOOGLE_STANDARD_SQL
+CREATE TABLE Users(
+  ID       INT64 NOT NULL,
+  Name     STRING(MAX),
+  Age      INT64,
+  Updated  TIMESTAMP OPTIONS (allow_commit_timestamp = true),
+) PRIMARY KEY (ID);
+CREATE SEQUENCE mysequence OPTIONS (
+  sequence_kind = "bit_reversed_positive"
+);
+===
+@Dialect=POSTGRESQL
+CREATE TABLE Users(
+  ID       int8 NOT NULL PRIMARY KEY,
+  Name     text,
+  Age      int8,
+  Updated  spanner.commit_timestamp
+);
+CREATE SEQUENCE mysequence BIT_REVERSED_POSITIVE;

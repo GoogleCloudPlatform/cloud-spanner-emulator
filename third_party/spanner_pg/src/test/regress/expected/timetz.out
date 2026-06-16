@@ -131,6 +131,37 @@ SELECT '25:00:00 PDT'::timetz;  -- not allowed
 ERROR:  date/time field value out of range: "25:00:00 PDT"
 LINE 1: SELECT '25:00:00 PDT'::timetz;
                ^
+-- Test non-error-throwing API
+SELECT pg_input_is_valid('12:00:00 PDT', 'timetz');
+ pg_input_is_valid 
+-------------------
+ t
+(1 row)
+
+SELECT pg_input_is_valid('25:00:00 PDT', 'timetz');
+ pg_input_is_valid 
+-------------------
+ f
+(1 row)
+
+SELECT pg_input_is_valid('15:36:39 America/New_York', 'timetz');
+ pg_input_is_valid 
+-------------------
+ f
+(1 row)
+
+SELECT * FROM pg_input_error_info('25:00:00 PDT', 'timetz');
+                      message                       | detail | hint | sql_error_code 
+----------------------------------------------------+--------+------+----------------
+ date/time field value out of range: "25:00:00 PDT" |        |      | 22008
+(1 row)
+
+SELECT * FROM pg_input_error_info('15:36:39 America/New_York', 'timetz');
+                                    message                                     | detail | hint | sql_error_code 
+--------------------------------------------------------------------------------+--------+------+----------------
+ invalid input syntax for type time with time zone: "15:36:39 America/New_York" |        |      | 22007
+(1 row)
+
 --
 -- TIME simple math
 --
@@ -243,13 +274,13 @@ CREATE VIEW timetz_local_view AS
   FROM TIMETZ_TBL
   ORDER BY f1;
 SELECT pg_get_viewdef('timetz_local_view', true);
-                                  pg_get_viewdef                                  
-----------------------------------------------------------------------------------
-  SELECT timetz_tbl.f1 AS dat,                                                   +
-     (timetz_tbl.f1 AT TIME ZONE current_setting('TimeZone'::text)) AS dat_at_tz,+
-     (timetz_tbl.f1 AT TIME ZONE '@ 0'::interval) AS dat_at_int                  +
-    FROM timetz_tbl                                                              +
-   ORDER BY timetz_tbl.f1;
+                            pg_get_viewdef                             
+-----------------------------------------------------------------------
+  SELECT f1 AS dat,                                                   +
+     (f1 AT TIME ZONE current_setting('TimeZone'::text)) AS dat_at_tz,+
+     (f1 AT TIME ZONE '@ 0'::interval) AS dat_at_int                  +
+    FROM timetz_tbl                                                   +
+   ORDER BY f1;
 (1 row)
 
 TABLE timetz_local_view;

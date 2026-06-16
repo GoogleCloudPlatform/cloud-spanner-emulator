@@ -19,7 +19,7 @@
 
 #include <memory>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/container/btree_map.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"

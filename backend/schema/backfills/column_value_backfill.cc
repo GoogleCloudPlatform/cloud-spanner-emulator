@@ -19,9 +19,9 @@
 #include <memory>
 #include <vector>
 
-#include "zetasql/public/analyzer_options.h"
-#include "zetasql/public/type.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/type.h"
+#include "googlesql/public/value.h"
 #include "absl/status/statusor.h"
 #include "backend/actions/evaluated_column.h"
 #include "backend/datamodel/types.h"
@@ -29,8 +29,8 @@
 #include "backend/query/catalog.h"
 #include "backend/query/function_catalog.h"
 #include "backend/schema/catalog/table.h"
+#include "googlesql/base/status_macros.h"
 #include "absl/status/status.h"
-#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -39,67 +39,67 @@ namespace backend {
 
 namespace {
 
-absl::StatusOr<zetasql::Value> RewriteColumnValue(
-    const zetasql::Type* old_column_type,
-    const zetasql::Type* new_column_type, const zetasql::Value& value) {
-  ZETASQL_RET_CHECK(old_column_type != nullptr && new_column_type != nullptr);
+absl::StatusOr<googlesql::Value> RewriteColumnValue(
+    const googlesql::Type* old_column_type,
+    const googlesql::Type* new_column_type, const googlesql::Value& value) {
+  GOOGLESQL_RET_CHECK(old_column_type != nullptr && new_column_type != nullptr);
 
   if (!value.is_valid()) {
     return value;
   }
 
   if (value.is_null()) {
-    return zetasql::Value::Null(new_column_type);
+    return googlesql::Value::Null(new_column_type);
   }
 
   if (old_column_type->IsArray()) {
-    ZETASQL_RET_CHECK(new_column_type->IsArray());
+    GOOGLESQL_RET_CHECK(new_column_type->IsArray());
     const auto* old_elem_type = BaseType(old_column_type);
     const auto* new_elem_type = BaseType(new_column_type);
-    std::vector<zetasql::Value> array_elements;
+    std::vector<googlesql::Value> array_elements;
     array_elements.reserve(value.elements().size());
     for (const auto& element : value.elements()) {
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           auto new_element,
           RewriteColumnValue(old_elem_type, new_elem_type, element));
       array_elements.push_back(new_element);
     }
-    return zetasql::Value::Array(new_column_type->AsArray(), array_elements);
+    return googlesql::Value::Array(new_column_type->AsArray(), array_elements);
   }
 
   if (old_column_type->IsString() && new_column_type->IsBytes()) {
-    return zetasql::Value::Bytes(value.string_value());
+    return googlesql::Value::Bytes(value.string_value());
   }
 
   if (old_column_type->IsBytes() && new_column_type->IsString()) {
-    return zetasql::Value::String(value.bytes_value());
+    return googlesql::Value::String(value.bytes_value());
   }
 
   if (old_column_type->IsProto() && new_column_type->IsBytes()) {
-    return zetasql::Value::Bytes(value.proto_value());
+    return googlesql::Value::Bytes(value.proto_value());
   }
 
   if (old_column_type->IsProto() && new_column_type->IsProto()) {
-    return zetasql::Value::Proto(new_column_type->AsProto(),
+    return googlesql::Value::Proto(new_column_type->AsProto(),
                                    value.proto_value());
   }
 
   if (old_column_type->IsBytes() && new_column_type->IsProto()) {
-    return zetasql::Value::Proto(new_column_type->AsProto(),
+    return googlesql::Value::Proto(new_column_type->AsProto(),
                                    absl::Cord(value.bytes_value()));
   }
 
   if (old_column_type->IsEnum() && new_column_type->IsInt64()) {
-    return zetasql::Value::Int64(value.enum_value());
+    return googlesql::Value::Int64(value.enum_value());
   }
 
   if (old_column_type->IsInt64() && new_column_type->IsEnum()) {
-    return zetasql::Value::Enum(new_column_type->AsEnum(),
+    return googlesql::Value::Enum(new_column_type->AsEnum(),
                                   value.int64_value());
   }
 
   if (old_column_type->IsEnum() && new_column_type->IsEnum()) {
-    return zetasql::Value::Enum(new_column_type->AsEnum(), value.enum_value(),
+    return googlesql::Value::Enum(new_column_type->AsEnum(), value.enum_value(),
                                   true /*allow_unknown_enum_values=*/);
   }
   return absl::InternalError("Invalid type conversion");
@@ -110,23 +110,23 @@ absl::StatusOr<zetasql::Value> RewriteColumnValue(
 absl::Status BackfillColumnValue(const Column* old_column,
                                  const Column* new_column,
                                  const SchemaValidationContext* context) {
-  ZETASQL_RET_CHECK_EQ(old_column->id(), new_column->id());
+  GOOGLESQL_RET_CHECK_EQ(old_column->id(), new_column->id());
   auto column_id = old_column->id();
   const Table* table = old_column->table();
 
   std::unique_ptr<StorageIterator> itr;
-  ZETASQL_RETURN_IF_ERROR(context->storage()->Read(context->pending_commit_timestamp(),
+  GOOGLESQL_RETURN_IF_ERROR(context->storage()->Read(context->pending_commit_timestamp(),
                                            table->id(), KeyRange::All(),
                                            {column_id}, &itr));
 
   while (itr->Next()) {
-    std::vector<zetasql::Value> row_values;
-    ZETASQL_RET_CHECK_EQ(itr->NumColumns(), 1);
-    const zetasql::Value& orig_value = itr->ColumnValue(0);
-    ZETASQL_ASSIGN_OR_RETURN(const auto new_column_value,
+    std::vector<googlesql::Value> row_values;
+    GOOGLESQL_RET_CHECK_EQ(itr->NumColumns(), 1);
+    const googlesql::Value& orig_value = itr->ColumnValue(0);
+    GOOGLESQL_ASSIGN_OR_RETURN(const auto new_column_value,
                      RewriteColumnValue(old_column->GetType(),
                                         new_column->GetType(), orig_value));
-    ZETASQL_RETURN_IF_ERROR(context->storage()->Write(
+    GOOGLESQL_RETURN_IF_ERROR(context->storage()->Write(
         context->pending_commit_timestamp(), table->id(), itr->Key(),
         {column_id}, {new_column_value}));
   }
@@ -136,16 +136,16 @@ absl::Status BackfillColumnValue(const Column* old_column,
 
 absl::Status BackfillEvaluatedColumnValue(
     const Column* evaluated_column, const SchemaValidationContext* context) {
-  ZETASQL_RET_CHECK(evaluated_column != nullptr &&
+  GOOGLESQL_RET_CHECK(evaluated_column != nullptr &&
             (evaluated_column->is_generated() ||
              evaluated_column->has_default_value()));
-  ZETASQL_RET_CHECK_NE(context, nullptr);
+  GOOGLESQL_RET_CHECK_NE(context, nullptr);
   FunctionCatalog function_catalog(
       context->type_factory(),
       /*catalog_name=*/kCloudSpannerEmulatorFunctionCatalogName,
       /*latest_schema=*/context->validated_new_schema());
   function_catalog.SetLatestSchema(context->validated_new_schema());
-  zetasql::AnalyzerOptions analyzer_options = MakeGoogleSqlAnalyzerOptions(
+  googlesql::AnalyzerOptions analyzer_options = MakeGoogleSqlAnalyzerOptions(
       context->validated_new_schema()->default_time_zone());
   Catalog catalog(context->validated_new_schema(), &function_catalog,
                   context->type_factory(), analyzer_options);
@@ -154,25 +154,25 @@ absl::Status BackfillEvaluatedColumnValue(
 
   std::vector<ColumnID> column_ids = GetColumnIDs(table->columns());
   std::unique_ptr<StorageIterator> itr;
-  ZETASQL_RETURN_IF_ERROR(context->storage()->Read(context->pending_commit_timestamp(),
+  GOOGLESQL_RETURN_IF_ERROR(context->storage()->Read(context->pending_commit_timestamp(),
                                            table->id(), KeyRange::All(),
                                            column_ids, &itr));
   while (itr->Next()) {
-    zetasql::ParameterValueMap row_column_values;
+    googlesql::ParameterValueMap row_column_values;
     for (int i = 0; i < itr->NumColumns(); ++i) {
       // Storage returns invalid values if a value is not present, in which case
       // we convert it into a typed NULL.
       row_column_values[table->columns()[i]->Name()] =
           itr->ColumnValue(i).is_valid()
               ? itr->ColumnValue(i)
-              : zetasql::Value::Null(table->columns()[i]->GetType());
+              : googlesql::Value::Null(table->columns()[i]->GetType());
     }
 
-    ZETASQL_ASSIGN_OR_RETURN(zetasql::Value value,
+    GOOGLESQL_ASSIGN_OR_RETURN(googlesql::Value value,
                      effector.ComputeEvaluatedColumnValue(evaluated_column,
                                                           row_column_values));
 
-    ZETASQL_RETURN_IF_ERROR(context->storage()->Write(
+    GOOGLESQL_RETURN_IF_ERROR(context->storage()->Write(
         context->pending_commit_timestamp(), table->id(), itr->Key(),
         {evaluated_column->id()}, {value}));
   }

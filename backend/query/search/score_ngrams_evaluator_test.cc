@@ -19,10 +19,10 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "backend/query/search/plain_full_text_tokenizer.h"
@@ -37,12 +37,12 @@ namespace query {
 namespace search {
 
 using testing::HasSubstr;
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 TEST(ScoreNgramsEvaluatorTest, EvaluateWrongSearchColumnType) {
-  std::vector<zetasql::Value> args;
-  args.push_back(zetasql::Value::Bool(false));
-  args.push_back(zetasql::Value::String("test"));
+  std::vector<googlesql::Value> args;
+  args.push_back(googlesql::Value::Bool(false));
+  args.push_back(googlesql::Value::String("test"));
 
   EXPECT_THAT(
       ScoreNgramsEvaluator::Evaluate(args),
@@ -53,11 +53,11 @@ TEST(ScoreNgramsEvaluatorTest, EvaluateWrongSearchColumnType) {
 }
 
 TEST(ScoreNgramsEvaluatorTest, EvaluateWrongSearchQueryType) {
-  std::vector<zetasql::Value> args;
+  std::vector<googlesql::Value> args;
   const auto ngrams_tokenlist =
-      NgramsTokenizer::Tokenize({zetasql::Value::String("foo")});
+      NgramsTokenizer::Tokenize({googlesql::Value::String("foo")});
   args.push_back(*ngrams_tokenlist);
-  args.push_back(zetasql::Value::Bool(false));
+  args.push_back(googlesql::Value::Bool(false));
 
   EXPECT_THAT(ScoreNgramsEvaluator::Evaluate(args),
               StatusIs(absl::StatusCode::kInvalidArgument,
@@ -65,11 +65,11 @@ TEST(ScoreNgramsEvaluatorTest, EvaluateWrongSearchQueryType) {
 }
 
 TEST(ScoreNgramsEvaluatorTest, EvaluateOnWrongTokenList) {
-  std::vector<zetasql::Value> args;
+  std::vector<googlesql::Value> args;
   const auto fulltext_tokenlist =
-      PlainFullTextTokenizer::Tokenize({zetasql::Value::String("fulltext")});
+      PlainFullTextTokenizer::Tokenize({googlesql::Value::String("fulltext")});
   args.push_back(*fulltext_tokenlist);
-  args.push_back(zetasql::Value::String("test"));
+  args.push_back(googlesql::Value::String("test"));
 
   EXPECT_THAT(
       ScoreNgramsEvaluator::Evaluate(args),
@@ -81,31 +81,31 @@ TEST(ScoreNgramsEvaluatorTest, EvaluateOnWrongTokenList) {
 }
 
 TEST(ScoreNgramsEvaluatorTest, EvaluateOnNullQueryReturnsZero) {
-  std::vector<zetasql::Value> args;
+  std::vector<googlesql::Value> args;
   const auto ngrams_tokenlist =
-      NgramsTokenizer::Tokenize({zetasql::Value::String("foo")});
+      NgramsTokenizer::Tokenize({googlesql::Value::String("foo")});
   args.push_back(*ngrams_tokenlist);
-  args.push_back(zetasql::Value::NullString());
+  args.push_back(googlesql::Value::NullString());
 
-  absl::StatusOr<zetasql::Value> result =
+  absl::StatusOr<googlesql::Value> result =
       ScoreNgramsEvaluator::Evaluate(args);
-  ZETASQL_EXPECT_OK(result.status());
+  GOOGLESQL_EXPECT_OK(result.status());
 
-  zetasql::Value score = result.value();
+  googlesql::Value score = result.value();
   EXPECT_TRUE(score.type()->IsDouble());
   EXPECT_EQ(0.0, score.double_value());
 }
 
 TEST(ScoreNgramsEvaluatorTest, EvaluateOnNullTokenListReturnsZero) {
-  std::vector<zetasql::Value> args;
-  args.push_back(zetasql::Value::NullTokenList());
-  args.push_back(zetasql::Value::String("test"));
+  std::vector<googlesql::Value> args;
+  args.push_back(googlesql::Value::NullTokenList());
+  args.push_back(googlesql::Value::String("test"));
 
-  absl::StatusOr<zetasql::Value> result =
+  absl::StatusOr<googlesql::Value> result =
       ScoreNgramsEvaluator::Evaluate(args);
-  ZETASQL_EXPECT_OK(result.status());
+  GOOGLESQL_EXPECT_OK(result.status());
 
-  zetasql::Value score = result.value();
+  googlesql::Value score = result.value();
   EXPECT_TRUE(score.type()->IsDouble());
   EXPECT_EQ(0.0, score.double_value());
 }
@@ -121,15 +121,15 @@ using ScoreNgramsEvaluatorTest =
 
 TEST_P(ScoreNgramsEvaluatorTest, TestScoreNgramsEvaluate) {
   const ScoreNgramsEvaluatorTestCase& test_case = GetParam();
-  zetasql::Value query = zetasql::Value::String(test_case.query);
-  std::vector<zetasql::Value> args{TokenListFromStrings(test_case.tokens),
+  googlesql::Value query = googlesql::Value::String(test_case.query);
+  std::vector<googlesql::Value> args{TokenListFromStrings(test_case.tokens),
                                      query};
 
-  absl::StatusOr<zetasql::Value> result =
+  absl::StatusOr<googlesql::Value> result =
       ScoreNgramsEvaluator::Evaluate(args);
-  ZETASQL_EXPECT_OK(result.status());
+  GOOGLESQL_EXPECT_OK(result.status());
 
-  zetasql::Value score = result.value();
+  googlesql::Value score = result.value();
   EXPECT_TRUE(score.type()->IsDouble());
 
   EXPECT_EQ(test_case.expected_result, score.double_value());

@@ -3,7 +3,7 @@
  * toast_internals.c
  *	  Functions for internal use by the TOAST system.
  *
- * Copyright (c) 2000-2022, PostgreSQL Global Development Group
+ * Copyright (c) 2000-2023, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/access/common/toast_internals.c
@@ -136,7 +136,7 @@ toast_save_datum(Relation rel, Datum value,
 		char		data[TOAST_MAX_CHUNK_SIZE + VARHDRSZ];
 		/* ensure union is aligned well enough: */
 		int32		align_it;
-	}			chunk_data;
+	}			chunk_data = {0};	/* silence compiler warning */
 	int32		chunk_size;
 	int32		chunk_seq = 0;
 	char	   *data_p;

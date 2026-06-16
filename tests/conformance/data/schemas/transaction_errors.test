@@ -1,0 +1,39 @@
+@Dialect=GOOGLE_STANDARD_SQL
+CREATE TABLE Users(
+  ID       INT64 NOT NULL,
+  Name     STRING(MAX),
+  Age      INT64,
+  Updated  TIMESTAMP,
+) PRIMARY KEY (ID);
+CREATE TABLE Nullable(
+  Key      INT64,
+  Value    STRING(MAX),
+) PRIMARY KEY (Key);
+CREATE TABLE Singleton(
+  Col1     STRING(MAX),
+  Col2     STRING(MAX),
+) PRIMARY KEY ();
+CREATE TABLE ArrayFields(
+  Key      INT64,
+  ArrayCol ARRAY<INT64>,
+) PRIMARY KEY(Key);
+===
+@Dialect=POSTGRESQL
+CREATE TABLE Users(
+  ID       int8 NOT NULL,
+  Name     text,
+  Age      int8,
+  Updated  timestamptz,
+  PRIMARY KEY (ID)
+);
+CREATE TABLE Nullable(
+  Key      int8,
+  Value    text,
+  PRIMARY KEY (Key)
+);
+-- Singleton table is not supported
+CREATE TABLE ArrayFields(
+  Key      int8,
+  ArrayCol int8[],
+  PRIMARY KEY(Key)
+);

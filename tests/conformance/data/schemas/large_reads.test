@@ -1,0 +1,13 @@
+@Dialect=GOOGLE_STANDARD_SQL
+CREATE TABLE Users(
+  ID   INT64,
+  Name STRING(MAX),
+  List ARRAY<STRING(MAX)>,
+) PRIMARY KEY (ID);
+===
+@Dialect=POSTGRESQL
+CREATE TABLE Users(
+  ID   int8 PRIMARY KEY,
+  Name text,
+  List text[]
+);

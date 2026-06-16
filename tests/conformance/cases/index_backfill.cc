@@ -18,7 +18,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "tests/common/scoped_feature_flags_setter.h"
@@ -31,7 +31,7 @@ namespace test {
 
 namespace {
 
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 class IndexBackfillTest
     : public DatabaseTest,
@@ -57,11 +57,11 @@ INSTANTIATE_TEST_SUITE_P(
     });
 
 TEST_P(IndexBackfillTest, BackfillForUniqueIndexSucceeds) {
-  ZETASQL_EXPECT_OK(Insert("users", {"user_id", "name", "age"}, {1, "user1", 20}));
-  ZETASQL_EXPECT_OK(Insert("users", {"user_id", "name", "age"}, {2, "user1", 25}));
-  ZETASQL_EXPECT_OK(Insert("users", {"user_id", "name", "age"}, {3, "user2", 20}));
+  GOOGLESQL_EXPECT_OK(Insert("users", {"user_id", "name", "age"}, {1, "user1", 20}));
+  GOOGLESQL_EXPECT_OK(Insert("users", {"user_id", "name", "age"}, {2, "user1", 25}));
+  GOOGLESQL_EXPECT_OK(Insert("users", {"user_id", "name", "age"}, {3, "user2", 20}));
 
-  ZETASQL_EXPECT_OK(UpdateSchema(
+  GOOGLESQL_EXPECT_OK(UpdateSchema(
       {"CREATE UNIQUE INDEX users_by_name_age_unique ON users(name, age)"}));
 
   EXPECT_THAT(ReadWithIndex("users", "users_by_name_age_unique",
@@ -71,8 +71,8 @@ TEST_P(IndexBackfillTest, BackfillForUniqueIndexSucceeds) {
 
 TEST_P(IndexBackfillTest,
        BackfillForUniqueIndexFailsWithUniquenessViolationFails) {
-  ZETASQL_EXPECT_OK(Insert("users", {"user_id", "name", "age"}, {1, "user", 20}));
-  ZETASQL_EXPECT_OK(Insert("users", {"user_id", "name", "age"}, {2, "user", 20}));
+  GOOGLESQL_EXPECT_OK(Insert("users", {"user_id", "name", "age"}, {1, "user", 20}));
+  GOOGLESQL_EXPECT_OK(Insert("users", {"user_id", "name", "age"}, {2, "user", 20}));
 
   EXPECT_THAT(
       UpdateSchema(
@@ -81,7 +81,7 @@ TEST_P(IndexBackfillTest,
 }
 
 TEST_P(IndexBackfillTest, ValidateCreationOfDuplicateIndexFails) {
-  ZETASQL_EXPECT_OK(UpdateSchema(
+  GOOGLESQL_EXPECT_OK(UpdateSchema(
       {"CREATE INDEX users_by_name_age_unique ON users(name, age)"}));
   EXPECT_THAT(
       UpdateSchema(
@@ -91,7 +91,7 @@ TEST_P(IndexBackfillTest, ValidateCreationOfDuplicateIndexFails) {
 
 TEST_P(IndexBackfillTest, BackfillOfIndexOnInterleavedTableSucceeds) {
   if (dialect_ == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
-    ZETASQL_EXPECT_OK(UpdateSchema({R"(
+    GOOGLESQL_EXPECT_OK(UpdateSchema({R"(
     CREATE TABLE photos(
       user_id    INT64 NOT NULL,
       photo_id   INT64 NOT NULL,
@@ -100,7 +100,7 @@ TEST_P(IndexBackfillTest, BackfillOfIndexOnInterleavedTableSucceeds) {
     INTERLEAVE IN PARENT users ON DELETE CASCADE
   )"}));
   } else {
-    ZETASQL_EXPECT_OK(UpdateSchema({R"(
+    GOOGLESQL_EXPECT_OK(UpdateSchema({R"(
       CREATE TABLE photos(
         user_id    BIGINT NOT NULL,
         photo_id   BIGINT NOT NULL,
@@ -111,13 +111,13 @@ TEST_P(IndexBackfillTest, BackfillOfIndexOnInterleavedTableSucceeds) {
     )"}));
   }
 
-  ZETASQL_EXPECT_OK(Insert("users", {"user_id", "name", "age"}, {1, "user1", 20}));
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(Insert("users", {"user_id", "name", "age"}, {1, "user1", 20}));
+  GOOGLESQL_EXPECT_OK(
       Insert("photos", {"user_id", "photo_id", "name"}, {1, 2, "entry1"}));
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       Insert("photos", {"user_id", "photo_id", "name"}, {1, 3, "entry2"}));
 
-  ZETASQL_EXPECT_OK(UpdateSchema(
+  GOOGLESQL_EXPECT_OK(UpdateSchema(
       {"CREATE INDEX photos_by_name ON photos(name, photo_id, user_id)"}));
 
   EXPECT_THAT(ReadWithIndex("photos", "photos_by_name",
@@ -128,7 +128,7 @@ TEST_P(IndexBackfillTest, BackfillOfIndexOnInterleavedTableSucceeds) {
 TEST_P(IndexBackfillTest,
        BackfillOfIndexOnInterleavedTableWithCascadingDeletesSucceeds) {
   if (dialect_ == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
-    ZETASQL_EXPECT_OK(UpdateSchema({R"(
+    GOOGLESQL_EXPECT_OK(UpdateSchema({R"(
     CREATE TABLE photos(
       user_id    INT64 NOT NULL,
       photo_id   INT64 NOT NULL,
@@ -137,7 +137,7 @@ TEST_P(IndexBackfillTest,
     INTERLEAVE IN PARENT users ON DELETE CASCADE
   )"}));
   } else {
-    ZETASQL_EXPECT_OK(UpdateSchema({R"(
+    GOOGLESQL_EXPECT_OK(UpdateSchema({R"(
       CREATE TABLE photos(
         user_id    BIGINT NOT NULL,
         photo_id   BIGINT NOT NULL,
@@ -148,16 +148,16 @@ TEST_P(IndexBackfillTest,
     )"}));
   }
 
-  ZETASQL_EXPECT_OK(Insert("users", {"user_id", "name", "age"}, {1, "user1", 20}));
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(Insert("users", {"user_id", "name", "age"}, {1, "user1", 20}));
+  GOOGLESQL_EXPECT_OK(
       Insert("photos", {"user_id", "photo_id", "name"}, {1, 2, "entry1"}));
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       Insert("photos", {"user_id", "photo_id", "name"}, {1, 3, "entry2"}));
 
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       UpdateSchema({"CREATE INDEX photos_by_name ON photos(name, photo_id)"}));
 
-  ZETASQL_EXPECT_OK(Delete("users", KeySet::All()));
+  GOOGLESQL_EXPECT_OK(Delete("users", KeySet::All()));
 
   EXPECT_THAT(ReadWithIndex("photos", "photos_by_name", {"name", "photo_id"},
                             KeySet::All()),
@@ -165,18 +165,18 @@ TEST_P(IndexBackfillTest,
 }
 
 TEST_P(IndexBackfillTest, ValidateBackfillOfNullFilteredIndexSucceeds) {
-  ZETASQL_EXPECT_OK(Insert("users", {"user_id", "name", "age"}, {1, "user1", 20}));
-  ZETASQL_EXPECT_OK(Insert("users", {"user_id", "name", "age"},
+  GOOGLESQL_EXPECT_OK(Insert("users", {"user_id", "name", "age"}, {1, "user1", 20}));
+  GOOGLESQL_EXPECT_OK(Insert("users", {"user_id", "name", "age"},
                    {2, Null<std::string>(), 20}));
-  ZETASQL_EXPECT_OK(Insert("users", {"user_id", "name", "age"},
+  GOOGLESQL_EXPECT_OK(Insert("users", {"user_id", "name", "age"},
                    {3, "user2", Null<int64_t>()}));
 
   if (dialect_ == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
-    ZETASQL_EXPECT_OK(UpdateSchema(
+    GOOGLESQL_EXPECT_OK(UpdateSchema(
         {"CREATE NULL_FILTERED INDEX users_by_name_null_filtered ON "
          "users(name, age)"}));
   } else {
-    ZETASQL_EXPECT_OK(UpdateSchema(
+    GOOGLESQL_EXPECT_OK(UpdateSchema(
         {"CREATE INDEX users_by_name_null_filtered ON "
          "users(name, age) WHERE name IS NOT NULL AND age IS NOT NULL"}));
   }
@@ -187,16 +187,16 @@ TEST_P(IndexBackfillTest, ValidateBackfillOfNullFilteredIndexSucceeds) {
 }
 
 TEST_P(IndexBackfillTest, ValidateBackfillOfIndexWithStoredColumns) {
-  ZETASQL_EXPECT_OK(Insert("users", {"user_id", "name", "age"}, {1, "user1", 20}));
-  ZETASQL_EXPECT_OK(Insert("users", {"user_id", "name", "age"}, {2, "user2", 30}));
-  ZETASQL_EXPECT_OK(Insert("users", {"user_id", "name", "age"},
+  GOOGLESQL_EXPECT_OK(Insert("users", {"user_id", "name", "age"}, {1, "user1", 20}));
+  GOOGLESQL_EXPECT_OK(Insert("users", {"user_id", "name", "age"}, {2, "user2", 30}));
+  GOOGLESQL_EXPECT_OK(Insert("users", {"user_id", "name", "age"},
                    {3, "user2", Null<int64_t>()}));
 
   if (dialect_ == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
-    ZETASQL_EXPECT_OK(UpdateSchema(
+    GOOGLESQL_EXPECT_OK(UpdateSchema(
         {"CREATE INDEX users_by_name ON users(name) STORING (age)"}));
   } else {
-    ZETASQL_EXPECT_OK(UpdateSchema(
+    GOOGLESQL_EXPECT_OK(UpdateSchema(
         {"CREATE INDEX users_by_name ON users(name) INCLUDE (age)"}));
   }
 
@@ -207,18 +207,18 @@ TEST_P(IndexBackfillTest, ValidateBackfillOfIndexWithStoredColumns) {
 }
 
 TEST_P(IndexBackfillTest, ValidateNullFilteringDoesNotApplyToStoredColumns) {
-  ZETASQL_EXPECT_OK(Insert("users", {"user_id", "name", "age"}, {1, "user1", 20}));
-  ZETASQL_EXPECT_OK(Insert("users", {"user_id", "name", "age"}, {2, "user2", 30}));
-  ZETASQL_EXPECT_OK(Insert("users", {"user_id", "name", "age"},
+  GOOGLESQL_EXPECT_OK(Insert("users", {"user_id", "name", "age"}, {1, "user1", 20}));
+  GOOGLESQL_EXPECT_OK(Insert("users", {"user_id", "name", "age"}, {2, "user2", 30}));
+  GOOGLESQL_EXPECT_OK(Insert("users", {"user_id", "name", "age"},
                    {3, "user2", Null<int64_t>()}));
 
   // Ensure that null filtering does not apply to stored columns.
   if (dialect_ == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
-    ZETASQL_EXPECT_OK(
+    GOOGLESQL_EXPECT_OK(
         UpdateSchema({"CREATE NULL_FILTERED INDEX users_by_name ON users(name) "
                       "STORING (age)"}));
   } else {
-    ZETASQL_EXPECT_OK(
+    GOOGLESQL_EXPECT_OK(
         UpdateSchema({"CREATE INDEX users_by_name ON users(name) INCLUDE (age) "
                       "WHERE name IS NOT NULL"}));
   }
@@ -231,7 +231,7 @@ TEST_P(IndexBackfillTest, ValidateNullFilteringDoesNotApplyToStoredColumns) {
 
 TEST_P(IndexBackfillTest, CannotBackfillIndexWithLargeKey) {
   std::string long_name(8192, 'a');
-  ZETASQL_EXPECT_OK(Insert("users", {"user_id", "name", "age"}, {1, long_name, 20}));
+  GOOGLESQL_EXPECT_OK(Insert("users", {"user_id", "name", "age"}, {1, long_name, 20}));
 
   EXPECT_THAT(UpdateSchema({"CREATE INDEX users_by_name ON users(name)"}),
               StatusIs(absl::StatusCode::kFailedPrecondition));
@@ -249,11 +249,11 @@ TEST_P(IndexBackfillTest, BackfillForUniqueNumericIndex) {
   Numeric val2 = cloud::spanner::MakeNumeric("0").value();
   Numeric val3 = cloud::spanner::MakeNumeric("999999999.456789").value();
 
-  ZETASQL_EXPECT_OK(Insert("numeric_table", {"key", "val"}, {1, val1}));
-  ZETASQL_EXPECT_OK(Insert("numeric_table", {"key", "val"}, {2, val2}));
-  ZETASQL_EXPECT_OK(Insert("numeric_table", {"key", "val"}, {3, val3}));
+  GOOGLESQL_EXPECT_OK(Insert("numeric_table", {"key", "val"}, {1, val1}));
+  GOOGLESQL_EXPECT_OK(Insert("numeric_table", {"key", "val"}, {2, val2}));
+  GOOGLESQL_EXPECT_OK(Insert("numeric_table", {"key", "val"}, {3, val3}));
 
-  ZETASQL_EXPECT_OK(UpdateSchema({"CREATE UNIQUE INDEX idx ON numeric_table(val)"}));
+  GOOGLESQL_EXPECT_OK(UpdateSchema({"CREATE UNIQUE INDEX idx ON numeric_table(val)"}));
 
   EXPECT_THAT(
       ReadWithIndex("numeric_table", "idx", {"key", "val"}, KeySet::All()),
@@ -270,8 +270,8 @@ TEST_P(IndexBackfillTest,
   emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
 
   Numeric val = cloud::spanner::MakeNumeric("123.456789").value();
-  ZETASQL_EXPECT_OK(Insert("numeric_table", {"key", "val"}, {1, val}));
-  ZETASQL_EXPECT_OK(Insert("numeric_table", {"key", "val"}, {2, val}));
+  GOOGLESQL_EXPECT_OK(Insert("numeric_table", {"key", "val"}, {1, val}));
+  GOOGLESQL_EXPECT_OK(Insert("numeric_table", {"key", "val"}, {2, val}));
 
   EXPECT_THAT(UpdateSchema({"CREATE UNIQUE INDEX idx ON numeric_table(val)"}),
               StatusIs(absl::StatusCode::kFailedPrecondition,
@@ -287,10 +287,10 @@ TEST_P(IndexBackfillTest, BackfillNullFilteredNumericIndex) {
   emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
 
   Numeric val = cloud::spanner::MakeNumeric("123.456789").value();
-  ZETASQL_EXPECT_OK(Insert("numeric_table", {"key", "val"}, {1, Null<Numeric>()}));
-  ZETASQL_EXPECT_OK(Insert("numeric_table", {"key", "val"}, {2, val}));
+  GOOGLESQL_EXPECT_OK(Insert("numeric_table", {"key", "val"}, {1, Null<Numeric>()}));
+  GOOGLESQL_EXPECT_OK(Insert("numeric_table", {"key", "val"}, {2, val}));
 
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       UpdateSchema({"CREATE NULL_FILTERED INDEX idx ON numeric_table(val)"}));
 
   EXPECT_THAT(

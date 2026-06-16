@@ -16,7 +16,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "tests/common/scoped_feature_flags_setter.h"
@@ -30,8 +30,8 @@ namespace test {
 namespace {
 
 using testing::ElementsAre;
-using zetasql_base::testing::IsOkAndHolds;
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::IsOkAndHolds;
+using googlesql_base::testing::StatusIs;
 
 class GeneratedColumnTest : public DatabaseTest {
  public:
@@ -79,43 +79,43 @@ MATCHER_P(WhenLowercased, matcher, "") {
 }
 
 TEST_F(GeneratedColumnTest, TypeCoercion) {
-  ZETASQL_EXPECT_OK(Insert("TypeCoercion", {"K_I"}, {1}));
+  GOOGLESQL_EXPECT_OK(Insert("TypeCoercion", {"K_I"}, {1}));
   EXPECT_THAT(ReadAll("TypeCoercion", {"K_I", "G_N", "G_F", "G_F_N"}),
               IsOkAndHoldsRows({{1, cloud::spanner::MakeNumeric("1").value(),
                                  (double)1, (double)1}}));
 }
 
 TEST_F(GeneratedColumnTest, Error) {
-  ZETASQL_EXPECT_OK(Insert("Err", {"K"}, {1}));
+  GOOGLESQL_EXPECT_OK(Insert("Err", {"K"}, {1}));
   EXPECT_FALSE(Insert("Err", {"K"}, {253402300800}).status().ok());
 }
 
 TEST_F(GeneratedColumnTest, AllMutationTypes) {
-  ZETASQL_ASSERT_OK(Insert("T", {"K", "V1", "V2"}, {1, 1, 1}));
+  GOOGLESQL_ASSERT_OK(Insert("T", {"K", "V1", "V2"}, {1, 1, 1}));
   EXPECT_THAT(ReadAll("T", {"K", "G1", "G2", "G3"}),
               IsOkAndHoldsRows({{1, 3, 2, 3}}));
-  ZETASQL_ASSERT_OK(Update("T", {"K", "V1", "V2"}, {1, 2, 2}));
+  GOOGLESQL_ASSERT_OK(Update("T", {"K", "V1", "V2"}, {1, 2, 2}));
   EXPECT_THAT(ReadAll("T", {"K", "G1", "G2", "G3"}),
               IsOkAndHoldsRows({{1, 5, 4, 5}}));
-  ZETASQL_ASSERT_OK(InsertOrUpdate("T", {"K", "V1", "V2"}, {1, 3, 3}));
+  GOOGLESQL_ASSERT_OK(InsertOrUpdate("T", {"K", "V1", "V2"}, {1, 3, 3}));
   EXPECT_THAT(ReadAll("T", {"K", "G1", "G2", "G3"}),
               IsOkAndHoldsRows({{1, 7, 6, 7}}));
-  ZETASQL_ASSERT_OK(InsertOrUpdate("T", {"K", "V1", "V2"}, {2, 4, 4}));
+  GOOGLESQL_ASSERT_OK(InsertOrUpdate("T", {"K", "V1", "V2"}, {2, 4, 4}));
   EXPECT_THAT(ReadAll("T", {"K", "G1", "G2", "G3"}),
               IsOkAndHoldsRows({{1, 7, 6, 7}, {2, 9, 8, 9}}));
-  ZETASQL_ASSERT_OK(Replace("T", {"K", "V1", "V2"}, {1, 5, 5}));
+  GOOGLESQL_ASSERT_OK(Replace("T", {"K", "V1", "V2"}, {1, 5, 5}));
   EXPECT_THAT(ReadAll("T", {"K", "G1", "G2", "G3"}),
               IsOkAndHoldsRows({{1, 11, 10, 11}, {2, 9, 8, 9}}));
-  ZETASQL_ASSERT_OK(Replace("T", {"K", "V1", "V2"}, {2, 6, 6}));
+  GOOGLESQL_ASSERT_OK(Replace("T", {"K", "V1", "V2"}, {2, 6, 6}));
   EXPECT_THAT(ReadAll("T", {"K", "G1", "G2", "G3"}),
               IsOkAndHoldsRows({{1, 11, 10, 11}, {2, 13, 12, 13}}));
-  ZETASQL_ASSERT_OK(Delete("T", {Key(2)}));
+  GOOGLESQL_ASSERT_OK(Delete("T", {Key(2)}));
   EXPECT_THAT(ReadAll("T", {"K", "G1", "G2", "G3"}),
               IsOkAndHoldsRows({{1, 11, 10, 11}}));
 }
 
 TEST_F(GeneratedColumnTest, MultipleMutationsPerRow) {
-  ZETASQL_ASSERT_OK(Commit({
+  GOOGLESQL_ASSERT_OK(Commit({
       MakeInsert("T", {"K", "V1", "V2"}, 1, 1, 1),
       MakeUpdate("T", {"K", "V1", "V2"}, 1, 1, 2),
       MakeUpdate("T", {"K", "V1", "V2"}, 1, 2, 2),
@@ -132,7 +132,7 @@ TEST_F(GeneratedColumnTest, MultipleMutationsPerRow) {
                           })
                        .status();
   if (in_prod_env()) {
-    ZETASQL_ASSERT_OK(s);
+    GOOGLESQL_ASSERT_OK(s);
     EXPECT_THAT(ReadAll("T", {"K", "G1", "G2", "G3"}),
                 IsOkAndHoldsRows({{1, 5, 4, 5}, {2, 7, 6, 7}}));
   } else {
@@ -150,25 +150,25 @@ TEST_F(GeneratedColumnTest, MultipleMutationsPerRow) {
 }
 
 TEST_F(GeneratedColumnTest, Index) {
-  ZETASQL_ASSERT_OK(Insert("T", {"K", "V1", "V2"}, {1, 1, 1}));
+  GOOGLESQL_ASSERT_OK(Insert("T", {"K", "V1", "V2"}, {1, 1, 1}));
   EXPECT_THAT(ReadAllWithIndex("T", "TByG3", {"K", "G3"}),
               IsOkAndHoldsRows({{1, 3}}));
-  ZETASQL_ASSERT_OK(Update("T", {"K", "V1", "V2"}, {1, 2, 2}));
+  GOOGLESQL_ASSERT_OK(Update("T", {"K", "V1", "V2"}, {1, 2, 2}));
   EXPECT_THAT(ReadAllWithIndex("T", "TByG3", {"K", "G3"}),
               IsOkAndHoldsRows({{1, 5}}));
-  ZETASQL_ASSERT_OK(InsertOrUpdate("T", {"K", "V1", "V2"}, {1, 3, 3}));
+  GOOGLESQL_ASSERT_OK(InsertOrUpdate("T", {"K", "V1", "V2"}, {1, 3, 3}));
   EXPECT_THAT(ReadAllWithIndex("T", "TByG3", {"K", "G3"}),
               IsOkAndHoldsRows({{1, 7}}));
-  ZETASQL_ASSERT_OK(InsertOrUpdate("T", {"K", "V1", "V2"}, {2, 4, 4}));
+  GOOGLESQL_ASSERT_OK(InsertOrUpdate("T", {"K", "V1", "V2"}, {2, 4, 4}));
   EXPECT_THAT(ReadAllWithIndex("T", "TByG3", {"K", "G3"}),
               IsOkAndHoldsRows({{1, 7}, {2, 9}}));
-  ZETASQL_ASSERT_OK(Replace("T", {"K", "V1", "V2"}, {1, 5, 5}));
+  GOOGLESQL_ASSERT_OK(Replace("T", {"K", "V1", "V2"}, {1, 5, 5}));
   EXPECT_THAT(ReadAllWithIndex("T", "TByG3", {"K", "G3"}),
               IsOkAndHoldsRows({{2, 9}, {1, 11}}));
-  ZETASQL_ASSERT_OK(Replace("T", {"K", "V1", "V2"}, {2, 6, 6}));
+  GOOGLESQL_ASSERT_OK(Replace("T", {"K", "V1", "V2"}, {2, 6, 6}));
   EXPECT_THAT(ReadAllWithIndex("T", "TByG3", {"K", "G3"}),
               IsOkAndHoldsRows({{1, 11}, {2, 13}}));
-  ZETASQL_ASSERT_OK(Delete("T", {Key(2)}));
+  GOOGLESQL_ASSERT_OK(Delete("T", {Key(2)}));
   EXPECT_THAT(ReadAllWithIndex("T", "TByG3", {"K", "G3"}),
               IsOkAndHoldsRows({{1, 11}}));
   EXPECT_THAT(Insert("T", {"K", "V1", "V2"}, {2, 5, 5}),
@@ -177,7 +177,7 @@ TEST_F(GeneratedColumnTest, Index) {
 }
 
 TEST_F(GeneratedColumnTest, DML) {
-  ZETASQL_ASSERT_OK(CommitDml(
+  GOOGLESQL_ASSERT_OK(CommitDml(
       {SqlStatement("INSERT T(K, V1, V2, V3) VALUES (1, 1, 1, 1)"),
        SqlStatement("UPDATE T SET V1 = 2, V2 = 2, V3 = 2 WHERE K = 1")}));
   EXPECT_THAT(Query("SELECT V1, V2, V3, G1, G2, G3 FROM T"),
@@ -194,20 +194,20 @@ TEST_F(GeneratedColumnTest, ForeignKey) {
   EXPECT_THAT(Insert("FK", {"K"}, {3}),
               StatusIs(absl::StatusCode::kFailedPrecondition,
                        testing::HasSubstr("Foreign key")));
-  ZETASQL_ASSERT_OK(Insert("T", {"K", "V1", "V2"}, {1, 1, 1}));
-  ZETASQL_EXPECT_OK(Insert("FK", {"K"}, {3}));
+  GOOGLESQL_ASSERT_OK(Insert("T", {"K", "V1", "V2"}, {1, 1, 1}));
+  GOOGLESQL_EXPECT_OK(Insert("FK", {"K"}, {3}));
   EXPECT_THAT(Delete("T", {Key(1)}),
               StatusIs(absl::StatusCode::kFailedPrecondition,
                        testing::HasSubstr("Foreign key")));
 }
 
 TEST_F(GeneratedColumnTest, CommitTimestamp) {
-  ZETASQL_ASSERT_OK(Insert(
+  GOOGLESQL_ASSERT_OK(Insert(
       "Ts", {"K", "V"},
       {google::cloud::spanner::MakeTimestamp(absl::FromUnixMicros(0)).value(),
        0}));
-  ZETASQL_ASSERT_OK(Insert("Ts", {"K", "V"}, {"spanner.commit_timestamp()", 1}));
-  ZETASQL_ASSERT_OK(Update(
+  GOOGLESQL_ASSERT_OK(Insert("Ts", {"K", "V"}, {"spanner.commit_timestamp()", 1}));
+  GOOGLESQL_ASSERT_OK(Update(
       "Ts", {"K", "V"},
       {google::cloud::spanner::MakeTimestamp(absl::FromUnixMicros(0)).value(),
        2}));
@@ -229,7 +229,7 @@ TEST_F(GeneratedColumnTest, NoDirectWrite) {
   EXPECT_THAT(Replace("T", {"K", "V1", "V2", "G1"}, {1, 1, 1, 3}),
               StatusIs(absl::StatusCode::kFailedPrecondition,
                        testing::HasSubstr(kCannotWriteToGeneratedColumn)));
-  ZETASQL_ASSERT_OK(CommitDml({SqlStatement("INSERT T(K, V1, V2) VALUES (1, 1, 1)")}));
+  GOOGLESQL_ASSERT_OK(CommitDml({SqlStatement("INSERT T(K, V1, V2) VALUES (1, 1, 1)")}));
   EXPECT_THAT(
       CommitDml({SqlStatement("INSERT t(k, v1, v2, g1) VALUES (2, 2, 2, 5)")}),
       StatusIs(absl::StatusCode::kInvalidArgument,
@@ -267,7 +267,7 @@ class GeneratedPrimaryKeyReadWriteTest : public DatabaseTest {
 
 TEST_F(GeneratedPrimaryKeyReadWriteTest, InsertMutations) {
   // A few inserts:
-  ZETASQL_ASSERT_OK(Commit({
+  GOOGLESQL_ASSERT_OK(Commit({
       MakeInsert("T1", {"k1", "k2", "k4"}, 1, 1, 5),
       MakeInsert("T1", {"k1", "k2", "k4"}, 1, 2, 6),
       MakeInsert("T1", {"k1", "k2", "k4"}, 2, 1, 7),
@@ -278,7 +278,7 @@ TEST_F(GeneratedPrimaryKeyReadWriteTest, InsertMutations) {
       IsOkAndHoldsUnorderedRows({{1, 1, 1, 5}, {1, 2, 2, 6}, {2, 1, 1, 7}}));
 
   // All columns are present:
-  ZETASQL_ASSERT_OK(Insert("T1", {"k1", "k2", "k4"}, {2, 200, 8}));
+  GOOGLESQL_ASSERT_OK(Insert("T1", {"k1", "k2", "k4"}, {2, 200, 8}));
   EXPECT_THAT(
       ReadAll("T1", {"k1", "k2", "k3_stored", "k4"}),
       IsOkAndHoldsUnorderedRows(
@@ -287,7 +287,7 @@ TEST_F(GeneratedPrimaryKeyReadWriteTest, InsertMutations) {
 
 TEST_F(GeneratedPrimaryKeyReadWriteTest, CannotInsertInNonWriteableColumn) {
   // A few inserts:
-  ZETASQL_ASSERT_OK(Commit({
+  GOOGLESQL_ASSERT_OK(Commit({
       MakeInsert("T1", {"k1", "k2", "k4"}, 1, 1, 5),
       MakeInsert("T1", {"k1", "k2", "k4"}, 1, 2, 6),
       MakeInsert("T1", {"k1", "k2", "k4"}, 2, 1, 7),
@@ -304,7 +304,7 @@ TEST_F(GeneratedPrimaryKeyReadWriteTest, CannotInsertInNonWriteableColumn) {
 
 TEST_F(GeneratedPrimaryKeyReadWriteTest, DuplicatePrimaryKeyInsertFails) {
   // A few inserts:
-  ZETASQL_ASSERT_OK(Commit({
+  GOOGLESQL_ASSERT_OK(Commit({
       MakeInsert("T1", {"k1", "k2", "k4"}, 1, 1, 5),
       MakeInsert("T1", {"k1", "k2", "k4"}, 1, 2, 6),
       MakeInsert("T1", {"k1", "k2", "k4"}, 2, 1, 7),
@@ -324,7 +324,7 @@ TEST_F(GeneratedPrimaryKeyReadWriteTest, DuplicatePrimaryKeyInsertFails) {
 
 TEST_F(GeneratedPrimaryKeyReadWriteTest, InsertOrUpdateMutations) {
   // All 3 inserts.
-  ZETASQL_ASSERT_OK(Commit({
+  GOOGLESQL_ASSERT_OK(Commit({
       MakeInsertOrUpdate("T1", {"k1", "k2", "k4"}, 1, 1, 1),
       MakeInsertOrUpdate("T1", {"k1", "k2", "k4"}, 2, 1, 2),
       MakeInsertOrUpdate("T1", {"k1", "k2", "k4"}, 1, 2, 3),
@@ -334,7 +334,7 @@ TEST_F(GeneratedPrimaryKeyReadWriteTest, InsertOrUpdateMutations) {
       IsOkAndHoldsUnorderedRows({{1, 1, 1, 1}, {2, 1, 1, 2}, {1, 2, 2, 3}}));
 
   // An insert and an update.
-  ZETASQL_ASSERT_OK(Commit({
+  GOOGLESQL_ASSERT_OK(Commit({
       MakeInsertOrUpdate("T1", {"k1", "k2", "k4"}, 3, 3, 9),
       MakeInsertOrUpdate("T1", {"k1", "k2", "k4"}, 3, 3, 300),
   }));
@@ -343,7 +343,7 @@ TEST_F(GeneratedPrimaryKeyReadWriteTest, InsertOrUpdateMutations) {
                   {{1, 1, 1, 1}, {2, 1, 1, 2}, {1, 2, 2, 3}, {3, 3, 3, 300}}));
 
   // All columns are present:
-  ZETASQL_ASSERT_OK(InsertOrUpdate("T1", {"k1", "k2", "k4"}, {2, 200, 2}));
+  GOOGLESQL_ASSERT_OK(InsertOrUpdate("T1", {"k1", "k2", "k4"}, {2, 200, 2}));
   EXPECT_THAT(ReadAll("T1", {"k1", "k2", "k3_stored", "k4"}),
               IsOkAndHoldsUnorderedRows({{1, 1, 1, 1},
                                          {2, 1, 1, 2},
@@ -354,7 +354,7 @@ TEST_F(GeneratedPrimaryKeyReadWriteTest, InsertOrUpdateMutations) {
 
 TEST_F(GeneratedPrimaryKeyReadWriteTest, UpdateMutations) {
   // Insert a few rows and update one.
-  ZETASQL_ASSERT_OK(Commit({
+  GOOGLESQL_ASSERT_OK(Commit({
       MakeInsert("T1", {"k1", "k2", "k4"}, 1, 1, 1),
       MakeInsert("T1", {"k1", "k2", "k4"}, 1, 2, 2),
       MakeInsert("T1", {"k1", "k2", "k4"}, 2, 1, 3),
@@ -364,7 +364,7 @@ TEST_F(GeneratedPrimaryKeyReadWriteTest, UpdateMutations) {
       ReadAll("T1", {"k1", "k2", "k3_stored", "k4"}),
       IsOkAndHoldsUnorderedRows({{1, 1, 1, 1}, {1, 2, 2, 100}, {2, 1, 1, 3}}));
 
-  ZETASQL_ASSERT_OK(Update("T1", {"k1", "k2", "k4"}, {1, 1, 200}));
+  GOOGLESQL_ASSERT_OK(Update("T1", {"k1", "k2", "k4"}, {1, 1, 200}));
   EXPECT_THAT(ReadAll("T1", {"k1", "k2", "k3_stored", "k4"}),
               IsOkAndHoldsUnorderedRows(
                   {{1, 1, 1, 200}, {1, 2, 2, 100}, {2, 1, 1, 3}}));
@@ -372,7 +372,7 @@ TEST_F(GeneratedPrimaryKeyReadWriteTest, UpdateMutations) {
 
 TEST_F(GeneratedPrimaryKeyReadWriteTest, UpdateFailsAllPkColumnsNotPresent) {
   // Insert a few rows and update one.
-  ZETASQL_ASSERT_OK(Commit({
+  GOOGLESQL_ASSERT_OK(Commit({
       MakeInsert("T1", {"k1", "k2", "k4"}, 1, 1, 1),
       MakeInsert("T1", {"k1", "k2", "k4"}, 1, 2, 2),
       MakeInsert("T1", {"k1", "k2", "k4"}, 2, 1, 3),
@@ -389,7 +389,7 @@ TEST_F(GeneratedPrimaryKeyReadWriteTest, UpdateFailsAllPkColumnsNotPresent) {
 
 TEST_F(GeneratedPrimaryKeyReadWriteTest, CannotModifyGeneratedKeyColumn) {
   // Insert a few rows and update one.
-  ZETASQL_ASSERT_OK(Commit({
+  GOOGLESQL_ASSERT_OK(Commit({
       MakeInsert("T1", {"k1", "k2", "k4"}, 1, 1, 1),
       MakeInsert("T1", {"k1", "k2", "k4"}, 1, 2, 2),
       MakeInsert("T1", {"k1", "k2", "k4"}, 2, 1, 3),
@@ -407,7 +407,7 @@ TEST_F(GeneratedPrimaryKeyReadWriteTest, CannotModifyGeneratedKeyColumn) {
 
 TEST_F(GeneratedPrimaryKeyReadWriteTest, DeleteMutations) {
   // Insert a few rows and delete one.
-  ZETASQL_ASSERT_OK(Commit({
+  GOOGLESQL_ASSERT_OK(Commit({
       MakeInsert("T1", {"k1", "k2", "k4"}, 1, 1, 1),
       MakeInsert("T1", {"k1", "k2", "k4"}, 1, 2, 2),
       MakeInsert("T1", {"k1", "k2", "k4"}, 2, 1, 3),
@@ -418,21 +418,21 @@ TEST_F(GeneratedPrimaryKeyReadWriteTest, DeleteMutations) {
 
   // This delete fails because all PK columns must be present:
   EXPECT_THAT(Delete("T1", Key(1)),
-              StatusIs(absl::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kInvalidArgument));
   EXPECT_THAT(ReadAll("T1", {"k1", "k2", "k3_stored", "k4"}),
               IsOkAndHoldsRows({{1, 2, 2, 2}, {2, 1, 1, 3}}));
 }
 
 TEST_F(GeneratedPrimaryKeyReadWriteTest, DeleteMutationsDifferentCommit) {
   // Insert a few rows and delete one.
-  ZETASQL_ASSERT_OK(Commit({
+  GOOGLESQL_ASSERT_OK(Commit({
       MakeInsert("T1", {"k1", "k2", "k4"}, 1, 1, 1),
       MakeInsert("T1", {"k1", "k2", "k4"}, 1, 2, 2),
       MakeInsert("T1", {"k1", "k2", "k4"}, 2, 1, 3),
   }));
   EXPECT_THAT(ReadAll("T1", {"k1", "k2", "k3_stored", "k4"}),
               IsOkAndHoldsRows({{1, 1, 1, 1}, {1, 2, 2, 2}, {2, 1, 1, 3}}));
-  ZETASQL_EXPECT_OK(Commit({
+  GOOGLESQL_EXPECT_OK(Commit({
       MakeDelete("T1", Singleton(1, 1)),
   }));
   EXPECT_THAT(ReadAll("T1", {"k1", "k2", "k3_stored", "k4"}),
@@ -441,7 +441,7 @@ TEST_F(GeneratedPrimaryKeyReadWriteTest, DeleteMutationsDifferentCommit) {
 
 TEST_F(GeneratedPrimaryKeyReadWriteTest, ReplaceMutations) {
   // Insert a few rows and replace one.
-  ZETASQL_ASSERT_OK(Commit({
+  GOOGLESQL_ASSERT_OK(Commit({
       MakeInsert("T1", {"k1", "k2", "k4"}, 1, 1, 1),
       MakeInsert("T1", {"k1", "k2", "k4"}, 1, 2, 2),
       MakeInsert("T1", {"k1", "k2", "k4"}, 2, 1, 3),
@@ -450,18 +450,18 @@ TEST_F(GeneratedPrimaryKeyReadWriteTest, ReplaceMutations) {
   EXPECT_THAT(ReadAll("T1", {"k1", "k2", "k3_stored", "k4"}),
               IsOkAndHoldsRows({{1, 1, 1, 1}, {1, 2, 2, 100}, {2, 1, 1, 3}}));
 
-  ZETASQL_ASSERT_OK(Replace("T1", {"k1", "k2", "k4"}, {1, 1, 200}));
+  GOOGLESQL_ASSERT_OK(Replace("T1", {"k1", "k2", "k4"}, {1, 1, 200}));
   EXPECT_THAT(ReadAll("T1", {"k1", "k2", "k3_stored", "k4"}),
               IsOkAndHoldsRows({{1, 1, 1, 200}, {1, 2, 2, 100}, {2, 1, 1, 3}}));
 }
 
 TEST_F(GeneratedPrimaryKeyReadWriteTest, DmlInsert) {
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       CommitDml({SqlStatement("INSERT T1(k1,k2,k4) Values (1,1,1),(2,1,2)")}));
   EXPECT_THAT(ReadAll("T1", {"k1", "k2", "k3_stored", "k4"}),
               IsOkAndHoldsRows({{1, 1, 1, 1}, {2, 1, 1, 2}}));
 
-  ZETASQL_EXPECT_OK(CommitDml({SqlStatement("INSERT T2(k1,k3) Values (1,1)")}));
+  GOOGLESQL_EXPECT_OK(CommitDml({SqlStatement("INSERT T2(k1,k3) Values (1,1)")}));
   EXPECT_THAT(ReadAll("T2", {"k1", "k3", "k2_stored", "k4_stored"}),
               IsOkAndHoldsRows({{1, 1, 2, 3}}));
 
@@ -472,12 +472,12 @@ TEST_F(GeneratedPrimaryKeyReadWriteTest, DmlInsert) {
 }
 
 TEST_F(GeneratedPrimaryKeyReadWriteTest, DmlUpdate) {
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       CommitDml({SqlStatement("INSERT T1(k1,k2,k4) Values (1,1,1),(2,1,2)")}));
   EXPECT_THAT(ReadAll("T1", {"k1", "k2", "k3_stored", "k4"}),
               IsOkAndHoldsRows({{1, 1, 1, 1}, {2, 1, 1, 2}}));
 
-  ZETASQL_EXPECT_OK(CommitDml({SqlStatement("UPDATE T1 SET k4=50 WHERE k3_stored=1")}));
+  GOOGLESQL_EXPECT_OK(CommitDml({SqlStatement("UPDATE T1 SET k4=50 WHERE k3_stored=1")}));
   EXPECT_THAT(ReadAll("T1", {"k1", "k2", "k3_stored", "k4"}),
               IsOkAndHoldsRows({{1, 1, 1, 50}, {2, 1, 1, 50}}));
 
@@ -488,13 +488,13 @@ TEST_F(GeneratedPrimaryKeyReadWriteTest, DmlUpdate) {
 }
 
 TEST_F(GeneratedPrimaryKeyReadWriteTest, DmlInsertDistinctOnlyGpkValues) {
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       CommitDml({SqlStatement("INSERT T1(k1,k2,k4) Values (1,1,1),(1,2,2)")}));
 
   EXPECT_THAT(ReadAll("T1", {"k1", "k2", "k3_stored", "k4"}),
               IsOkAndHoldsRows({{1, 1, 1, 1}, {1, 2, 2, 2}}));
 
-  ZETASQL_EXPECT_OK(CommitDml({SqlStatement("INSERT T2(k1,k3) Values (1,1),(2,1)")}));
+  GOOGLESQL_EXPECT_OK(CommitDml({SqlStatement("INSERT T2(k1,k3) Values (1,1),(2,1)")}));
   EXPECT_THAT(ReadAll("T2", {"k1", "k2_stored", "k3", "k4_stored"}),
               IsOkAndHoldsRows({{1, 2, 1, 3}, {2, 4, 1, 3}}));
 }
@@ -516,7 +516,7 @@ class PGGeneratedColumnTest : public DatabaseTest {
 };
 
 TEST_F(PGGeneratedColumnTest, AddJsonbGeneratedColumn) {
-  ZETASQL_ASSERT_OK(UpdateSchema({
+  GOOGLESQL_ASSERT_OK(UpdateSchema({
       R"(
         CREATE TABLE t (
           k bigint primary key,
@@ -533,7 +533,7 @@ TEST_F(PGGeneratedColumnTest, AddJsonbGeneratedColumn) {
   PRIMARY KEY(k)
 ))")));
 
-  ZETASQL_ASSERT_OK(CommitDml({SqlStatement("INSERT INTO t(k) VALUES (1)")}));
+  GOOGLESQL_ASSERT_OK(CommitDml({SqlStatement("INSERT INTO t(k) VALUES (1)")}));
   EXPECT_THAT(Query("SELECT jsonb_typ FROM t"), IsOkAndHoldsRows({{"string"}}));
 }
 

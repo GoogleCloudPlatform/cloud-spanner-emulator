@@ -32,21 +32,21 @@
 #ifndef DATATYPES_EXTENDED_PG_NUMERIC_CONVERSION_FUNCTIONS_H_
 #define DATATYPES_EXTENDED_PG_NUMERIC_CONVERSION_FUNCTIONS_H_
 
-#include "zetasql/public/function.h"
+#include "googlesql/public/function.h"
 
 namespace postgres_translator::spangres {
 namespace datatypes {
 
 // PG.NUMERIC conversion functions.
-const zetasql::Function* GetInt64ToPgNumericConversion();
-const zetasql::Function* GetDoubleToPgNumericConversion();
-const zetasql::Function* GetFloatToPgNumericConversion();
-const zetasql::Function* GetStringToPgNumericConversion();
+const googlesql::Function* GetInt64ToPgNumericConversion();
+const googlesql::Function* GetDoubleToPgNumericConversion();
+const googlesql::Function* GetFloatToPgNumericConversion();
+const googlesql::Function* GetStringToPgNumericConversion();
 
-const zetasql::Function* GetPgNumericToInt64Conversion();
-const zetasql::Function* GetPgNumericToDoubleConversion();
-const zetasql::Function* GetPgNumericToFloatConversion();
-const zetasql::Function* GetPgNumericToStringConversion();
+const googlesql::Function* GetPgNumericToInt64Conversion();
+const googlesql::Function* GetPgNumericToDoubleConversion();
+const googlesql::Function* GetPgNumericToFloatConversion();
+const googlesql::Function* GetPgNumericToStringConversion();
 
 }  // namespace datatypes
 }  // namespace postgres_translator::spangres

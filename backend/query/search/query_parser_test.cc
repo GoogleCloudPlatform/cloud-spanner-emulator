@@ -21,7 +21,8 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
+#include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "backend/query/search/SearchQueryParserTreeConstants.h"
@@ -104,143 +105,129 @@ void GetRQueryString(const SimpleNode* node, std::string& str) {
   }
 }
 
-void TestParseSearchQuery(absl::string_view search_query,
-                          absl::string_view expected_result) {
-  SCOPED_TRACE(absl::StrCat("\nParsing: ", search_query,
-                            "\texpect: ", expected_result, "\n"));
+void TestParseRQuery(const absl::string_view query,
+                     const absl::string_view expected_result) {
+  SCOPED_TRACE(
+      absl::StrCat("\nParsing: ", query, "\texpect: ", expected_result, "\n"));
 
-  QueryParser parser(search_query);
-  ZETASQL_EXPECT_OK(parser.ParseSearchQuery());
+  RQueryParser parser(query);
+  GOOGLESQL_EXPECT_OK(parser.Parse());
 
   std::string rquery;
   GetRQueryString(parser.Tree(), rquery);
   EXPECT_EQ(rquery, expected_result);
 }
 
-void TestParseFailure(absl::string_view search_query,
+void TestParseFailure(absl::string_view query,
                       absl::string_view expected_error) {
-  QueryParser parser(search_query);
-  absl::Status status = parser.ParseSearchQuery();
-  EXPECT_THAT(status, ::zetasql_base::testing::StatusIs(
-                          absl::StatusCode::kInvalidArgument,
-                          ::testing::HasSubstr(expected_error)));
+  RQueryParser parser(query);
+  EXPECT_THAT(parser.Parse(), ::googlesql_base::testing::StatusIs(
+                                  absl::StatusCode::kInvalidArgument,
+                                  ::testing::HasSubstr(expected_error)));
 }
 
-TEST(SearchQueryParserTest, BasicParse) {
-  TestParseSearchQuery("cloud spanner emulator", "(a cloud spanner emulator)");
-  TestParseSearchQuery("cloud | spanner | emulator",
-                       "(o cloud spanner emulator)");
-  TestParseSearchQuery("cloud|spanner|emulator", "(o cloud spanner emulator)");
-  TestParseSearchQuery("cloud OR spanner OR emulator",
-                       "(o cloud spanner emulator)");
-  TestParseSearchQuery("cloudORspannerOR emulator ORany",
-                       "(a cloudorspanneror emulator orany)");
-  TestParseSearchQuery("\"cloudORspannerOR emulator ORany\"",
-                       "(p cloudorspanneror emulator orany)");
-  TestParseSearchQuery("-cloud", "(n cloud)");
-  TestParseSearchQuery("cloud-spanner-emulator", "(p cloud spanner emulator)");
-  TestParseSearchQuery("\"cloud spanner emulator\"",
-                       "(p cloud spanner emulator)");
-  TestParseSearchQuery("cloud AROUND(3) spanner AROUND(5) emulator",
-                       "(ar cloud 3 spanner 5 emulator)");
+TEST(RQueryParserTest, BasicParse) {
+  TestParseRQuery("cloud spanner emulator", "(a cloud spanner emulator)");
+  TestParseRQuery("cloud | spanner | emulator", "(o cloud spanner emulator)");
+  TestParseRQuery("cloud|spanner|emulator", "(o cloud spanner emulator)");
+  TestParseRQuery("cloud OR spanner OR emulator", "(o cloud spanner emulator)");
+  TestParseRQuery("cloudORspannerOR emulator ORany",
+                  "(a cloudorspanneror emulator orany)");
+  TestParseRQuery("\"cloudORspannerOR emulator ORany\"",
+                  "(p cloudorspanneror emulator orany)");
+  TestParseRQuery("-cloud", "(n cloud)");
+  TestParseRQuery("cloud-spanner-emulator", "(p cloud spanner emulator)");
+  TestParseRQuery("\"cloud spanner emulator\"", "(p cloud spanner emulator)");
+  TestParseRQuery("cloud AROUND(3) spanner AROUND(5) emulator",
+                  "(ar cloud 3 spanner 5 emulator)");
 }
 
-TEST(SearchQueryParserTest, SimpleCombinations) {
-  TestParseSearchQuery("cloud AROUND(3) spanner emulator",
-                       "(a (ar cloud 3 spanner) emulator)");
-  TestParseSearchQuery("cloud spanner AROUND(3) emulator",
-                       "(a cloud (ar spanner 3 emulator))");
-  TestParseSearchQuery("cloud | spanner emulator",
-                       "(a (o cloud spanner) emulator)");
-  TestParseSearchQuery("cloud spanner | emulator",
-                       "(a cloud (o spanner emulator))");
-  TestParseSearchQuery("cloud spanner OR emulator",
-                       "(a cloud (o spanner emulator))");
-  TestParseSearchQuery("-cloud spanner -emulator",
-                       "(a (n cloud) spanner (n emulator))");
-  TestParseSearchQuery("cloud spanner-emulator",
-                       "(a cloud (p spanner emulator))");
-  TestParseSearchQuery("cloud-spanner emulator",
-                       "(a (p cloud spanner) emulator)");
-  TestParseSearchQuery("cloud \"spanner emulator\"",
-                       "(a cloud (p spanner emulator))");
-  TestParseSearchQuery("\"cloud spanner\" emulator",
-                       "(a (p cloud spanner) emulator)");
+TEST(RQueryParserTest, SimpleCombinations) {
+  TestParseRQuery("cloud AROUND(3) spanner emulator",
+                  "(a (ar cloud 3 spanner) emulator)");
+  TestParseRQuery("cloud spanner AROUND(3) emulator",
+                  "(a cloud (ar spanner 3 emulator))");
+  TestParseRQuery("cloud | spanner emulator", "(a (o cloud spanner) emulator)");
+  TestParseRQuery("cloud spanner | emulator", "(a cloud (o spanner emulator))");
+  TestParseRQuery("cloud spanner OR emulator",
+                  "(a cloud (o spanner emulator))");
+  TestParseRQuery("-cloud spanner -emulator",
+                  "(a (n cloud) spanner (n emulator))");
+  TestParseRQuery("cloud spanner-emulator", "(a cloud (p spanner emulator))");
+  TestParseRQuery("cloud-spanner emulator", "(a (p cloud spanner) emulator)");
+  TestParseRQuery("cloud \"spanner emulator\"",
+                  "(a cloud (p spanner emulator))");
+  TestParseRQuery("\"cloud spanner\" emulator",
+                  "(a (p cloud spanner) emulator)");
 
-  TestParseSearchQuery("cloud | spanner AROUND(3) emulator",
-                       "(ar (o cloud spanner) 3 emulator)");
-  TestParseSearchQuery("cloud AROUND(3) spanner | emulator",
-                       "(ar cloud 3 (o spanner emulator))");
-  TestParseSearchQuery("-cloud AROUND(3) spanner | -emulator",
-                       "(ar (n cloud) 3 (o spanner (n emulator)))");
-  TestParseSearchQuery("cloud AROUND(3) spanner-emulator",
-                       "(ar cloud 3 (p spanner emulator))");
-  TestParseSearchQuery("\"cloud spanner\" AROUND(5) emulator",
-                       "(ar (p cloud spanner) 5 emulator)");
+  TestParseRQuery("cloud | spanner AROUND(3) emulator",
+                  "(ar (o cloud spanner) 3 emulator)");
+  TestParseRQuery("cloud AROUND(3) spanner | emulator",
+                  "(ar cloud 3 (o spanner emulator))");
+  TestParseRQuery("-cloud AROUND(3) spanner | -emulator",
+                  "(ar (n cloud) 3 (o spanner (n emulator)))");
+  TestParseRQuery("cloud AROUND(3) spanner-emulator",
+                  "(ar cloud 3 (p spanner emulator))");
+  TestParseRQuery("\"cloud spanner\" AROUND(5) emulator",
+                  "(ar (p cloud spanner) 5 emulator)");
 
-  TestParseSearchQuery("cloud | spanner -emulator",
-                       "(a (o cloud spanner) (n emulator))");
-  TestParseSearchQuery("-cloud | spanner emulator",
-                       "(a (o (n cloud) spanner) emulator)");
-  TestParseSearchQuery("-cloud -spanner | emulator",
-                       "(a (n cloud) (o (n spanner) emulator))");
-  TestParseSearchQuery("cloud | spanner-emulator",
-                       "(o cloud (p spanner emulator))");
-  TestParseSearchQuery("cloud-spanner | emulator",
-                       "(o (p cloud spanner) emulator)");
-  TestParseSearchQuery("cloud | \"spanner emulator\"",
-                       "(o cloud (p spanner emulator))");
-  TestParseSearchQuery("\"cloud spanner\" | emulator",
-                       "(o (p cloud spanner) emulator)");
+  TestParseRQuery("cloud | spanner -emulator",
+                  "(a (o cloud spanner) (n emulator))");
+  TestParseRQuery("-cloud | spanner emulator",
+                  "(a (o (n cloud) spanner) emulator)");
+  TestParseRQuery("-cloud -spanner | emulator",
+                  "(a (n cloud) (o (n spanner) emulator))");
+  TestParseRQuery("cloud | spanner-emulator", "(o cloud (p spanner emulator))");
+  TestParseRQuery("cloud-spanner | emulator", "(o (p cloud spanner) emulator)");
+  TestParseRQuery("cloud | \"spanner emulator\"",
+                  "(o cloud (p spanner emulator))");
+  TestParseRQuery("\"cloud spanner\" | emulator",
+                  "(o (p cloud spanner) emulator)");
 
-  TestParseSearchQuery("-cloud-spanner-emulator",
-                       "(n (p cloud spanner emulator))");
-  TestParseSearchQuery("-\"cloud spanner emulator\"",
-                       "(n (p cloud spanner emulator))");
-  TestParseSearchQuery("---cloud-spanner-emulator",
-                       "(n (n (n (p cloud spanner emulator))))");
+  TestParseRQuery("-cloud-spanner-emulator", "(n (p cloud spanner emulator))");
+  TestParseRQuery("-\"cloud spanner emulator\"",
+                  "(n (p cloud spanner emulator))");
+  TestParseRQuery("---cloud-spanner-emulator",
+                  "(n (n (n (p cloud spanner emulator))))");
 }
 
-TEST(SearchQueryParserTest, ConnectedPhrase) {
-  TestParseSearchQuery("cloud=spanner-emulator", "(p cloud spanner emulator)");
-  TestParseSearchQuery("cloud.spanner/emulator", "(p cloud spanner emulator)");
-  TestParseSearchQuery("cloud\\\\spanner'emulator",
-                       "(p cloud spanner emulator)");
-  TestParseSearchQuery("cloud:=spanner//=emulator",
-                       "(p cloud spanner emulator)");
+TEST(RQueryParserTest, ConnectedPhrase) {
+  TestParseRQuery("cloud=spanner-emulator", "(p cloud spanner emulator)");
+  TestParseRQuery("cloud.spanner/emulator", "(p cloud spanner emulator)");
+  TestParseRQuery("cloud\\\\spanner'emulator", "(p cloud spanner emulator)");
+  TestParseRQuery("cloud:=spanner//=emulator", "(p cloud spanner emulator)");
 }
 
-TEST(SearchQueryParserTest, OrTermTest) {
-  TestParseSearchQuery("cloud|spanner-emulator",
-                       "(p (o cloud spanner) emulator)");
-  TestParseSearchQuery("google|cloud:=spanner|emulator",
-                       "(p (o google cloud) (o spanner emulator))");
-  TestParseSearchQuery("\"cloud|spanner emulator\"",
-                       "(p (o cloud spanner) emulator)");
-  TestParseSearchQuery("\"cloud|spanner -emulator\"",
-                       "(p (o cloud spanner) emulator)");
-  TestParseSearchQuery("\"google|cloud:=spanner|emulator\"",
-                       "(p (o google cloud) (o spanner emulator))");
-  TestParseSearchQuery(
+TEST(RQueryParserTest, OrTermTest) {
+  TestParseRQuery("cloud|spanner-emulator", "(p (o cloud spanner) emulator)");
+  TestParseRQuery("google|cloud:=spanner|emulator",
+                  "(p (o google cloud) (o spanner emulator))");
+  TestParseRQuery("\"cloud|spanner emulator\"",
+                  "(p (o cloud spanner) emulator)");
+  TestParseRQuery("\"cloud|spanner -emulator\"",
+                  "(p (o cloud spanner) emulator)");
+  TestParseRQuery("\"google|cloud:=spanner|emulator\"",
+                  "(p (o google cloud) (o spanner emulator))");
+  TestParseRQuery(
       "google|alphabet-cloud-spanner|sql-emulator|prod",
       "(p (o google alphabet) cloud (o spanner sql) (o emulator prod))");
 }
 
-TEST(SearchQueryParserTest, AlphaNumeric) {
-  TestParseSearchQuery("22 cloud emulator", "(a 22 cloud emulator)");
-  TestParseSearchQuery("cloud | 22 emulator", "(a (o cloud 22) emulator)");
-  TestParseSearchQuery("c10oud emulator", "(a c10oud emulator)");
-  TestParseSearchQuery("2panner-c10ud-4mulator", "(p 2panner c10ud 4mulator)");
+TEST(RQueryParserTest, AlphaNumeric) {
+  TestParseRQuery("22 cloud emulator", "(a 22 cloud emulator)");
+  TestParseRQuery("cloud | 22 emulator", "(a (o cloud 22) emulator)");
+  TestParseRQuery("c10oud emulator", "(a c10oud emulator)");
+  TestParseRQuery("2panner-c10ud-4mulator", "(p 2panner c10ud 4mulator)");
 }
 
-TEST(SearchQueryParserTest, Capital) {
-  TestParseSearchQuery("CLOUD EMULATOR", "(a cloud emulator)");
-  TestParseSearchQuery("CLOud | emulaTOR", "(o cloud emulator)");
-  TestParseSearchQuery("\"ClOUd EmuLAtor\"", "(p cloud emulator)");
-  TestParseSearchQuery("ClOUd AROUND(3) EmuLAtor", "(ar cloud 3 emulator)");
+TEST(RQueryParserTest, Capital) {
+  TestParseRQuery("CLOUD EMULATOR", "(a cloud emulator)");
+  TestParseRQuery("CLOud | emulaTOR", "(o cloud emulator)");
+  TestParseRQuery("\"ClOUd EmuLAtor\"", "(p cloud emulator)");
+  TestParseRQuery("ClOUd AROUND(3) EmuLAtor", "(ar cloud 3 emulator)");
 }
 
-TEST(SearchQueryParserTest, ParsingError) {
+TEST(RQueryParserTest, ParsingError) {
   TestParseFailure("cloud || spanner", "Encountered error");
   TestParseFailure("cloud | AROUND(3) spanner", "Syntax error");
   TestParseFailure("cloud| spanner emulator", "Encountered error");
@@ -257,37 +244,37 @@ TEST(SearchQueryParserTest, ParsingError) {
   TestParseFailure("谷歌", "Encountered error");
 }
 
-TEST(SearchQueryParserTest, EmptyQuery) { TestParseSearchQuery("", ""); }
+TEST(RQueryParserTest, EmptyQuery) { TestParseRQuery("", ""); }
 
-TEST(SearchQueryParserTest, TrimSeparators) {
-  TestParseSearchQuery("term!", "term");
-  TestParseSearchQuery("term!@", "term");
-  TestParseSearchQuery("cloud spanner!@", "(a cloud spanner)");
-  TestParseSearchQuery("term!!!", "term");
-  TestParseSearchQuery("!", "");
-  TestParseSearchQuery("! ", "");
-  TestParseSearchQuery("!term", "term");
-  TestParseSearchQuery("@!term", "term");
-  TestParseSearchQuery("@!cloud spanner", "(a cloud spanner)");
-  TestParseSearchQuery("!!!term", "term");
-  TestParseSearchQuery("@!term!@", "term");
-  TestParseSearchQuery(" @!cloud spanner!@ ", "(a cloud spanner)");
-  TestParseSearchQuery("\\!term", "term");
-  TestParseSearchQuery("\\'term", "term");
-  TestParseSearchQuery("\\\"term", "term");
-  TestParseSearchQuery("term\\!", "term");
-  TestParseSearchQuery("term\\'", "term");
-  TestParseSearchQuery("term\\\"", "term");
-  TestParseSearchQuery("term\\'!", "term");
-  TestParseSearchQuery("@\\!term", "term");
-  TestParseSearchQuery("\\!\\@term", "term");
-  TestParseSearchQuery("term\\!@", "term");
+TEST(RQueryParserTest, TrimSeparators) {
+  TestParseRQuery("term!", "term");
+  TestParseRQuery("term!@", "term");
+  TestParseRQuery("cloud spanner!@", "(a cloud spanner)");
+  TestParseRQuery("term!!!", "term");
+  TestParseRQuery("!", "");
+  TestParseRQuery("! ", "");
+  TestParseRQuery("!term", "term");
+  TestParseRQuery("@!term", "term");
+  TestParseRQuery("@!cloud spanner", "(a cloud spanner)");
+  TestParseRQuery("!!!term", "term");
+  TestParseRQuery("@!term!@", "term");
+  TestParseRQuery(" @!cloud spanner!@ ", "(a cloud spanner)");
+  TestParseRQuery("\\!term", "term");
+  TestParseRQuery("\\'term", "term");
+  TestParseRQuery("\\\"term", "term");
+  TestParseRQuery("term\\!", "term");
+  TestParseRQuery("term\\'", "term");
+  TestParseRQuery("term\\\"", "term");
+  TestParseRQuery("term\\'!", "term");
+  TestParseRQuery("@\\!term", "term");
+  TestParseRQuery("\\!\\@term", "term");
+  TestParseRQuery("term\\!@", "term");
 }
 
-TEST(SearchQueryParserTest, CaseSensitive) {
-  TestParseSearchQuery("CLOUD or EMULATOR", "(a cloud or emulator)");
-  TestParseSearchQuery("CLOUD oR EMULATOR", "(a cloud or emulator)");
-  TestParseSearchQuery("CLOUD OR EMULATOR", "(o cloud emulator)");
+TEST(RQueryParserTest, CaseSensitive) {
+  TestParseRQuery("CLOUD or EMULATOR", "(a cloud or emulator)");
+  TestParseRQuery("CLOUD oR EMULATOR", "(a cloud or emulator)");
+  TestParseRQuery("CLOUD OR EMULATOR", "(o cloud emulator)");
   TestParseFailure("ClOUd ARouND(3) EmuLAtor", "Syntax error");
 }
 

@@ -21,7 +21,7 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -37,14 +37,14 @@ namespace search {
 
 class SearchNgramsEvaluator {
  public:
-  static absl::StatusOr<zetasql::Value> Evaluate(
-      absl::Span<const zetasql::Value> args);
+  static absl::StatusOr<googlesql::Value> Evaluate(
+      absl::Span<const googlesql::Value> args);
 
  private:
   static constexpr int64_t kDefaultMinNgrams = 2;
 
   static absl::Status BuildTokenLists(
-      const zetasql::Value& tokenlist, absl::string_view query,
+      const googlesql::Value& tokenlist, absl::string_view query,
       bool& source_is_null, std::vector<std::string>& tokenlist_ngrams,
       absl::flat_hash_set<std::string>& query_ngrams);
 

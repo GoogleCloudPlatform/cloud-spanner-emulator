@@ -52,7 +52,7 @@
  *   dynahash has better performance for large entries.
  * - Guarantees stable pointers to entries.
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -292,7 +292,8 @@ static void *
 DynaHashAlloc(Size size)
 {
 	Assert(MemoryContextIsValid(CurrentDynaHashCxt));
-	return MemoryContextAlloc(CurrentDynaHashCxt, size);
+	return MemoryContextAllocExtended(CurrentDynaHashCxt, size,
+									  MCXT_ALLOC_NO_OOM);
 }
 
 
@@ -390,7 +391,8 @@ hash_create(const char *tabname, long nelem, const HASHCTL *info, int flags)
 	}
 
 	/* Initialize the hash header, plus a copy of the table name */
-	hashp = (HTAB *) DynaHashAlloc(sizeof(HTAB) + strlen(tabname) + 1);
+	hashp = (HTAB *) MemoryContextAlloc(CurrentDynaHashCxt,
+										sizeof(HTAB) + strlen(tabname) + 1);
 	MemSet(hashp, 0, sizeof(HTAB));
 
 	hashp->tabname = (char *) (hashp + 1);
@@ -759,7 +761,7 @@ init_htab(HTAB *hashp, long nelem)
 	hctl->nelem_alloc = choose_nelem_alloc(hctl->entrysize);
 
 #ifdef HASH_DEBUG
-	fprintf(stderr, "init_htab:\n%s%p\n%s%ld\n%s%ld\n%s%d\n%s%ld\n%s%u\n%s%x\n%s%x\n%s%ld\n",
+	fprintf(stderr, "init_htab:\n%s%p\n%s%ld\n%s%ld\n%s%d\n%s%u\n%s%x\n%s%x\n%s%ld\n",
 			"TABLE POINTER   ", hashp,
 			"DIRECTORY SIZE  ", hctl->dsize,
 			"SEGMENT SIZE    ", hctl->ssize,
@@ -942,9 +944,7 @@ calc_bucket(HASHHDR *hctl, uint32 hash_val)
  *
  * HASH_ENTER will normally ereport a generic "out of memory" error if
  * it is unable to create a new entry.  The HASH_ENTER_NULL operation is
- * the same except it will return NULL if out of memory.  Note that
- * HASH_ENTER_NULL cannot be used with the default palloc-based allocator,
- * since palloc internally ereports on out-of-memory.
+ * the same except it will return NULL if out of memory.
  *
  * If foundPtr isn't NULL, then *foundPtr is set true if we found an
  * existing entry in the table, false otherwise.  This is needed in the
@@ -1087,12 +1087,8 @@ hash_search_with_hash_value(HTAB *hashp,
 			}
 			return NULL;
 
-		case HASH_ENTER_NULL:
-			/* ENTER_NULL does not work with palloc-based allocator */
-			Assert(hashp->alloc != DynaHashAlloc);
-			/* FALL THRU */
-
 		case HASH_ENTER:
+		case HASH_ENTER_NULL:
 			/* Return existing element if found, else create one */
 			if (currBucket != NULL)
 				return (void *) ELEMENTKEY(currBucket);

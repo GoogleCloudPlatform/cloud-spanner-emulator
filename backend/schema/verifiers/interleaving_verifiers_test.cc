@@ -18,10 +18,10 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/time/time.h"
@@ -33,7 +33,7 @@
 #include "backend/transaction/read_write_transaction.h"
 #include "common/clock.h"
 #include "tests/common/scoped_feature_flags_setter.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -42,9 +42,9 @@ namespace backend {
 namespace {
 
 using google::spanner::emulator::test::ScopedEmulatorFeatureFlagsSetter;
-using zetasql::values::Int64;
-using zetasql::values::NullInt64;
-using zetasql_base::testing::StatusIs;
+using googlesql::values::Int64;
+using googlesql::values::NullInt64;
+using googlesql_base::testing::StatusIs;
 
 constexpr char kDatabaseId[] = "test-db";
 
@@ -66,7 +66,7 @@ class InterleavingVerifiersTest : public ::testing::Test {
           K2 INT64,
           V INT64,
         ) PRIMARY KEY(K1,K2), INTERLEAVE IN T)"};
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         database_,
         Database::Create(&clock_, kDatabaseId,
                          SchemaChangeOperation{.statements = statements}));
@@ -76,7 +76,7 @@ class InterleavingVerifiersTest : public ::testing::Test {
     int successful;
     absl::Status status;
     absl::Time timestamp;
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         database_->UpdateSchema(SchemaChangeOperation{.statements = statements},
                                 &successful, &timestamp, &status));
     return status;
@@ -93,14 +93,14 @@ class InterleavingVerifiersTest : public ::testing::Test {
 };
 
 TEST_F(InterleavingVerifiersTest, VerifierRunsOnEmptyTables) {
-  ZETASQL_ASSERT_OK(UpdateSchema({"ALTER TABLE C SET INTERLEAVE IN PARENT T"}));
+  GOOGLESQL_ASSERT_OK(UpdateSchema({"ALTER TABLE C SET INTERLEAVE IN PARENT T"}));
 
-  ZETASQL_ASSERT_OK(UpdateSchema({"ALTER TABLE C SET INTERLEAVE IN T"}));
+  GOOGLESQL_ASSERT_OK(UpdateSchema({"ALTER TABLE C SET INTERLEAVE IN T"}));
 }
 
 TEST_F(InterleavingVerifiersTest, VerifierRunsOnNullAndNonNullKeys) {
   {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
                          database_->CreateReadWriteTransaction(
                              ReadWriteOptions(), RetryState()));
     // Add a row with a NULL key to T.
@@ -111,8 +111,8 @@ TEST_F(InterleavingVerifiersTest, VerifierRunsOnNullAndNonNullKeys) {
                  {{NullInt64(), Int64(1)}});
     m.AddWriteOp(MutationOpType::kInsert, "C", {"K1", "K2"},
                  {{Int64(2), Int64(2)}});
-    ZETASQL_ASSERT_OK(txn->Write(m));
-    ZETASQL_ASSERT_OK(txn->Commit());
+    GOOGLESQL_ASSERT_OK(txn->Write(m));
+    GOOGLESQL_ASSERT_OK(txn->Commit());
   }
 
   // Cannot migrate to INTERLEAVE IN PARENT because the parent row does not
@@ -121,23 +121,23 @@ TEST_F(InterleavingVerifiersTest, VerifierRunsOnNullAndNonNullKeys) {
               StatusIs(absl::StatusCode::kFailedPrecondition));
 
   {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
                          database_->CreateReadWriteTransaction(
                              ReadWriteOptions(), RetryState()));
     // Add a row with key 2 to T.
     Mutation m;
     m.AddWriteOp(MutationOpType::kInsert, "T", {"K1"}, {{Int64(2)}});
-    ZETASQL_ASSERT_OK(txn->Write(m));
-    ZETASQL_ASSERT_OK(txn->Commit());
+    GOOGLESQL_ASSERT_OK(txn->Write(m));
+    GOOGLESQL_ASSERT_OK(txn->Commit());
   }
 
   // Migrate to INTERLEAVE IN PARENT should now succeed.
-  ZETASQL_ASSERT_OK(UpdateSchema({"ALTER TABLE C SET INTERLEAVE IN PARENT T"}));
+  GOOGLESQL_ASSERT_OK(UpdateSchema({"ALTER TABLE C SET INTERLEAVE IN PARENT T"}));
 
-  ZETASQL_ASSERT_OK(UpdateSchema({"ALTER TABLE C SET INTERLEAVE IN T"}));
+  GOOGLESQL_ASSERT_OK(UpdateSchema({"ALTER TABLE C SET INTERLEAVE IN T"}));
 
   {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ReadWriteTransaction> txn,
                          database_->CreateReadWriteTransaction(
                              ReadWriteOptions(), RetryState()));
     // Delete the row with key (2) from T & C
@@ -145,12 +145,12 @@ TEST_F(InterleavingVerifiersTest, VerifierRunsOnNullAndNonNullKeys) {
     m.AddWriteOp(MutationOpType::kDelete, "C", {"K1", "K2"},
                  {{Int64(2), Int64(2)}});
     m.AddWriteOp(MutationOpType::kDelete, "T", {"K1"}, {{Int64(2)}});
-    ZETASQL_ASSERT_OK(txn->Write(m));
-    ZETASQL_ASSERT_OK(txn->Commit());
+    GOOGLESQL_ASSERT_OK(txn->Write(m));
+    GOOGLESQL_ASSERT_OK(txn->Commit());
   }
 
   // Migration should still succeed.
-  ZETASQL_ASSERT_OK(UpdateSchema({"ALTER TABLE C SET INTERLEAVE IN PARENT T"}));
+  GOOGLESQL_ASSERT_OK(UpdateSchema({"ALTER TABLE C SET INTERLEAVE IN PARENT T"}));
 }
 
 }  // namespace

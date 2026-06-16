@@ -31,7 +31,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
 #include "third_party/spanner_pg/function_evaluators/tests/test_base.h"
 #include "third_party/spanner_pg/interface/formatting_evaluators.h"
@@ -43,8 +43,8 @@ using ::testing::HasSubstr;
 using ::testing::IsNull;
 using ::testing::Pointee;
 using ::testing::StrEq;
-using ::zetasql_base::testing::IsOkAndHolds;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::IsOkAndHolds;
+using ::googlesql_base::testing::StatusIs;
 
 class NumericToNumberTest : public PgEvaluatorTest {
  protected:
@@ -162,11 +162,11 @@ TEST_F(NumericToNumberTest, ParseNumberWithLocalePatterns) {
 
 TEST_F(NumericToNumberTest, DividesNumberByPowersOfTen) {
   EXPECT_THAT(NumericToNumber("99", "9V9"),
-              IsOkAndHolds(Pointee(StrEq(("9.9000000000000000")))));
+              IsOkAndHolds(Pointee(StrEq(("9.90000000000000000")))));
   EXPECT_THAT(NumericToNumber("999", "9V99"),
-              IsOkAndHolds(Pointee(StrEq(("9.9900000000000000")))));
+              IsOkAndHolds(Pointee(StrEq(("9.990000000000000000")))));
   EXPECT_THAT(NumericToNumber("9999", "9V999"),
-              IsOkAndHolds(Pointee(StrEq(("9.9990000000000000")))));
+              IsOkAndHolds(Pointee(StrEq(("9.9990000000000000000")))));
 }
 
 TEST_F(NumericToNumberTest, ParsesNumberWithStringLiterals) {

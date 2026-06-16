@@ -20,8 +20,8 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/functions/string.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/functions/string.h"
+#include "googlesql/public/value.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -34,8 +34,8 @@
 #include "absl/types/span.h"
 #include "backend/query/search/tokenizer.h"
 #include "common/errors.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -54,14 +54,14 @@ namespace search {
 // Out ngram_min_size: the minimum ngram size used to tokenize the source.
 // Out token_list: the list of tokens to search from.
 absl::Status SearchSubstringEvaluator::BuildTokenList(
-    const zetasql::Value& tokenlist, bool& source_is_null,
+    const googlesql::Value& tokenlist, bool& source_is_null,
     int& relative_search_types, int& ngram_min_size,
     std::vector<std::string>& token_list) {
   constexpr int kNgramMinSizeIndex = 2;
   constexpr int kIsNullIndex = 3;
   constexpr int kRelativeSearchTypeIndex = 4;
 
-  ZETASQL_ASSIGN_OR_RETURN(auto tokens, StringsFromTokenList(tokenlist));
+  GOOGLESQL_ASSIGN_OR_RETURN(auto tokens, StringsFromTokenList(tokenlist));
   ngram_min_size = 12;  // max allowed ngrams size.
   for (int i = 0; i < tokens.size(); ++i) {
     if (IsTokenizerSignature(tokens[i])) {
@@ -79,7 +79,7 @@ absl::Status SearchSubstringEvaluator::BuildTokenList(
       std::vector<std::string> signature =
           absl::StrSplit(tokens[i], absl::ByChar('-'), absl::SkipEmpty());
       int current_ngram_size_min = 0;
-      ZETASQL_RET_CHECK(signature.size() == kSubstringTokenizerSignatureArgumentSize &&
+      GOOGLESQL_RET_CHECK(signature.size() == kSubstringTokenizerSignatureArgumentSize &&
                 absl::SimpleAtoi(signature[kNgramMinSizeIndex],
                                  &current_ngram_size_min) &&
                 current_ngram_size_min > 0 &&
@@ -91,7 +91,7 @@ absl::Status SearchSubstringEvaluator::BuildTokenList(
       return error::TokenListNotMatchSearch("SEARCH_SUBSTRING",
                                             "TOKENIZE_SUBSTRING");
     } else {
-      ZETASQL_RETURN_IF_ERROR(TokenizeSubstring(tokens[i], token_list));
+      GOOGLESQL_RETURN_IF_ERROR(TokenizeSubstring(tokens[i], token_list));
     }
   }
 
@@ -145,7 +145,7 @@ bool SearchSubstringEvaluator::MatchesSubstring(
   return false;
 }
 
-zetasql::Value SearchSubstringEvaluator::SearchSubstring(
+googlesql::Value SearchSubstringEvaluator::SearchSubstring(
     int ngram_min_size, absl::Span<const std::string> tokens,
     absl::Span<const std::string> substrings,
     RelativeSearchType relative_search_type) {
@@ -158,14 +158,14 @@ zetasql::Value SearchSubstringEvaluator::SearchSubstring(
     bool found = (token_set.contains(ss) || ss.length() >= ngram_min_size) &&
                  MatchesSubstring(tokens, ss, relative_search_type);
     if (!found) {
-      return zetasql::Value::Bool(false);
+      return googlesql::Value::Bool(false);
     }
   }
   // return true if all tokens return match or query does not contain token.
-  return zetasql::Value::Bool(true);
+  return googlesql::Value::Bool(true);
 }
 
-zetasql::Value SearchSubstringEvaluator::SearchSubstringPharse(
+googlesql::Value SearchSubstringEvaluator::SearchSubstringPharse(
     int ngram_min_size, absl::Span<const std::string> tokens,
     absl::Span<const std::string> substrings) {
   std::string substring_phrase = absl::StrJoin(substrings, " ");
@@ -186,16 +186,16 @@ zetasql::Value SearchSubstringEvaluator::SearchSubstringPharse(
   std::string token_string = absl::StrCat(" ", absl::StrJoin(tokens, " "), " ");
   if (substring_phrase.length() >= ngram_min_size &&
       absl::StrContains(token_string, substring_phrase)) {
-    return zetasql::Value::Bool(true);
+    return googlesql::Value::Bool(true);
   }
 
-  return zetasql::Value::Bool(false);
+  return googlesql::Value::Bool(false);
 }
 
-absl::StatusOr<zetasql::Value> SearchSubstringEvaluator::Evaluate(
-    absl::Span<const zetasql::Value> args) {
-  const zetasql::Value& tokenlist = args[kTokenlist];
-  const zetasql::Value& query = args[kQuery];
+absl::StatusOr<googlesql::Value> SearchSubstringEvaluator::Evaluate(
+    absl::Span<const googlesql::Value> args) {
+  const googlesql::Value& tokenlist = args[kTokenlist];
+  const googlesql::Value& query = args[kQuery];
 
   if (!tokenlist.type()->IsTokenList()) {
     return error::ColumnNotSearchable(tokenlist.type()->DebugString());
@@ -206,7 +206,7 @@ absl::StatusOr<zetasql::Value> SearchSubstringEvaluator::Evaluate(
   }
 
   if (tokenlist.is_null()) {
-    return zetasql::Value::NullBool();
+    return googlesql::Value::NullBool();
   }
 
   int ngram_min_size = 12;  // max allowed ngrams size.
@@ -214,7 +214,7 @@ absl::StatusOr<zetasql::Value> SearchSubstringEvaluator::Evaluate(
   bool source_is_null;
   int tokenizer_relative_search_types = 0;
 
-  ZETASQL_RETURN_IF_ERROR(BuildTokenList(tokenlist, source_is_null,
+  GOOGLESQL_RETURN_IF_ERROR(BuildTokenList(tokenlist, source_is_null,
                                  tokenizer_relative_search_types,
                                  ngram_min_size, token_list));
 
@@ -222,7 +222,7 @@ absl::StatusOr<zetasql::Value> SearchSubstringEvaluator::Evaluate(
   RelativeSearchType requested_search_type = RelativeSearchType::None;
   if (args.size() > kRelativeSearchType &&
       !args[kRelativeSearchType].is_null()) {
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         requested_search_type,
         ParseRelativeSearchType(args[kRelativeSearchType].string_value()));
     if ((tokenizer_relative_search_types & requested_search_type) == 0) {
@@ -233,27 +233,27 @@ absl::StatusOr<zetasql::Value> SearchSubstringEvaluator::Evaluate(
 
   if (source_is_null || query.is_null()) {
     // Either document is empty or query is null, always return false
-    return zetasql::Value::NullBool();
+    return googlesql::Value::NullBool();
   }
 
   std::string lower_str;
   absl::Status status;
-  zetasql::functions::LowerUtf8(query.string_value(), &lower_str, &status);
-  ZETASQL_RETURN_IF_ERROR(status);
+  googlesql::functions::LowerUtf8(query.string_value(), &lower_str, &status);
+  GOOGLESQL_RETURN_IF_ERROR(status);
 
   std::vector<std::string> substrings = absl::StrSplit(
       lower_str, absl::ByAnyChar(kDelimiter), absl::SkipWhitespace());
 
   if (substrings.empty()) {
     // Query is empty, always return false
-    return zetasql::Value::Bool(false);
+    return googlesql::Value::Bool(false);
   }
 
   if (substrings.size() > 1 &&
       requested_search_type != RelativeSearchType::Phrase &&
       requested_search_type != RelativeSearchType::None) {
     // It is not possible for any word to have multiple prefixes/suffixes.
-    return zetasql::Value::NullBool();
+    return googlesql::Value::NullBool();
   }
 
   if (requested_search_type != RelativeSearchType::Phrase) {

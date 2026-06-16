@@ -44,6 +44,10 @@ OUTPUT (Outcome BOOL)
 REMOTE OPTIONS (
   endpoint = '//aiplatform.googleapis.com/projects/tp/locations/tl/endpoints/te'
 );
+CREATE PROPERTY GRAPH test_graph
+  NODE TABLES (
+    users KEY(user_id) PROPERTIES (user_id, name, age)
+  );
 ===
 @Dialect=POSTGRESQL
 CREATE TABLE users(
@@ -83,4 +87,8 @@ CREATE TABLE array_table (
   key                 bigint NOT NULL PRIMARY KEY,
   string_array        varchar(30)[],
   has_not_applicable  bool generated always as (arrayoverlap(string_array, ARRAY['not_applicable'])) stored
+);
+CREATE TABLE EntityWithArrays (
+  id bigint NOT NULL PRIMARY KEY,
+  the_array varchar(255)[]
 );

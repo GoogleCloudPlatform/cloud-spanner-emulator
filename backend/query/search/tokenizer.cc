@@ -20,9 +20,9 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/simple_token_list.h"
-#include "zetasql/public/token_list_util.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/simple_token_list.h"
+#include "googlesql/public/token_list_util.h"
+#include "googlesql/public/value.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/match.h"
@@ -31,7 +31,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "common/errors.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -40,8 +40,8 @@ namespace backend {
 namespace query {
 namespace search {
 
-using TextToken = zetasql::tokens::TextToken;
-using TokenList = zetasql::tokens::TokenList;
+using TextToken = googlesql::tokens::TextToken;
+using TokenList = googlesql::tokens::TokenList;
 
 namespace {
 constexpr absl::string_view kRelativeSearchTypeWordPrefix = "word_prefix";
@@ -53,15 +53,15 @@ constexpr absl::string_view kRelateiveSearchTypeAdjacentAndInOrder =
 constexpr absl::string_view kRelativeSearchTypePhrase = "phrase";
 }  // namespace
 
-zetasql::Value TokenListFromStrings(std::vector<std::string> strings) {
-  return zetasql::TokenListFromStringArray(strings);
+googlesql::Value TokenListFromStrings(std::vector<std::string> strings) {
+  return googlesql::TokenListFromStringArray(strings);
 }
 
 absl::StatusOr<std::vector<std::string>> StringsFromTokenList(
-    const zetasql::Value& tokenList) {
+    const googlesql::Value& tokenList) {
   std::vector<std::string> strings;
 
-  ZETASQL_ASSIGN_OR_RETURN(auto iter, tokenList.tokenlist_value().GetIterator());
+  GOOGLESQL_ASSIGN_OR_RETURN(auto iter, tokenList.tokenlist_value().GetIterator());
   TextToken token;
   while (!iter.done() && iter.Next(token).ok()) {
     strings.push_back(std::string(token.text()));
@@ -70,8 +70,8 @@ absl::StatusOr<std::vector<std::string>> StringsFromTokenList(
   return strings;
 }
 
-zetasql::Value TokenListFromBytes(std::string& bytes) {
-  return zetasql::Value::TokenList(TokenList::FromBytesUnvalidated(bytes));
+googlesql::Value TokenListFromBytes(std::string& bytes) {
+  return googlesql::Value::TokenList(TokenList::FromBytesUnvalidated(bytes));
 }
 
 bool IsTokenizerSignature(absl::string_view token) {
@@ -84,21 +84,21 @@ bool IsTokenizerSignature(absl::string_view token) {
          absl::StartsWith(token, absl::StrCat(kJsonTokenizer, "-"));
 }
 
-int64_t GetIntParameterValue(absl::Span<const zetasql::Value> args,
+int64_t GetIntParameterValue(absl::Span<const googlesql::Value> args,
                              int parameter_index, int default_value) {
   return args.size() > parameter_index && !args[parameter_index].is_null()
              ? args[parameter_index].int64_value()
              : default_value;
 }
 
-double GetDoubleParameterValue(absl::Span<const zetasql::Value> args,
+double GetDoubleParameterValue(absl::Span<const googlesql::Value> args,
                                int parameter_index, double default_value) {
   return args.size() > parameter_index && !args[parameter_index].is_null()
              ? args[parameter_index].double_value()
              : default_value;
 }
 
-bool GetBoolParameterValue(absl::Span<const zetasql::Value> args,
+bool GetBoolParameterValue(absl::Span<const googlesql::Value> args,
                            int parameter_index, bool default_value) {
   return args.size() > parameter_index && !args[parameter_index].is_null()
              ? args[parameter_index].bool_value()

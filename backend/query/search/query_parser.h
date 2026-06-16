@@ -31,21 +31,21 @@ namespace backend {
 namespace query {
 namespace search {
 
-class QueryParser {
-  // Wrapper class of the search query parser. The class takes a passed in query
+class RQueryParser {
+  // Wrapper class of the rquery parser. The class takes a passed in query
   // string, preprocess it, and parse the processed string into an AST for
   // SEARCH evaluation.
  public:
-  // Initialize a query parser object from a search query. The search query is
-  // the user input in the SEARCH function. Some accepted search queries are:
+  // Initialize a query parser object from a query. The rquery is
+  // the user input in the SEARCH function. Some accepted rquery examples are:
   // [cloud spanner], [cloud | spanner emulator], [cloud-spanner-emulator],
   // [google around(3) cloud-spanner|sql-emulator], etc.
-  // The grammar of a valid search query is defined in query_parser.jjt.
+  // The grammar of a valid rquery is defined in query_parser.jjt.
   // An error will be returned when the input fails to parse.
-  explicit QueryParser(absl::string_view search_query);
+  explicit RQueryParser(absl::string_view query);
 
-  // Parses a search query.
-  absl::Status ParseSearchQuery();
+  // Parses a rquery.
+  absl::Status Parse();
 
   // Taking ownership of the parsed tree.
   std::unique_ptr<SimpleNode>& ReleaseTree() { return tree_; }
@@ -56,8 +56,7 @@ class QueryParser {
   // Normalize query string. e.g. transfer all chars into lower case.
   absl::Status NormalizeParsedTree(SimpleNode* tree);
 
-  std::string search_query_;
-
+  std::string query_;
   std::unique_ptr<SimpleNode> tree_;
 };
 

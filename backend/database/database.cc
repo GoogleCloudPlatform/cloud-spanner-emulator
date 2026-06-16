@@ -21,7 +21,7 @@
 #include <utility>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
-#include "zetasql/public/types/type_factory.h"
+#include "googlesql/public/types/type_factory.h"
 #include "absl/functional/bind_front.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
@@ -50,7 +50,7 @@
 #include "common/clock.h"
 #include "common/errors.h"
 #include "absl/status/status.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -79,7 +79,7 @@ absl::StatusOr<std::unique_ptr<Database>> Database::Create(
     database->storage_ = std::make_unique<InMemoryStorage>();
   }
   database->lock_manager_ = std::make_unique<LockManager>(clock);
-  database->type_factory_ = std::make_unique<zetasql::TypeFactory>();
+  database->type_factory_ = std::make_unique<googlesql::TypeFactory>();
   database->action_manager_ = std::make_unique<ActionManager>();
   database->dialect_ = schema_change_operation.database_dialect;
   database->pg_oid_assigner_ = std::make_unique<PgOidAssigner>(
@@ -98,7 +98,7 @@ absl::StatusOr<std::unique_ptr<Database>> Database::Create(
     }
   } else {
     SchemaUpdater updater;
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         std::unique_ptr<const Schema> schema,
         updater.CreateSchemaFromDDL(schema_change_operation,
                                     database->GetSchemaChangeContext()));
@@ -173,18 +173,18 @@ absl::Status Database::UpdateSchema(
   // concurrent transactions it will be denied and the operation aborted.
   ScopedSchemaChangeLock lock{transaction_id_generator_.NextId(),
                               lock_manager_.get()};
-  ZETASQL_RETURN_IF_ERROR(lock.Wait());
+  GOOGLESQL_RETURN_IF_ERROR(lock.Wait());
 
   // Reserve a commit timestamp for the schema changes. Even if the
   // schema change fails, it will result in a no-op commit that will
   // be invisible to other read-only/read-write transactions.
-  ZETASQL_ASSIGN_OR_RETURN(auto update_timestamp, lock.ReserveCommitTimestamp());
+  GOOGLESQL_ASSIGN_OR_RETURN(auto update_timestamp, lock.ReserveCommitTimestamp());
 
   auto context = GetSchemaChangeContext();
   context.schema_change_timestamp = update_timestamp;
   const Schema* existing_schema = versioned_catalog_->GetLatestSchema();
   SchemaUpdater updater;
-  ZETASQL_ASSIGN_OR_RETURN(auto result,
+  GOOGLESQL_ASSIGN_OR_RETURN(auto result,
                    updater.UpdateSchemaFromDDL(
                        existing_schema, schema_change_operation, context));
   *commit_timestamp = update_timestamp;
@@ -195,7 +195,7 @@ absl::Status Database::UpdateSchema(
   // schema will be the schema for the last valid statement before the statement
   // for which the backfill/verification failed.
   if (result.updated_schema != nullptr) {
-    ZETASQL_RETURN_IF_ERROR(versioned_catalog_->AddSchema(
+    GOOGLESQL_RETURN_IF_ERROR(versioned_catalog_->AddSchema(
         update_timestamp, std::move(result.updated_schema)));
     action_manager_->AddActionsForSchema(versioned_catalog_->GetLatestSchema(),
                                          query_engine_->function_catalog(),

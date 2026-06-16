@@ -23,7 +23,7 @@
 #include "benchmark/benchmark.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/log/check.h"
 #include "absl/status/statusor.h"
@@ -38,11 +38,11 @@
 #include "common/clock.h"
 #include "tests/common/schema_constructor.h"
 
-using zetasql::types::StringType;
-using zetasql::values::Int64;
-using zetasql::values::Null;
-using zetasql::values::String;
-using zetasql_base::testing::StatusIs;
+using googlesql::types::StringType;
+using googlesql::values::Int64;
+using googlesql::values::Null;
+using googlesql::values::String;
+using googlesql_base::testing::StatusIs;
 
 namespace google {
 namespace spanner {
@@ -61,7 +61,7 @@ class TransactionStoreTest : public testing::Test {
         commit_timestamp_tracker_(std::make_unique<CommitTimestampTracker>()),
         transaction_store_(base_storage_.get(), lock_handle_.get(),
                            commit_timestamp_tracker_.get()),
-        type_factory_(std::make_unique<zetasql::TypeFactory>()),
+        type_factory_(std::make_unique<googlesql::TypeFactory>()),
         schema_(test::CreateSchemaFromDDL(
                     {
                         R"(
@@ -86,7 +86,7 @@ class TransactionStoreTest : public testing::Test {
   TransactionStore transaction_store_;
 
   // The type factory must outlive the type objects that it has made.
-  std::unique_ptr<zetasql::TypeFactory> type_factory_;
+  std::unique_ptr<googlesql::TypeFactory> type_factory_;
   std::unique_ptr<const Schema> schema_;
 
   // Constants
@@ -127,7 +127,7 @@ class TransactionStoreTest : public testing::Test {
 
   absl::StatusOr<std::vector<ValueList>> Read(const KeyRange& key_range) {
     std::unique_ptr<StorageIterator> itr;
-    ZETASQL_RETURN_IF_ERROR(transaction_store_.Read(table_, key_range,
+    GOOGLESQL_RETURN_IF_ERROR(transaction_store_.Read(table_, key_range,
                                             {int64_col_, string_col_}, &itr));
 
     std::vector<ValueList> rows;
@@ -141,30 +141,30 @@ class TransactionStoreTest : public testing::Test {
   }
 
   auto IsOkAndHoldsRow(const ValueList& row) {
-    return zetasql_base::testing::IsOkAndHolds(row);
+    return googlesql_base::testing::IsOkAndHolds(row);
   }
 
   auto IsOkAndHoldsRows(const std::vector<ValueList>& rows) {
-    return zetasql_base::testing::IsOkAndHolds(testing::ElementsAreArray(rows));
+    return googlesql_base::testing::IsOkAndHolds(testing::ElementsAreArray(rows));
   }
 };
 
 TEST_F(TransactionStoreTest, CanReadBufferedWrites) {
   // Populate the table with some data.
   absl::Time t0 = absl::Now();
-  ZETASQL_EXPECT_OK(Write(t0, Key({Int64(1)}), {Int64(1), String("value")}));
-  ZETASQL_EXPECT_OK(Write(t0, Key({Int64(2)}), {Int64(2), String("value")}));
+  GOOGLESQL_EXPECT_OK(Write(t0, Key({Int64(1)}), {Int64(1), String("value")}));
+  GOOGLESQL_EXPECT_OK(Write(t0, Key({Int64(2)}), {Int64(2), String("value")}));
 
   // Insert a new row.
-  ZETASQL_EXPECT_OK(BufferInsert(Key({Int64(3)}), {int64_col_, string_col_},
+  GOOGLESQL_EXPECT_OK(BufferInsert(Key({Int64(3)}), {int64_col_, string_col_},
                          {Int64(3), String("value")}));
 
   // Update an existing row.
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       BufferUpdate(Key({Int64(1)}), {string_col_}, {String("new-value")}));
 
   // Delete another existing row.
-  ZETASQL_EXPECT_OK(BufferDelete(Key({Int64(2)})));
+  GOOGLESQL_EXPECT_OK(BufferDelete(Key({Int64(2)})));
 
   // Read your writes.
   EXPECT_THAT(ReadAll(), IsOkAndHoldsRows({{Int64(1), String("new-value")},
@@ -174,17 +174,17 @@ TEST_F(TransactionStoreTest, CanReadBufferedWrites) {
 TEST_F(TransactionStoreTest, CanBufferInsertAfterDelete) {
   // Populate the table with some data.
   absl::Time t0 = absl::Now();
-  ZETASQL_EXPECT_OK(Write(t0, Key({Int64(1)}), {Int64(1), String("value")}));
+  GOOGLESQL_EXPECT_OK(Write(t0, Key({Int64(1)}), {Int64(1), String("value")}));
 
   // Read your writes.
   EXPECT_THAT(ReadAll(), IsOkAndHoldsRows({{Int64(1), String("value")}}));
 
-  ZETASQL_EXPECT_OK(BufferDelete(Key({Int64(1)})));
+  GOOGLESQL_EXPECT_OK(BufferDelete(Key({Int64(1)})));
 
   // Read your writes, no rows to read.
   EXPECT_THAT(ReadAll(), IsOkAndHoldsRows({}));
 
-  ZETASQL_EXPECT_OK(BufferInsert(Key({Int64(1)}), {int64_col_, string_col_},
+  GOOGLESQL_EXPECT_OK(BufferInsert(Key({Int64(1)}), {int64_col_, string_col_},
                          {Int64(1), String("new-value")}));
 
   // Read your writes.
@@ -194,13 +194,13 @@ TEST_F(TransactionStoreTest, CanBufferInsertAfterDelete) {
 }
 
 TEST_F(TransactionStoreTest, CanBufferUpdateAfterInsert) {
-  ZETASQL_EXPECT_OK(BufferInsert(Key({Int64(1)}), {int64_col_, string_col_},
+  GOOGLESQL_EXPECT_OK(BufferInsert(Key({Int64(1)}), {int64_col_, string_col_},
                          {Int64(1), String("old-value")}));
 
   // Read your writes.
   EXPECT_THAT(ReadAll(), IsOkAndHoldsRows({{Int64(1), String("old-value")}}));
 
-  ZETASQL_EXPECT_OK(BufferInsert(Key({Int64(1)}), {int64_col_, string_col_},
+  GOOGLESQL_EXPECT_OK(BufferInsert(Key({Int64(1)}), {int64_col_, string_col_},
                          {Int64(1), String("new-value")}));
 
   // Read your writes.
@@ -208,10 +208,10 @@ TEST_F(TransactionStoreTest, CanBufferUpdateAfterInsert) {
 }
 
 TEST_F(TransactionStoreTest, CanBufferDeleteAfterInsert) {
-  ZETASQL_EXPECT_OK(BufferInsert(Key({Int64(1)}), {int64_col_, string_col_},
+  GOOGLESQL_EXPECT_OK(BufferInsert(Key({Int64(1)}), {int64_col_, string_col_},
                          {Int64(1), String("old-value")}));
 
-  ZETASQL_EXPECT_OK(BufferDelete(Key({Int64(1)})));
+  GOOGLESQL_EXPECT_OK(BufferDelete(Key({Int64(1)})));
 
   // No rows to read.
   EXPECT_THAT(ReadAll(), IsOkAndHoldsRows({}));
@@ -219,15 +219,15 @@ TEST_F(TransactionStoreTest, CanBufferDeleteAfterInsert) {
 
 TEST_F(TransactionStoreTest, CanBufferMultipleUpdates) {
   absl::Time t0 = absl::Now();
-  ZETASQL_EXPECT_OK(Write(t0, Key({Int64(1)}), {Int64(1), String("value-1")}));
+  GOOGLESQL_EXPECT_OK(Write(t0, Key({Int64(1)}), {Int64(1), String("value-1")}));
 
-  ZETASQL_EXPECT_OK(BufferUpdate(Key({Int64(1)}), {string_col_}, {String("value-2")}));
+  GOOGLESQL_EXPECT_OK(BufferUpdate(Key({Int64(1)}), {string_col_}, {String("value-2")}));
 
   // Read
   EXPECT_THAT(ReadAll(), IsOkAndHoldsRows({{Int64(1), String("value-2")}}));
 
   // Buffer update.
-  ZETASQL_EXPECT_OK(BufferUpdate(Key({Int64(1)}), {string_col_}, {String("value-3")}));
+  GOOGLESQL_EXPECT_OK(BufferUpdate(Key({Int64(1)}), {string_col_}, {String("value-3")}));
 
   // Read
   EXPECT_THAT(ReadAll(), IsOkAndHoldsRows({{Int64(1), String("value-3")}}));
@@ -235,11 +235,11 @@ TEST_F(TransactionStoreTest, CanBufferMultipleUpdates) {
 
 TEST_F(TransactionStoreTest, CanBufferReplaceWithNullValues) {
   absl::Time t0 = absl::Now();
-  ZETASQL_EXPECT_OK(Write(t0, Key({Int64(1)}), {Int64(1), String("value-1")}));
+  GOOGLESQL_EXPECT_OK(Write(t0, Key({Int64(1)}), {Int64(1), String("value-1")}));
 
   // Delete row and only insert key column value.
-  ZETASQL_EXPECT_OK(BufferDelete(Key({Int64(1)})));
-  ZETASQL_EXPECT_OK(BufferInsert(Key({Int64(1)}), {int64_col_}, {Int64(1)}));
+  GOOGLESQL_EXPECT_OK(BufferDelete(Key({Int64(1)})));
+  GOOGLESQL_EXPECT_OK(BufferInsert(Key({Int64(1)}), {int64_col_}, {Int64(1)}));
 
   // Read should return null value for string_col.
   EXPECT_THAT(ReadAll(), IsOkAndHoldsRows({{Int64(1), Null(StringType())}}));
@@ -247,12 +247,12 @@ TEST_F(TransactionStoreTest, CanBufferReplaceWithNullValues) {
 
 TEST_F(TransactionStoreTest, CanBufferDeleteInsertUpdate) {
   absl::Time t0 = absl::Now();
-  ZETASQL_EXPECT_OK(Write(t0, Key({Int64(1)}), {Int64(1), String("value-1")}));
+  GOOGLESQL_EXPECT_OK(Write(t0, Key({Int64(1)}), {Int64(1), String("value-1")}));
 
-  ZETASQL_EXPECT_OK(BufferDelete(Key({Int64(1)})));
-  ZETASQL_EXPECT_OK(BufferInsert(Key({Int64(1)}), {int64_col_, string_col_},
+  GOOGLESQL_EXPECT_OK(BufferDelete(Key({Int64(1)})));
+  GOOGLESQL_EXPECT_OK(BufferInsert(Key({Int64(1)}), {int64_col_, string_col_},
                          {Int64(1), String("value-2")}));
-  ZETASQL_EXPECT_OK(BufferUpdate(Key({Int64(1)}), {string_col_}, {String("value-3")}));
+  GOOGLESQL_EXPECT_OK(BufferUpdate(Key({Int64(1)}), {string_col_}, {String("value-3")}));
 
   EXPECT_THAT(ReadAll(), IsOkAndHoldsRows({{Int64(1), String("value-3")}}));
 }
@@ -265,7 +265,7 @@ TEST_F(TransactionStoreTest, ReadValueNotFound) {
 TEST_F(TransactionStoreTest, ReadValueOnlyInBaseStorage) {
   // Write into base storage.
   absl::Time t0 = absl::Now();
-  ZETASQL_EXPECT_OK(Write(t0, Key({Int64(1)}), {Int64(1), String("value-1")}));
+  GOOGLESQL_EXPECT_OK(Write(t0, Key({Int64(1)}), {Int64(1), String("value-1")}));
 
   // Read
   EXPECT_THAT(ReadAll(), IsOkAndHoldsRows({{Int64(1), String("value-1")}}));
@@ -273,15 +273,15 @@ TEST_F(TransactionStoreTest, ReadValueOnlyInBaseStorage) {
 
 TEST_F(TransactionStoreTest, Lookup) {
   // Populate transaction store
-  ZETASQL_EXPECT_OK(BufferInsert(Key({Int64(1)}), {int64_col_, string_col_},
+  GOOGLESQL_EXPECT_OK(BufferInsert(Key({Int64(1)}), {int64_col_, string_col_},
                          {Int64(1), String("value")}));
-  ZETASQL_EXPECT_OK(BufferInsert(Key({Int64(3)}), {int64_col_, string_col_},
+  GOOGLESQL_EXPECT_OK(BufferInsert(Key({Int64(3)}), {int64_col_, string_col_},
                          {Int64(3), String("value")}));
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       BufferUpdate(Key({Int64(1)}), {string_col_}, {String("new-value")}));
 
   // Delete another existing row.
-  ZETASQL_EXPECT_OK(BufferDelete(Key({Int64(2)})));
+  GOOGLESQL_EXPECT_OK(BufferDelete(Key({Int64(2)})));
 
   // Now verify the values in the transaction store.
   // Row Int64(1) is updated.
@@ -295,7 +295,7 @@ TEST_F(TransactionStoreTest, Lookup) {
   EXPECT_THAT(Lookup(Key({Int64(3)})),
               IsOkAndHoldsRow({Int64(3), String("value")}));
 
-  ZETASQL_EXPECT_OK(BufferDelete(Key({Int64(3)})));
+  GOOGLESQL_EXPECT_OK(BufferDelete(Key({Int64(3)})));
 
   // Row Int64(3) has been deleted so it should return not found.
   EXPECT_THAT(Lookup(Key({Int64(3)})), StatusIs(absl::StatusCode::kNotFound));
@@ -304,22 +304,22 @@ TEST_F(TransactionStoreTest, Lookup) {
 TEST_F(TransactionStoreTest, LookupDelete) {
   EXPECT_THAT(Lookup(Key({Int64(1)})), StatusIs(absl::StatusCode::kNotFound));
 
-  ZETASQL_EXPECT_OK(BufferInsert(Key({Int64(1)}), {int64_col_, string_col_},
+  GOOGLESQL_EXPECT_OK(BufferInsert(Key({Int64(1)}), {int64_col_, string_col_},
                          {Int64(1), String("value")}));
   EXPECT_THAT(Lookup(Key({Int64(1)})),
               IsOkAndHoldsRow({Int64(1), String("value")}));
 
-  ZETASQL_EXPECT_OK(BufferDelete(Key({Int64(1)})));
+  GOOGLESQL_EXPECT_OK(BufferDelete(Key({Int64(1)})));
   EXPECT_THAT(Lookup(Key({Int64(1)})), StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(TransactionStoreTest, LookupBaseStorage) {
   absl::Time t0 = absl::Now();
-  ZETASQL_EXPECT_OK(Write(t0, Key({Int64(1)}), {Int64(1), String("value")}));
+  GOOGLESQL_EXPECT_OK(Write(t0, Key({Int64(1)}), {Int64(1), String("value")}));
   EXPECT_THAT(Lookup(Key({Int64(1)})),
               IsOkAndHoldsRow({Int64(1), String("value")}));
 
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       BufferUpdate(Key({Int64(1)}), {string_col_}, {String("new-value")}));
   EXPECT_THAT(Lookup(Key({Int64(1)})),
               IsOkAndHoldsRow({Int64(1), String("new-value")}));
@@ -327,17 +327,17 @@ TEST_F(TransactionStoreTest, LookupBaseStorage) {
 
 TEST_F(TransactionStoreTest, LookupEmptyColumns) {
   absl::Time t0 = absl::Now();
-  ZETASQL_EXPECT_OK(Write(t0, Key({Int64(1)}), {Int64(1), String("value")}));
-  ZETASQL_EXPECT_OK(BufferInsert(Key({Int64(2)}), {int64_col_, string_col_},
+  GOOGLESQL_EXPECT_OK(Write(t0, Key({Int64(1)}), {Int64(1), String("value")}));
+  GOOGLESQL_EXPECT_OK(BufferInsert(Key({Int64(2)}), {int64_col_, string_col_},
                          {Int64(2), String("value")}));
 
-  ZETASQL_EXPECT_OK(transaction_store_.Lookup(table_, Key({Int64(1)}), {}));
-  ZETASQL_EXPECT_OK(transaction_store_.Lookup(table_, Key({Int64(2)}), {}));
+  GOOGLESQL_EXPECT_OK(transaction_store_.Lookup(table_, Key({Int64(1)}), {}));
+  GOOGLESQL_EXPECT_OK(transaction_store_.Lookup(table_, Key({Int64(2)}), {}));
 
-  ZETASQL_EXPECT_OK(BufferUpdate(Key({Int64(1)}), {int64_col_, string_col_},
+  GOOGLESQL_EXPECT_OK(BufferUpdate(Key({Int64(1)}), {int64_col_, string_col_},
                          {Int64(2), String("new-value")}));
 
-  ZETASQL_EXPECT_OK(transaction_store_.Lookup(table_, Key({Int64(1)}), {}));
+  GOOGLESQL_EXPECT_OK(transaction_store_.Lookup(table_, Key({Int64(1)}), {}));
 }
 
 TEST_F(TransactionStoreTest, ReturnsNullValuesForUnpopulatedColumns) {
@@ -348,13 +348,13 @@ TEST_F(TransactionStoreTest, ReturnsNullValuesForUnpopulatedColumns) {
   // In each case, we do not populate the string column, and expect that all
   // reads for the string column return NULL.
   absl::Time t0 = absl::Now();
-  ZETASQL_EXPECT_OK(base_storage_->Write(t0, table_->id(), Key({Int64(1)}),
+  GOOGLESQL_EXPECT_OK(base_storage_->Write(t0, table_->id(), Key({Int64(1)}),
                                  {int64_col_->id()}, {Int64(1)}));
-  ZETASQL_EXPECT_OK(BufferInsert(Key({Int64(2)}), {int64_col_}, {Int64(2)}));
+  GOOGLESQL_EXPECT_OK(BufferInsert(Key({Int64(2)}), {int64_col_}, {Int64(2)}));
 
-  ZETASQL_EXPECT_OK(base_storage_->Write(t0, table_->id(), Key({Int64(3)}),
+  GOOGLESQL_EXPECT_OK(base_storage_->Write(t0, table_->id(), Key({Int64(3)}),
                                  {int64_col_->id()}, {Int64(3)}));
-  ZETASQL_EXPECT_OK(BufferUpdate(Key({Int64(3)}), {int64_col_}, {Int64(3)}));
+  GOOGLESQL_EXPECT_OK(BufferUpdate(Key({Int64(3)}), {int64_col_}, {Int64(3)}));
 
   for (const int key : {1, 2, 3}) {
     EXPECT_THAT(Lookup(Key({Int64(key)})),
@@ -370,7 +370,7 @@ TEST_F(TransactionStoreTest, ReturnsNullValuesForUnpopulatedColumns) {
 
 TEST_F(TransactionStoreTest, ReadsClosedOpenRange) {
   // We insert key {1}, then read range [0, 1) which should exclude the key.
-  ZETASQL_EXPECT_OK(BufferInsert(Key({Int64(1)}), {int64_col_}, {Int64(1)}));
+  GOOGLESQL_EXPECT_OK(BufferInsert(Key({Int64(1)}), {int64_col_}, {Int64(1)}));
 
   EXPECT_THAT(Read(KeyRange::ClosedOpen(Key({Int64(0)}), Key({Int64(1)}))),
               IsOkAndHoldsRows({}));
@@ -391,7 +391,7 @@ void BM_TransactionStoreRead(benchmark::State& state) {
   TransactionStore transaction_store(&base_storage, lock_handle.get(),
                                      &commit_timestamp_tracker);
 
-  auto type_factory = std::make_unique<zetasql::TypeFactory>();
+  auto type_factory = std::make_unique<googlesql::TypeFactory>();
   absl::StatusOr<std::unique_ptr<const Schema>> schema_or =
       test::CreateSchemaFromDDL({R"(
         CREATE TABLE TestTable (

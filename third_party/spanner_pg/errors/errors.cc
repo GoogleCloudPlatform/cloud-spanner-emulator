@@ -31,7 +31,7 @@
 
 #include "third_party/spanner_pg/errors/errors.h"
 
-#include "zetasql/base/logging.h"
+#include "googlesql/base/logging.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "third_party/spanner_pg/errors/errors.pb.h"
@@ -76,12 +76,8 @@ absl::StatusCode CanonicalCode(int pg_error_code) {
       // like the best option.
       return absl::StatusCode::kInvalidArgument;
     case ERRCODE_TO_CATEGORY(ERRCODE_PROGRAM_LIMIT_EXCEEDED): {
-      if (pg_error_code == ERRCODE_STATEMENT_TOO_COMPLEX) {
-        return absl::StatusCode::kResourceExhausted;
-      } else {
-        // Exceeded some sort of artificial internal limit.
-        return absl::StatusCode::kOutOfRange;
-      }
+      // Exceeded some sort of artificial internal limit.
+      return absl::StatusCode::kOutOfRange;
     }
     case 0:
       // TODO: kUnknown is confusing, specifically for the deparser

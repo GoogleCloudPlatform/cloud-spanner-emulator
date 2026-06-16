@@ -22,9 +22,9 @@
 #include <string>
 #include <utility>
 
-#include "zetasql/public/analyzer_output.h"
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/type.h"
+#include "googlesql/public/analyzer_output.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/type.h"
 #include "absl/strings/str_cat.h"
 #include "backend/schema/catalog/column.h"
 
@@ -34,17 +34,17 @@ namespace emulator {
 namespace backend {
 
 // QueryableColumn is a thin wrapper over backend::Column class which implements
-// the zetasql::Column interface. The intent is to have a cleaner separation
+// the googlesql::Column interface. The intent is to have a cleaner separation
 // of interfaces between backend/catalog and backend/query and remove any
-// ZetaSQL dependencies from the former.
-class QueryableColumn : public zetasql::Column {
+// GoogleSQL dependencies from the former.
+class QueryableColumn : public googlesql::Column {
  public:
   explicit QueryableColumn(const backend::Column* column)
       : wrapped_column_(column) {}
 
   QueryableColumn(const backend::Column* column,
-                  std::unique_ptr<const zetasql::AnalyzerOutput> output,
-                  std::optional<const zetasql::Column::ExpressionAttributes>
+                  std::unique_ptr<const googlesql::AnalyzerOutput> output,
+                  std::optional<const googlesql::Column::ExpressionAttributes>
                       expression_attributes)
       : wrapped_column_(column),
         output_(std::move(output)),
@@ -54,7 +54,7 @@ class QueryableColumn : public zetasql::Column {
 
   std::string FullName() const override { return wrapped_column_->FullName(); }
 
-  const zetasql::Type* GetType() const override {
+  const googlesql::Type* GetType() const override {
     return wrapped_column_->GetType();
   }
 
@@ -66,7 +66,7 @@ class QueryableColumn : public zetasql::Column {
 
   // Returns optional ExpressionAttributes if a column has default or generated
   // Expression.
-  std::optional<const zetasql::Column::ExpressionAttributes> GetExpression()
+  std::optional<const googlesql::Column::ExpressionAttributes> GetExpression()
       const override {
     return column_expression_;
   }
@@ -78,9 +78,9 @@ class QueryableColumn : public zetasql::Column {
   const backend::Column* wrapped_column_;
   // The AnalyzerOutput that holds the column's ResolvedExpr, representing
   // default value expression.
-  const std::unique_ptr<const zetasql::AnalyzerOutput> output_ = nullptr;
+  const std::unique_ptr<const googlesql::AnalyzerOutput> output_ = nullptr;
   // Column Expression for generated or default columns.
-  std::optional<const zetasql::Column::ExpressionAttributes>
+  std::optional<const googlesql::Column::ExpressionAttributes>
       column_expression_;
 };
 

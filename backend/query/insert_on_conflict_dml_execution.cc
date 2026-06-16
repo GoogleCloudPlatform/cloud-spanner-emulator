@@ -16,6 +16,7 @@
 
 #include "backend/query/insert_on_conflict_dml_execution.h"
 
+#include <iterator>
 #include <map>
 #include <memory>
 #include <set>
@@ -23,16 +24,16 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/analyzer_options.h"
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/function_signature.h"
-#include "zetasql/public/id_string.h"
-#include "zetasql/public/options.pb.h"
-#include "zetasql/public/type.h"
-#include "zetasql/public/types/type.h"
-#include "zetasql/resolved_ast/resolved_ast.h"
-#include "zetasql/resolved_ast/resolved_column.h"
-#include "zetasql/resolved_ast/rewrite_utils.h"
+#include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/function_signature.h"
+#include "googlesql/public/id_string.h"
+#include "googlesql/public/options.pb.h"
+#include "googlesql/public/type.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_column.h"
+#include "googlesql/resolved_ast/rewrite_utils.h"
 #include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
@@ -48,8 +49,8 @@
 #include "backend/schema/catalog/table.h"
 #include "common/constants.h"
 #include "common/errors.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -59,12 +60,13 @@ namespace backend {
 constexpr char kReservedIndexNameForPrimaryKey[] = "PRIMARY_KEY";
 
 namespace {
-using InsertRow = std::vector<zetasql::Value>;
-using zetasql::MakeResolvedUpdateItem;
-using zetasql::ResolvedColumnRef;
-using zetasql::ResolvedDMLValue;
-using zetasql::ResolvedInsertStmt;
-using zetasql::ResolvedOnConflictClauseEnums;
+using InsertRow = std::vector<googlesql::Value>;
+using googlesql::MakeResolvedUpdateItem;
+using googlesql::ResolvedColumnRef;
+using googlesql::ResolvedDMLValue;
+using googlesql::ResolvedInsertStmt;
+using googlesql::ResolvedOnConflictClauseEnums;
+using googlesql::ResolvedSubqueryExpr;
 }  // namespace
 
 absl::Status InsertOnConflictDoUpdateRewriter::VisitResolvedColumnRef(
@@ -84,41 +86,96 @@ absl::Status InsertOnConflictDoUpdateRewriter::VisitResolvedColumnRef(
           node->column().column_id())) {
     return error::PendingCommitTimestampDmlValueOnly();
   }
-
-  std::pair<const zetasql::Type*, int> column_info =
+  std::pair<const googlesql::Type*, int> column_info =
       column_ids_referenced_from_insert_row_.at(node->column().column_id());
-  auto array_element_column_ref = zetasql::MakeResolvedColumnRef(
-      struct_column_holder_->type(), *struct_column_holder_, false);
+  auto array_element_column_ref = googlesql::MakeResolvedColumnRef(
+      struct_column_holder_->type(), *struct_column_holder_,
+      node->is_correlated());
   // Build RESOLVED_GET_STRUCT_FIELD to extract the column value from the
   // source STRUCT column.
-  auto get_struct_field = zetasql::MakeResolvedGetStructField(
+  auto get_struct_field = googlesql::MakeResolvedGetStructField(
       column_info.first, std::move(array_element_column_ref),
       column_info.second);
   PushNodeToStack(std::move(get_struct_field));
   return absl::OkStatus();
 }
 
+absl::Status InsertOnConflictDoUpdateRewriter::VisitResolvedSubqueryExpr(
+    const ResolvedSubqueryExpr* node) {
+  std::vector<std::unique_ptr<ResolvedColumnRef>> parameter_list;
+  parameter_list.reserve(node->parameter_list_size());
+  bool added_struct_column_holder = false;
+  for (const auto& parameter : node->parameter_list()) {
+    if (column_ids_referenced_from_insert_row_.contains(
+            parameter->column().column_id())) {
+      // Replace references from insert row via `excluded.<column_name>` with
+      // the struct with name `excluded` that holds the insert row values.
+      if (!added_struct_column_holder) {
+        parameter_list.push_back(googlesql::MakeResolvedColumnRef(
+            struct_column_holder_->type(), *struct_column_holder_,
+            parameter->is_correlated()));
+        GOOGLESQL_RET_CHECK(struct_column_holder_->name() == "excluded");
+        added_struct_column_holder = true;
+      }
+      continue;
+    }
+    GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<ResolvedColumnRef> parameter_copy,
+                     ProcessNode(parameter.get()));
+    parameter_list.push_back(std::move(parameter_copy));
+  }
+
+  GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<googlesql::ResolvedExpr> in_expr,
+                   ProcessNode(node->in_expr()));
+  GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<googlesql::ResolvedScan> subquery,
+                   ProcessNode(node->subquery()));
+
+  auto copy = googlesql::MakeResolvedSubqueryExpr(
+      node->type(), node->subquery_type(), std::move(parameter_list),
+      std::move(in_expr), std::move(subquery));
+  copy->set_type_annotation_map(node->type_annotation_map());
+  copy->set_in_collation(node->in_collation());
+
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      std::vector<std::unique_ptr<googlesql::ResolvedOption>> hint_list,
+      ProcessNodeList(node->hint_list()));
+  copy->set_hint_list({std::make_move_iterator(hint_list.begin()),
+                       std::make_move_iterator(hint_list.end())});
+
+  const auto parse_location = node->GetParseLocationRangeOrNULL();
+  if (parse_location != nullptr) {
+    copy->SetParseLocationRange(*parse_location);
+  }
+  const auto operator_keyword_parse_location =
+      node->GetOperatorKeywordLocationRangeOrNULL();
+  if (operator_keyword_parse_location != nullptr) {
+    copy->SetOperatorKeywordLocationRange(*operator_keyword_parse_location);
+  }
+
+  PushNodeToStack(std::move(copy));
+  return absl::OkStatus();
+}
+
 absl::Status InsertOnConflictToInsertOrIgnoreRewriter::VisitResolvedInsertStmt(
     const ResolvedInsertStmt* node) {
-  ZETASQL_RETURN_IF_ERROR(CopyVisitResolvedInsertStmt(node));
-  zetasql::ResolvedInsertStmt* insert_stmt =
-      GetUnownedTopOfStack<zetasql::ResolvedInsertStmt>();
+  GOOGLESQL_RETURN_IF_ERROR(CopyVisitResolvedInsertStmt(node));
+  googlesql::ResolvedInsertStmt* insert_stmt =
+      GetUnownedTopOfStack<googlesql::ResolvedInsertStmt>();
   insert_stmt->set_on_conflict_clause(nullptr);
   insert_stmt->set_insert_mode(ResolvedInsertStmt::OR_IGNORE);
   return absl::OkStatus();
 }
 
-absl::StatusOr<std::unique_ptr<const zetasql::ResolvedInsertStmt>>
+absl::StatusOr<std::unique_ptr<const googlesql::ResolvedInsertStmt>>
 BuildInsertOrIgnoreStmtFromInsertOnConflictStmt(
     const ResolvedInsertStmt* insert_on_conflict_stmt) {
-  ZETASQL_RET_CHECK_NE(insert_on_conflict_stmt->on_conflict_clause(), nullptr);
+  GOOGLESQL_RET_CHECK_NE(insert_on_conflict_stmt->on_conflict_clause(), nullptr);
   InsertOnConflictToInsertOrIgnoreRewriter rewriter;
-  ZETASQL_RETURN_IF_ERROR(insert_on_conflict_stmt->Accept(&rewriter));
-  return rewriter.ConsumeRootNode<zetasql::ResolvedInsertStmt>();
+  GOOGLESQL_RETURN_IF_ERROR(insert_on_conflict_stmt->Accept(&rewriter));
+  return rewriter.ConsumeRootNode<googlesql::ResolvedInsertStmt>();
 }
 
 absl::Status ExtractColumnInfoAndRowsForInsertOrUpdateAction(
-    const zetasql::ResolvedInsertStmt* insert_stmt,
+    const googlesql::ResolvedInsertStmt* insert_stmt,
     const std::vector<std::string>& conflict_target_key_columns,
     const ExecuteUpdateResult& all_insert_rows_in_dml,
     const std::set<Key>& original_table_row_keys,
@@ -126,19 +183,19 @@ absl::Status ExtractColumnInfoAndRowsForInsertOrUpdateAction(
     std::vector<Key>* new_rows, std::vector<std::string>* columns_in_mutation,
     absl::flat_hash_set<int>* insert_column_index_in_mutation_for_insert,
     absl::flat_hash_set<int>* insert_column_index_in_mutation_for_update) {
-  ZETASQL_RET_CHECK_NE(insert_stmt, nullptr);
-  ZETASQL_RET_CHECK(!conflict_target_key_columns.empty());
-  ZETASQL_RET_CHECK_EQ(all_insert_rows_in_dml.mutation.ops().size(), 1);
-  ZETASQL_RET_CHECK(all_insert_rows_in_dml.mutation.ops().at(0).type ==
+  GOOGLESQL_RET_CHECK_NE(insert_stmt, nullptr);
+  GOOGLESQL_RET_CHECK(!conflict_target_key_columns.empty());
+  GOOGLESQL_RET_CHECK_EQ(all_insert_rows_in_dml.mutation.ops().size(), 1);
+  GOOGLESQL_RET_CHECK(all_insert_rows_in_dml.mutation.ops().at(0).type ==
             MutationOpType::kInsert);
   const MutationOp& mutation_op = all_insert_rows_in_dml.mutation.ops().at(0);
 
-  ZETASQL_RET_CHECK_NE(insert_row_map, nullptr);
-  ZETASQL_RET_CHECK_NE(existing_rows, nullptr);
-  ZETASQL_RET_CHECK_NE(new_rows, nullptr);
-  ZETASQL_RET_CHECK_NE(columns_in_mutation, nullptr);
-  ZETASQL_RET_CHECK_NE(insert_column_index_in_mutation_for_insert, nullptr);
-  ZETASQL_RET_CHECK_NE(insert_column_index_in_mutation_for_update, nullptr);
+  GOOGLESQL_RET_CHECK_NE(insert_row_map, nullptr);
+  GOOGLESQL_RET_CHECK_NE(existing_rows, nullptr);
+  GOOGLESQL_RET_CHECK_NE(new_rows, nullptr);
+  GOOGLESQL_RET_CHECK_NE(columns_in_mutation, nullptr);
+  GOOGLESQL_RET_CHECK_NE(insert_column_index_in_mutation_for_insert, nullptr);
+  GOOGLESQL_RET_CHECK_NE(insert_column_index_in_mutation_for_update, nullptr);
 
   absl::flat_hash_set<std::string> insert_column_list_for_insert;
   for (const auto& column : insert_stmt->insert_column_list()) {
@@ -177,10 +234,10 @@ absl::Status ExtractColumnInfoAndRowsForInsertOrUpdateAction(
   for (const auto& insert_row : mutation_op.rows) {
     Key insert_row_key;
     for (const auto& key_column : conflict_target_key_columns) {
-      zetasql::Value key_column_value =
+      googlesql::Value key_column_value =
           insert_row.at(key_column_index_in_mutation.at(key_column));
       if (key_column_value.Equals(
-              zetasql::Value::StringValue(kCommitTimestampIdentifier))) {
+              googlesql::Value::StringValue(kCommitTimestampIdentifier))) {
         key_has_commit_timestamp_value = true;
       }
       insert_row_key.AddColumn(key_column_value);
@@ -217,10 +274,10 @@ absl::Status ExtractColumnInfoAndRowsForInsertOrUpdateAction(
   }
 
   if (!has_duplicate_keys) {
-    ZETASQL_RET_CHECK_EQ(existing_rows->size() + new_rows->size(),
+    GOOGLESQL_RET_CHECK_EQ(existing_rows->size() + new_rows->size(),
                  insert_row_map->size());
     if (insert_stmt->query() == nullptr) {
-      ZETASQL_RET_CHECK_EQ(insert_row_map->size(),
+      GOOGLESQL_RET_CHECK_EQ(insert_row_map->size(),
                    all_insert_rows_in_dml.modify_row_count);
     }
   }
@@ -229,9 +286,9 @@ absl::Status ExtractColumnInfoAndRowsForInsertOrUpdateAction(
 
 bool UniqueConstraintMatchesWithConflictTargetColumns(
     const absl::flat_hash_set<std::string>& pk_or_index_constraint_columns,
-    const zetasql::ResolvedColumnList& ast_conflict_target_column_list) {
+    const googlesql::ResolvedColumnList& ast_conflict_target_column_list) {
   absl::flat_hash_set<std::string> matched_conflict_target_columns;
-  for (const zetasql::ResolvedColumn& column :
+  for (const googlesql::ResolvedColumn& column :
        ast_conflict_target_column_list) {
     if (pk_or_index_constraint_columns.contains(column.name())) {
       matched_conflict_target_columns.insert(column.name());
@@ -248,7 +305,7 @@ bool UniqueConstraintMatchesWithConflictTargetColumns(
 
 absl::Status ResolveConflictTarget(
     const Table* table,
-    const zetasql::ResolvedOnConflictClause* on_conflict_clause,
+    const googlesql::ResolvedOnConflictClause* on_conflict_clause,
     std::vector<std::string>& conflict_target_key_columns,
     std::string* conflict_target_unique_constraint_name) {
   // Empty conflict target is not supported.
@@ -326,8 +383,8 @@ absl::Status ResolveConflictTarget(
   if ((*conflict_target_unique_constraint_name).empty()) {
     return error::ConflictTargetNotFound();
   }
-  ZETASQL_RET_CHECK(!conflict_target_key_columns.empty());
-  ZETASQL_RET_CHECK(!conflict_target_unique_constraint_name->empty());
+  GOOGLESQL_RET_CHECK(!conflict_target_key_columns.empty());
+  GOOGLESQL_RET_CHECK(!conflict_target_unique_constraint_name->empty());
   return absl::OkStatus();
 }
 
@@ -343,8 +400,8 @@ absl::StatusOr<std::set<Key>> GetOriginalTableRows(
   read_arg.key_set = KeySet::All();
   read_arg.columns = key_columns;
   std::unique_ptr<RowCursor> cursor;
-  ZETASQL_RETURN_IF_ERROR(reader->Read(read_arg, &cursor));
-  ZETASQL_RET_CHECK(cursor->Status().ok());
+  GOOGLESQL_RETURN_IF_ERROR(reader->Read(read_arg, &cursor));
+  GOOGLESQL_RET_CHECK(cursor->Status().ok());
   while (cursor->Next()) {
     Key row_key;
     for (int i = 0; i < cursor->NumColumns(); ++i) {
@@ -355,11 +412,11 @@ absl::StatusOr<std::set<Key>> GetOriginalTableRows(
   return original_table_row_keys;
 }
 
-inline absl::StatusOr<std::unique_ptr<const zetasql::ResolvedTableScan>>
-CopyTableScanAST(const zetasql::ResolvedTableScan* table_scan) {
-  std::vector<zetasql::ResolvedColumn> column_list;
+inline absl::StatusOr<std::unique_ptr<const googlesql::ResolvedTableScan>>
+CopyTableScanAST(const googlesql::ResolvedTableScan* table_scan) {
+  std::vector<googlesql::ResolvedColumn> column_list;
   for (int i = 0; i < table_scan->column_list().size(); ++i) {
-    zetasql::ResolvedColumn elem = table_scan->column_list()[i];
+    googlesql::ResolvedColumn elem = table_scan->column_list()[i];
     column_list.push_back(elem);
   }
   auto table_scan_copy = MakeResolvedTableScan(column_list, table_scan->table(),
@@ -369,8 +426,8 @@ CopyTableScanAST(const zetasql::ResolvedTableScan* table_scan) {
   return std::move(table_scan_copy);
 }
 
-inline absl::StatusOr<std::unique_ptr<const zetasql::ResolvedReturningClause>>
-CopyReturningClause(const zetasql::ResolvedInsertStmt* insert_stmt) {
+inline absl::StatusOr<std::unique_ptr<const googlesql::ResolvedReturningClause>>
+CopyReturningClause(const googlesql::ResolvedInsertStmt* insert_stmt) {
   if (insert_stmt->returning() == nullptr) {
     return nullptr;
   }
@@ -381,13 +438,13 @@ CopyReturningClause(const zetasql::ResolvedInsertStmt* insert_stmt) {
       /*column_ids_referenced_from_insert_row=*/{},
       /*column_ids_with_commit_timestamp_value=*/{},
       /*struct_column_holder=*/nullptr);
-  ZETASQL_RETURN_IF_ERROR(insert_stmt->returning()->Accept(&rewriter));
-  return rewriter.ConsumeRootNode<zetasql::ResolvedReturningClause>();
+  GOOGLESQL_RETURN_IF_ERROR(insert_stmt->returning()->Accept(&rewriter));
+  return rewriter.ConsumeRootNode<googlesql::ResolvedReturningClause>();
 }
 
 inline absl::Status CopyGeneratedColumnExprs(
-    const zetasql::ResolvedInsertStmt* insert_stmt,
-    std::vector<std::unique_ptr<const zetasql::ResolvedExpr>>&
+    const googlesql::ResolvedInsertStmt* insert_stmt,
+    std::vector<std::unique_ptr<const googlesql::ResolvedExpr>>&
         generated_column_exprs) {
   // Columns in `excluded` alias is not referenced in generated column exprs.
   // All input arguments are empty.
@@ -396,62 +453,62 @@ inline absl::Status CopyGeneratedColumnExprs(
       /*column_ids_with_commit_timestamp_value=*/{},
       /*struct_column_holder=*/nullptr);
   for (const auto& expr : insert_stmt->generated_column_expr_list()) {
-    ZETASQL_RETURN_IF_ERROR(expr->Accept(&rewriter));
-    ZETASQL_ASSIGN_OR_RETURN(auto expr_copy,
-                     rewriter.ConsumeRootNode<zetasql::ResolvedExpr>());
+    GOOGLESQL_RETURN_IF_ERROR(expr->Accept(&rewriter));
+    GOOGLESQL_ASSIGN_OR_RETURN(auto expr_copy,
+                     rewriter.ConsumeRootNode<googlesql::ResolvedExpr>());
     generated_column_exprs.push_back(std::move(expr_copy));
   }
   return absl::OkStatus();
 }
 
 absl::Status InsertColumnListMatches(
-    const std::vector<zetasql::ResolvedColumn>& insert_column_list,
-    const std::vector<zetasql::ResolvedColumn>& new_insert_column_list) {
-  ZETASQL_RET_CHECK_EQ(insert_column_list.size(), new_insert_column_list.size());
+    const std::vector<googlesql::ResolvedColumn>& insert_column_list,
+    const std::vector<googlesql::ResolvedColumn>& new_insert_column_list) {
+  GOOGLESQL_RET_CHECK_EQ(insert_column_list.size(), new_insert_column_list.size());
   absl::flat_hash_set<std::string> insert_column_names;
   for (const auto& column : insert_column_list) {
     insert_column_names.insert(column.name());
   }
   for (const auto& column : new_insert_column_list) {
-    ZETASQL_RET_CHECK(insert_column_names.contains(column.name()))
+    GOOGLESQL_RET_CHECK(insert_column_names.contains(column.name()))
         << "Insert column " << column.name()
         << " not found in original insert column list";
   }
   return absl::OkStatus();
 }
 
-absl::StatusOr<std::unique_ptr<const zetasql::ResolvedInsertStmt>>
+absl::StatusOr<std::unique_ptr<const googlesql::ResolvedInsertStmt>>
 BuildInsertDMLForNewRows(
-    const zetasql::ResolvedInsertStmt* insert_stmt,
-    zetasql::TypeFactory& type_factory, zetasql::Catalog& catalog,
+    const googlesql::ResolvedInsertStmt* insert_stmt,
+    googlesql::TypeFactory& type_factory, googlesql::Catalog& catalog,
     const std::vector<Key>& new_rows,
     const std::map<Key, InsertRow>& insert_rows_map,
     const std::vector<std::string>& mutation_column_names,
     const absl::flat_hash_set<int>& insert_column_index_in_row) {
-  ZETASQL_RET_CHECK(insert_stmt->on_conflict_clause() != nullptr);
+  GOOGLESQL_RET_CHECK(insert_stmt->on_conflict_clause() != nullptr);
 
   // Copy table scan for new insert statement.
-  ZETASQL_ASSIGN_OR_RETURN(auto table_scan_copy,
+  GOOGLESQL_ASSIGN_OR_RETURN(auto table_scan_copy,
                    CopyTableScanAST(insert_stmt->table_scan()));
 
-  absl::flat_hash_map<std::string, zetasql::ResolvedColumn>
+  absl::flat_hash_map<std::string, googlesql::ResolvedColumn>
       insert_column_name_to_type_map;
   for (const auto& column : insert_stmt->insert_column_list()) {
     insert_column_name_to_type_map[column.name()] = column;
   }
 
   // Build insert row list for the new INSERT statement from `new_rows`.
-  std::vector<std::unique_ptr<const zetasql::ResolvedInsertRow>>
+  std::vector<std::unique_ptr<const googlesql::ResolvedInsertRow>>
       new_insert_row_list;
   // Re-build the insert column list to ensure that the columns and
   // corresponding values in the insert row are in the same order.
   // The value in `new_row` are in the natural order of columns in the table.
   bool populate_insert_column_list = true;
-  std::vector<zetasql::ResolvedColumn> insert_column_list;
+  std::vector<googlesql::ResolvedColumn> insert_column_list;
   for (const auto& new_row : new_rows) {
-    ZETASQL_RET_CHECK(insert_rows_map.find(new_row) != insert_rows_map.end());
+    GOOGLESQL_RET_CHECK(insert_rows_map.find(new_row) != insert_rows_map.end());
     InsertRow insert_row = insert_rows_map.at(new_row);
-    std::vector<std::unique_ptr<const zetasql::ResolvedDMLValue>> row_values;
+    std::vector<std::unique_ptr<const googlesql::ResolvedDMLValue>> row_values;
     for (int i = 0; i < insert_row.size(); ++i) {
       // Skip columns from the input row that are not part of
       // insert column list.
@@ -459,7 +516,7 @@ BuildInsertDMLForNewRows(
         continue;
       }
       std::string insert_column_name = mutation_column_names[i];
-      ZETASQL_RET_CHECK(insert_column_name_to_type_map.contains(insert_column_name));
+      GOOGLESQL_RET_CHECK(insert_column_name_to_type_map.contains(insert_column_name));
       if (populate_insert_column_list) {
         insert_column_list.push_back(
             insert_column_name_to_type_map[insert_column_name]);
@@ -467,37 +524,37 @@ BuildInsertDMLForNewRows(
       // If the insert row value is a commit timestamp identifier, replace it
       // with PENDING_COMMIT_TIMESTAMP() function call.
       if (insert_row[i].Equals(
-              zetasql::Value::String(kCommitTimestampIdentifier))) {
-        ZETASQL_ASSIGN_OR_RETURN(
+              googlesql::Value::String(kCommitTimestampIdentifier))) {
+        GOOGLESQL_ASSIGN_OR_RETURN(
             auto pending_commit_timestamp_expr,
             BuildPendingCommitTimestampFunction(type_factory, catalog));
-        row_values.push_back(zetasql::MakeResolvedDMLValue(
+        row_values.push_back(googlesql::MakeResolvedDMLValue(
             std::move(pending_commit_timestamp_expr)));
       } else {
         row_values.push_back(
-            zetasql::MakeResolvedDMLValue(zetasql::MakeResolvedLiteral(
+            googlesql::MakeResolvedDMLValue(googlesql::MakeResolvedLiteral(
                 insert_column_name_to_type_map[insert_column_name].type(),
                 insert_row[i])));
       }
     }
     populate_insert_column_list = false;
     new_insert_row_list.push_back(
-        zetasql::MakeResolvedInsertRow(std::move(row_values)));
+        googlesql::MakeResolvedInsertRow(std::move(row_values)));
   }
   // Insert column list of the new INSERT statement must match with
   // the insert column list in the original ON CONFLICT statement.
-  ZETASQL_RETURN_IF_ERROR(InsertColumnListMatches(insert_stmt->insert_column_list(),
+  GOOGLESQL_RETURN_IF_ERROR(InsertColumnListMatches(insert_stmt->insert_column_list(),
                                           insert_column_list));
 
   // Copy returning clause and generated column exprs in the new insert
   // statement.
-  ZETASQL_ASSIGN_OR_RETURN(auto returning_clause, CopyReturningClause(insert_stmt));
-  std::vector<std::unique_ptr<const zetasql::ResolvedExpr>>
+  GOOGLESQL_ASSIGN_OR_RETURN(auto returning_clause, CopyReturningClause(insert_stmt));
+  std::vector<std::unique_ptr<const googlesql::ResolvedExpr>>
       generated_column_exprs;
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       CopyGeneratedColumnExprs(insert_stmt, generated_column_exprs));
 
-  auto insert_stmt_copy = zetasql::MakeResolvedInsertStmt(
+  auto insert_stmt_copy = googlesql::MakeResolvedInsertStmt(
       std::move(table_scan_copy), insert_stmt->insert_mode(),
       /*assert_rows_modified=*/nullptr,
       /*returning=*/std::move(returning_clause), insert_column_list, {},
@@ -506,82 +563,82 @@ BuildInsertDMLForNewRows(
       /*on_conflict_clause=*/nullptr,
       insert_stmt->topologically_sorted_generated_column_id_list(),
       std::move(generated_column_exprs));
-  std::vector<zetasql::ResolvedStatement::ObjectAccess> object_access(
+  std::vector<googlesql::ResolvedStatement::ObjectAccess> object_access(
       insert_stmt->table_scan()->column_list().size(),
-      zetasql::ResolvedStatement::READ_WRITE);
+      googlesql::ResolvedStatement::READ_WRITE);
   insert_stmt_copy->set_column_access_list(object_access);
 
-  ZETASQL_VLOG(1) << "Executed INSERT statement: " << insert_stmt_copy->DebugString();
+  GOOGLESQL_VLOG(1) << "Executed INSERT statement: " << insert_stmt_copy->DebugString();
   return std::move(insert_stmt_copy);
 }
 
-absl::StatusOr<std::unique_ptr<const zetasql::ResolvedArrayScan>>
+absl::StatusOr<std::unique_ptr<const googlesql::ResolvedArrayScan>>
 BuildFromArrayScanClause(
-    zetasql::TypeFactory& type_factory, zetasql::Catalog& catalog,
-    const zetasql::ResolvedInsertStmt* insert_stmt,
+    googlesql::TypeFactory& type_factory, googlesql::Catalog& catalog,
+    const googlesql::ResolvedInsertStmt* insert_stmt,
     const std::vector<Key>& existing_rows,
     const std::map<Key, InsertRow>& insert_rows_map,
     const std::vector<std::string>& mutation_column_names,
     const absl::flat_hash_set<int>& from_array_scan_column_index_in_row,
-    absl::flat_hash_map<std::string, std::pair<const zetasql::Type*, int>>&
+    absl::flat_hash_map<std::string, std::pair<const googlesql::Type*, int>>&
         struct_field_info_by_name,
     std::set<std::string>& insert_columns_with_commit_timestamp_value) {
-  absl::flat_hash_map<std::string, zetasql::ResolvedColumn>
+  absl::flat_hash_map<std::string, googlesql::ResolvedColumn>
       table_scan_column_name_to_type_map;
   for (const auto& column : insert_stmt->table_scan()->column_list()) {
     table_scan_column_name_to_type_map[column.name()] = column;
   }
 
   // All table scan columns are included in the struct.
-  std::vector<zetasql::StructType::StructField> struct_fields;
+  std::vector<googlesql::StructType::StructField> struct_fields;
   for (const auto& column : insert_stmt->table_scan()->column_list()) {
     struct_fields.push_back(
-        zetasql::StructType::StructField(column.name(), column.type()));
+        googlesql::StructType::StructField(column.name(), column.type()));
     struct_field_info_by_name[column.name()] =
         std::make_pair(column.type(), struct_fields.size() - 1);
   }
-  const zetasql::StructType* struct_type;
-  ZETASQL_RETURN_IF_ERROR(type_factory.MakeStructType(struct_fields, &struct_type));
-  zetasql::AnalyzerOptions analyzer_options;
-  zetasql::FunctionCallBuilder function_builder(analyzer_options, catalog,
+  const googlesql::StructType* struct_type;
+  GOOGLESQL_RETURN_IF_ERROR(type_factory.MakeStructType(struct_fields, &struct_type));
+  googlesql::AnalyzerOptions analyzer_options;
+  googlesql::FunctionCallBuilder function_builder(analyzer_options, catalog,
                                                   type_factory);
 
   // Construct STRUCT value for each row in `existing_rows`.
-  std::vector<std::unique_ptr<const zetasql::ResolvedExpr>> array_elements;
+  std::vector<std::unique_ptr<const googlesql::ResolvedExpr>> array_elements;
   for (const auto& existing_row : existing_rows) {
-    ZETASQL_RET_CHECK(insert_rows_map.find(existing_row) != insert_rows_map.end());
+    GOOGLESQL_RET_CHECK(insert_rows_map.find(existing_row) != insert_rows_map.end());
     InsertRow insert_row = insert_rows_map.at(existing_row);
-    std::vector<std::unique_ptr<const zetasql::ResolvedExpr>>
+    std::vector<std::unique_ptr<const googlesql::ResolvedExpr>>
         field_value_exprs;
     for (int i = 0; i < insert_row.size(); ++i) {
       if (!from_array_scan_column_index_in_row.contains(i)) {
         continue;
       }
       std::string column_name = mutation_column_names[i];
-      ZETASQL_RET_CHECK(table_scan_column_name_to_type_map.contains(column_name));
+      GOOGLESQL_RET_CHECK(table_scan_column_name_to_type_map.contains(column_name));
       if (insert_row[i].Equals(
-              zetasql::Value::String(kCommitTimestampIdentifier))) {
+              googlesql::Value::String(kCommitTimestampIdentifier))) {
         insert_columns_with_commit_timestamp_value.insert(column_name);
-        ZETASQL_ASSIGN_OR_RETURN(
+        GOOGLESQL_ASSIGN_OR_RETURN(
             auto pending_commit_timestamp_expr,
             BuildPendingCommitTimestampFunction(type_factory, catalog));
         field_value_exprs.push_back(std::move(pending_commit_timestamp_expr));
       } else {
-        field_value_exprs.push_back(zetasql::MakeResolvedLiteral(
+        field_value_exprs.push_back(googlesql::MakeResolvedLiteral(
             table_scan_column_name_to_type_map[column_name].type(),
             insert_row[i]));
       }
     }
-    array_elements.push_back(zetasql::MakeResolvedMakeStruct(
+    array_elements.push_back(googlesql::MakeResolvedMakeStruct(
         struct_type, std::move(field_value_exprs)));
   }
 
   // Construct ARRAY<STRUCT> value with each row in `existing_rows` as the array
   // element.
-  const zetasql::Type* array_of_structs_type = nullptr;
-  ZETASQL_RETURN_IF_ERROR(
+  const googlesql::Type* array_of_structs_type = nullptr;
+  GOOGLESQL_RETURN_IF_ERROR(
       type_factory.MakeArrayType(struct_type, &array_of_structs_type));
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       auto array_of_structs_expr,
       function_builder.MakeArray(struct_type, std::move(array_elements)));
 
@@ -589,54 +646,54 @@ BuildFromArrayScanClause(
   // Emulator does not maintain column_id allocator. Choose an arbitrary large
   // value to avoid collision with existing column ids.
   int array_element_column_id = 100000;
-  auto array_element_column = zetasql::ResolvedColumn(
-      array_element_column_id, zetasql::IdString::MakeGlobal("$array"),
-      zetasql::IdString::MakeGlobal("excluded"), array_of_structs_type);
+  auto array_element_column = googlesql::ResolvedColumn(
+      array_element_column_id, googlesql::IdString::MakeGlobal("$array"),
+      googlesql::IdString::MakeGlobal("excluded"), array_of_structs_type);
 
-  auto element_column = zetasql::ResolvedColumn(
-      array_element_column_id, zetasql::IdString::MakeGlobal("$array"),
-      zetasql::IdString::MakeGlobal("excluded"), struct_type);
+  auto element_column = googlesql::ResolvedColumn(
+      array_element_column_id, googlesql::IdString::MakeGlobal("$array"),
+      googlesql::IdString::MakeGlobal("excluded"), struct_type);
 
-  return zetasql::MakeResolvedArrayScan(
+  return googlesql::MakeResolvedArrayScan(
       {array_element_column}, /*input_scan=*/nullptr,
       /*array_expr=*/std::move(array_of_structs_expr), element_column,
       /*array_offset_column=*/nullptr, /*join_expr=*/nullptr,
       /*is_outer=*/false);
 }
 
-inline std::unique_ptr<const zetasql::ResolvedExpr>
+inline std::unique_ptr<const googlesql::ResolvedExpr>
 BuildExprForColumnValueFromInsertRow(
-    const zetasql::ResolvedColumn& array_element_column,
-    const std::pair<const zetasql::Type*, int>& excluded_column_info) {
-  auto array_element_column_ref = zetasql::MakeResolvedColumnRef(
+    const googlesql::ResolvedColumn& array_element_column,
+    const std::pair<const googlesql::Type*, int>& excluded_column_info) {
+  auto array_element_column_ref = googlesql::MakeResolvedColumnRef(
       array_element_column.type(), array_element_column, false);
-  auto get_struct_field = zetasql::MakeResolvedGetStructField(
+  auto get_struct_field = googlesql::MakeResolvedGetStructField(
       excluded_column_info.first, std::move(array_element_column_ref),
       excluded_column_info.second);
   return std::move(get_struct_field);
 }
 
-inline std::unique_ptr<const zetasql::ResolvedExpr>
+inline std::unique_ptr<const googlesql::ResolvedExpr>
 BuildExprForColumnValueFromTableScan(
-    absl::flat_hash_map<std::string, zetasql::ResolvedColumn>&
+    absl::flat_hash_map<std::string, googlesql::ResolvedColumn>&
         table_scan_column_name_to_type_map,
     const std::string& key_column_name) {
-  auto column_ref = zetasql::MakeResolvedColumnRef(
+  auto column_ref = googlesql::MakeResolvedColumnRef(
       table_scan_column_name_to_type_map[key_column_name].type(),
       table_scan_column_name_to_type_map[key_column_name], false);
   return std::move(column_ref);
 }
 
-absl::StatusOr<std::unique_ptr<const zetasql::ResolvedUpdateStmt>>
+absl::StatusOr<std::unique_ptr<const googlesql::ResolvedUpdateStmt>>
 BuildUpdateDMLForExistingRows(
-    const zetasql::ResolvedInsertStmt* insert_stmt,
-    zetasql::TypeFactory& type_factory, zetasql::Catalog& catalog,
+    const googlesql::ResolvedInsertStmt* insert_stmt,
+    googlesql::TypeFactory& type_factory, googlesql::Catalog& catalog,
     const std::vector<Key>& existing_rows,
     const std::map<Key, InsertRow>& insert_rows_map,
     const std::vector<std::string>& mutation_column_names,
     const absl::flat_hash_set<int>& insert_column_index_in_row,
     const std::vector<std::string>& conflict_target_key_columns) {
-  ZETASQL_RET_CHECK(insert_stmt->on_conflict_clause() != nullptr);
+  GOOGLESQL_RET_CHECK(insert_stmt->on_conflict_clause() != nullptr);
 
   // Build FROM clause of the output UPDATE statement.
   // This is a ResolvedArrayScan node of the form:
@@ -644,18 +701,18 @@ BuildUpdateDMLForExistingRows(
   //              ...]) as alias
   // The struct must include all table scan columns in the original INSERT
   // statement.
-  absl::flat_hash_map<std::string, std::pair<const zetasql::Type*, int>>
+  absl::flat_hash_map<std::string, std::pair<const googlesql::Type*, int>>
       struct_field_info_by_name;
   std::set<std::string> insert_columns_with_commit_timestamp_value;
-  ZETASQL_ASSIGN_OR_RETURN(auto from_array_scan,
+  GOOGLESQL_ASSIGN_OR_RETURN(auto from_array_scan,
                    BuildFromArrayScanClause(
                        type_factory, catalog, insert_stmt, existing_rows,
                        insert_rows_map, mutation_column_names,
                        insert_column_index_in_row, struct_field_info_by_name,
                        insert_columns_with_commit_timestamp_value));
-  ZETASQL_RET_CHECK(from_array_scan != nullptr);
-  ZETASQL_RET_CHECK_EQ(from_array_scan->element_column_list_size(), 1);
-  const zetasql::ResolvedColumn& array_element_column =
+  GOOGLESQL_RET_CHECK(from_array_scan != nullptr);
+  GOOGLESQL_RET_CHECK_EQ(from_array_scan->element_column_list_size(), 1);
+  const googlesql::ResolvedColumn& array_element_column =
       from_array_scan->element_column_list(0);
 
   // Map of column id referenced via excluded alias (i.e reference value from
@@ -664,7 +721,7 @@ BuildUpdateDMLForExistingRows(
   // Used in InsertOnConflictDoUpdateRewriter to replace ColumnRef
   // `excluded.column_name` in SET and WHERE expression with corresponding
   // column expression from FROM clause.
-  absl::flat_hash_map<int, std::pair<const zetasql::Type*, int>>
+  absl::flat_hash_map<int, std::pair<const googlesql::Type*, int>>
       excluded_alias_column_ids;
   // Set of column ids of columns referenced from the insert row (i.e. of the
   // form `excluded.<column_name>`) and having commit timestamp value.
@@ -688,25 +745,25 @@ BuildUpdateDMLForExistingRows(
   }
 
   // Build WHERE clause for the output UPDATE statement.
-  absl::flat_hash_map<std::string, zetasql::ResolvedColumn>
+  absl::flat_hash_map<std::string, googlesql::ResolvedColumn>
       table_scan_column_name_to_type_map;
   for (const auto& column : insert_stmt->table_scan()->column_list()) {
     table_scan_column_name_to_type_map[column.name()] = column;
   }
 
-  zetasql::AnalyzerOptions analyzer_options;
-  zetasql::FunctionCallBuilder function_builder(analyzer_options, catalog,
+  googlesql::AnalyzerOptions analyzer_options;
+  googlesql::FunctionCallBuilder function_builder(analyzer_options, catalog,
                                                   type_factory);
   // Includes join condition between FROM and table scan on conflict target
   // key columns.
   // Optionally AND's with the condition in ON CONFLICT DO UPDATE WHERE
   // clause if present.
-  std::vector<std::unique_ptr<const zetasql::ResolvedExpr>>
+  std::vector<std::unique_ptr<const googlesql::ResolvedExpr>>
       where_expr_predicates;
   for (const auto& key_column_name : conflict_target_key_columns) {
     // Table scan must have the key column.
-    ZETASQL_RET_CHECK(table_scan_column_name_to_type_map.contains(key_column_name));
-    std::pair<const zetasql::Type*, int> excluded_column_info =
+    GOOGLESQL_RET_CHECK(table_scan_column_name_to_type_map.contains(key_column_name));
+    std::pair<const googlesql::Type*, int> excluded_column_info =
         struct_field_info_by_name[key_column_name];
 
     // If the key value in insert row is NULL then establish equality
@@ -715,26 +772,26 @@ BuildUpdateDMLForExistingRows(
     // IF(excluded.<key_column_name> IS NULL,
     //    <key_column_name> IS NULL,
     //    excluded.<key_column_name> = <key_column_name>)
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         auto if_condition,
         function_builder.IsNull(BuildExprForColumnValueFromInsertRow(
             array_element_column, excluded_column_info)));
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         auto if_true_expr,
         function_builder.IsNull(BuildExprForColumnValueFromTableScan(
             table_scan_column_name_to_type_map, key_column_name)));
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         auto if_false_expr,
         function_builder.Equal(
             BuildExprForColumnValueFromInsertRow(array_element_column,
                                                  excluded_column_info),
             BuildExprForColumnValueFromTableScan(
                 table_scan_column_name_to_type_map, key_column_name)));
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         auto predicate,
         function_builder.If(std::move(if_condition), std::move(if_true_expr),
                             std::move(if_false_expr)));
-    ZETASQL_VLOG(1) << "Key join predicate: " << predicate->DebugString();
+    GOOGLESQL_VLOG(1) << "Key join predicate: " << predicate->DebugString();
     where_expr_predicates.push_back(std::move(predicate));
   }
 
@@ -745,27 +802,27 @@ BuildUpdateDMLForExistingRows(
         excluded_alias_column_ids,
         excluded_alias_column_ids_with_commit_timestamp_value,
         &array_element_column);
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         insert_stmt->on_conflict_clause()->update_where_expression()->Accept(
             &rewriter));
-    ZETASQL_ASSIGN_OR_RETURN(auto rewritten_where_expr,
-                     rewriter.ConsumeRootNode<zetasql::ResolvedExpr>());
+    GOOGLESQL_ASSIGN_OR_RETURN(auto rewritten_where_expr,
+                     rewriter.ConsumeRootNode<googlesql::ResolvedExpr>());
     where_expr_predicates.push_back(std::move(rewritten_where_expr));
   }
 
-  std::unique_ptr<const zetasql::ResolvedExpr> update_where_expr;
+  std::unique_ptr<const googlesql::ResolvedExpr> update_where_expr;
   if (where_expr_predicates.size() > 1) {
-    ZETASQL_ASSIGN_OR_RETURN(update_where_expr,
+    GOOGLESQL_ASSIGN_OR_RETURN(update_where_expr,
                      function_builder.And(std::move(where_expr_predicates)));
   } else {
     update_where_expr = std::move(where_expr_predicates[0]);
   }
-  ZETASQL_VLOG(1) << "Output UPDATE WHERE expression: "
+  GOOGLESQL_VLOG(1) << "Output UPDATE WHERE expression: "
           << update_where_expr->DebugString();
 
   // Build SET clause for the output UPDATE statement from the DO UPDATE SET
   // clause in the original INSERT ON CONFLICT statement.
-  std::vector<std::unique_ptr<const zetasql::ResolvedUpdateItem>>
+  std::vector<std::unique_ptr<const googlesql::ResolvedUpdateItem>>
       rewritten_update_item_list;
   for (const auto& update_item :
        insert_stmt->on_conflict_clause()->update_item_list()) {
@@ -803,57 +860,57 @@ BuildUpdateDMLForExistingRows(
           excluded_alias_column_ids,
           excluded_alias_column_ids_with_commit_timestamp_value,
           &array_element_column);
-      ZETASQL_RETURN_IF_ERROR(update_item->Accept(&rewriter));
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_RETURN_IF_ERROR(update_item->Accept(&rewriter));
+      GOOGLESQL_ASSIGN_OR_RETURN(
           auto new_update_item,
-          rewriter.ConsumeRootNode<zetasql::ResolvedUpdateItem>());
-      ZETASQL_VLOG(1) << "Output UPDATE SET item: " << new_update_item->DebugString();
+          rewriter.ConsumeRootNode<googlesql::ResolvedUpdateItem>());
+      GOOGLESQL_VLOG(1) << "Output UPDATE SET item: " << new_update_item->DebugString();
       rewritten_update_item_list.push_back(std::move(new_update_item));
     } else {
-      const zetasql::Type* timestamp_type = zetasql::types::TimestampType();
-      ZETASQL_ASSIGN_OR_RETURN(
+      const googlesql::Type* timestamp_type = googlesql::types::TimestampType();
+      GOOGLESQL_ASSIGN_OR_RETURN(
           auto pct_function_call,
           BuildPendingCommitTimestampFunction(type_factory, catalog));
       auto update_item_with_pct_function_call = MakeResolvedUpdateItem(
-          zetasql::MakeResolvedColumnRef(
+          googlesql::MakeResolvedColumnRef(
               timestamp_type,
               update_item->target()
-                  ->GetAs<zetasql::ResolvedColumnRef>()
+                  ->GetAs<googlesql::ResolvedColumnRef>()
                   ->column(),
               false),
-          zetasql::MakeResolvedDMLValue(std::move(pct_function_call)),
+          googlesql::MakeResolvedDMLValue(std::move(pct_function_call)),
           /*element_column=*/nullptr, /*array_update_list=*/{},
           /*delete_list=*/{}, /*update_list=*/{}, /*insert_list=*/{});
-      ZETASQL_VLOG(1) << "Output UPDATE SET item: "
+      GOOGLESQL_VLOG(1) << "Output UPDATE SET item: "
               << update_item_with_pct_function_call->DebugString();
       rewritten_update_item_list.push_back(
           std::move(update_item_with_pct_function_call));
     }
   }
 
-  ZETASQL_ASSIGN_OR_RETURN(auto table_scan_copy,
+  GOOGLESQL_ASSIGN_OR_RETURN(auto table_scan_copy,
                    CopyTableScanAST(insert_stmt->table_scan()));
 
   // Copy returning clause and generated column exprs in the update
   // statement.
-  ZETASQL_ASSIGN_OR_RETURN(auto returning_clause, CopyReturningClause(insert_stmt));
-  std::vector<std::unique_ptr<const zetasql::ResolvedExpr>>
+  GOOGLESQL_ASSIGN_OR_RETURN(auto returning_clause, CopyReturningClause(insert_stmt));
+  std::vector<std::unique_ptr<const googlesql::ResolvedExpr>>
       generated_column_exprs;
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       CopyGeneratedColumnExprs(insert_stmt, generated_column_exprs));
 
-  auto update_stmt = zetasql::MakeResolvedUpdateStmt(
+  auto update_stmt = googlesql::MakeResolvedUpdateStmt(
       std::move(table_scan_copy), /*assert_rows_modified=*/nullptr,
       /*returning=*/std::move(returning_clause),
       /*array_offset_column=*/nullptr, std::move(update_where_expr),
       std::move(rewritten_update_item_list), std::move(from_array_scan),
       insert_stmt->topologically_sorted_generated_column_id_list(),
       std::move(generated_column_exprs));
-  std::vector<zetasql::ResolvedStatement::ObjectAccess> object_access(
+  std::vector<googlesql::ResolvedStatement::ObjectAccess> object_access(
       update_stmt->table_scan()->column_list().size(),
-      zetasql::ResolvedStatement::READ_WRITE);
+      googlesql::ResolvedStatement::READ_WRITE);
   update_stmt->set_column_access_list(object_access);
-  ZETASQL_VLOG(1) << "Output UPDATE statement: " << update_stmt->DebugString();
+  GOOGLESQL_VLOG(1) << "Output UPDATE statement: " << update_stmt->DebugString();
 
   return std::move(update_stmt);
 }
@@ -868,7 +925,7 @@ absl::Status CollectReturningRows(
   while (returning_row_cursor->Next()) {
     // Collect the names of the columns in the returning row cursor.
     bool collect_column_metadata = returning_rows.column_names.empty();
-    std::vector<zetasql::Value> row;
+    std::vector<googlesql::Value> row;
     row.reserve(returning_row_cursor->NumColumns());
     for (int i = 0; i < returning_row_cursor->NumColumns(); ++i) {
       if (collect_column_metadata) {
@@ -885,11 +942,11 @@ absl::Status CollectReturningRows(
 }
 
 absl::StatusOr<bool> CanTranslateToInsertOrUpdateMode(
-    const zetasql::ResolvedInsertStmt& insert_stmt) {
-  const zetasql::ResolvedOnConflictClause* on_conflict_clause =
+    const googlesql::ResolvedInsertStmt& insert_stmt) {
+  const googlesql::ResolvedOnConflictClause* on_conflict_clause =
       insert_stmt.on_conflict_clause();
-  ZETASQL_RET_CHECK_NE(on_conflict_clause, nullptr);
-  ZETASQL_RET_CHECK_NE(on_conflict_clause->conflict_action(),
+  GOOGLESQL_RET_CHECK_NE(on_conflict_clause, nullptr);
+  GOOGLESQL_RET_CHECK_NE(on_conflict_clause->conflict_action(),
                ResolvedOnConflictClauseEnums::NOTHING);
 
   // Rules for translating ON CONFLICT DO UPDATE to INSERT OR UPDATE statement.
@@ -951,7 +1008,7 @@ absl::StatusOr<bool> CanTranslateToInsertOrUpdateMode(
     insert_columns.insert(insert_column.name());
   }
   // Map of referenced columns expression.
-  absl::flat_hash_map<std::string, const zetasql::ResolvedColumn*>
+  absl::flat_hash_map<std::string, const googlesql::ResolvedColumn*>
       insert_row_column_name_to_column;
   for (const auto& insert_tuple_column :
        on_conflict_clause->insert_row_scan()->column_list()) {
@@ -963,14 +1020,14 @@ absl::StatusOr<bool> CanTranslateToInsertOrUpdateMode(
   // the insert row.
   for (const auto& update_item : on_conflict_clause->update_item_list()) {
     // Nested updates are disallowed.
-    ZETASQL_RET_CHECK(update_item->element_column() == nullptr);
+    GOOGLESQL_RET_CHECK(update_item->element_column() == nullptr);
     // Target may be a proto update.
     if (!update_item->target()->Is<ResolvedColumnRef>()) {
       return false;
     }
 
     // Update column list is not in the insert column list.
-    const zetasql::ResolvedColumn& update_column =
+    const googlesql::ResolvedColumn& update_column =
         update_item->target()->GetAs<ResolvedColumnRef>()->column();
     if (!insert_columns.contains(update_column.name())) {
       return false;
@@ -1004,20 +1061,20 @@ absl::StatusOr<bool> CanTranslateToInsertOrUpdateMode(
   return true;
 }
 
-absl::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>>
+absl::StatusOr<std::unique_ptr<const googlesql::AnalyzerOutput>>
 AnalyzeAsInsertOrUpdateDML(const std::string& sql, Catalog* catalog,
-                           zetasql::AnalyzerOptions& analyzer_options,
-                           zetasql::TypeFactory* type_factory,
+                           googlesql::AnalyzerOptions& analyzer_options,
+                           googlesql::TypeFactory* type_factory,
                            const FunctionCatalog* function_catalog) {
   // Defer to OR_IGNORE translation of ON CONFLICT DO NOTHING DML in
   // PostgreSQL.
   analyzer_options.mutable_language()->DisableLanguageFeature(
-      zetasql::FEATURE_INSERT_ON_CONFLICT_CLAUSE);
+      googlesql::FEATURE_INSERT_ON_CONFLICT_CLAUSE);
   auto analyzer_output = AnalyzePostgreSQL(sql, catalog, analyzer_options,
                                            type_factory, function_catalog);
   // Re-enable after the step for the rest of the execution.
   analyzer_options.mutable_language()->EnableLanguageFeature(
-      zetasql::FEATURE_INSERT_ON_CONFLICT_CLAUSE);
+      googlesql::FEATURE_INSERT_ON_CONFLICT_CLAUSE);
   return analyzer_output;
 }
 

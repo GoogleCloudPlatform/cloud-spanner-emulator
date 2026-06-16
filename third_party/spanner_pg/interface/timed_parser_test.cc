@@ -35,7 +35,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
 #include "third_party/spanner_pg/interface/parser_output.h"
 
@@ -45,7 +45,7 @@ namespace spangres {
 namespace {
 
 using testing::Return;
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 class MockTimedParser : public TimedParser {
  public:

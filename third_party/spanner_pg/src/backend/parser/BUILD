@@ -29,15 +29,16 @@
 # MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 #------------------------------------------------------------------------------
 
-load("@com_google_zetasql//bazel:bison.bzl", "genyacc")
-load("@com_google_zetasql//bazel:flex.bzl", "genlex")
+load("@com_google_googlesql//bazel:bison.bzl", "genyacc")
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+load("@rules_hdl//dependency_support/com_github_westes_flex:flex.bzl", "genlex")
 
 
 
 package(
     default_visibility = [
         "//:__subpackages__",
+        "//third_party/spanner_pg/shims:__pkg__",
     ],
     # Disable layering_check because the Postgres binary is one giant component.
     # Disable parse_headers because postgres implicitly includes postgres.h
@@ -84,6 +85,7 @@ cc_library(
     ],
     textual_hdrs = [
         "gram.h",
+        "gramparse.h",
     ],
     deps = [
         "//third_party/spanner_pg/interface:catalog_wrappers",
@@ -133,7 +135,7 @@ cc_test(
         "//third_party/spanner_pg/util:valid_memory_context_fixture",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )

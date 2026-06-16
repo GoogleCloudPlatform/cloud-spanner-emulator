@@ -26,7 +26,7 @@ cc_test(
     name = "emulator_conformance_test",
     size = "large",
     srcs = ["emulator_conformance_test.cc"],
-    shard_count = 20,
+    shard_count = 32,
     deps = [
         "//common:feature_flags",
         "//frontend/server",
@@ -39,8 +39,8 @@ cc_test(
         "@com_github_googleapis_google_cloud_cpp//:grpc_utils",
         "@com_github_googleapis_google_cloud_cpp//:spanner",
         "@com_github_grpc_grpc//:grpc++",
+        "@com_google_googlesql//googlesql/base",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )

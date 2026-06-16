@@ -21,7 +21,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "google/cloud/spanner/value.h"
@@ -35,6 +35,9 @@ namespace emulator {
 namespace test {
 
 namespace {
+
+using ::testing::HasSubstr;
+using ::googlesql_base::testing::StatusIs;
 
 class UDFsTest
     : public DatabaseTest,
@@ -67,7 +70,7 @@ INSTANTIATE_TEST_SUITE_P(
     });
 
 TEST_P(UDFsTest, SimpleUdf) {
-  ZETASQL_ASSERT_OK(UpdateSchema({
+  GOOGLESQL_ASSERT_OK(UpdateSchema({
       R"SQL(
       CREATE FUNCTION inc_udf(x INT64) RETURNS INT64
       AS (x + 1)
@@ -76,7 +79,7 @@ TEST_P(UDFsTest, SimpleUdf) {
 }
 
 TEST_P(UDFsTest, UdfWithInvokerSecurity) {
-  ZETASQL_ASSERT_OK(UpdateSchema({
+  GOOGLESQL_ASSERT_OK(UpdateSchema({
       R"SQL(
       CREATE FUNCTION get_table_name() RETURNS STRING SQL SECURITY INVOKER
       AS ("test")
@@ -86,7 +89,7 @@ TEST_P(UDFsTest, UdfWithInvokerSecurity) {
 }
 
 TEST_P(UDFsTest, UdfNullSemantics) {
-  ZETASQL_ASSERT_OK(UpdateSchema({
+  GOOGLESQL_ASSERT_OK(UpdateSchema({
       R"SQL(
       CREATE FUNCTION inc_udf(x INT64) RETURNS INT64 AS (x + 1)
     )SQL"}));
@@ -95,7 +98,7 @@ TEST_P(UDFsTest, UdfNullSemantics) {
 }
 
 TEST_P(UDFsTest, UdfVariousTypes) {
-  ZETASQL_ASSERT_OK(UpdateSchema({
+  GOOGLESQL_ASSERT_OK(UpdateSchema({
       R"SQL(
       CREATE FUNCTION my_lower(s STRING) RETURNS STRING AS (LOWER(s))
     )SQL",
@@ -109,7 +112,7 @@ TEST_P(UDFsTest, UdfVariousTypes) {
 }
 
 TEST_P(UDFsTest, UdfMultipleDefinitions) {
-  ZETASQL_ASSERT_OK(UpdateSchema({
+  GOOGLESQL_ASSERT_OK(UpdateSchema({
       R"SQL(
       CREATE FUNCTION inc_udf(x INT64) RETURNS INT64 AS (x + 1)
     )SQL",
@@ -121,7 +124,7 @@ TEST_P(UDFsTest, UdfMultipleDefinitions) {
 }
 
 TEST_P(UDFsTest, UdfCallingOtherUdf) {
-  ZETASQL_ASSERT_OK(UpdateSchema({
+  GOOGLESQL_ASSERT_OK(UpdateSchema({
       R"SQL(
       CREATE FUNCTION inc_udf(x INT64) RETURNS INT64 AS (x + 1)
     )SQL",
@@ -132,7 +135,7 @@ TEST_P(UDFsTest, UdfCallingOtherUdf) {
 }
 
 TEST_P(UDFsTest, UdfWithQueryExpression) {
-  ZETASQL_ASSERT_OK(UpdateSchema({R"SQL(
+  GOOGLESQL_ASSERT_OK(UpdateSchema({R"SQL(
       CREATE FUNCTION get_v() RETURNS STRING AS (
         (SELECT "v")
       )
@@ -141,7 +144,7 @@ TEST_P(UDFsTest, UdfWithQueryExpression) {
 }
 
 TEST_P(UDFsTest, ArrayDefaultParam) {
-  ZETASQL_ASSERT_OK(UpdateSchema({
+  GOOGLESQL_ASSERT_OK(UpdateSchema({
       R"SQL(
       CREATE FUNCTION test_udf(x ARRAY<INT64> DEFAULT [1]) RETURNS ARRAY<INT64> AS (x)
     )SQL"}));
@@ -155,10 +158,87 @@ TEST_P(UDFsTest, IntervalDefaultParam) {
                   R"SQL(
       CREATE FUNCTION test_udf(x INTERVAL DEFAULT INTERVAL 1 DAY) RETURNS INTERVAL AS (x)
     )SQL"}),
-              zetasql_base::testing::StatusIs(
+              googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInvalidArgument,
                   testing::HasSubstr(
                       "Function parameter default value must be a literal")));
+}
+
+class UDFsDisabledTest
+    : public DatabaseTest,
+      public testing::WithParamInterface<database_api::DatabaseDialect> {
+  absl::Status SetUpDatabase() override {
+    feature_flags_setter_ = std::make_unique<ScopedEmulatorFeatureFlagsSetter>(
+        EmulatorFeatureFlags::Flags{
+            .enable_user_defined_functions = false,
+        });
+    return absl::OkStatus();
+  }
+
+  void SetUp() override {
+    if (GetConformanceTestGlobals().in_prod_env) {
+      GTEST_SKIP() << "Test not applicable to the real Spanner backend "
+                      "(Emulator flags test)";
+    }
+    dialect_ = GetParam();
+    DatabaseTest::SetUp();
+  }
+  void TearDown() override {
+    if (GetConformanceTestGlobals().in_prod_env) {
+      return;
+    }
+    DatabaseTest::TearDown();
+  }
+
+ public:
+  // Aliases so test expectations read more clearly.
+  cloud::spanner::Value Nb() { return Null<Bytes>(); }
+  cloud::spanner::Value Ns() { return Null<std::string>(); }
+  cloud::spanner::Value Ni() { return Null<std::int64_t>(); }
+
+ protected:
+  std::unique_ptr<ScopedEmulatorFeatureFlagsSetter> feature_flags_setter_;
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    UDFsDisabledTest, UDFsDisabledTest,
+    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
+                    database_api::DatabaseDialect::POSTGRESQL),
+    [](const testing::TestParamInfo<UDFsDisabledTest::ParamType>& info) {
+      return database_api::DatabaseDialect_Name(info.param);
+    });
+
+TEST_P(UDFsDisabledTest, CreateDropFunctionFailsIfDisabled) {
+  GTEST_SKIP() << "Temporarily disabled";
+  if (dialect_ == database_api::DatabaseDialect::POSTGRESQL) {
+    EXPECT_THAT(
+        UpdateSchema({R"sql(
+      CREATE FUNCTION inc_udf(x bigint) RETURNS bigint AS 'SELECT x + 1' LANGUAGE SQL
+    )sql"}),
+        StatusIs(absl::StatusCode::kFailedPrecondition,
+                 HasSubstr("<CREATE FUNCTION> statement is not supported")));
+    EXPECT_THAT(
+        UpdateSchema({R"sql(
+      DROP FUNCTION inc_udf
+    )sql"}),
+        StatusIs(absl::StatusCode::kFailedPrecondition,
+                 HasSubstr("<DROP FUNCTION> statement is not supported")));
+  } else {
+    EXPECT_THAT(
+        UpdateSchema({
+            R"SQL(
+      CREATE FUNCTION inc_udf(x INT64) RETURNS INT64 AS (x + 1)
+    )SQL"}),
+        StatusIs(absl::StatusCode::kInvalidArgument,
+                 HasSubstr("User defined functions are not supported")));
+    EXPECT_THAT(
+        UpdateSchema({
+            R"SQL(
+      DROP FUNCTION inc_udf
+    )SQL"}),
+        StatusIs(absl::StatusCode::kInvalidArgument,
+                 HasSubstr("User defined functions are not supported")));
+  }
 }
 
 }  // namespace

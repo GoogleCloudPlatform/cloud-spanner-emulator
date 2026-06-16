@@ -17,7 +17,7 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_TRANSACTION_COMMIT_TIMESTAMP_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_TRANSACTION_COMMIT_TIMESTAMP_H_
 
-#include "zetasql/public/type.h"
+#include "googlesql/public/type.h"
 #include "absl/base/thread_annotations.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
@@ -37,7 +37,7 @@ namespace backend {
 // Helper methods to validate that user provided timestamp value for a commit
 // timestamp column is not in future.
 absl::Status ValidateCommitTimestampValueNotInFuture(
-    const zetasql::Value& value, absl::Time now);
+    const googlesql::Value& value, absl::Time now);
 
 absl::Status ValidateCommitTimestampKeySetForDeleteOp(const Table* table,
                                                       const KeySet& set,
@@ -55,15 +55,15 @@ absl::StatusOr<KeyRange> MaybeSetCommitTimestampSentinel(
 // Returns true if one of the values for a given column contains timestamp
 // sentinel value.
 bool IsPendingCommitTimestamp(const Column* column,
-                              const zetasql::Value& column_value);
+                              const googlesql::Value& column_value);
 
 // Returns true if given key contains key part with timestamp sentinel value.
 bool HasPendingCommitTimestampInKey(const Table* table, const Key& key);
 
 // Replace commit timestamp sentinel value, if present, with transaction
 // commit timestamp for the given column value.
-zetasql::Value MaybeSetCommitTimestamp(const Column* column,
-                                         const zetasql::Value& column_value,
+googlesql::Value MaybeSetCommitTimestamp(const Column* column,
+                                         const googlesql::Value& column_value,
                                          absl::Time commit_timestamp);
 
 // Replace commit timestamp sentinel value, if present, with transaction

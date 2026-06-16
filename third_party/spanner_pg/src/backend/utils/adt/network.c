@@ -71,7 +71,7 @@ static inet *internal_inetpl(inet *ip, int64 addend);
  * Common INET/CIDR input routine
  */
 static inet *
-network_in(char *src, bool is_cidr)
+network_in(char *src, bool is_cidr, Node *escontext)
 {
 	int			bits;
 	inet	   *dst;
@@ -92,7 +92,7 @@ network_in(char *src, bool is_cidr)
 	bits = pg_inet_net_pton(ip_family(dst), src, ip_addr(dst),
 							is_cidr ? ip_addrsize(dst) : -1);
 	if ((bits < 0) || (bits > ip_maxbits(dst)))
-		ereport(ERROR,
+		ereturn(escontext, NULL,
 				(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
 		/* translator: first %s is inet or cidr */
 				 errmsg("invalid input syntax for type %s: \"%s\"",
@@ -104,7 +104,7 @@ network_in(char *src, bool is_cidr)
 	if (is_cidr)
 	{
 		if (!addressOK(ip_addr(dst), bits, ip_family(dst)))
-			ereport(ERROR,
+			ereturn(escontext, NULL,
 					(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
 					 errmsg("invalid cidr value: \"%s\"", src),
 					 errdetail("Value has bits set to right of mask.")));
@@ -121,7 +121,7 @@ inet_in(PG_FUNCTION_ARGS)
 {
 	char	   *src = PG_GETARG_CSTRING(0);
 
-	PG_RETURN_INET_P(network_in(src, false));
+	PG_RETURN_INET_P(network_in(src, false, fcinfo->context));
 }
 
 Datum
@@ -129,7 +129,7 @@ cidr_in(PG_FUNCTION_ARGS)
 {
 	char	   *src = PG_GETARG_CSTRING(0);
 
-	PG_RETURN_INET_P(network_in(src, true));
+	PG_RETURN_INET_P(network_in(src, true, fcinfo->context));
 }
 
 
@@ -1724,9 +1724,7 @@ inet_client_addr(PG_FUNCTION_ARGS)
 	switch (port->raddr.addr.ss_family)
 	{
 		case AF_INET:
-#ifdef HAVE_IPV6
 		case AF_INET6:
-#endif
 			break;
 		default:
 			PG_RETURN_NULL();
@@ -1743,7 +1741,7 @@ inet_client_addr(PG_FUNCTION_ARGS)
 
 	clean_ipv6_addr(port->raddr.addr.ss_family, remote_host);
 
-	PG_RETURN_INET_P(network_in(remote_host, false));
+	PG_RETURN_INET_P(network_in(remote_host, false, NULL));
 }
 
 
@@ -1763,9 +1761,7 @@ inet_client_port(PG_FUNCTION_ARGS)
 	switch (port->raddr.addr.ss_family)
 	{
 		case AF_INET:
-#ifdef HAVE_IPV6
 		case AF_INET6:
-#endif
 			break;
 		default:
 			PG_RETURN_NULL();
@@ -1800,9 +1796,7 @@ inet_server_addr(PG_FUNCTION_ARGS)
 	switch (port->laddr.addr.ss_family)
 	{
 		case AF_INET:
-#ifdef HAVE_IPV6
 		case AF_INET6:
-#endif
 			break;
 		default:
 			PG_RETURN_NULL();
@@ -1819,7 +1813,7 @@ inet_server_addr(PG_FUNCTION_ARGS)
 
 	clean_ipv6_addr(port->laddr.addr.ss_family, local_host);
 
-	PG_RETURN_INET_P(network_in(local_host, false));
+	PG_RETURN_INET_P(network_in(local_host, false, NULL));
 }
 
 
@@ -1839,9 +1833,7 @@ inet_server_port(PG_FUNCTION_ARGS)
 	switch (port->laddr.addr.ss_family)
 	{
 		case AF_INET:
-#ifdef HAVE_IPV6
 		case AF_INET6:
-#endif
 			break;
 		default:
 			PG_RETURN_NULL();
@@ -2101,7 +2093,6 @@ inetmi(PG_FUNCTION_ARGS)
 void
 clean_ipv6_addr(int addr_family, char *addr)
 {
-#ifdef HAVE_IPV6
 	if (addr_family == AF_INET6)
 	{
 		char	   *pct = strchr(addr, '%');
@@ -2109,5 +2100,4 @@ clean_ipv6_addr(int addr_family, char *addr)
 		if (pct)
 			*pct = '\0';
 	}
-#endif
 }

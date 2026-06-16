@@ -34,20 +34,20 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/base/logging.h"
+#include "googlesql/base/logging.h"
 #include "absl/log/absl_log.h"
-#include "zetasql/public/analyzer.h"
-#include "zetasql/public/analyzer_options.h"
-#include "zetasql/public/analyzer_output.h"
-#include "zetasql/public/parse_location.h"
-#include "zetasql/public/types/type_factory.h"
-#include "zetasql/resolved_ast/resolved_ast.h"
-#include "zetasql/resolved_ast/resolved_column.h"
-#include "zetasql/resolved_ast/resolved_node_kind.pb.h"
-#include "zetasql/resolved_ast/validator.h"
+#include "googlesql/public/analyzer.h"
+#include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/analyzer_output.h"
+#include "googlesql/public/parse_location.h"
+#include "googlesql/public/types/type_factory.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_column.h"
+#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
+#include "googlesql/resolved_ast/validator.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/flags/flag.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
@@ -71,26 +71,26 @@
 #include "third_party/spanner_pg/util/unittest_utils.h"
 #include "third_party/spanner_pg/util/valid_memory_context_fixture.h"
 #include "re2/re2.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator::spangres::test {
 namespace {
 
-using ::zetasql::AnalyzerOutput;
-using ::zetasql::ResolvedColumn;
-using ::zetasql::ResolvedComputedColumn;
-using ::zetasql::ResolvedOutputColumn;
-using ::zetasql::ResolvedProjectScan;
-using ::zetasql::ResolvedQueryStmt;
-using ::zetasql::ResolvedStatement;
-using ::zetasql::ResolvedTableScan;
+using ::googlesql::AnalyzerOutput;
+using ::googlesql::ResolvedColumn;
+using ::googlesql::ResolvedComputedColumn;
+using ::googlesql::ResolvedOutputColumn;
+using ::googlesql::ResolvedProjectScan;
+using ::googlesql::ResolvedQueryStmt;
+using ::googlesql::ResolvedStatement;
+using ::googlesql::ResolvedTableScan;
 
 using ::postgres_translator::internal::PostgresCastNodeTemplate;
 using ::postgres_translator::internal::PostgresCastToExpr;
 using ::postgres_translator::internal::PostgresCastToNode;
 using ::testing::HasSubstr;
-using ::zetasql_base::testing::IsOkAndHolds;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::IsOkAndHolds;
+using ::googlesql_base::testing::StatusIs;
 
 using QueryTransformerTest = ::postgres_translator::TransformerTest;
 
@@ -116,10 +116,10 @@ const ResolvedProjectScan* CastToGsqlProjectScan(
   return query_stmt->query()->GetAs<ResolvedProjectScan>();
 }
 
-// Builds a mutable copy of the input ZetaSQL table scan.
-// ZetaSQL only exposes read-only references to children scans of a resolved
+// Builds a mutable copy of the input GoogleSQL table scan.
+// GoogleSQL only exposes read-only references to children scans of a resolved
 // AST, it doesn't let call sites own them. Meanwhile, in order to build a
-// ZetaSQL scan that contains a child scan, the parent scan needs to own the
+// GoogleSQL scan that contains a child scan, the parent scan needs to own the
 // child scan. Call sites can use this function to build a ResolvedTableScan,
 // which can later be used to build other ResolvedScan objects.
 absl::StatusOr<std::unique_ptr<ResolvedTableScan>> BuildMutableGsqlTableScan(
@@ -129,7 +129,7 @@ absl::StatusOr<std::unique_ptr<ResolvedTableScan>> BuildMutableGsqlTableScan(
         "Cannot build a mutable table scan. The source table scan is invalid.");
   }
   std::unique_ptr<ResolvedTableScan> new_table_scan =
-      zetasql::MakeResolvedTableScan(
+      googlesql::MakeResolvedTableScan(
           gsql_table_scan->column_list(), gsql_table_scan->table(),
           /*for_system_time_expr=*/nullptr, gsql_table_scan->alias());
   new_table_scan->set_column_index_list(gsql_table_scan->column_index_list());
@@ -156,11 +156,11 @@ void StripTargetEntry(TargetEntry* entry) {
   entry->resorigcol = InvalidOid;
 }
 
-// The has_explicit_type boolean field on a ZetaSQL literal is not used during
+// The has_explicit_type boolean field on a GoogleSQL literal is not used during
 // query execution and is not possible for the Spangres transformer to match
 // exactly. This method strips the has_explicit_type field from a resolved AST
 // debug string so that we can compare debug strings between Spangres and
-// ZetaSQL.
+// GoogleSQL.
 std::string StripHasExplicitType(
     const std::string& original_debug_string) {
   const std::string kHasExplicitType = ", has_explicit_type=TRUE";
@@ -192,6 +192,7 @@ void StripPgExpr(Expr* expr) {
       Var* var = PostgresCastNode(Var, expr);
       var->location = -1;
       var->varcollid = 0;
+      var->varnullingrels = nullptr;
       if (var->vartype == VARCHAROID) {
         var->vartype = TEXTOID;
       }
@@ -416,7 +417,7 @@ void StripPgQueryDifferences(Query* pg_query) {
       }
       case RTE_FUNCTION: {
         // Strip the alias because there's no way to differentiate user-supplied
-        // from system default aliases with functions (since ZetaSQL doesn't
+        // from system default aliases with functions (since GoogleSQL doesn't
         // really support FROM functions).
         rte->alias = nullptr;
         for (RangeTblFunction* function :
@@ -432,7 +433,9 @@ void StripPgQueryDifferences(Query* pg_query) {
     rte->coltypes = nullptr;
     rte->coltypmods = nullptr;
     rte->colcollations = nullptr;
+    rte->perminfoindex = 0;
   }
+  pg_query->rteperminfos = nullptr;
   // Ignore stmt_location:
   pg_query->stmt_location = -1;
   // Ignore differences in TargetEntry and its expressions:
@@ -487,7 +490,7 @@ void StripPgQueryDifferences(Query* pg_query) {
 
 // Test case for QueryTransformationTest
 //
-// Defaults to kTransformRoundTrip phases and same query text for ZetaSQL
+// Defaults to kTransformRoundTrip phases and same query text for GoogleSQL
 // and PostgreSQL. Use mutators to override those defaults.
 class TransformTestCase {
  public:
@@ -505,12 +508,12 @@ class TransformTestCase {
     return *this;
   }
   TransformTestCase& SetParameterTypes(
-      const absl::flat_hash_map<std::string, const zetasql::Type*>&
+      const absl::flat_hash_map<std::string, const googlesql::Type*>&
           parameter_types) {
     parameter_types_ = parameter_types;
     return *this;
   }
-  TransformTestCase& SetLanguageFeature(zetasql::LanguageFeature feature,
+  TransformTestCase& SetLanguageFeature(googlesql::LanguageFeature feature,
                                         bool value) {
     language_features_.push_back(std::make_pair(feature, value));
     return *this;
@@ -523,11 +526,11 @@ class TransformTestCase {
   int planning_phases() const { return planning_phases_; }
   const std::string& pg_query() const { return pg_query_; }
   const std::string& gsql_query() const { return gsql_query_; }
-  const absl::flat_hash_map<std::string, const zetasql::Type*>&
+  const absl::flat_hash_map<std::string, const googlesql::Type*>&
   parameter_types() const {
     return parameter_types_;
   }
-  const std::vector<std::pair<zetasql::LanguageFeature, bool>>&
+  const std::vector<std::pair<googlesql::LanguageFeature, bool>>&
   language_features() const {
     return language_features_;
   }
@@ -539,11 +542,11 @@ class TransformTestCase {
   friend std::ostream& operator<<(std::ostream& os,
                                   const TransformTestCase& test_case) {
     if (test_case.gsql_query_ == test_case.pg_query_) {
-      os << "PostgreSQL and ZetaSQL test query:\n"
+      os << "PostgreSQL and GoogleSQL test query:\n"
          << test_case.pg_query_ << "\n";
     } else {
       os << "PostgreSQL test query:\n" << test_case.pg_query_ << "\n";
-      os << "ZetaSQL test query:\n" << test_case.gsql_query_ << "\n";
+      os << "GoogleSQL test query:\n" << test_case.gsql_query_ << "\n";
     }
     return os << PrintPhases(test_case.planning_phases_);
   }
@@ -553,8 +556,8 @@ class TransformTestCase {
   std::string name_;
   std::string pg_query_;
   std::string gsql_query_;
-  absl::flat_hash_map<std::string, const zetasql::Type*> parameter_types_;
-  std::vector<std::pair<zetasql::LanguageFeature, bool>> language_features_;
+  absl::flat_hash_map<std::string, const googlesql::Type*> parameter_types_;
+  std::vector<std::pair<googlesql::LanguageFeature, bool>> language_features_;
   std::vector<std::pair<absl::Flag<bool>*, bool>> flag_overrides_;
 };
 
@@ -562,7 +565,7 @@ class QueryTransformationTest
     : public ::testing::WithParamInterface<TransformTestCase>,
       public ::postgres_translator::test::ValidMemoryContext {
  protected:
-  zetasql::AnalyzerOptions analyzer_options_ =
+  googlesql::AnalyzerOptions analyzer_options_ =
       GetSpangresTestAnalyzerOptions();
 };
 
@@ -584,22 +587,22 @@ TEST_P(QueryTransformationTest, TestTransform) {
       GetSpangresTestCatalogAdapterHolder(analyzer_options_);
 
   // Build the analyzer options.
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   analyzer_options.set_record_parse_locations(false);
   for (const auto& [parameter_name, parameter_type] :
        test_case.parameter_types()) {
-    ZETASQL_ASSERT_OK(
+    GOOGLESQL_ASSERT_OK(
         analyzer_options.AddQueryParameter(parameter_name, parameter_type));
   }
 
-  // Build Postgres and ZetaSQL objects from the sql string:
+  // Build Postgres and GoogleSQL objects from the sql string:
   Query* pg_analyzer_output;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(pg_analyzer_output,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(pg_analyzer_output,
                        BuildPgQuery(test_case.pg_query(), analyzer_options));
-  zetasql::TypeFactory type_factory;
+  googlesql::TypeFactory type_factory;
   std::unique_ptr<const AnalyzerOutput> gsql_output;
-  ZETASQL_ASSERT_OK(ParseAndAnalyzeFromZetaSQLForTest(
+  GOOGLESQL_ASSERT_OK(ParseAndAnalyzeFromGoogleSQLForTest(
       test_case.gsql_query(), &type_factory, analyzer_options, &gsql_output));
 
   auto transformer = std::make_unique<ForwardTransformer>(
@@ -618,14 +621,14 @@ TEST_P(QueryTransformationTest, TestTransform) {
     // resolved AST.
     pg_analyzer_output->stmt_location = -1;
 
-    // PostgreSQL -> ZetaSQL
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    // PostgreSQL -> GoogleSQL
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         transformed_statement,
         transformer->BuildGsqlResolvedStatement(*pg_analyzer_output));
 
     // Validate the resolved AST.
-    zetasql::Validator validator(analyzer_options.language());
-    ZETASQL_ASSERT_OK(validator.ValidateResolvedStatement(transformed_statement.get()));
+    googlesql::Validator validator(analyzer_options.language());
+    GOOGLESQL_ASSERT_OK(validator.ValidateResolvedStatement(transformed_statement.get()));
 
     // Check that the ASTs match.
     ASSERT_EQ(StripParseLocations(transformed_statement->DebugString()),
@@ -861,8 +864,8 @@ INSTANTIATE_TEST_SUITE_P(
         TransformTestCase("ParameterizedQuery",
                           "select key, $2 as col2 from keyvalue where key=$1")
             .SetGsqlQuery("select key, @p2 as col2 from keyvalue where key=@p1")
-            .SetParameterTypes({{"p1", zetasql::types::Int64Type()},
-                                {"p2", zetasql::types::BoolType()}}),
+            .SetParameterTypes({{"p1", googlesql::types::Int64Type()},
+                                {"p2", googlesql::types::BoolType()}}),
         TransformTestCase("CastParameterInSelectList",
                           "select $1::bigint as col1")
             .SetGsqlQuery(
@@ -1008,7 +1011,7 @@ TEST_F(QueryTransformerTest, PgQueryToGsqlResolvedStatementNoLocation) {
       GetSpangresTestCatalogAdapterHolder(analyzer_options_);
   // Build a PostgreSQL Query object from the sql string
   // clang-format off
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Query* pg_query, BuildPgQuery(sql));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Query* pg_query, BuildPgQuery(sql));
   // clang-format on
 
   // When the flag is set to false, expect the parse location of the statement
@@ -1018,16 +1021,16 @@ TEST_F(QueryTransformerTest, PgQueryToGsqlResolvedStatementNoLocation) {
 
   pg_query->stmt_location = 10;
   pg_query->stmt_len = 0;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const ResolvedStatement> new_statement,
       forward_transformer_->BuildGsqlResolvedStatement(*pg_query));
   EXPECT_EQ(new_statement->GetParseLocationRangeOrNULL(), nullptr);
 
   pg_query->stmt_len = 20;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       new_statement,
       forward_transformer_->BuildGsqlResolvedStatement(*pg_query));
-  const zetasql::ParseLocationRange* location_range =
+  const googlesql::ParseLocationRange* location_range =
       new_statement->GetParseLocationRangeOrNULL();
   ASSERT_NE(location_range, nullptr);
   EXPECT_EQ(location_range->start().GetByteOffset(), pg_query->stmt_location);
@@ -1045,17 +1048,17 @@ TEST_F(QueryTransformerTest, PgQueryToGsqlResolvedStatementWithLocation) {
       GetSpangresTestCatalogAdapterHolder(analyzer_options_);
   // Build a PostgreSQL Query object from the sql string
   // clang-format off
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Query* pg_query, BuildPgQuery(sql));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Query* pg_query, BuildPgQuery(sql));
   // clang-format on
 
   // With stmt_len == 0, expect the range's end to be 0 as well, while
   // the range's start is the same as stmt_location.
   pg_query->stmt_location = 10;
   pg_query->stmt_len = 0;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const ResolvedStatement> new_statement,
       forward_transformer_->BuildGsqlResolvedStatement(*pg_query));
-  const zetasql::ParseLocationRange* location_range =
+  const googlesql::ParseLocationRange* location_range =
       new_statement->GetParseLocationRangeOrNULL();
   EXPECT_EQ(location_range->start().GetByteOffset(), pg_query->stmt_location);
   EXPECT_EQ(location_range->end().GetByteOffset(), 0);
@@ -1063,7 +1066,7 @@ TEST_F(QueryTransformerTest, PgQueryToGsqlResolvedStatementWithLocation) {
   // Now set a positive stmt_len, expect the range's end to change
   // accordingly.
   pg_query->stmt_len = 20;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       new_statement,
       forward_transformer_->BuildGsqlResolvedStatement(*pg_query));
   location_range = new_statement->GetParseLocationRangeOrNULL();
@@ -1074,23 +1077,23 @@ TEST_F(QueryTransformerTest, PgQueryToGsqlResolvedStatementWithLocation) {
 
 TEST_F(QueryTransformerTest, BuildResolvedFilterScanNegativeTest) {
   const std::string sql = "select key from keyvalue where true";
-  // Build ZetaSQL objects from the sql string:
-  zetasql::TypeFactory type_factory;
+  // Build GoogleSQL objects from the sql string:
+  googlesql::TypeFactory type_factory;
   std::unique_ptr<const AnalyzerOutput> gsql_output;
-  ZETASQL_ASSERT_OK(
-      ParseAndAnalyzeFromZetaSQLForTest(sql, &type_factory, &gsql_output));
+  GOOGLESQL_ASSERT_OK(
+      ParseAndAnalyzeFromGoogleSQLForTest(sql, &type_factory, &gsql_output));
 
-  // Retrieve ZetaSQL AST objects
+  // Retrieve GoogleSQL AST objects
   const ResolvedProjectScan* gsql_project_scan =
       CastToGsqlProjectScan(gsql_output->resolved_statement());
-  const zetasql::ResolvedFilterScan* gsql_filter_scan =
-      gsql_project_scan->input_scan()->GetAs<zetasql::ResolvedFilterScan>();
-  const zetasql::ResolvedTableScan* gsql_table_scan =
-      gsql_filter_scan->input_scan()->GetAs<zetasql::ResolvedTableScan>();
+  const googlesql::ResolvedFilterScan* gsql_filter_scan =
+      gsql_project_scan->input_scan()->GetAs<googlesql::ResolvedFilterScan>();
+  const googlesql::ResolvedTableScan* gsql_table_scan =
+      gsql_filter_scan->input_scan()->GetAs<googlesql::ResolvedTableScan>();
 
   // Build a mutable copy of the table scan:
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<zetasql::ResolvedTableScan> new_table_scan,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<googlesql::ResolvedTableScan> new_table_scan,
       BuildMutableGsqlTableScan(gsql_table_scan));
 
   // Negative test case: invalid node type
@@ -1109,31 +1112,31 @@ TEST_F(QueryTransformerTest, BuildResolvedFilterScanTest) {
 
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options_);
-  // Build Postgres and ZetaSQL objects from the sql string:
+  // Build Postgres and GoogleSQL objects from the sql string:
   // clang-format off
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Query* pg_query, BuildPgQuery(sql));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Query* pg_query, BuildPgQuery(sql));
   // clang-format on
-  zetasql::TypeFactory type_factory;
+  googlesql::TypeFactory type_factory;
   std::unique_ptr<const AnalyzerOutput> gsql_output;
-  ZETASQL_ASSERT_OK(
-      ParseAndAnalyzeFromZetaSQLForTest(sql, &type_factory, &gsql_output));
+  GOOGLESQL_ASSERT_OK(
+      ParseAndAnalyzeFromGoogleSQLForTest(sql, &type_factory, &gsql_output));
 
-  // Retrieve ZetaSQL AST objects
+  // Retrieve GoogleSQL AST objects
   const ResolvedProjectScan* gsql_project_scan =
       CastToGsqlProjectScan(gsql_output->resolved_statement());
-  const zetasql::ResolvedFilterScan* gsql_filter_scan =
-      gsql_project_scan->input_scan()->GetAs<zetasql::ResolvedFilterScan>();
-  const zetasql::ResolvedTableScan* gsql_table_scan =
-      gsql_filter_scan->input_scan()->GetAs<zetasql::ResolvedTableScan>();
+  const googlesql::ResolvedFilterScan* gsql_filter_scan =
+      gsql_project_scan->input_scan()->GetAs<googlesql::ResolvedFilterScan>();
+  const googlesql::ResolvedTableScan* gsql_table_scan =
+      gsql_filter_scan->input_scan()->GetAs<googlesql::ResolvedTableScan>();
 
   // Build a mutable copy of the table scan:
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<zetasql::ResolvedTableScan> new_table_scan,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<googlesql::ResolvedTableScan> new_table_scan,
       BuildMutableGsqlTableScan(gsql_table_scan));
 
   VarIndexScope empty_from_scan_scope;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<const zetasql::ResolvedFilterScan> new_filter_scan,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const googlesql::ResolvedFilterScan> new_filter_scan,
       forward_transformer_->BuildGsqlResolvedFilterScan(
           *(pg_query->jointree->quals), &empty_from_scan_scope,
           std::move(new_table_scan)));
@@ -1152,26 +1155,26 @@ void BuildAliasColumnList(const std::vector<std::string>& column_aliases,
   }
 }
 
-const zetasql::Table* FindTable(CatalogAdapter* adapter,
+const googlesql::Table* FindTable(CatalogAdapter* adapter,
                                   TableName table_name) {
-  const zetasql::Table* table = nullptr;
+  const googlesql::Table* table = nullptr;
   ABSL_CHECK_OK(
       adapter->GetEngineUserCatalog()->FindTable(table_name.AsSpan(), &table));
   ABSL_CHECK_NE(table, nullptr);
   return table;
 }
 
-// Transform a zetasql::Table into a PostgreSQL RangeTblEntry and verify
+// Transform a googlesql::Table into a PostgreSQL RangeTblEntry and verify
 // basic fields values are set.
 TEST_F(QueryTransformerTest, BasicTableTransformTest) {
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options_);
   CatalogAdapter* catalog_adapter;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(catalog_adapter, GetCatalogAdapter());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(catalog_adapter, GetCatalogAdapter());
 
   // Test that we can build an RTE from a simple table.
   RangeTblEntry* key_value_rte;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       key_value_rte,
       Transformer::BuildPgRangeTblEntry(
           *catalog_adapter, *FindTable(catalog_adapter, kTableName),
@@ -1183,17 +1186,17 @@ TEST_F(QueryTransformerTest, BasicTableTransformTest) {
   EXPECT_EQ(key_value_rte->relkind, RELKIND_RELATION);
 }
 
-// Transform a zetasql::Table into a PostgreSQL RangeTblEntry and verify
+// Transform a googlesql::Table into a PostgreSQL RangeTblEntry and verify
 // relid (oid) values are set properly.
 TEST_F(QueryTransformerTest, TableOidAssignmentTest) {
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options_);
   CatalogAdapter* catalog_adapter;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(catalog_adapter, GetCatalogAdapter());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(catalog_adapter, GetCatalogAdapter());
 
   // Build an RTE from a simple table.
   RangeTblEntry* key_value_rte;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       key_value_rte,
       Transformer::BuildPgRangeTblEntry(
           *catalog_adapter, *FindTable(catalog_adapter, kTableName),
@@ -1224,7 +1227,7 @@ TEST_F(QueryTransformerTest, TableOidAssignmentTest) {
                   testing::Field(&RangeTblEntry::relid, key_value_rte->relid)));
 }
 
-// Transform 2 zetasql::Table objects into 2 PostgreSQL RangeTblEntry
+// Transform 2 googlesql::Table objects into 2 PostgreSQL RangeTblEntry
 // objects and verify relid (oid) values are set properly.
 TEST_F(QueryTransformerTest, TwoTableOidAssignmentTest) {
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
@@ -1233,9 +1236,9 @@ TEST_F(QueryTransformerTest, TwoTableOidAssignmentTest) {
   const TableName kKeyValue2TableName({"public", "KeyValue2"});
 
   CatalogAdapter* catalog_adapter;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(catalog_adapter, GetCatalogAdapter());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(catalog_adapter, GetCatalogAdapter());
   RangeTblEntry* key_value_rte;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       key_value_rte,
       Transformer::BuildPgRangeTblEntry(
           *catalog_adapter, *FindTable(catalog_adapter, kTableName),
@@ -1243,7 +1246,7 @@ TEST_F(QueryTransformerTest, TwoTableOidAssignmentTest) {
 
   // Build a second RTE from another table
   RangeTblEntry* key_value2_rte;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       key_value2_rte,
       Transformer::BuildPgRangeTblEntry(
           *catalog_adapter, *FindTable(catalog_adapter, kKeyValue2TableName),
@@ -1263,24 +1266,24 @@ TEST_F(QueryTransformerTest, TwoTableOidAssignmentTest) {
   EXPECT_NE(key_value2_rte->relid, key_value_rte->relid);
 }
 
-// Transform a zetasql::Table into a PostgreSQL RangeTblEntry and verify
+// Transform a googlesql::Table into a PostgreSQL RangeTblEntry and verify
 // column properties.
 TEST_F(QueryTransformerTest, TableColumnTransformTest) {
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options_);
   // Test that we can build an RTE from a simple table.
   CatalogAdapter* catalog_adapter;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(catalog_adapter, GetCatalogAdapter());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(catalog_adapter, GetCatalogAdapter());
   RangeTblEntry* key_value_rte;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       key_value_rte,
       Transformer::BuildPgRangeTblEntry(
           *catalog_adapter, *FindTable(catalog_adapter, kTableName),
           /*alias=*/nullptr, /*inFromCl=*/true, ACL_SELECT));
 
   // Validate per-column contents.
-  const zetasql::Table* key_value_table;
-  ZETASQL_ASSERT_OK(catalog_adapter->GetEngineUserCatalog()->FindTable(
+  const googlesql::Table* key_value_table;
+  GOOGLESQL_ASSERT_OK(catalog_adapter->GetEngineUserCatalog()->FindTable(
       kTableName.AsSpan(), &key_value_table));
   EXPECT_EQ(list_length(key_value_rte->eref->colnames),
             key_value_table->NumColumns());
@@ -1293,12 +1296,12 @@ TEST_F(QueryTransformerTest, TableColumnTransformTest) {
     GetAttributeTypeC(key_value_rte->relid, /*1-indexed*/ i + 1, &col_typeoid,
                       &col_typmod, &col_collationid);
 
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         Oid oid_from_gsql,
         Transformer::BuildPgTypeOid(*catalog_adapter,
                                     key_value_table->GetColumn(i)->GetType()));
     EXPECT_EQ(col_typeoid, oid_from_gsql);
-    ZETASQL_ASSERT_OK_AND_ASSIGN(const FormData_pg_type* pg_type,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(const FormData_pg_type* pg_type,
                          PgBootstrapCatalog::Default()->GetType(oid_from_gsql));
     EXPECT_EQ(col_typmod, pg_type->typtypmod);
     EXPECT_EQ(col_collationid, pg_type->typcollation);
@@ -1318,10 +1321,10 @@ TEST_F(QueryTransformerTest, TableAliasTransformTest) {
       GetSpangresTestCatalogAdapterHolder(analyzer_options_);
   // Test that we correctly rename columns when aliases are supplied.
   TableName all_types_table_name({"AllSpangresTypes"});
-  const zetasql::Table* all_types_table;
+  const googlesql::Table* all_types_table;
   CatalogAdapter* catalog_adapter;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(catalog_adapter, GetCatalogAdapter());
-  ZETASQL_ASSERT_OK(catalog_adapter->GetEngineUserCatalog()->FindTable(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(catalog_adapter, GetCatalogAdapter());
+  GOOGLESQL_ASSERT_OK(catalog_adapter->GetEngineUserCatalog()->FindTable(
       all_types_table_name.AsSpan(), &all_types_table));
   // Build the alias names vector programatically to be robust to test catalog
   // schema changes.
@@ -1334,7 +1337,7 @@ TEST_F(QueryTransformerTest, TableAliasTransformTest) {
   ASSERT_EQ(list_length(all_types_alias->colnames), alias_names.size());
 
   RangeTblEntry* all_types_rte;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(all_types_rte,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(all_types_rte,
                        Transformer::BuildPgRangeTblEntry(
                            *catalog_adapter, *all_types_table, all_types_alias,
                            /*inFromCl=*/true, ACL_SELECT));
@@ -1359,35 +1362,35 @@ TEST_F(QueryTransformerTest, UnsupportedUpdateWithFromClause) {
                HasSubstr("UPDATE...FROM statements are not supported")));
 }
 
-// Helper function to extract the single TableScan from a ZetaSQL
+// Helper function to extract the single TableScan from a GoogleSQL
 // AnalyzerOutput. Currently this only supports statements with a single
 // TableScan.
-absl::StatusOr<const zetasql::ResolvedTableScan*> GetTableScan(
-    const zetasql::AnalyzerOutput* analyzer_output) {
-  std::vector<const zetasql::ResolvedNode*> nodes;
+absl::StatusOr<const googlesql::ResolvedTableScan*> GetTableScan(
+    const googlesql::AnalyzerOutput* analyzer_output) {
+  std::vector<const googlesql::ResolvedNode*> nodes;
   analyzer_output->resolved_statement()->GetDescendantsSatisfying(
-      &zetasql::ResolvedNode::Is<zetasql::ResolvedTableScan>, &nodes);
-  ZETASQL_RET_CHECK_EQ(nodes.size(), 1)
+      &googlesql::ResolvedNode::Is<googlesql::ResolvedTableScan>, &nodes);
+  GOOGLESQL_RET_CHECK_EQ(nodes.size(), 1)
       << "This helper only supports statements with a single table scan";
-  return nodes[0]->GetAs<zetasql::ResolvedTableScan>();
+  return nodes[0]->GetAs<googlesql::ResolvedTableScan>();
 }
 
 TEST(TransformerTest, PruneUnusedPrunesOneColumn) {
-  zetasql::AnalyzerOptions options = GetSpangresTestAnalyzerOptions();
+  googlesql::AnalyzerOptions options = GetSpangresTestAnalyzerOptions();
   ASSERT_TRUE(options.prune_unused_columns());
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<const zetasql::AnalyzerOutput> gsql_output,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const googlesql::AnalyzerOutput> gsql_output,
       ParseAnalyzeAndTransformStatement("select key, value from keyvalue",
                                         options));
 
   // We expect that "key" and "value" were not pruned and only "_exists" was
   // pruned.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const zetasql::ResolvedTableScan* table_scan,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const googlesql::ResolvedTableScan* table_scan,
                        GetTableScan(gsql_output.get()));
   const std::vector<std::string> column_names{"key", "value"};
-  const zetasql::Table* catalog_table;
-  ZETASQL_ASSERT_OK(GetSpangresTestSpannerUserCatalog()->FindTable({"keyvalue"},
+  const googlesql::Table* catalog_table;
+  GOOGLESQL_ASSERT_OK(GetSpangresTestSpannerUserCatalog()->FindTable({"keyvalue"},
                                                            &catalog_table));
   EXPECT_EQ(table_scan->column_list_size(), column_names.size());
   for (int i = 0; i < table_scan->column_list_size(); ++i) {
@@ -1400,16 +1403,16 @@ TEST(TransformerTest, PruneUnusedPrunesOneColumn) {
 }
 
 TEST(TransformerTest, PruneUnusedPrunesMultipleColumns) {
-  zetasql::AnalyzerOptions options = GetSpangresTestAnalyzerOptions();
+  googlesql::AnalyzerOptions options = GetSpangresTestAnalyzerOptions();
   ASSERT_TRUE(options.prune_unused_columns());
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<const zetasql::AnalyzerOutput> gsql_output,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const googlesql::AnalyzerOutput> gsql_output,
       ParseAnalyzeAndTransformStatement("select value from keyvalue", options));
 
   // We expect that "key" and "exists_" were pruned from the table scan. That
   // should leave a single "value" column.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const zetasql::ResolvedTableScan* table_scan,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const googlesql::ResolvedTableScan* table_scan,
                        GetTableScan(gsql_output.get()));
   EXPECT_EQ(table_scan->column_list_size(), 1);
   EXPECT_EQ(table_scan->column_list(0).table_name(), "keyvalue");
@@ -1418,21 +1421,21 @@ TEST(TransformerTest, PruneUnusedPrunesMultipleColumns) {
 }
 
 TEST(TransformerTest, PruneUnusedPrunesInsert) {
-  zetasql::AnalyzerOptions options = GetSpangresTestAnalyzerOptions();
+  googlesql::AnalyzerOptions options = GetSpangresTestAnalyzerOptions();
   ASSERT_TRUE(options.prune_unused_columns());
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<const zetasql::AnalyzerOutput> gsql_output,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const googlesql::AnalyzerOutput> gsql_output,
       ParseAnalyzeAndTransformStatement(
           "insert into keyvalue values (1, 'abc')", options));
 
   // We are implicitly inserting into "key" and "value" columns so we expect
   // that "key" and "value" were not pruned and only "_exists" was pruned.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const zetasql::ResolvedTableScan* table_scan,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const googlesql::ResolvedTableScan* table_scan,
                        GetTableScan(gsql_output.get()));
   const std::vector<std::string> column_names{"key", "value"};
-  const zetasql::Table* catalog_table;
-  ZETASQL_ASSERT_OK(GetSpangresTestSpannerUserCatalog()->FindTable({"keyvalue"},
+  const googlesql::Table* catalog_table;
+  GOOGLESQL_ASSERT_OK(GetSpangresTestSpannerUserCatalog()->FindTable({"keyvalue"},
                                                            &catalog_table));
   EXPECT_EQ(table_scan->column_list_size(), column_names.size());
   for (int i = 0; i < table_scan->column_list_size(); ++i) {
@@ -1445,18 +1448,18 @@ TEST(TransformerTest, PruneUnusedPrunesInsert) {
 }
 
 TEST(TransformerTest, InsertOnConflictDoNothing) {
-  zetasql::AnalyzerOptions options = GetSpangresTestAnalyzerOptions();
+  googlesql::AnalyzerOptions options = GetSpangresTestAnalyzerOptions();
   options.mutable_language()->DisableLanguageFeature(
-      zetasql::FEATURE_INSERT_ON_CONFLICT_CLAUSE);
+      googlesql::FEATURE_INSERT_ON_CONFLICT_CLAUSE);
   ASSERT_TRUE(options.prune_unused_columns());
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<const zetasql::AnalyzerOutput> gsql_output,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const googlesql::AnalyzerOutput> gsql_output,
       ParseAnalyzeAndTransformStatement(
           "INSERT INTO keyvalue VALUES (1, 'abc') ON CONFLICT(key) DO NOTHING",
           options));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const zetasql::ResolvedTableScan* table_scan,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const googlesql::ResolvedTableScan* table_scan,
                        GetTableScan(gsql_output.get()));
   const std::vector<std::string> column_names{"key", "value"};
   EXPECT_EQ(table_scan->column_list_size(), column_names.size());
@@ -1465,26 +1468,26 @@ TEST(TransformerTest, InsertOnConflictDoNothing) {
     EXPECT_EQ(table_scan->column_list(i).table_name(), "keyvalue");
   }
 
-  const zetasql::ResolvedInsertStmt* stmt =
-      gsql_output->resolved_statement()->GetAs<zetasql::ResolvedInsertStmt>();
-  EXPECT_EQ(stmt->insert_mode(), zetasql::ResolvedInsertStmt::OR_IGNORE);
+  const googlesql::ResolvedInsertStmt* stmt =
+      gsql_output->resolved_statement()->GetAs<googlesql::ResolvedInsertStmt>();
+  EXPECT_EQ(stmt->insert_mode(), googlesql::ResolvedInsertStmt::OR_IGNORE);
   EXPECT_EQ(stmt->row_list_size(), 1);
 }
 
 TEST(TransformerTest, InsertOnConflictDoUpdate) {
-  zetasql::AnalyzerOptions options = GetSpangresTestAnalyzerOptions();
+  googlesql::AnalyzerOptions options = GetSpangresTestAnalyzerOptions();
   options.mutable_language()->DisableLanguageFeature(
-      zetasql::FEATURE_INSERT_ON_CONFLICT_CLAUSE);
+      googlesql::FEATURE_INSERT_ON_CONFLICT_CLAUSE);
   ASSERT_TRUE(options.prune_unused_columns());
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<const zetasql::AnalyzerOutput> gsql_output,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const googlesql::AnalyzerOutput> gsql_output,
       ParseAnalyzeAndTransformStatement(
           "INSERT INTO keyvalue VALUES (1, 'abc') ON CONFLICT(key) "
           "DO UPDATE SET key = excluded.key, value = excluded.value",
           options));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const zetasql::ResolvedTableScan* table_scan,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const googlesql::ResolvedTableScan* table_scan,
                        GetTableScan(gsql_output.get()));
   const std::vector<std::string> column_names{"key", "value"};
   EXPECT_EQ(table_scan->column_list_size(), column_names.size());
@@ -1493,28 +1496,28 @@ TEST(TransformerTest, InsertOnConflictDoUpdate) {
     EXPECT_EQ(table_scan->column_list(i).table_name(), "keyvalue");
   }
 
-  const zetasql::ResolvedInsertStmt* stmt =
-      gsql_output->resolved_statement()->GetAs<zetasql::ResolvedInsertStmt>();
-  EXPECT_EQ(stmt->insert_mode(), zetasql::ResolvedInsertStmt::OR_UPDATE);
+  const googlesql::ResolvedInsertStmt* stmt =
+      gsql_output->resolved_statement()->GetAs<googlesql::ResolvedInsertStmt>();
+  EXPECT_EQ(stmt->insert_mode(), googlesql::ResolvedInsertStmt::OR_UPDATE);
   EXPECT_EQ(stmt->row_list_size(), 1);
 }
 
 TEST(TransformerTest, PruneUnusedPrunesDelete) {
-  zetasql::AnalyzerOptions options = GetSpangresTestAnalyzerOptions();
+  googlesql::AnalyzerOptions options = GetSpangresTestAnalyzerOptions();
   ASSERT_TRUE(options.prune_unused_columns());
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<const zetasql::AnalyzerOutput> gsql_output,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const googlesql::AnalyzerOutput> gsql_output,
       ParseAnalyzeAndTransformStatement(
           "delete from keyvalue where value = 'f in the chat'", options));
 
   // We are deleting by specifying the "value" column so we expect
   // that "value" was not pruned and "key" and "_exists" were pruned.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const zetasql::ResolvedTableScan* table_scan,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const googlesql::ResolvedTableScan* table_scan,
                        GetTableScan(gsql_output.get()));
   const std::vector<std::string> column_names{"value"};
-  const zetasql::Table* catalog_table;
-  ZETASQL_ASSERT_OK(GetSpangresTestSpannerUserCatalog()->FindTable({"keyvalue"},
+  const googlesql::Table* catalog_table;
+  GOOGLESQL_ASSERT_OK(GetSpangresTestSpannerUserCatalog()->FindTable({"keyvalue"},
                                                            &catalog_table));
   EXPECT_EQ(table_scan->column_list_size(), column_names.size());
   for (int i = 0; i < table_scan->column_list_size(); ++i) {
@@ -1527,22 +1530,22 @@ TEST(TransformerTest, PruneUnusedPrunesDelete) {
 }
 
 TEST(TransformerTest, PruneUnusedPrunesUpdate) {
-  zetasql::AnalyzerOptions options = GetSpangresTestAnalyzerOptions();
+  googlesql::AnalyzerOptions options = GetSpangresTestAnalyzerOptions();
   ASSERT_TRUE(options.prune_unused_columns());
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<const zetasql::AnalyzerOutput> gsql_output,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const googlesql::AnalyzerOutput> gsql_output,
       ParseAnalyzeAndTransformStatement(
           "update keyvalue set key=1234567890123, value='its a new day';",
           options));
 
   // We are updating "key" and "value" columns so we expect that "key" and
   // "value" were not pruned and only "_exists" was pruned.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const zetasql::ResolvedTableScan* table_scan,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const googlesql::ResolvedTableScan* table_scan,
                        GetTableScan(gsql_output.get()));
   const std::vector<std::string> column_names{"key", "value"};
-  const zetasql::Table* catalog_table;
-  ZETASQL_ASSERT_OK(GetSpangresTestSpannerUserCatalog()->FindTable({"keyvalue"},
+  const googlesql::Table* catalog_table;
+  GOOGLESQL_ASSERT_OK(GetSpangresTestSpannerUserCatalog()->FindTable({"keyvalue"},
                                                            &catalog_table));
   EXPECT_EQ(table_scan->column_list_size(), column_names.size());
   for (int i = 0; i < table_scan->column_list_size(); ++i) {
@@ -1555,21 +1558,21 @@ TEST(TransformerTest, PruneUnusedPrunesUpdate) {
 }
 
 TEST(TransformerTest, PruneUnusedPrunesUpdateValueOnly) {
-  zetasql::AnalyzerOptions options = GetSpangresTestAnalyzerOptions();
+  googlesql::AnalyzerOptions options = GetSpangresTestAnalyzerOptions();
   ASSERT_TRUE(options.prune_unused_columns());
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<const zetasql::AnalyzerOutput> gsql_output,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const googlesql::AnalyzerOutput> gsql_output,
       ParseAnalyzeAndTransformStatement("UPDATE keyvalue SET value = '10'",
                                         options));
 
   // We are updating the "value" column so we expect that "key" and "_exists"
   // were pruned.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const zetasql::ResolvedTableScan* table_scan,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const googlesql::ResolvedTableScan* table_scan,
                        GetTableScan(gsql_output.get()));
   const std::vector<std::string> column_names{"value"};
-  const zetasql::Table* catalog_table;
-  ZETASQL_ASSERT_OK(GetSpangresTestSpannerUserCatalog()->FindTable({"keyvalue"},
+  const googlesql::Table* catalog_table;
+  GOOGLESQL_ASSERT_OK(GetSpangresTestSpannerUserCatalog()->FindTable({"keyvalue"},
                                                            &catalog_table));
   EXPECT_EQ(table_scan->column_list_size(), column_names.size());
   for (int i = 0; i < table_scan->column_list_size(); ++i) {
@@ -1582,22 +1585,22 @@ TEST(TransformerTest, PruneUnusedPrunesUpdateValueOnly) {
 }
 
 TEST(TransformerTest, PruneUnusedPrunesUpdateKeyAndValue) {
-  zetasql::AnalyzerOptions options = GetSpangresTestAnalyzerOptions();
+  googlesql::AnalyzerOptions options = GetSpangresTestAnalyzerOptions();
   ASSERT_TRUE(options.prune_unused_columns());
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<const zetasql::AnalyzerOutput> gsql_output,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const googlesql::AnalyzerOutput> gsql_output,
       ParseAnalyzeAndTransformStatement(
           "UPDATE keyvalue SET value = 'abc' WHERE key=1", options));
 
   // We are updating the "value" column and referencing "key" in the WHERE
   // clause so we expect that "key" and "value" are retained and only
   // "_exists" is pruned.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const zetasql::ResolvedTableScan* table_scan,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const googlesql::ResolvedTableScan* table_scan,
                        GetTableScan(gsql_output.get()));
   const std::vector<std::string> column_names{"key", "value"};
-  const zetasql::Table* catalog_table;
-  ZETASQL_ASSERT_OK(GetSpangresTestSpannerUserCatalog()->FindTable({"keyvalue"},
+  const googlesql::Table* catalog_table;
+  GOOGLESQL_ASSERT_OK(GetSpangresTestSpannerUserCatalog()->FindTable({"keyvalue"},
                                                            &catalog_table));
   EXPECT_EQ(table_scan->column_list_size(), column_names.size());
   for (int i = 0; i < table_scan->column_list_size(); ++i) {
@@ -1627,20 +1630,20 @@ TEST_F(QueryTransformerTest, MultipleExpressionsTest) {
   absl::SetFlag(&FLAGS_spangres_expression_recursion_limit, 3);
 
   const std::string sql = "select 1+1,1+2, 1+3, 1+4";
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const ResolvedStatement> transformed_statement,
       ForwardTransformQuery(sql, analyzer_options_));
 
   // Validate the resolved AST.
-  zetasql::Validator validator(analyzer_options_.language());
-  ZETASQL_ASSERT_OK(validator.ValidateResolvedStatement(transformed_statement.get()));
+  googlesql::Validator validator(analyzer_options_.language());
+  GOOGLESQL_ASSERT_OK(validator.ValidateResolvedStatement(transformed_statement.get()));
 
   absl::SetFlag(&FLAGS_spangres_expression_recursion_limit, recursion_limit);
 }
 
 // Verify default RTE settings is inh == true.
 TEST_F(QueryTransformerTest, RTEDefaultsToInh) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       const RangeTblEntry* rte,
       internal::makePartialRangeTblEntry(/*inFromCl=*/true, ACL_SELECT));
 
@@ -1664,7 +1667,7 @@ TEST_F(QueryTransformerTest, UnsupportedQueryFields) {
   std::unique_ptr<CatalogAdapterHolder> adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options_);
   Query* query;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(query, BuildPgQuery("select 1", analyzer_options_));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(query, BuildPgQuery("select 1", analyzer_options_));
 
   // Run the forward transformer.
   auto transformer = std::make_unique<ForwardTransformer>(

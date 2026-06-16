@@ -21,7 +21,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 
 namespace google {
 namespace spanner {
@@ -31,7 +31,7 @@ namespace query {
 namespace search {
 
 using testing::HasSubstr;
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 // The test suite focuses on verifying the safety code that handles unexpected
 // input for SearchEvaluator class since they indicate abnormal status
@@ -39,9 +39,9 @@ using zetasql_base::testing::StatusIs;
 // function) are covered in search_test.cc.
 
 TEST(SearchEvaluatorTest, EvaluateWrongSearchColumnType) {
-  std::vector<zetasql::Value> args;
-  args.push_back(zetasql::Value::Bool(false));
-  args.push_back(zetasql::Value::String("test"));
+  std::vector<googlesql::Value> args;
+  args.push_back(googlesql::Value::Bool(false));
+  args.push_back(googlesql::Value::String("test"));
 
   EXPECT_THAT(
       SearchEvaluator::Evaluate(args),
@@ -52,9 +52,9 @@ TEST(SearchEvaluatorTest, EvaluateWrongSearchColumnType) {
 }
 
 TEST(SearchEvaluatorTest, EvaluateWrongSearchQueryType) {
-  std::vector<zetasql::Value> args;
-  args.push_back(zetasql::Value::NullTokenList());
-  args.push_back(zetasql::Value::Bool(false));
+  std::vector<googlesql::Value> args;
+  args.push_back(googlesql::Value::NullTokenList());
+  args.push_back(googlesql::Value::Bool(false));
 
   EXPECT_THAT(SearchEvaluator::Evaluate(args),
               StatusIs(absl::StatusCode::kInvalidArgument,

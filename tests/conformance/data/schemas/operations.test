@@ -1,0 +1,9 @@
+@Dialect=GOOGLE_STANDARD_SQL
+CREATE TABLE T(
+  k1 INT64
+) PRIMARY KEY(k1)
+===
+@Dialect=POSTGRESQL
+CREATE TABLE T(
+  k1 bigint primary key
+)

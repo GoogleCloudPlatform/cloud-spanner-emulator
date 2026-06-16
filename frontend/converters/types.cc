@@ -21,12 +21,12 @@
 #include <vector>
 
 #include "google/spanner/v1/type.pb.h"
-#include "zetasql/public/type.h"
-#include "zetasql/public/type.pb.h"
-#include "zetasql/public/types/array_type.h"
-#include "zetasql/public/types/enum_type.h"
-#include "zetasql/public/types/proto_type.h"
-#include "zetasql/public/types/struct_type.h"
+#include "googlesql/public/type.h"
+#include "googlesql/public/type.pb.h"
+#include "googlesql/public/types/array_type.h"
+#include "googlesql/public/types/enum_type.h"
+#include "googlesql/public/types/proto_type.h"
+#include "googlesql/public/types/struct_type.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "backend/schema/catalog/proto_bundle.h"
@@ -35,8 +35,8 @@
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_oid_type.h"
 #include "third_party/spanner_pg/datatypes/extended/spanner_extended_type.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -48,8 +48,8 @@ using postgres_translator::spangres::datatypes::GetPgNumericType;
 using postgres_translator::spangres::datatypes::GetPgOidType;
 
 absl::Status TypeFromProto(
-    const google::spanner::v1::Type& type_pb, zetasql::TypeFactory* factory,
-    const zetasql::Type** type
+    const google::spanner::v1::Type& type_pb, googlesql::TypeFactory* factory,
+    const googlesql::Type** type
     ,
     std::shared_ptr<const backend::ProtoBundle> proto_bundle
 ) {
@@ -126,55 +126,55 @@ absl::Status TypeFromProto(
     }
 
     case google::spanner::v1::TypeCode::ARRAY: {
-      const zetasql::Type* element_type;
+      const googlesql::Type* element_type;
       if (!type_pb.has_array_element_type()) {
         return error::ArrayTypeMustSpecifyElementType(type_pb.DebugString());
       }
-      ZETASQL_RETURN_IF_ERROR(TypeFromProto(type_pb.array_element_type(), factory,
+      GOOGLESQL_RETURN_IF_ERROR(TypeFromProto(type_pb.array_element_type(), factory,
                                     &element_type
                                     ,
                                     proto_bundle
                                     ))
           << "\nWhen parsing array element type of " << type_pb.DebugString();
-      ZETASQL_RETURN_IF_ERROR(factory->MakeArrayType(element_type, type))
+      GOOGLESQL_RETURN_IF_ERROR(factory->MakeArrayType(element_type, type))
           << "\nWhen parsing " << type_pb.DebugString();
       return absl::OkStatus();
     }
 
     case google::spanner::v1::TypeCode::STRUCT: {
-      std::vector<zetasql::StructField> fields;
+      std::vector<googlesql::StructField> fields;
       for (int i = 0; i < type_pb.struct_type().fields_size(); ++i) {
-        const zetasql::Type* type;
-        ZETASQL_RETURN_IF_ERROR(TypeFromProto(type_pb.struct_type().fields(i).type(),
+        const googlesql::Type* type;
+        GOOGLESQL_RETURN_IF_ERROR(TypeFromProto(type_pb.struct_type().fields(i).type(),
                                       factory,
                                       &type
                                       ,
                                       proto_bundle
                                       ))
             << "\nWhen parsing field #" << i << " of " << type_pb.DebugString();
-        zetasql::StructField field(type_pb.struct_type().fields(i).name(),
+        googlesql::StructField field(type_pb.struct_type().fields(i).name(),
                                      type);
         fields.push_back(field);
       }
-      ZETASQL_RETURN_IF_ERROR(factory->MakeStructTypeFromVector(fields, type))
+      GOOGLESQL_RETURN_IF_ERROR(factory->MakeStructTypeFromVector(fields, type))
           << "\nWhen parsing " << type_pb.DebugString();
       return absl::OkStatus();
     }
     case google::spanner::v1::TypeCode::PROTO: {
-      ZETASQL_RET_CHECK_NE(proto_bundle, nullptr);
+      GOOGLESQL_RET_CHECK_NE(proto_bundle, nullptr);
       std::string proto_type_fqn = type_pb.proto_type_fqn();
-      ZETASQL_ASSIGN_OR_RETURN(auto descriptor,
+      GOOGLESQL_ASSIGN_OR_RETURN(auto descriptor,
                        proto_bundle->GetTypeDescriptor(proto_type_fqn));
-      ZETASQL_RETURN_IF_ERROR(factory->MakeProtoType(descriptor, type));
+      GOOGLESQL_RETURN_IF_ERROR(factory->MakeProtoType(descriptor, type));
       return absl::OkStatus();
     }
 
     case google::spanner::v1::TypeCode::ENUM: {
-      ZETASQL_RET_CHECK_NE(proto_bundle, nullptr);
+      GOOGLESQL_RET_CHECK_NE(proto_bundle, nullptr);
       std::string proto_type_fqn = type_pb.proto_type_fqn();
-      ZETASQL_ASSIGN_OR_RETURN(auto descriptor,
+      GOOGLESQL_ASSIGN_OR_RETURN(auto descriptor,
                        proto_bundle->GetEnumTypeDescriptor(proto_type_fqn));
-      ZETASQL_RETURN_IF_ERROR(factory->MakeEnumType(descriptor, type));
+      GOOGLESQL_RETURN_IF_ERROR(factory->MakeEnumType(descriptor, type));
       return absl::OkStatus();
     }
 
@@ -183,35 +183,35 @@ absl::Status TypeFromProto(
   }
 }
 
-absl::Status TypeToProto(const zetasql::Type* type,
+absl::Status TypeToProto(const googlesql::Type* type,
                          google::spanner::v1::Type* type_pb) {
   switch (type->kind()) {
-    case zetasql::TYPE_BOOL: {
+    case googlesql::TYPE_BOOL: {
       type_pb->set_code(google::spanner::v1::TypeCode::BOOL);
       return absl::OkStatus();
     }
 
-    case zetasql::TYPE_INT64: {
+    case googlesql::TYPE_INT64: {
       type_pb->set_code(google::spanner::v1::TypeCode::INT64);
       return absl::OkStatus();
     }
 
-    case zetasql::TYPE_FLOAT: {
+    case googlesql::TYPE_FLOAT: {
       type_pb->set_code(google::spanner::v1::TypeCode::FLOAT32);
       return absl::OkStatus();
     }
 
-    case zetasql::TYPE_UUID: {
+    case googlesql::TYPE_UUID: {
       type_pb->set_code(google::spanner::v1::TypeCode::UUID);
       return absl::OkStatus();
     }
 
-    case zetasql::TYPE_DOUBLE: {
+    case googlesql::TYPE_DOUBLE: {
       type_pb->set_code(google::spanner::v1::TypeCode::FLOAT64);
       return absl::OkStatus();
     }
 
-    case zetasql::TYPE_EXTENDED: {
+    case googlesql::TYPE_EXTENDED: {
       auto type_code = static_cast<const postgres_translator::spangres::
                                        datatypes::SpannerExtendedType*>(type)
                            ->code();
@@ -230,67 +230,67 @@ absl::Status TypeToProto(const zetasql::Type* type,
           return absl::OkStatus();
         default:
           return error::Internal(
-              absl::StrCat("Unsupported ZetaSQL Extended type ",
+              absl::StrCat("Unsupported GoogleSQL Extended type ",
                            type->DebugString(), " passed to TypeToProto"));
       }
     }
 
-    case zetasql::TYPE_TIMESTAMP: {
+    case googlesql::TYPE_TIMESTAMP: {
       type_pb->set_code(google::spanner::v1::TypeCode::TIMESTAMP);
       return absl::OkStatus();
     }
 
-    case zetasql::TYPE_DATE: {
+    case googlesql::TYPE_DATE: {
       type_pb->set_code(google::spanner::v1::TypeCode::DATE);
       return absl::OkStatus();
     }
 
-    case zetasql::TYPE_STRING: {
+    case googlesql::TYPE_STRING: {
       type_pb->set_code(google::spanner::v1::TypeCode::STRING);
       return absl::OkStatus();
     }
 
-    case zetasql::TYPE_BYTES: {
+    case googlesql::TYPE_BYTES: {
       type_pb->set_code(google::spanner::v1::TypeCode::BYTES);
       return absl::OkStatus();
     }
 
-    case zetasql::TYPE_NUMERIC: {
+    case googlesql::TYPE_NUMERIC: {
       type_pb->set_code(google::spanner::v1::TypeCode::NUMERIC);
       return absl::OkStatus();
     }
 
-    case zetasql::TYPE_JSON: {
+    case googlesql::TYPE_JSON: {
       type_pb->set_code(google::spanner::v1::TypeCode::JSON);
       return absl::OkStatus();
     }
 
-    case zetasql::TYPE_INTERVAL: {
+    case googlesql::TYPE_INTERVAL: {
       type_pb->set_code(google::spanner::v1::TypeCode::INTERVAL);
       return absl::OkStatus();
     }
 
-    case zetasql::TYPE_TOKENLIST: {
+    case googlesql::TYPE_TOKENLIST: {
       return error::ProjectTokenlistNotAllowed();
     }
 
-    case zetasql::TYPE_ARRAY: {
+    case googlesql::TYPE_ARRAY: {
       type_pb->set_code(google::spanner::v1::TypeCode::ARRAY);
-      ZETASQL_RETURN_IF_ERROR(TypeToProto(type->AsArray()->element_type(),
+      GOOGLESQL_RETURN_IF_ERROR(TypeToProto(type->AsArray()->element_type(),
                                   type_pb->mutable_array_element_type()))
           << "\nWhen converting array element type of " << type->DebugString()
           << " to proto";
       return absl::OkStatus();
     }
 
-    case zetasql::TYPE_STRUCT: {
+    case googlesql::TYPE_STRUCT: {
       type_pb->set_code(google::spanner::v1::TypeCode::STRUCT);
-      const zetasql::StructType* struct_type = type->AsStruct();
+      const googlesql::StructType* struct_type = type->AsStruct();
       auto struct_pb_type = type_pb->mutable_struct_type();
       for (int i = 0; i < struct_type->num_fields(); ++i) {
         auto field = struct_pb_type->add_fields();
         field->set_name(struct_type->field(i).name);
-        ZETASQL_RETURN_IF_ERROR(
+        GOOGLESQL_RETURN_IF_ERROR(
             TypeToProto(struct_type->field(i).type, field->mutable_type()))
             << "\nWhen converting field #" << i << " of " << type->DebugString()
             << " to proto";
@@ -298,22 +298,22 @@ absl::Status TypeToProto(const zetasql::Type* type,
       return absl::OkStatus();
     }
 
-    case zetasql::TYPE_PROTO: {
-      const zetasql::ProtoType* proto_type = type->AsProto();
+    case googlesql::TYPE_PROTO: {
+      const googlesql::ProtoType* proto_type = type->AsProto();
       type_pb->set_code(google::spanner::v1::TypeCode::PROTO);
       type_pb->set_proto_type_fqn(proto_type->descriptor()->full_name());
       return absl::OkStatus();
     }
 
-    case zetasql::TYPE_ENUM: {
-      const zetasql::EnumType* enum_type = type->AsEnum();
+    case googlesql::TYPE_ENUM: {
+      const googlesql::EnumType* enum_type = type->AsEnum();
       type_pb->set_code(google::spanner::v1::TypeCode::ENUM);
       type_pb->set_proto_type_fqn(enum_type->enum_descriptor()->full_name());
       return absl::OkStatus();
     }
 
     default:
-      return error::Internal(absl::StrCat("Unsupported ZetaSQL type ",
+      return error::Internal(absl::StrCat("Unsupported GoogleSQL type ",
                                           type->DebugString(),
                                           " passed to TypeToProto"));
   }

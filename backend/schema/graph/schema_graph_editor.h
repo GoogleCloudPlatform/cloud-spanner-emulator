@@ -31,9 +31,9 @@
 #include "backend/schema/graph/schema_node.h"
 #include "backend/schema/graph/schema_objects_pool.h"
 #include "backend/schema/updater/schema_validation_context.h"
-#include "zetasql/base/ret_check.h"
+#include "googlesql/base/ret_check.h"
 #include "absl/status/status.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -84,26 +84,26 @@ class SchemaGraphEditor {
   template <typename T>
   absl::Status EditNode(const SchemaNode* node,
                         const EditCallback<T>& edit_cb) {
-    ZETASQL_RET_CHECK(deleted_nodes_.empty())
+    GOOGLESQL_RET_CHECK(deleted_nodes_.empty())
         << "Graph has deleted nodes. It must be canonicalized before "
         << "making further changes.";
 
     // Get an editable node.
     T* editable = const_cast<SchemaNode*>(node)->As<T>();
-    ZETASQL_RET_CHECK_NE(editable, nullptr);
+    GOOGLESQL_RET_CHECK_NE(editable, nullptr);
 
     // Clone the node if it already exists.
     if (IsOriginalNode(node)) {
       // Create a clone of the schema first.
       if (clone_map_.empty()) {
-        ZETASQL_RETURN_IF_ERROR(InitCloneMap());
+        GOOGLESQL_RETURN_IF_ERROR(InitCloneMap());
       }
 
       // Edit the clone.
       const auto* clone = FindClone(node);
-      ZETASQL_RET_CHECK_NE(clone, nullptr);
+      GOOGLESQL_RET_CHECK_NE(clone, nullptr);
       editable = const_cast<SchemaNode*>(clone)->As<T>();
-      ZETASQL_RET_CHECK_NE(editable, nullptr);
+      GOOGLESQL_RET_CHECK_NE(editable, nullptr);
 
       edited_clones_.insert(clone);
     }
@@ -142,7 +142,7 @@ class SchemaGraphEditor {
   template <typename T, typename C>
   absl::Status CloneContainer(C* nodes) {
     for (auto it = nodes->begin(); it != nodes->end();) {
-      ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, Clone(*it));
+      GOOGLESQL_ASSIGN_OR_RETURN(const auto* schema_node, Clone(*it));
       if (schema_node->is_deleted()) {
         it = nodes->erase(it);
       } else {
@@ -164,7 +164,7 @@ class SchemaGraphEditor {
       std::vector<const T*>& schema_objects,
       CaseInsensitiveStringMap<const T*>& schema_objects_map) {
     for (auto it = schema_objects.begin(); it != schema_objects.end();) {
-      ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, Clone(*it));
+      GOOGLESQL_ASSIGN_OR_RETURN(const auto* schema_node, Clone(*it));
       if (schema_node->is_deleted()) {
         schema_objects_map.erase((*it)->Name());
         schema_objects.erase(it);

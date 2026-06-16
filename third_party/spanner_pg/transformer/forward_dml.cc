@@ -36,15 +36,15 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/type.h"
-#include "zetasql/public/value.h"
-#include "zetasql/resolved_ast/resolved_ast.h"
-#include "zetasql/resolved_ast/resolved_ast_deep_copy_visitor.h"
-#include "zetasql/resolved_ast/resolved_ast_rewrite_visitor.h"
-#include "zetasql/resolved_ast/resolved_column.h"
-#include "zetasql/resolved_ast/resolved_node.h"
-#include "zetasql/resolved_ast/resolved_node_kind.pb.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/type.h"
+#include "googlesql/public/value.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_ast_deep_copy_visitor.h"
+#include "googlesql/resolved_ast/resolved_ast_rewrite_visitor.h"
+#include "googlesql/resolved_ast/resolved_column.h"
+#include "googlesql/resolved_ast/resolved_node.h"
+#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/container/node_hash_map.h"
@@ -61,8 +61,8 @@
 #include "third_party/spanner_pg/util/nodetag_to_string.h"
 #include "third_party/spanner_pg/util/pg_list_iterators.h"
 #include "third_party/spanner_pg/util/postgres.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 constexpr absl::string_view kExcludedAlias = "excluded";
 
@@ -70,11 +70,11 @@ namespace postgres_translator {
 
 using ::postgres_translator::internal::PostgresCastToExpr;
 
-absl::flat_hash_map<int, const zetasql::Column*>
-ForwardTransformer::GetUnwritableColumns(const zetasql::Table* table) {
-  absl::flat_hash_map<int, const zetasql::Column*> unwritable_columns;
+absl::flat_hash_map<int, const googlesql::Column*>
+ForwardTransformer::GetUnwritableColumns(const googlesql::Table* table) {
+  absl::flat_hash_map<int, const googlesql::Column*> unwritable_columns;
   for (int i = 0; i < table->NumColumns(); ++i) {
-    const zetasql::Column* column = table->GetColumn(i);
+    const googlesql::Column* column = table->GetColumn(i);
     if (!column->IsWritableColumn()) {
       unwritable_columns.insert({i, column});
     }
@@ -82,7 +82,7 @@ ForwardTransformer::GetUnwritableColumns(const zetasql::Table* table) {
   return unwritable_columns;
 }
 
-absl::StatusOr<std::unique_ptr<const zetasql::ResolvedReturningClause>>
+absl::StatusOr<std::unique_ptr<const googlesql::ResolvedReturningClause>>
 ForwardTransformer::BuildGsqlReturningClauseForDML(
     const List* pg_returning_list, absl::string_view table_alias,
     const VarIndexScope* target_table_scope) {
@@ -93,61 +93,61 @@ ForwardTransformer::BuildGsqlReturningClauseForDML(
   auto transformer_info = std::make_unique<TransformerInfo>();
 
   // Transform the TargetEntry expr for each returning column in target list.
-  ZETASQL_RETURN_IF_ERROR(BuildGsqlSelectListResolvedExprsFirstPass(
+  GOOGLESQL_RETURN_IF_ERROR(BuildGsqlSelectListResolvedExprsFirstPass(
       pg_returning_list, target_table_scope, transformer_info.get()));
 
   transformer_info->set_has_group_by(false);
   transformer_info->set_has_having(false);
   transformer_info->set_has_order_by(false);
 
-  ZETASQL_RETURN_IF_ERROR(FinalizeSelectListTransformState(
+  GOOGLESQL_RETURN_IF_ERROR(FinalizeSelectListTransformState(
       table_alias, transformer_info.get(),
       transformer_info->select_list_transform_state()));
 
   std::vector<NamedColumn> final_output_list;
-  ZETASQL_RETURN_IF_ERROR(BuildGsqlSelectListResolvedExprsSecondPass(
+  GOOGLESQL_RETURN_IF_ERROR(BuildGsqlSelectListResolvedExprsSecondPass(
       pg_returning_list, table_alias, target_table_scope, &final_output_list,
       transformer_info.get()));
 
-  // ZetaSQL runs 'ResolveAdditionalExprsSecondPass' to resolve dot-star
+  // GoogleSQL runs 'ResolveAdditionalExprsSecondPass' to resolve dot-star
   // expansions, which are already handled by the PostgreSQL analyzer, so we can
   // skip it here.
-  ZETASQL_RET_CHECK(
+  GOOGLESQL_RET_CHECK(
       transformer_info->select_list_columns_to_compute_before_aggregation()
           ->empty());
 
   // Postgres does not support "WITH ACTION" in returning clause.
-  std::unique_ptr<zetasql::ResolvedColumnHolder> action_column;
+  std::unique_ptr<googlesql::ResolvedColumnHolder> action_column;
 
-  std::vector<std::unique_ptr<const zetasql::ResolvedOutputColumn>>
+  std::vector<std::unique_ptr<const googlesql::ResolvedOutputColumn>>
       output_column_list;
   for (int index = 0; index < final_output_list.size(); ++index) {
-    std::unique_ptr<zetasql::ResolvedOutputColumn> output_column =
-        zetasql::MakeResolvedOutputColumn(
+    std::unique_ptr<googlesql::ResolvedOutputColumn> output_column =
+        googlesql::MakeResolvedOutputColumn(
             final_output_list[index].name.ToString(),
             final_output_list[index].column);
     output_column_list.push_back(std::move(output_column));
   }
 
-  std::vector<std::unique_ptr<const zetasql::ResolvedComputedColumn>>
+  std::vector<std::unique_ptr<const googlesql::ResolvedComputedColumn>>
       computed_columns =
           transformer_info->release_select_list_columns_to_compute();
-  return zetasql::MakeResolvedReturningClause(std::move(output_column_list),
+  return googlesql::MakeResolvedReturningClause(std::move(output_column_list),
                                                 std::move(action_column),
                                                 std::move(computed_columns));
 }
 
 absl::Status ForwardTransformer::CheckForUnsupportedOnConflictClause(
-    const Query& query, Index rte_index, const zetasql::Table& table,
-    const std::vector<zetasql::ResolvedColumn>& insert_column_list,
+    const Query& query, Index rte_index, const googlesql::Table& table,
+    const std::vector<googlesql::ResolvedColumn>& insert_column_list,
     VarIndexScope* scope, bool is_ignore_mode) {
-  ZETASQL_RET_CHECK_NE(query.onConflict, nullptr);
+  GOOGLESQL_RET_CHECK_NE(query.onConflict, nullptr);
   OnConflictExpr* expr = query.onConflict;
 
   //
   // Check that the conflict target columns are primary key columns.
   //
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       auto key_columns,
       catalog_adapter().GetEngineUserCatalog()->GetPrimaryKeyColumns(table));
   if (key_columns.empty()) {
@@ -157,9 +157,9 @@ absl::Status ForwardTransformer::CheckForUnsupportedOnConflictClause(
   }
   std::unordered_set<std::string> key_columns_in_conflict_target;
   for (InferenceElem* elem : StructList<InferenceElem*>(expr->arbiterElems)) {
-    ZETASQL_RET_CHECK_EQ(nodeTag(elem->expr), NodeTag::T_Var);
-    ZETASQL_ASSIGN_OR_RETURN(
-        zetasql::ResolvedColumn column,
+    GOOGLESQL_RET_CHECK_EQ(nodeTag(elem->expr), NodeTag::T_Var);
+    GOOGLESQL_ASSIGN_OR_RETURN(
+        googlesql::ResolvedColumn column,
         GetResolvedColumn(
             *scope, 1,
             ((const Var*)internal::PostgresCastToNode(elem->expr))->varattno,
@@ -189,11 +189,11 @@ absl::Status ForwardTransformer::CheckForUnsupportedOnConflictClause(
   // allows further validation on the values in SET clause below.
   RangeTblEntry* rte_for_on_conflict = rt_fetch(rte_index, query.rtable);
   auto transformer_info = std::make_unique<TransformerInfo>();
-  ZETASQL_ASSIGN_OR_RETURN(
-      std::unique_ptr<zetasql::ResolvedTableScan> alias_table_scan,
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      std::unique_ptr<googlesql::ResolvedTableScan> alias_table_scan,
       BuildGsqlResolvedTableScan(*rte_for_on_conflict, transformer_info.get(),
                                  rte_index, scope));
-  ZETASQL_RET_CHECK(!alias_table_scan->alias().empty() &&
+  GOOGLESQL_RET_CHECK(!alias_table_scan->alias().empty() &&
             alias_table_scan->alias() == kExcludedAlias);
 
   //
@@ -201,22 +201,22 @@ absl::Status ForwardTransformer::CheckForUnsupportedOnConflictClause(
   //
   List* set_clauses = expr->onConflictSet;
   std::set<std::string> insert_column_names;
-  for (const zetasql::ResolvedColumn& column : insert_column_list) {
+  for (const googlesql::ResolvedColumn& column : insert_column_list) {
     insert_column_names.insert(column.name());
   }
   for (TargetEntry* entry : StructList<TargetEntry*>(set_clauses)) {
     // Get the column in SET clause.
-    ZETASQL_ASSIGN_OR_RETURN(zetasql::ResolvedColumn table_column,
+    GOOGLESQL_ASSIGN_OR_RETURN(googlesql::ResolvedColumn table_column,
                      GetResolvedColumn(*scope, rte_index, entry->resno,
                                        /*var_levels_up=*/0));
     // Get the value expression in SET clause.
-    ZETASQL_ASSIGN_OR_RETURN(
-        std::unique_ptr<zetasql::ResolvedExpr> resolved_expr,
+    GOOGLESQL_ASSIGN_OR_RETURN(
+        std::unique_ptr<googlesql::ResolvedExpr> resolved_expr,
         BuildGsqlResolvedScalarExpr(*entry->expr, scope, "ON CONFLICT"));
 
     // 1. Value expressions other than reference to same column in the
     // insert row is not supported.
-    if (resolved_expr->node_kind() != zetasql::RESOLVED_COLUMN_REF) {
+    if (resolved_expr->node_kind() != googlesql::RESOLVED_COLUMN_REF) {
       return absl::UnimplementedError(
           absl::StrCat("Column '", table_column.name(),
                        "' must be set to the insert value in the statement "
@@ -226,8 +226,8 @@ absl::Status ForwardTransformer::CheckForUnsupportedOnConflictClause(
                        "ON CONFLICT DO UPDATE SET clause"));
     }
 
-    const zetasql::ResolvedColumnRef* referenced_column =
-        resolved_expr->GetAs<zetasql::ResolvedColumnRef>();
+    const googlesql::ResolvedColumnRef* referenced_column =
+        resolved_expr->GetAs<googlesql::ResolvedColumnRef>();
     if (referenced_column == nullptr ||
         referenced_column->column().name() != table_column.name()) {
       return absl::UnimplementedError(
@@ -280,12 +280,12 @@ absl::Status ForwardTransformer::CheckForUnsupportedOnConflictClause(
 }
 
 absl::Status ForwardTransformer::PopulateUpdateSetItemListFromUpdateSetClause(
-    const zetasql::Table& table, Index table_rtindex,
+    const googlesql::Table& table, Index table_rtindex,
     const List* update_set_clause, const VarIndexScope& update_column_scope,
     const VarIndexScope& update_value_scope, const std::string& clause_name,
-    std::vector<std::unique_ptr<const zetasql::ResolvedUpdateItem>>&
+    std::vector<std::unique_ptr<const googlesql::ResolvedUpdateItem>>&
         update_item_list) {
-  absl::flat_hash_map<int, const zetasql::Column*> unwritable_table_columns =
+  absl::flat_hash_map<int, const googlesql::Column*> unwritable_table_columns =
       GetUnwritableColumns(&table);
   absl::flat_hash_set<int> updated_resnos;
   for (TargetEntry* entry : StructList<TargetEntry*>(update_set_clause)) {
@@ -306,22 +306,22 @@ absl::Status ForwardTransformer::PopulateUpdateSetItemListFromUpdateSetClause(
     }
     updated_resnos.insert(entry->resno);
 
-    ZETASQL_ASSIGN_OR_RETURN(zetasql::ResolvedColumn update_column,
+    GOOGLESQL_ASSIGN_OR_RETURN(googlesql::ResolvedColumn update_column,
                      GetResolvedColumn(update_column_scope, table_rtindex,
                                        entry->resno, /*var_levels_up=*/0));
-    ZETASQL_ASSIGN_OR_RETURN(
-        std::unique_ptr<zetasql::ResolvedColumnRef> column_ref,
+    GOOGLESQL_ASSIGN_OR_RETURN(
+        std::unique_ptr<googlesql::ResolvedColumnRef> column_ref,
         BuildGsqlResolvedColumnRef(update_column,
                                    /*is_correlated=*/false,
-                                   zetasql::ResolvedStatement::WRITE));
+                                   googlesql::ResolvedStatement::WRITE));
 
-    ZETASQL_ASSIGN_OR_RETURN(
-        std::unique_ptr<const zetasql::ResolvedDMLValue> dml_value,
+    GOOGLESQL_ASSIGN_OR_RETURN(
+        std::unique_ptr<const googlesql::ResolvedDMLValue> dml_value,
         BuildGsqlResolvedDMLValue(*entry->expr, &update_value_scope,
                                   clause_name.c_str()));
 
-    std::unique_ptr<zetasql::ResolvedUpdateItem> update_item =
-        zetasql::MakeResolvedUpdateItem();
+    std::unique_ptr<googlesql::ResolvedUpdateItem> update_item =
+        googlesql::MakeResolvedUpdateItem();
     update_item->set_target(std::move(column_ref));
     update_item->set_set_value(std::move(dml_value));
     update_item_list.push_back(std::move(update_item));
@@ -329,15 +329,16 @@ absl::Status ForwardTransformer::PopulateUpdateSetItemListFromUpdateSetClause(
   return absl::OkStatus();
 }
 
-absl::StatusOr<std::unique_ptr<const zetasql::ResolvedOnConflictClause>>
+absl::StatusOr<std::unique_ptr<const googlesql::ResolvedOnConflictClause>>
 ForwardTransformer::BuildGsqlOnConflictClauseForInsertDML(
-    const zetasql::Table& table, const OnConflictExpr* on_conflict,
+    const googlesql::Table& table, const OnConflictExpr* on_conflict,
     RangeTblEntry* rte_for_excluded_alias, Index insert_table_rtindex,
-    Index excluded_alias_rtindex, const VarIndexScope* target_table_scope) {
-  ZETASQL_RET_CHECK_NE(on_conflict, nullptr);
-  ZETASQL_RET_CHECK_NE(rte_for_excluded_alias, nullptr);
-  ZETASQL_RET_CHECK_NE(target_table_scope, nullptr);
-  zetasql::ResolvedColumnList conflict_target_column_list;
+    Index excluded_alias_rtindex, const List* rteperminfos,
+    const VarIndexScope* target_table_scope) {
+  GOOGLESQL_RET_CHECK_NE(on_conflict, nullptr);
+  GOOGLESQL_RET_CHECK_NE(rte_for_excluded_alias, nullptr);
+  GOOGLESQL_RET_CHECK_NE(target_table_scope, nullptr);
+  googlesql::ResolvedColumnList conflict_target_column_list;
   // Columns from excluded RTE is added to the scope to resolve SET and WHERE
   // expressions that can access columns like `excluded.<column_name>`
   VarIndexScope on_conflict_scope = *target_table_scope;
@@ -346,9 +347,9 @@ ForwardTransformer::BuildGsqlOnConflictClauseForInsertDML(
   absl::flat_hash_set<std::string> visited_column_names;
   for (InferenceElem* elem :
        StructList<InferenceElem*>(on_conflict->arbiterElems)) {
-    ZETASQL_RET_CHECK_EQ(nodeTag(elem->expr), NodeTag::T_Var);
-    ZETASQL_ASSIGN_OR_RETURN(
-        zetasql::ResolvedColumn column,
+    GOOGLESQL_RET_CHECK_EQ(nodeTag(elem->expr), NodeTag::T_Var);
+    GOOGLESQL_ASSIGN_OR_RETURN(
+        googlesql::ResolvedColumn column,
         GetResolvedColumn(
             on_conflict_scope, /*varno=*/1,
             ((const Var*)internal::PostgresCastToNode(elem->expr))->varattno,
@@ -363,26 +364,26 @@ ForwardTransformer::BuildGsqlOnConflictClauseForInsertDML(
   }
   // Conflict target columns must have READ access.
   RecordColumnAccess(conflict_target_column_list,
-                     zetasql::ResolvedStatement::READ);
+                     googlesql::ResolvedStatement::READ);
 
   // 2. Alternative to conflict target columns, constraint name can be
   // specified.
   // TODO: Support ON CONFLICT ON CONSTRAINT.
   std::string unique_constraint_name;
   if (on_conflict->constraint != 0) {
-    ZETASQL_RET_CHECK_EQ(on_conflict->arbiterElems->length, 0);
+    GOOGLESQL_RET_CHECK_EQ(on_conflict->arbiterElems->length, 0);
     return absl::UnimplementedError(
         "ON CONFLICT ON CONSTRAINT is not supported");
   }
 
-  std::vector<std::unique_ptr<const zetasql::ResolvedUpdateItem>>
+  std::vector<std::unique_ptr<const googlesql::ResolvedUpdateItem>>
       update_item_list;
-  std::unique_ptr<const zetasql::ResolvedExpr> update_where_expr;
+  std::unique_ptr<const googlesql::ResolvedExpr> update_where_expr;
   // 3. Nothing else is needed for ON CONFLICT DO NOTHING. Build and return the
-  // on zetasql::ResolvedOnConflictClause.
+  // on googlesql::ResolvedOnConflictClause.
   if (on_conflict->action == ONCONFLICT_NOTHING) {
     return MakeResolvedOnConflictClause(
-        zetasql::ResolvedOnConflictClause::NOTHING,
+        googlesql::ResolvedOnConflictClause::NOTHING,
         std::move(conflict_target_column_list),
         /*unique_constraint_name=*/"",
         /*insert_row_scan=*/nullptr,
@@ -393,19 +394,26 @@ ForwardTransformer::BuildGsqlOnConflictClauseForInsertDML(
   // 4. Build the scan for columns referenced with the excluded alias, if any.
   // Additionally, add the columns to scope `on_conflict_scope` to resolve
   // SET and WHERE expressions.
-  std::unique_ptr<zetasql::ResolvedTableScan> insert_row_scan = nullptr;
-  if (rte_for_excluded_alias->selectedCols != nullptr) {
+  std::unique_ptr<googlesql::ResolvedTableScan> insert_row_scan = nullptr;
+  bool has_selected_cols = false;
+  if (rte_for_excluded_alias->perminfoindex > 0) {
+    GOOGLESQL_RET_CHECK_NE(rteperminfos, nullptr);
+    const RTEPermissionInfo* perminfo = static_cast<const RTEPermissionInfo*>(
+        list_nth(rteperminfos, rte_for_excluded_alias->perminfoindex - 1));
+    has_selected_cols = perminfo->selectedCols != nullptr;
+  }
+  if (has_selected_cols) {
     auto transformer_info = std::make_unique<TransformerInfo>();
-    ZETASQL_ASSIGN_OR_RETURN(insert_row_scan,
+    GOOGLESQL_ASSIGN_OR_RETURN(insert_row_scan,
                      BuildGsqlResolvedTableScan(
                          *rte_for_excluded_alias, transformer_info.get(),
                          excluded_alias_rtindex, &on_conflict_scope));
-    ZETASQL_RET_CHECK(!insert_row_scan->alias().empty() &&
+    GOOGLESQL_RET_CHECK(!insert_row_scan->alias().empty() &&
               insert_row_scan->alias() == kExcludedAlias);
   }
 
   // 5. Build the update item list from the update set clause.
-  ZETASQL_RETURN_IF_ERROR(PopulateUpdateSetItemListFromUpdateSetClause(
+  GOOGLESQL_RETURN_IF_ERROR(PopulateUpdateSetItemListFromUpdateSetClause(
       table, insert_table_rtindex, on_conflict->onConflictSet,
       *target_table_scope, on_conflict_scope,
       "ON CONFLICT DO UPDATE SET clause", update_item_list));
@@ -413,7 +421,7 @@ ForwardTransformer::BuildGsqlOnConflictClauseForInsertDML(
   // 6. Build a ResolvedExpr for the WHERE clause.
   if (on_conflict->onConflictWhere != nullptr) {
     if (internal::IsExpr(*on_conflict->onConflictWhere)) {
-      ZETASQL_ASSIGN_OR_RETURN(update_where_expr,
+      GOOGLESQL_ASSIGN_OR_RETURN(update_where_expr,
                        BuildGsqlResolvedScalarExpr(
                            *PostgresCastToExpr(on_conflict->onConflictWhere),
                            &on_conflict_scope, "ON CONFLICT DO UPDATE WHERE"));
@@ -427,7 +435,7 @@ ForwardTransformer::BuildGsqlOnConflictClauseForInsertDML(
 
   // 7. Build and return the ResolvedOnConflictClause.
   return MakeResolvedOnConflictClause(
-      zetasql::ResolvedOnConflictClause::UPDATE,
+      googlesql::ResolvedOnConflictClause::UPDATE,
       std::move(conflict_target_column_list),
       /*unique_constraint_name=*/"",
       (insert_row_scan != nullptr) ? std::move(insert_row_scan) : nullptr,
@@ -435,10 +443,10 @@ ForwardTransformer::BuildGsqlOnConflictClauseForInsertDML(
       /*update_where_expression=*/std::move(update_where_expr));
 }
 
-static bool IsZetaSQLInsertOnConflictClauseEnabled(
-    const zetasql::LanguageOptions& language_options) {
+static bool IsGoogleSQLInsertOnConflictClauseEnabled(
+    const googlesql::LanguageOptions& language_options) {
   return language_options.LanguageFeatureEnabled(
-      zetasql::FEATURE_INSERT_ON_CONFLICT_CLAUSE);
+      googlesql::FEATURE_INSERT_ON_CONFLICT_CLAUSE);
 }
 
 namespace {
@@ -446,15 +454,15 @@ namespace {
 // Visitor to rewrite ResolvedExpressionColumn to the appropriate
 // ResolvedColumnRef.
 class ResolvedExpressionColumnRewriter
-    : public zetasql::ResolvedASTRewriteVisitor {
+    : public googlesql::ResolvedASTRewriteVisitor {
  public:
   ResolvedExpressionColumnRewriter(
-      const zetasql::Table* table,
-      const absl::node_hash_map<const zetasql::Column*,
-                                zetasql::ResolvedColumn>&
+      const googlesql::Table* table,
+      const absl::node_hash_map<const googlesql::Column*,
+                                googlesql::ResolvedColumn>&
           catalog_columns_to_resolved_columns_map,
-      std::function<std::unique_ptr<zetasql::ResolvedColumnRef>(
-          const zetasql::ResolvedColumn&)>
+      std::function<std::unique_ptr<googlesql::ResolvedColumnRef>(
+          const googlesql::ResolvedColumn&)>
           make_column_ref)
       : table_(table),
         catalog_columns_to_resolved_columns_map_(
@@ -471,56 +479,56 @@ class ResolvedExpressionColumnRewriter
   // scan and not the entire query. make_column_ref is a lamda function which
   // calls Resolver::MakeColumnRef to make corresponding ResolvedColumnRef and
   // record the column access.
-  static absl::StatusOr<std::unique_ptr<const zetasql::ResolvedExpr>>
+  static absl::StatusOr<std::unique_ptr<const googlesql::ResolvedExpr>>
   RewriteValueExpression(
-      const zetasql::ResolvedExpr* original_value_expr,
-      const zetasql::Table* table,
-      const absl::node_hash_map<const zetasql::Column*,
-                                zetasql::ResolvedColumn>&
+      const googlesql::ResolvedExpr* original_value_expr,
+      const googlesql::Table* table,
+      const absl::node_hash_map<const googlesql::Column*,
+                                googlesql::ResolvedColumn>&
           catalog_columns_to_resolved_columns_map,
-      std::function<std::unique_ptr<zetasql::ResolvedColumnRef>(
-          const zetasql::ResolvedColumn&)>
+      std::function<std::unique_ptr<googlesql::ResolvedColumnRef>(
+          const googlesql::ResolvedColumn&)>
           make_column_ref) {
     ResolvedExpressionColumnRewriter rewriter(
         table, catalog_columns_to_resolved_columns_map, make_column_ref);
     // We copied the <original_value_expr> (instead of directly rewrite it)
     // because <original_value_expr> is owned by the Column
     // catalog object.
-    ZETASQL_ASSIGN_OR_RETURN(
-        std::unique_ptr<const zetasql::ResolvedExpr> copied_node,
-        zetasql::ResolvedASTDeepCopyVisitor::Copy(original_value_expr));
-    return rewriter.VisitAll<zetasql::ResolvedExpr>(std::move(copied_node));
+    GOOGLESQL_ASSIGN_OR_RETURN(
+        std::unique_ptr<const googlesql::ResolvedExpr> copied_node,
+        googlesql::ResolvedASTDeepCopyVisitor::Copy(original_value_expr));
+    return rewriter.VisitAll<googlesql::ResolvedExpr>(std::move(copied_node));
   }
 
  private:
-  absl::StatusOr<std::unique_ptr<const zetasql::ResolvedNode>>
+  absl::StatusOr<std::unique_ptr<const googlesql::ResolvedNode>>
   PostVisitResolvedExpressionColumn(
-      std::unique_ptr<const zetasql::ResolvedExpressionColumn> ref) override {
-    const zetasql::Column* column = table_->FindColumnByName(ref->name());
-    ZETASQL_RET_CHECK(column != nullptr);
+      std::unique_ptr<const googlesql::ResolvedExpressionColumn> ref) override {
+    const googlesql::Column* column = table_->FindColumnByName(ref->name());
+    GOOGLESQL_RET_CHECK(column != nullptr);
     auto itr = catalog_columns_to_resolved_columns_map_.find(column);
-    ZETASQL_RET_CHECK(itr != catalog_columns_to_resolved_columns_map_.end());
+    GOOGLESQL_RET_CHECK(itr != catalog_columns_to_resolved_columns_map_.end());
     // Resolver::MakeColumnRef also records the referenced column access.
     return make_column_ref_(itr->second);
   }
 
  private:
-  const zetasql::Table* table_;
-  const absl::node_hash_map<const zetasql::Column*,
-                            zetasql::ResolvedColumn>&
+  const googlesql::Table* table_;
+  const absl::node_hash_map<const googlesql::Column*,
+                            googlesql::ResolvedColumn>&
       catalog_columns_to_resolved_columns_map_;
-  std::function<std::unique_ptr<zetasql::ResolvedColumnRef>(
-      const zetasql::ResolvedColumn&)>
+  std::function<std::unique_ptr<googlesql::ResolvedColumnRef>(
+      const googlesql::ResolvedColumn&)>
       make_column_ref_;
 };
 
 }  // namespace
 
-absl::StatusOr<std::vector<std::unique_ptr<const zetasql::ResolvedExpr>>>
+absl::StatusOr<std::vector<std::unique_ptr<const googlesql::ResolvedExpr>>>
 ForwardTransformer::BuildRewrittenGsqlGeneratedColumnResolvedExprList(
-    const zetasql::Table& table, const VarIndexScope& target_table_scope,
+    const googlesql::Table& table, const VarIndexScope& target_table_scope,
     std::vector<int>* out_generated_column_ids) {
-  std::vector<std::unique_ptr<const zetasql::ResolvedExpr>>
+  std::vector<std::unique_ptr<const googlesql::ResolvedExpr>>
       out_generated_column_expr_list;
   out_generated_column_expr_list.reserve(
       target_table_scope.catalog_columns_to_resolved_columns_map().size());
@@ -528,21 +536,21 @@ ForwardTransformer::BuildRewrittenGsqlGeneratedColumnResolvedExprList(
       target_table_scope.catalog_columns_to_resolved_columns_map().size());
   for (const auto& [catalog_column, resolved_column] :
        target_table_scope.catalog_columns_to_resolved_columns_map()) {
-    ZETASQL_RET_CHECK(catalog_column != nullptr);
+    GOOGLESQL_RET_CHECK(catalog_column != nullptr);
     if (!catalog_column->HasGeneratedExpression()) {
       continue;
     }
-    const zetasql::ResolvedExpr* resolved_expr =
+    const googlesql::ResolvedExpr* resolved_expr =
         catalog_column->GetExpression()->GetResolvedExpression();
-    ZETASQL_RET_CHECK(resolved_expr != nullptr);
-    ZETASQL_ASSIGN_OR_RETURN(
-        std::unique_ptr<const zetasql::ResolvedExpr> rewritten_expr,
+    GOOGLESQL_RET_CHECK(resolved_expr != nullptr);
+    GOOGLESQL_ASSIGN_OR_RETURN(
+        std::unique_ptr<const googlesql::ResolvedExpr> rewritten_expr,
         ResolvedExpressionColumnRewriter::RewriteValueExpression(
             resolved_expr, &table,
             target_table_scope.catalog_columns_to_resolved_columns_map(),
-            [this](const zetasql::ResolvedColumn& c) {
-              RecordColumnAccess(c, zetasql::ResolvedStatement::READ);
-              std::unique_ptr<zetasql::ResolvedColumnRef> resolved_node =
+            [this](const googlesql::ResolvedColumn& c) {
+              RecordColumnAccess(c, googlesql::ResolvedStatement::READ);
+              std::unique_ptr<googlesql::ResolvedColumnRef> resolved_node =
                   MakeResolvedColumnRef(c.type(), c, false);
               // No annotation propagation needed as the only annotations,
               // if there are, from TOKENLIST cannot be returned as a value.
@@ -554,19 +562,19 @@ ForwardTransformer::BuildRewrittenGsqlGeneratedColumnResolvedExprList(
   return std::move(out_generated_column_expr_list);
 }
 
-absl::StatusOr<std::unique_ptr<zetasql::ResolvedInsertStmt>>
+absl::StatusOr<std::unique_ptr<googlesql::ResolvedInsertStmt>>
 ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
-  zetasql::ResolvedInsertStmt::InsertMode insert_mode =
-      zetasql::ResolvedInsertStmt::OR_ERROR;
+  googlesql::ResolvedInsertStmt::InsertMode insert_mode =
+      googlesql::ResolvedInsertStmt::OR_ERROR;
   if (query.onConflict != nullptr &&
-      !IsZetaSQLInsertOnConflictClauseEnabled(
+      !IsGoogleSQLInsertOnConflictClauseEnabled(
           catalog_adapter_->analyzer_options().language())) {
     switch (query.onConflict->action) {
       case ONCONFLICT_NOTHING:
-        insert_mode = zetasql::ResolvedInsertStmt::OR_IGNORE;
+        insert_mode = googlesql::ResolvedInsertStmt::OR_IGNORE;
         break;
       case ONCONFLICT_UPDATE:
-        insert_mode = zetasql::ResolvedInsertStmt::OR_UPDATE;
+        insert_mode = googlesql::ResolvedInsertStmt::OR_UPDATE;
         break;
       case ONCONFLICT_NONE:
         return absl::UnimplementedError(
@@ -587,13 +595,13 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
   // being inserted in the query.
   int rte_count = list_length(query.rtable);
   bool is_insert_or_update =
-      insert_mode == zetasql::ResolvedInsertStmt::OR_UPDATE ||
+      insert_mode == googlesql::ResolvedInsertStmt::OR_UPDATE ||
       (query.onConflict != nullptr &&
        query.onConflict->action == ONCONFLICT_UPDATE);
   if (is_insert_or_update) {
-    ZETASQL_RET_CHECK(rte_count == 2 || rte_count == 3);
+    GOOGLESQL_RET_CHECK(rte_count == 2 || rte_count == 3);
   } else {
-    ZETASQL_RET_CHECK(rte_count == 1 || rte_count == 2);
+    GOOGLESQL_RET_CHECK(rte_count == 1 || rte_count == 2);
   }
 
   // Get the target table, which is the first rte in the list.
@@ -601,21 +609,21 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
   RangeTblEntry* rte = rt_fetch(rtindex, query.rtable);
   auto transformer_info = std::make_unique<TransformerInfo>();
   VarIndexScope target_table_scope;
-  ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<zetasql::ResolvedTableScan> table_scan,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<googlesql::ResolvedTableScan> table_scan,
                    BuildGsqlResolvedTableScan(*rte, transformer_info.get(),
                                               rtindex, &target_table_scope));
   std::string table_alias = table_scan->alias().empty()
                                 ? table_scan->table()->Name()
                                 : table_scan->alias();
 
-  ZETASQL_ASSIGN_OR_RETURN(const zetasql::Table* table, GetTableFromRTE(*rte));
-  absl::flat_hash_map<int, const zetasql::Column*> unwritable_table_columns =
+  GOOGLESQL_ASSIGN_OR_RETURN(const googlesql::Table* table, GetTableFromRTE(*rte));
+  absl::flat_hash_map<int, const googlesql::Column*> unwritable_table_columns =
       GetUnwritableColumns(table);
 
   // insert_column_list is the list of table columns in the same order as the
   // the inserted row, but not necessarily the same order as the target table.
-  std::vector<zetasql::ResolvedColumn> insert_column_list;
-  absl::flat_hash_map<int, const zetasql::Column*>
+  std::vector<googlesql::ResolvedColumn> insert_column_list;
+  absl::flat_hash_map<int, const googlesql::Column*>
       unwritable_insert_list_columns;
   if (list_length(query.targetList) == 0) {
     // This is an INSERT...DEFAULT VALUES statement. Use all writable columns
@@ -623,8 +631,14 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
 
     // Use insertedCols to build the insert_column_list since no TargetEntry
     // objects are provided.
-    ZETASQL_RET_CHECK_EQ(table_scan->column_list().size(),
+    GOOGLESQL_RET_CHECK_EQ(table_scan->column_list().size(),
                  table_scan->column_index_list().size());
+    const RTEPermissionInfo* perminfo = nullptr;
+    if (rte->perminfoindex > 0) {
+      GOOGLESQL_RET_CHECK_NE(query.rteperminfos, nullptr);
+      perminfo = static_cast<const RTEPermissionInfo*>(
+          list_nth(query.rteperminfos, rte->perminfoindex - 1));
+    }
     for (int i = 0; i < table_scan->column_list().size(); ++i) {
       // Skip over unwritable columns.
       if (unwritable_table_columns.find(i) != unwritable_table_columns.end()) {
@@ -632,8 +646,11 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
       }
       int column_index = table_scan->column_index_list()[i];
       int column_attnum = column_index - FirstLowInvalidHeapAttributeNumber + 1;
-      ZETASQL_ASSIGN_OR_RETURN(bool inserted,
-                       CheckedPgBmsIsMember(column_attnum, rte->insertedCols));
+      bool inserted = false;
+      if (perminfo != nullptr && perminfo->insertedCols != nullptr) {
+        GOOGLESQL_ASSIGN_OR_RETURN(inserted, CheckedPgBmsIsMember(
+                                       column_attnum, perminfo->insertedCols));
+      }
       if (inserted) {
         insert_column_list.push_back(table_scan->column_list()[i]);
       }
@@ -650,7 +667,7 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
       int column_index = entry->resno - 1;
       auto it = unwritable_table_columns.find(column_index);
       if (it == unwritable_table_columns.end()) {
-        ZETASQL_ASSIGN_OR_RETURN(zetasql::ResolvedColumn column,
+        GOOGLESQL_ASSIGN_OR_RETURN(googlesql::ResolvedColumn column,
                          GetResolvedColumn(target_table_scope, rtindex,
                                            entry->resno, /*var_levels_up=*/0));
         insert_column_list.push_back(column);
@@ -684,29 +701,29 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
     }
   }
 
-  RecordColumnAccess(insert_column_list, zetasql::ResolvedStatement::WRITE);
+  RecordColumnAccess(insert_column_list, googlesql::ResolvedStatement::WRITE);
 
   // insert_select_query, query_output_column_list, and query_parameter_list are
   // used for INSERT...SELECT statements.
-  std::unique_ptr<const zetasql::ResolvedScan> insert_select_query = nullptr;
-  zetasql::ResolvedColumnList query_output_column_list;
-  std::vector<std::unique_ptr<const zetasql::ResolvedColumnRef>>
+  std::unique_ptr<const googlesql::ResolvedScan> insert_select_query = nullptr;
+  googlesql::ResolvedColumnList query_output_column_list;
+  std::vector<std::unique_ptr<const googlesql::ResolvedColumnRef>>
       query_parameter_list;
 
   // row_list is the list of inserted rows for INSERT...VALUES statements.
-  std::vector<std::unique_ptr<const zetasql::ResolvedInsertRow>> row_list;
+  std::vector<std::unique_ptr<const googlesql::ResolvedInsertRow>> row_list;
 
   if (list_length(query.targetList) == 0) {
     // This is an INSERT...DEFAULT VALUES statement. Create a fake row filled
     // with default values.
-    std::vector<std::unique_ptr<const zetasql::ResolvedDMLValue>> value_list;
+    std::vector<std::unique_ptr<const googlesql::ResolvedDMLValue>> value_list;
     value_list.reserve(insert_column_list.size());
-    for (const zetasql::ResolvedColumn& column : insert_column_list) {
-      value_list.push_back(zetasql::MakeResolvedDMLValue(
-          zetasql::MakeResolvedDMLDefault(column.type())));
+    for (const googlesql::ResolvedColumn& column : insert_column_list) {
+      value_list.push_back(googlesql::MakeResolvedDMLValue(
+          googlesql::MakeResolvedDMLDefault(column.type())));
     }
-    std::unique_ptr<const zetasql::ResolvedInsertRow> insert_row =
-        zetasql::MakeResolvedInsertRow(std::move(value_list));
+    std::unique_ptr<const googlesql::ResolvedInsertRow> insert_row =
+        googlesql::MakeResolvedInsertRow(std::move(value_list));
     row_list.push_back(std::move(insert_row));
   } else if (rte_count == 1 || (rte_count == 2 && is_insert_or_update)) {
     // A single row INSERT...VALUES statement.
@@ -714,18 +731,18 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
     // Use the list of Expr objects to construct a row.
     List* expr_list = nullptr;
     for (TargetEntry* entry : StructList<TargetEntry*>(query.targetList)) {
-      ZETASQL_ASSIGN_OR_RETURN(expr_list, CheckedPgLappend(expr_list, entry->expr));
+      GOOGLESQL_ASSIGN_OR_RETURN(expr_list, CheckedPgLappend(expr_list, entry->expr));
     }
-    ZETASQL_ASSIGN_OR_RETURN(
-        std::vector<std::unique_ptr<const zetasql::ResolvedDMLValue>>
+    GOOGLESQL_ASSIGN_OR_RETURN(
+        std::vector<std::unique_ptr<const googlesql::ResolvedDMLValue>>
             value_list,
         BuildGsqlResolvedDMLValueList(expr_list, unwritable_insert_list_columns,
                                       &target_table_scope));
-    std::unique_ptr<const zetasql::ResolvedInsertRow> insert_row =
-        zetasql::MakeResolvedInsertRow(std::move(value_list));
+    std::unique_ptr<const googlesql::ResolvedInsertRow> insert_row =
+        googlesql::MakeResolvedInsertRow(std::move(value_list));
     row_list.push_back(std::move(insert_row));
   } else {
-    ZETASQL_RET_CHECK(rte_count == 2 || (rte_count == 3 && is_insert_or_update));
+    GOOGLESQL_RET_CHECK(rte_count == 2 || (rte_count == 3 && is_insert_or_update));
     RangeTblEntry* rte = rt_fetch(2, query.rtable);
     switch (rte->rtekind) {
       case RTE_VALUES: {
@@ -734,14 +751,14 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
         // values_list is a list of expression lists. The outer list is the set
         // of inserted rows and the inner lists are the values for each row.
         for (List* expr_list : StructList<List*>(rte->values_lists)) {
-          ZETASQL_ASSIGN_OR_RETURN(
-              std::vector<std::unique_ptr<const zetasql::ResolvedDMLValue>>
+          GOOGLESQL_ASSIGN_OR_RETURN(
+              std::vector<std::unique_ptr<const googlesql::ResolvedDMLValue>>
                   value_list,
               BuildGsqlResolvedDMLValueList(expr_list,
                                             unwritable_insert_list_columns,
                                             &target_table_scope));
-          std::unique_ptr<const zetasql::ResolvedInsertRow> insert_row =
-              zetasql::MakeResolvedInsertRow(std::move(value_list));
+          std::unique_ptr<const googlesql::ResolvedInsertRow> insert_row =
+              googlesql::MakeResolvedInsertRow(std::move(value_list));
           row_list.push_back(std::move(insert_row));
         }
         break;
@@ -752,9 +769,9 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
         // output columns for the subquery.
         // The subquery output columns do not have names, so there is no need
         // to collect the output_name_list.
-        ZETASQL_RET_CHECK_NE(rte->subquery, nullptr);
-        ZETASQL_RET_CHECK_NE(rte->alias->aliasname, nullptr);
-        ZETASQL_ASSIGN_OR_RETURN(insert_select_query,
+        GOOGLESQL_RET_CHECK_NE(rte->subquery, nullptr);
+        GOOGLESQL_RET_CHECK_NE(rte->alias->aliasname, nullptr);
+        GOOGLESQL_ASSIGN_OR_RETURN(insert_select_query,
                          BuildGsqlResolvedScanForQueryExpression(
                              *rte->subquery, /*top_level_query=*/false,
                              &empty_var_index_scope_, rte->alias->aliasname,
@@ -769,38 +786,39 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
     }
   }
 
-  std::unique_ptr<const zetasql::ResolvedOnConflictClause>
+  std::unique_ptr<const googlesql::ResolvedOnConflictClause>
       on_conflict_clause = nullptr;
-  if (insert_mode == zetasql::ResolvedInsertStmt::OR_UPDATE ||
-      insert_mode == zetasql::ResolvedInsertStmt::OR_IGNORE) {
-    ZETASQL_RET_CHECK(!IsZetaSQLInsertOnConflictClauseEnabled(
+  if (insert_mode == googlesql::ResolvedInsertStmt::OR_UPDATE ||
+      insert_mode == googlesql::ResolvedInsertStmt::OR_IGNORE) {
+    GOOGLESQL_RET_CHECK(!IsGoogleSQLInsertOnConflictClauseEnabled(
         catalog_adapter_->analyzer_options().language()));
-    ZETASQL_RETURN_IF_ERROR(CheckForUnsupportedOnConflictClause(
+    GOOGLESQL_RETURN_IF_ERROR(CheckForUnsupportedOnConflictClause(
         query, rte_count, *table_scan->table(), insert_column_list,
         &target_table_scope,
-        (insert_mode == zetasql::ResolvedInsertStmt::OR_IGNORE)));
+        (insert_mode == googlesql::ResolvedInsertStmt::OR_IGNORE)));
   } else if (query.onConflict != nullptr) {
-    ZETASQL_RET_CHECK(IsZetaSQLInsertOnConflictClauseEnabled(
+    GOOGLESQL_RET_CHECK(IsGoogleSQLInsertOnConflictClauseEnabled(
         catalog_adapter_->analyzer_options().language()));
     // Get the RangeTblEntry node for the excluded alias, available in
     // ON CONFLICT DO UPDATE DML only.
     RangeTblEntry* rte_for_excluded_alias = rt_fetch(rte_count, query.rtable);
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         on_conflict_clause,
         BuildGsqlOnConflictClauseForInsertDML(
             *table_scan->table(), query.onConflict, rte_for_excluded_alias,
             /*insert_table_rtindex=*/rtindex,
-            /*excluded_alias_rtindex=*/rte_count, &target_table_scope));
+            /*excluded_alias_rtindex=*/rte_count, query.rteperminfos,
+            &target_table_scope));
   }
 
-  ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<const zetasql::ResolvedReturningClause>
+  GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<const googlesql::ResolvedReturningClause>
                        returning_clause,
                    BuildGsqlReturningClauseForDML(
                        query.returningList, table_alias, &target_table_scope));
 
   std::vector<int> out_generated_column_ids;
-  ZETASQL_ASSIGN_OR_RETURN(
-      std::vector<std::unique_ptr<const zetasql::ResolvedExpr>>
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      std::vector<std::unique_ptr<const googlesql::ResolvedExpr>>
           out_generated_column_expr_list,
       BuildRewrittenGsqlGeneratedColumnResolvedExprList(
           *table_scan->table(), target_table_scope, &out_generated_column_ids));
@@ -810,7 +828,7 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
   // assert_rows_modified is not a supported feature in PostgreSQL.
   // INSERT...RETURNING is not supported.
   // Construct a ResolvedInsertStmt.
-  return zetasql::MakeResolvedInsertStmt(
+  return googlesql::MakeResolvedInsertStmt(
       std::move(table_scan), insert_mode,
       /*assert_rows_modified=*/nullptr, std::move(returning_clause),
       insert_column_list, std::move(query_parameter_list),
@@ -819,7 +837,7 @@ ForwardTransformer::BuildPartialGsqlResolvedInsertStmt(const Query& query) {
       out_generated_column_ids, std::move(out_generated_column_expr_list));
 }
 
-absl::StatusOr<std::unique_ptr<zetasql::ResolvedUpdateStmt>>
+absl::StatusOr<std::unique_ptr<googlesql::ResolvedUpdateStmt>>
 ForwardTransformer::BuildPartialGsqlResolvedUpdateStmt(const Query& query) {
   // The first RangeTblEntry is always the UPDATE target table.
   int rte_count = list_length(query.rtable);
@@ -829,13 +847,13 @@ ForwardTransformer::BuildPartialGsqlResolvedUpdateStmt(const Query& query) {
   }
 
   // Validity check.
-  ZETASQL_RET_CHECK(list_length(query.jointree->fromlist) == 1);
+  GOOGLESQL_RET_CHECK(list_length(query.jointree->fromlist) == 1);
 
   Index rtindex = 1;
   RangeTblEntry* rte = rt_fetch(rtindex, query.rtable);
   auto transformer_info = std::make_unique<TransformerInfo>();
   VarIndexScope target_table_scope;
-  ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<zetasql::ResolvedTableScan> table_scan,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<googlesql::ResolvedTableScan> table_scan,
                    BuildGsqlResolvedTableScan(*rte, transformer_info.get(),
                                               rtindex, &target_table_scope));
   std::string table_alias = table_scan->alias().empty()
@@ -843,30 +861,30 @@ ForwardTransformer::BuildPartialGsqlResolvedUpdateStmt(const Query& query) {
                                 : table_scan->alias();
 
   // Build a ResolvedExpr for the WHERE clause.
-  ZETASQL_ASSIGN_OR_RETURN(
-      std::unique_ptr<const zetasql::ResolvedExpr> gsql_where_expr,
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      std::unique_ptr<const googlesql::ResolvedExpr> gsql_where_expr,
       BuildGsqlWhereClauseExprForDML(query.jointree->quals,
                                      &target_table_scope));
 
-  ZETASQL_ASSIGN_OR_RETURN(const zetasql::Table* table, GetTableFromRTE(*rte));
-  absl::flat_hash_map<int, const zetasql::Column*> unwritable_table_columns =
+  GOOGLESQL_ASSIGN_OR_RETURN(const googlesql::Table* table, GetTableFromRTE(*rte));
+  absl::flat_hash_map<int, const googlesql::Column*> unwritable_table_columns =
       GetUnwritableColumns(table);
 
-  std::vector<std::unique_ptr<const zetasql::ResolvedUpdateItem>>
+  std::vector<std::unique_ptr<const googlesql::ResolvedUpdateItem>>
       update_item_list;
-  ZETASQL_RETURN_IF_ERROR(PopulateUpdateSetItemListFromUpdateSetClause(
+  GOOGLESQL_RETURN_IF_ERROR(PopulateUpdateSetItemListFromUpdateSetClause(
       *table, rtindex, query.targetList, target_table_scope, target_table_scope,
       "UPDATE clause", update_item_list));
 
   // Build a ResolvedReturningClause.
-  ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<const zetasql::ResolvedReturningClause>
+  GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<const googlesql::ResolvedReturningClause>
                        returning_clause,
                    BuildGsqlReturningClauseForDML(
                        query.returningList, table_alias, &target_table_scope));
 
   std::vector<int> out_generated_column_ids;
-  ZETASQL_ASSIGN_OR_RETURN(
-      std::vector<std::unique_ptr<const zetasql::ResolvedExpr>>
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      std::vector<std::unique_ptr<const googlesql::ResolvedExpr>>
           out_generated_column_expr_list,
       BuildRewrittenGsqlGeneratedColumnResolvedExprList(
           *table_scan->table(), target_table_scope, &out_generated_column_ids));
@@ -880,16 +898,16 @@ ForwardTransformer::BuildPartialGsqlResolvedUpdateStmt(const Query& query) {
       std::move(out_generated_column_expr_list));
 }
 
-absl::StatusOr<std::unique_ptr<const zetasql::ResolvedExpr>>
+absl::StatusOr<std::unique_ptr<const googlesql::ResolvedExpr>>
 ForwardTransformer::BuildGsqlWhereClauseExprForDML(
     Node* pg_where_clause, const VarIndexScope* var_index_scope) {
   if (pg_where_clause == nullptr) {
     // PostgreSQL allows an UPDATE/DELETE statements without a WHERE clause, in
-    // which all rows of the target table will be updated. Meanwhile, ZetaSQL
+    // which all rows of the target table will be updated. Meanwhile, GoogleSQL
     // requires presence of a WHERE clause. In this case, simply add a
     // "WHERE true" clause into the resolved AST produced by the transformer.
-    return zetasql::MakeResolvedLiteral(zetasql::types::BoolType(),
-                                          zetasql::Value::Bool(true));
+    return googlesql::MakeResolvedLiteral(googlesql::types::BoolType(),
+                                          googlesql::Value::Bool(true));
   } else {
     if (internal::IsExpr(*pg_where_clause)) {
       return BuildGsqlResolvedScalarExpr(*PostgresCastToExpr(pg_where_clause),
@@ -902,23 +920,23 @@ ForwardTransformer::BuildGsqlWhereClauseExprForDML(
   }
 }
 
-absl::StatusOr<std::unique_ptr<const zetasql::ResolvedDMLValue>>
+absl::StatusOr<std::unique_ptr<const googlesql::ResolvedDMLValue>>
 ForwardTransformer::BuildGsqlResolvedDMLValue(
     Expr& expr, const VarIndexScope* var_index_scope, const char* clause_name) {
-  ZETASQL_ASSIGN_OR_RETURN(
-      std::unique_ptr<zetasql::ResolvedExpr> resolved_expr,
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      std::unique_ptr<googlesql::ResolvedExpr> resolved_expr,
       BuildGsqlResolvedScalarExpr(expr, var_index_scope, clause_name));
-  return zetasql::MakeResolvedDMLValue(std::move(resolved_expr));
+  return googlesql::MakeResolvedDMLValue(std::move(resolved_expr));
 }
 
 // Build an INSERT row from the Expr list.
-absl::StatusOr<std::vector<std::unique_ptr<const zetasql::ResolvedDMLValue>>>
+absl::StatusOr<std::vector<std::unique_ptr<const googlesql::ResolvedDMLValue>>>
 ForwardTransformer::BuildGsqlResolvedDMLValueList(
     List* expr_list,
-    const absl::flat_hash_map<int, const zetasql::Column*>&
+    const absl::flat_hash_map<int, const googlesql::Column*>&
         unwritable_insert_list_columns,
     const VarIndexScope* var_index_scope) {
-  std::vector<std::unique_ptr<const zetasql::ResolvedDMLValue>> value_list;
+  std::vector<std::unique_ptr<const googlesql::ResolvedDMLValue>> value_list;
   int i = 0;
   for (Expr* expr : StructList<Expr*>(expr_list)) {
     auto it = unwritable_insert_list_columns.find(i);
@@ -931,8 +949,8 @@ ForwardTransformer::BuildGsqlResolvedDMLValueList(
             it->second->Name()));
       }
     } else {
-      ZETASQL_ASSIGN_OR_RETURN(
-          std::unique_ptr<const zetasql::ResolvedDMLValue> dml_value,
+      GOOGLESQL_ASSIGN_OR_RETURN(
+          std::unique_ptr<const googlesql::ResolvedDMLValue> dml_value,
           BuildGsqlResolvedDMLValue(*expr, var_index_scope, "INSERT VALUES"));
       value_list.push_back(std::move(dml_value));
     }
@@ -941,13 +959,13 @@ ForwardTransformer::BuildGsqlResolvedDMLValueList(
   return value_list;
 }
 
-absl::StatusOr<std::unique_ptr<zetasql::ResolvedDeleteStmt>>
+absl::StatusOr<std::unique_ptr<googlesql::ResolvedDeleteStmt>>
 ForwardTransformer::BuildPartialGsqlResolvedDeleteStmt(const Query& query) {
   // The first RangeTblEntry is always the DELETE target table.
   // Any additional RangeTblEntry objects are for USING statements, which are
   // not supported.
   int rte_count = list_length(query.rtable);
-  ZETASQL_RET_CHECK(rte_count >= 1);
+  GOOGLESQL_RET_CHECK(rte_count >= 1);
   if (rte_count > 1) {
     return absl::UnimplementedError(
         "DELETE...USING statements are not supported.");
@@ -956,7 +974,7 @@ ForwardTransformer::BuildPartialGsqlResolvedDeleteStmt(const Query& query) {
   RangeTblEntry* rte = rt_fetch(rtindex, query.rtable);
   auto transformer_info = std::make_unique<TransformerInfo>();
   VarIndexScope target_table_scope;
-  ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<zetasql::ResolvedTableScan> table_scan,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<googlesql::ResolvedTableScan> table_scan,
                    BuildGsqlResolvedTableScan(*rte, transformer_info.get(),
                                               rtindex, &target_table_scope));
   std::string table_alias = table_scan->alias().empty()
@@ -965,23 +983,23 @@ ForwardTransformer::BuildPartialGsqlResolvedDeleteStmt(const Query& query) {
 
   // There should be exactly one range table ref which points to the DELETE
   // target table range table entry.
-  ZETASQL_RET_CHECK(query.jointree != nullptr && query.jointree->fromlist != nullptr &&
+  GOOGLESQL_RET_CHECK(query.jointree != nullptr && query.jointree->fromlist != nullptr &&
             list_length(query.jointree->fromlist) == 1);
 
 
   // Build a ResolvedExpr for the WHERE clause
-  ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<const zetasql::ResolvedExpr> where_expr,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<const googlesql::ResolvedExpr> where_expr,
                    BuildGsqlWhereClauseExprForDML(query.jointree->quals,
                                                   &target_table_scope));
 
   // Build a ResolvedReturningClause.
-  ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<const zetasql::ResolvedReturningClause>
+  GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<const googlesql::ResolvedReturningClause>
                        returning_clause,
                    BuildGsqlReturningClauseForDML(
                        query.returningList, table_alias, &target_table_scope));
 
   // Construct a ResolvedDeleteStmt.
-  return zetasql::MakeResolvedDeleteStmt(
+  return googlesql::MakeResolvedDeleteStmt(
       std::move(table_scan),
       nullptr,
       std::move(returning_clause), /*array_offset_column=*/nullptr,

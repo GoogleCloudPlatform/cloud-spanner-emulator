@@ -7,7 +7,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/string_view.h"
@@ -251,7 +251,7 @@ TEST_F(ParserTest, NotInListGrammarParsesHint) {
 }
 
 using ::testing::HasSubstr;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 TEST_F(ParserTest, InValuesListHintErrors) {
   // These should error because IN with Values isn't a hintable Join.
   std::vector<std::string> test_strings{
@@ -675,6 +675,164 @@ TEST_F(ParserTest, OnUpdateLookaheadEofError) {
                 StatusIs(absl::StatusCode::kInvalidArgument,
                          HasSubstr("syntax error at end of input")));
   }
+}
+
+TEST_F(ParserTest, CreateIndexHashPartitionKey) {
+  const char* test_string =
+      "CREATE INDEX idx ON tbl (col DESC HASH PARTITION KEY, col2)";
+  SpangresTokenLocations locations;
+
+  List* parse_tree =
+      raw_parser_spangres(test_string, RAW_PARSE_DEFAULT, &locations);
+
+  ASSERT_EQ(list_length(parse_tree), 1);
+  RawStmt* raw_stmt = list_nth_node(RawStmt, parse_tree, 0);
+  IndexStmt* stmt = castNode(IndexStmt, raw_stmt->stmt);
+
+  ASSERT_EQ(list_length(stmt->indexParams), 2);
+  IndexElem* elem1 = list_nth_node(IndexElem, stmt->indexParams, 0);
+  EXPECT_STREQ(elem1->name, "col");
+  EXPECT_EQ(elem1->ordering, SORTBY_DESC);
+  EXPECT_TRUE(elem1->hash_partition);
+
+  IndexElem* elem2 = list_nth_node(IndexElem, stmt->indexParams, 1);
+  EXPECT_STREQ(elem2->name, "col2");
+  EXPECT_EQ(elem2->ordering, SORTBY_DEFAULT);
+  EXPECT_FALSE(elem2->hash_partition);
+}
+
+TEST_F(ParserTest, CreateIndexHashPartitionKeyNoDesc) {
+  const char* test_string =
+      "CREATE INDEX idx ON tbl (col HASH PARTITION KEY, col2)";
+  SpangresTokenLocations locations;
+
+  List* parse_tree =
+      raw_parser_spangres(test_string, RAW_PARSE_DEFAULT, &locations);
+
+  ASSERT_EQ(list_length(parse_tree), 1);
+  RawStmt* raw_stmt = list_nth_node(RawStmt, parse_tree, 0);
+  IndexStmt* stmt = castNode(IndexStmt, raw_stmt->stmt);
+
+  ASSERT_EQ(list_length(stmt->indexParams), 2);
+  IndexElem* elem1 = list_nth_node(IndexElem, stmt->indexParams, 0);
+  EXPECT_STREQ(elem1->name, "col");
+  EXPECT_TRUE(elem1->hash_partition);
+
+  IndexElem* elem2 = list_nth_node(IndexElem, stmt->indexParams, 1);
+  EXPECT_STREQ(elem2->name, "col2");
+  EXPECT_FALSE(elem2->hash_partition);
+}
+
+TEST_F(ParserTest, CreateIndexUsingHash) {
+  // Spangres does not support CREATE INDEX USING HASH. This test ensures that
+  // the parser does not crash.
+  const char* test_string = "CREATE INDEX idx ON tbl USING hash (col)";
+  SpangresTokenLocations locations;
+
+  List* parse_tree =
+      raw_parser_spangres(test_string, RAW_PARSE_DEFAULT, &locations);
+
+  ASSERT_EQ(list_length(parse_tree), 1);
+  RawStmt* raw_stmt = list_nth_node(RawStmt, parse_tree, 0);
+  IndexStmt* stmt = castNode(IndexStmt, raw_stmt->stmt);
+
+  EXPECT_STREQ(stmt->accessMethod, "hash");
+}
+
+TEST_F(ParserTest, CreateTableHashQuoted) {
+  const char* test_string = "CREATE TABLE \"hash\" (a int)";
+  SpangresTokenLocations locations;
+
+  List* parse_tree =
+      raw_parser_spangres(test_string, RAW_PARSE_DEFAULT, &locations);
+
+  ASSERT_EQ(list_length(parse_tree), 1);
+  RawStmt* raw_stmt = list_nth_node(RawStmt, parse_tree, 0);
+  CreateStmt* stmt = castNode(CreateStmt, raw_stmt->stmt);
+
+  EXPECT_STREQ(stmt->relation->relname, "hash");
+}
+
+TEST_F(ParserTest, CreateTableHashColumn) {
+  const char* test_string = "CREATE TABLE t1 (hash int PRIMARY KEY)";
+  SpangresTokenLocations locations;
+
+  List* parse_tree =
+      raw_parser_spangres(test_string, RAW_PARSE_DEFAULT, &locations);
+
+  ASSERT_EQ(list_length(parse_tree), 1);
+  RawStmt* raw_stmt = list_nth_node(RawStmt, parse_tree, 0);
+  CreateStmt* stmt = castNode(CreateStmt, raw_stmt->stmt);
+  ASSERT_EQ(list_length(stmt->tableElts), 1);
+  ColumnDef* col = list_nth_node(ColumnDef, stmt->tableElts, 0);
+  EXPECT_STREQ(col->colname, "hash");
+}
+
+TEST_F(ParserTest, CreateIndexHashLookahead) {
+  const char* test_string = "CREATE INDEX idx ON t1 (hash HASH PARTITION KEY)";
+  SpangresTokenLocations locations;
+
+  List* parse_tree =
+      raw_parser_spangres(test_string, RAW_PARSE_DEFAULT, &locations);
+
+  ASSERT_EQ(list_length(parse_tree), 1);
+  RawStmt* raw_stmt = list_nth_node(RawStmt, parse_tree, 0);
+  IndexStmt* stmt = castNode(IndexStmt, raw_stmt->stmt);
+  ASSERT_EQ(list_length(stmt->indexParams), 1);
+  IndexElem* elem = list_nth_node(IndexElem, stmt->indexParams, 0);
+  EXPECT_STREQ(elem->name, "hash");
+  EXPECT_TRUE(elem->hash_partition);
+}
+
+TEST_F(ParserTest, CreateTableHashWithColumns) {
+  const char* test_string =
+      "CREATE TABLE hash (id bigint primary key, value bigint)";
+  SpangresTokenLocations locations;
+
+  List* parse_tree =
+      raw_parser_spangres(test_string, RAW_PARSE_DEFAULT, &locations);
+
+  ASSERT_EQ(list_length(parse_tree), 1);
+  RawStmt* raw_stmt = list_nth_node(RawStmt, parse_tree, 0);
+  CreateStmt* stmt = castNode(CreateStmt, raw_stmt->stmt);
+  EXPECT_STREQ(stmt->relation->relname, "hash");
+  ASSERT_EQ(list_length(stmt->tableElts), 2);
+
+  ColumnDef* col1 = list_nth_node(ColumnDef, stmt->tableElts, 0);
+  EXPECT_STREQ(col1->colname, "id");
+
+  ColumnDef* col2 = list_nth_node(ColumnDef, stmt->tableElts, 1);
+  EXPECT_STREQ(col2->colname, "value");
+}
+
+TEST_F(ParserTest, CreateTableAndIndexWithHashColumnName) {
+  const char* test_string =
+      "create table tablewithhashcol (\n"
+      "  hash bigint primary key,\n"
+      "  value bigint\n"
+      ");\n"
+      "create index myindex on tablewithhashcol(hash HASH PARTITION KEY);";
+  SpangresTokenLocations locations;
+
+  List* parse_tree =
+      raw_parser_spangres(test_string, RAW_PARSE_DEFAULT, &locations);
+
+  ASSERT_EQ(list_length(parse_tree), 2);
+
+  RawStmt* raw_stmt1 = list_nth_node(RawStmt, parse_tree, 0);
+  CreateStmt* stmt1 = castNode(CreateStmt, raw_stmt1->stmt);
+  EXPECT_STREQ(stmt1->relation->relname, "tablewithhashcol");
+  ASSERT_EQ(list_length(stmt1->tableElts), 2);
+  ColumnDef* col1 = list_nth_node(ColumnDef, stmt1->tableElts, 0);
+  EXPECT_STREQ(col1->colname, "hash");
+
+  RawStmt* raw_stmt2 = list_nth_node(RawStmt, parse_tree, 1);
+  IndexStmt* stmt2 = castNode(IndexStmt, raw_stmt2->stmt);
+  EXPECT_STREQ(stmt2->idxname, "myindex");
+  ASSERT_EQ(list_length(stmt2->indexParams), 1);
+  IndexElem* elem = list_nth_node(IndexElem, stmt2->indexParams, 0);
+  EXPECT_STREQ(elem->name, "hash");
+  EXPECT_TRUE(elem->hash_partition);
 }
 
 }  // namespace

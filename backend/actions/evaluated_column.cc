@@ -24,10 +24,10 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/analyzer_options.h"
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/evaluator.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/evaluator.h"
+#include "googlesql/public/value.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/log/check.h"
 #include "absl/status/status.h"
@@ -47,8 +47,8 @@
 #include "backend/storage/iterator.h"
 #include "common/constants.h"
 #include "common/errors.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -70,14 +70,14 @@ absl::Status GetEvaluatedColumnsInTopologicalOrder(
       /*object_type=*/"evaluated column");
   for (const Column* column : table->columns()) {
     if (column->is_generated() || column->has_default_value()) {
-      ZETASQL_RETURN_IF_ERROR(sorter.AddNodeIfNotExists(column));
+      GOOGLESQL_RETURN_IF_ERROR(sorter.AddNodeIfNotExists(column));
     }
   }
   for (const Column* column : table->columns()) {
     if (column->is_generated()) {
       for (const Column* dep : column->dependent_columns()) {
         if (dep->is_generated() || dep->has_default_value()) {
-          ZETASQL_RETURN_IF_ERROR(
+          GOOGLESQL_RETURN_IF_ERROR(
               sorter.AddEdgeIfNotExists(column->Name(), dep->Name()));
         }
       }
@@ -104,44 +104,44 @@ bool IsAnyDependentColumnPresent(
   return false;
 }
 
-absl::StatusOr<std::unique_ptr<zetasql::PreparedExpression>>
+absl::StatusOr<std::unique_ptr<googlesql::PreparedExpression>>
 PrepareExpression(const Column* evaluated_column,
-                  const zetasql::AnalyzerOptions& analyzer_options,
-                  zetasql::Catalog* function_catalog) {
+                  const googlesql::AnalyzerOptions& analyzer_options,
+                  googlesql::Catalog* function_catalog) {
   constexpr char kExpression[] = "CAST (($0) AS $1)";
   std::string sql = absl::Substitute(
       kExpression, evaluated_column->expression().value(),
-      evaluated_column->GetType()->TypeName(zetasql::PRODUCT_EXTERNAL,
+      evaluated_column->GetType()->TypeName(googlesql::PRODUCT_EXTERNAL,
                                             /*use_external_float32=*/true));
-  auto expr = std::make_unique<zetasql::PreparedExpression>(sql);
-  zetasql::AnalyzerOptions options = analyzer_options;
+  auto expr = std::make_unique<googlesql::PreparedExpression>(sql);
+  googlesql::AnalyzerOptions options = analyzer_options;
   for (const Column* dep : evaluated_column->dependent_columns()) {
-    ZETASQL_RETURN_IF_ERROR(options.AddExpressionColumn(dep->Name(), dep->GetType()));
+    GOOGLESQL_RETURN_IF_ERROR(options.AddExpressionColumn(dep->Name(), dep->GetType()));
   }
-  ZETASQL_RETURN_IF_ERROR(expr->Prepare(options, function_catalog));
-  ZETASQL_RET_CHECK(evaluated_column->GetType()->Equals(expr->output_type()));
+  GOOGLESQL_RETURN_IF_ERROR(expr->Prepare(options, function_catalog));
+  GOOGLESQL_RET_CHECK(evaluated_column->GetType()->Equals(expr->output_type()));
   return std::move(expr);
 }
 
 }  // namespace
 
 EvaluatedColumnEffector::EvaluatedColumnEffector(
-    const Table* table, const zetasql::AnalyzerOptions& analyzer_options,
-    zetasql::Catalog* function_catalog, bool for_keys)
+    const Table* table, const googlesql::AnalyzerOptions& analyzer_options,
+    googlesql::Catalog* function_catalog, bool for_keys)
     : table_(table), for_keys_(for_keys) {
   absl::Status s = Initialize(analyzer_options, function_catalog);
   ABSL_DCHECK(s.ok()) << "Failed to initialize EvaluatedColumnEffector: " << s;
 }
 
 absl::Status EvaluatedColumnEffector::Initialize(
-    const zetasql::AnalyzerOptions& analyzer_options,
-    zetasql::Catalog* function_catalog) {
-  ZETASQL_RETURN_IF_ERROR(
+    const googlesql::AnalyzerOptions& analyzer_options,
+    googlesql::Catalog* function_catalog) {
+  GOOGLESQL_RETURN_IF_ERROR(
       GetEvaluatedColumnsInTopologicalOrder(table_, &evaluated_columns_));
   absl::flat_hash_set<ColumnID> unique_dependent_column;
   expressions_.reserve(evaluated_columns_.size());
   for (const Column* evaluated_column : evaluated_columns_) {
-    ZETASQL_ASSIGN_OR_RETURN(auto expr,
+    GOOGLESQL_ASSIGN_OR_RETURN(auto expr,
                      PrepareExpression(evaluated_column, analyzer_options,
                                        function_catalog));
     expressions_[evaluated_column] = std::move(expr);
@@ -154,18 +154,18 @@ absl::Status EvaluatedColumnEffector::Initialize(
   return absl::OkStatus();
 }
 
-absl::StatusOr<zetasql::Value>
+absl::StatusOr<googlesql::Value>
 EvaluatedColumnEffector::ComputeEvaluatedColumnValue(
     const Column* evaluated_column,
-    const zetasql::ParameterValueMap& row_column_values) const {
-  ZETASQL_RET_CHECK(evaluated_column != nullptr &&
+    const googlesql::ParameterValueMap& row_column_values) const {
+  GOOGLESQL_RET_CHECK(evaluated_column != nullptr &&
             (evaluated_column->is_generated() ||
              evaluated_column->has_default_value()));
   if (evaluated_column->is_pending_commit_timestamp()) {
-    return zetasql::values::Timestamp(kCommitTimestampValueSentinel);
+    return googlesql::values::Timestamp(kCommitTimestampValueSentinel);
   }
-  ZETASQL_ASSIGN_OR_RETURN(
-      zetasql::Value value,
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      googlesql::Value value,
       expressions_.at(evaluated_column)->Execute(row_column_values));
   if (value.is_null() && !evaluated_column->is_nullable()) {
     return error::NullValueForNotNullColumn(table_->Name(),
@@ -177,16 +177,16 @@ EvaluatedColumnEffector::ComputeEvaluatedColumnValue(
 
 absl::Status EvaluatedColumnEffector::Effect(
     const MutationOp& op,
-    std::vector<std::vector<zetasql::Value>>* evaluated_values,
+    std::vector<std::vector<googlesql::Value>>* evaluated_values,
     std::vector<const Column*>* columns_with_evaluated_values) const {
-  ZETASQL_RET_CHECK(for_keys_ == true);
+  GOOGLESQL_RET_CHECK(for_keys_ == true);
 
   columns_with_evaluated_values->reserve(evaluated_columns_.size());
 
   // This vector stores column values for each row that can be used to evaluate
   // evaluated columns.
-  std::vector<zetasql::ParameterValueMap> row_column_values(
-      op.rows.size(), zetasql::ParameterValueMap());
+  std::vector<googlesql::ParameterValueMap> row_column_values(
+      op.rows.size(), googlesql::ParameterValueMap());
   // Evaluate evaluated columns in topological order.
   for (int i = 0; i < evaluated_columns_.size(); ++i) {
     const Column* evaluated_column = evaluated_columns_[i];
@@ -234,12 +234,12 @@ absl::Status EvaluatedColumnEffector::Effect(
       for (int j = 0; j < op.columns.size(); ++j) {
         row_column_values[i][op.columns[j]] = op.rows[i][j];
       }
-      ZETASQL_ASSIGN_OR_RETURN(
-          zetasql::Value value,
+      GOOGLESQL_ASSIGN_OR_RETURN(
+          googlesql::Value value,
           ComputeEvaluatedColumnValue(evaluated_column, row_column_values[i]));
       if (evaluated_column->is_generated() && is_user_supplied_value) {
         size_t index = column_supplied_itr - op.columns.begin();
-        zetasql::Value provided_value = op.rows[i][index];
+        googlesql::Value provided_value = op.rows[i][index];
         if (provided_value != value) {
           return error::GeneratedPkModified(evaluated_column->FullName());
         }
@@ -256,8 +256,8 @@ absl::Status EvaluatedColumnEffector::Effect(
 
 absl::Status EvaluatedColumnEffector::Effect(const ActionContext* ctx,
                                              const InsertOp& op) const {
-  zetasql::ParameterValueMap column_values;
-  ZETASQL_RET_CHECK_EQ(op.columns.size(), op.values.size());
+  googlesql::ParameterValueMap column_values;
+  GOOGLESQL_RET_CHECK_EQ(op.columns.size(), op.values.size());
 
   for (int i = 0; i < op.columns.size(); ++i) {
     column_values[op.columns[i]->Name()] = op.values[i];
@@ -271,7 +271,7 @@ absl::Status EvaluatedColumnEffector::Effect(const ActionContext* ctx,
     // columns.
     if (column_values.find(column->Name()) == column_values.end() &&
         !column->has_default_value()) {
-      column_values[column->Name()] = zetasql::Value::Null(column->GetType());
+      column_values[column->Name()] = googlesql::Value::Null(column->GetType());
     }
   }
 
@@ -295,14 +295,14 @@ absl::Status EvaluatedColumnEffector::Effect(const ActionContext* ctx,
     }
   }
 
-  zetasql::ParameterValueMap column_values;
-  ZETASQL_ASSIGN_OR_RETURN(
+  googlesql::ParameterValueMap column_values;
+  GOOGLESQL_ASSIGN_OR_RETURN(
       std::unique_ptr<StorageIterator> itr,
       ctx->store()->Read(table_, KeyRange::Point(op.key), dependent_columns_));
-  ZETASQL_RET_CHECK(itr->Next());
-  ZETASQL_RETURN_IF_ERROR(itr->Status());
-  ZETASQL_RET_CHECK_EQ(op.columns.size(), op.values.size());
-  ZETASQL_RET_CHECK_EQ(itr->NumColumns(), dependent_columns_.size());
+  GOOGLESQL_RET_CHECK(itr->Next());
+  GOOGLESQL_RETURN_IF_ERROR(itr->Status());
+  GOOGLESQL_RET_CHECK_EQ(op.columns.size(), op.values.size());
+  GOOGLESQL_RET_CHECK_EQ(itr->NumColumns(), dependent_columns_.size());
   for (int i = 0; i < dependent_columns_.size(); ++i) {
     column_values[dependent_columns_[i]->Name()] = itr->ColumnValue(i);
   }
@@ -315,10 +315,10 @@ absl::Status EvaluatedColumnEffector::Effect(const ActionContext* ctx,
 
 absl::Status EvaluatedColumnEffector::Effect(
     const ActionContext* ctx, const Key& key,
-    zetasql::ParameterValueMap* column_values, bool is_update_op,
+    googlesql::ParameterValueMap* column_values, bool is_update_op,
     bool apply_on_update) const {
-  ZETASQL_RET_CHECK(for_keys_ == false);
-  std::vector<zetasql::Value> evaluated_values;
+  GOOGLESQL_RET_CHECK(for_keys_ == false);
+  std::vector<googlesql::Value> evaluated_values;
   evaluated_values.reserve(evaluated_columns_.size());
 
   std::vector<const Column*> columns_with_evaluated_values;
@@ -350,8 +350,8 @@ absl::Status EvaluatedColumnEffector::Effect(
       continue;
     }
 
-    ZETASQL_ASSIGN_OR_RETURN(
-        zetasql::Value value,
+    GOOGLESQL_ASSIGN_OR_RETURN(
+        googlesql::Value value,
         ComputeEvaluatedColumnValue(evaluated_column, *column_values));
 
     // Update the column value so that it can be used to evaluate other

@@ -51,6 +51,10 @@ class DatabaseOptions : public SchemaNode {
     return default_time_zone_;
   }
 
+  std::optional<std::string> columnar_policy() const {
+    return columnar_policy_;
+  }
+
   std::optional<std::string> version_retention_period() const {
     return version_retention_period_;
   }
@@ -101,6 +105,8 @@ class DatabaseOptions : public SchemaNode {
   std::optional<std::string> default_sequence_kind_;
   // Default time zone for the database.
   std::optional<std::string> default_time_zone_;
+  // Columnar policy for the database.
+  std::optional<std::string> columnar_policy_;
   // Version retention period for the database.
   std::optional<std::string> version_retention_period_;
 };

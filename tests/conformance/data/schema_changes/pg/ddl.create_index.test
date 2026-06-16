@@ -146,11 +146,6 @@ CREATE INDEX name_idx ON Users (name) WHERE (NOT name IS NULL);
 ERROR: <WHERE> clause of <CREATE INDEX> statement supports only conjunction of <column IS NOT NULL> expressions using <AND>, where <column> is part of an index.
 ==
 
-CREATE INDEX name_idx ON Users (UPPER(name));
---
-ERROR: Expressions are not supported in <CREATE INDEX> statement.
-==
-
 CREATE INDEX name_idx ON Users (name COLLATE ja_JP.utf8);
 --
 ERROR: Setting collation is not supported in <CREATE INDEX> statement.

@@ -3,10 +3,10 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: pg_controldata (PostgreSQL) 15\n"
+"Project-Id-Version: pg_controldata (PostgreSQL) 16\n"
 "Report-Msgid-Bugs-To: pgsql-bugs@lists.postgresql.org\n"
-"POT-Creation-Date: 2023-04-12 00:50+0000\n"
-"PO-Revision-Date: 2023-04-05 18:06+0900\n"
+"POT-Creation-Date: 2023-09-07 05:52+0000\n"
+"PO-Revision-Date: 2023-05-30 12:38+0900\n"
 "Last-Translator: Ioseph Kim <ioseph@uri.sarang.net>\n"
 "Language-Team: Korean Team <pgsql-kr@postgresql.kr>\n"
 "Language: ko\n"
@@ -30,7 +30,7 @@ msgstr "\"%s\" 파일을 읽을 수 없습니다: %m"
 msgid "could not read file \"%s\": read %d of %zu"
 msgstr "\"%s\" 파일을 읽을 수 없음: %d 읽음, 전체 %zu"
 
-#: ../../common/controldata_utils.c:108 ../../common/controldata_utils.c:244
+#: ../../common/controldata_utils.c:108 ../../common/controldata_utils.c:236
 #, c-format
 msgid "could not close file \"%s\": %m"
 msgstr "\"%s\" 파일을 닫을 수 없습니다: %m"
@@ -53,17 +53,17 @@ msgstr ""
 "이 프로그램에서 사용하는 순서와 일치해야 합니다.  이 경우 아래 결과는\n"
 "올바르지 않으며 이 데이터 디렉터리에 PostgreSQL을 설치할 수 없습니다."
 
-#: ../../common/controldata_utils.c:194
+#: ../../common/controldata_utils.c:186
 #, c-format
 msgid "could not open file \"%s\": %m"
 msgstr "\"%s\" 파일을 읽을 수 없습니다: %m"
 
-#: ../../common/controldata_utils.c:213
+#: ../../common/controldata_utils.c:205
 #, c-format
 msgid "could not write file \"%s\": %m"
 msgstr "\"%s\" 파일을 쓸 수 없습니다: %m"
 
-#: ../../common/controldata_utils.c:232
+#: ../../common/controldata_utils.c:224
 #, c-format
 msgid "could not fsync file \"%s\": %m"
 msgstr "\"%s\" 파일을 fsync 할 수 없습니다: %m"
@@ -502,7 +502,3 @@ msgstr "데이터 페이지 체크섬 버전:            %u\n"
 #, c-format
 msgid "Mock authentication nonce:            %s\n"
 msgstr "임시 모의 인증:                       %s\n"
-
-#, c-format
-#~ msgid "Try \"%s --help\" for more information.\n"
-#~ msgstr "보다 자세한 정보는 \"%s --help\"\n"

@@ -22,7 +22,7 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/flags/flag.h"
@@ -43,8 +43,8 @@
 #include "backend/transaction/read_write_transaction.h"
 #include "common/change_stream.h"
 #include "common/clock.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 ABSL_FLAG(absl::Duration, change_stream_churning_interval, absl::Seconds(20),
           "Change stream churning interval in seconds.");
@@ -74,8 +74,8 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 
-using zetasql::values::String;
-using zetasql::values::StringArray;
+using googlesql::values::String;
+using googlesql::values::StringArray;
 
 ChangeStreamPartitionChurner::ChangeStreamPartitionChurner(
     CreateReadWriteTransactionFn create_read_write_transaction_fn, Clock* clock)
@@ -114,7 +114,7 @@ void ChangeStreamPartitionChurner::ClearChurningThread(
 }
 
 void ChangeStreamPartitionChurner::ClearAllChurningThreads() {
-  absl::MutexLock l(&mu_);
+  absl::MutexLock l(mu_);
   churn_threads_.clear();
 }
 
@@ -122,7 +122,7 @@ void ChangeStreamPartitionChurner::PeriodicChurnPartitions(
     absl::string_view change_stream_name, ChurningThread* churning_thread) {
   while (true) {
     {
-      absl::MutexLock l(&churning_thread->mu);
+      absl::MutexLock l(churning_thread->mu);
       churning_thread->mu.AwaitWithTimeout(
           absl::Condition(&churning_thread->stop_thread),
           absl::GetFlag(FLAGS_change_stream_churn_thread_sleep_interval));
@@ -159,12 +159,12 @@ void ChangeStreamPartitionChurner::PeriodicChurnPartitions(
 // the transaction lock manager.
 absl::Status ChangeStreamPartitionChurner::ChurnPartitions(
     absl::string_view change_stream_name) {
-  ZETASQL_ASSIGN_OR_RETURN(auto txn, create_read_write_transaction_fn_(
+  GOOGLESQL_ASSIGN_OR_RETURN(auto txn, create_read_write_transaction_fn_(
                                  ReadWriteOptions(), RetryState()));
 
   const Schema* schema = txn->schema();
 
-  ZETASQL_RET_CHECK(schema != nullptr);
+  GOOGLESQL_RET_CHECK(schema != nullptr);
 
   const ChangeStream* change_stream =
       schema->FindChangeStream(std::string(change_stream_name));
@@ -181,7 +181,7 @@ absl::Status ChangeStreamPartitionChurner::ChurnPartitions(
   read_arg.key_set = KeySet::All();
   std::unique_ptr<backend::RowCursor> cursor;
   absl::Status status = txn->Read(read_arg, &cursor);
-  ZETASQL_RETURN_IF_ERROR(status);
+  GOOGLESQL_RETURN_IF_ERROR(status);
   absl::flat_hash_map<std::string, std::vector<std::string>> churned_partitions;
   // TODO : Consider optimizing the query to not return stale
   // tokens, i.e. prefix the token with start timestamp and use key range
@@ -210,20 +210,20 @@ absl::Status ChangeStreamPartitionChurner::ChurnPartitions(
     if (churn_type == "MOVE") {
       // Make sure to move each partition.
       for (const auto& partition_token : partition_tokens) {
-        ZETASQL_RETURN_IF_ERROR(
+        GOOGLESQL_RETURN_IF_ERROR(
             MovePartition(change_stream_name, partition_token, txn.get()));
       }
     } else if (churn_type == "SPLIT") {
       for (const auto& partition_token : partition_tokens) {
-        ZETASQL_RETURN_IF_ERROR(
+        GOOGLESQL_RETURN_IF_ERROR(
             SplitPartition(change_stream_name, partition_token, txn.get()));
       }
     } else {
       int number_of_tokens = partition_tokens.size();
       // Check that the number of tokens to merge is exactly 2.
-      ZETASQL_RET_CHECK(churn_type == "MERGE");
-      ZETASQL_RET_CHECK(number_of_tokens == 2);
-      ZETASQL_RETURN_IF_ERROR(MergePartition(change_stream_name, partition_tokens[0],
+      GOOGLESQL_RET_CHECK(churn_type == "MERGE");
+      GOOGLESQL_RET_CHECK(number_of_tokens == 2);
+      GOOGLESQL_RETURN_IF_ERROR(MergePartition(change_stream_name, partition_tokens[0],
                                      partition_tokens[1], txn.get()));
     }
   }
@@ -331,7 +331,7 @@ absl::Status ChangeStreamPartitionChurner::MergePartition(
 
 void ChangeStreamPartitionChurner::Update(const Schema* schema) {
   // Iterate through the change streams in the schema.
-  absl::MutexLock l(&mu_);
+  absl::MutexLock l(mu_);
   absl::flat_hash_set<std::string> change_stream_names;
   for (const auto& [change_stream_name, churn_thread] : churn_threads_) {
     change_stream_names.insert(change_stream_name);
@@ -353,7 +353,7 @@ void ChangeStreamPartitionChurner::Update(const Schema* schema) {
 }
 
 int ChangeStreamPartitionChurner::GetNumThreads() {
-  absl::MutexLock l(&mu_);
+  absl::MutexLock l(mu_);
   return churn_threads_.size();
 }
 

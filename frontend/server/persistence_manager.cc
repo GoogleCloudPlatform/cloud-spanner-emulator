@@ -28,7 +28,7 @@
 #include "google/spanner/admin/instance/v1/spanner_instance_admin.pb.h"
 #include "zetasql/public/type.h"
 #include "zetasql/public/value.h"
-#include "zetasql/base/logging.h"
+#include "googlesql/base/logging.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/time/time.h"

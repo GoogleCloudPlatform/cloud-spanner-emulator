@@ -18,11 +18,11 @@
 
 #include <memory>
 
-#include "zetasql/public/type.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/type.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "backend/access/read.h"
 #include "backend/query/catalog.h"
 #include "backend/query/queryable_column.h"
@@ -45,14 +45,14 @@ class QueryableTableTest : public testing::Test {
   RowReader* reader() { return &reader_; }
 
  private:
-  zetasql::TypeFactory type_factory_;
+  googlesql::TypeFactory type_factory_;
   std::unique_ptr<const Schema> schema_ =
       test::CreateSchemaWithOneTable(&type_factory_);
   test::TestRowReader reader_{
       {{"test_table",
         {{"int64_col", "string_col"},
-         {zetasql::types::Int64Type(), zetasql::types::StringType()},
-         {{zetasql::values::Int64(42), zetasql::values::String("foo")}}}}}};
+         {googlesql::types::Int64Type(), googlesql::types::StringType()},
+         {{googlesql::values::Int64(42), googlesql::values::String("foo")}}}}}};
 };
 
 TEST_F(QueryableTableTest, FindColumnByName) {
@@ -81,7 +81,7 @@ TEST_F(QueryableTableTest, CreateEvaluatorTableIteratorWithZeroColumns) {
       table.CreateEvaluatorTableIterator(/*column_idxs=*/{}).value();
   ASSERT_EQ(iterator->NumColumns(), 0);
   ASSERT_TRUE(iterator->NextRow());
-  ZETASQL_ASSERT_OK(iterator->Status());
+  GOOGLESQL_ASSERT_OK(iterator->Status());
   ASSERT_FALSE(iterator->NextRow());
 }
 
@@ -93,7 +93,7 @@ TEST_F(QueryableTableTest, CreateEvaluatorTableIteratorWithTheSecondColumn) {
   EXPECT_EQ(iterator->GetColumnName(0), "string_col");
   EXPECT_TRUE(iterator->GetColumnType(0)->IsString());
   ASSERT_TRUE(iterator->NextRow());
-  ZETASQL_ASSERT_OK(iterator->Status());
+  GOOGLESQL_ASSERT_OK(iterator->Status());
   EXPECT_EQ(iterator->GetValue(0).string_value(), "foo");
   ASSERT_FALSE(iterator->NextRow());
 }
@@ -108,7 +108,7 @@ TEST_F(QueryableTableTest, CreateEvaluatorTableIteratorWithAllColumns) {
   EXPECT_TRUE(iterator->GetColumnType(0)->IsInt64());
   EXPECT_TRUE(iterator->GetColumnType(1)->IsString());
   ASSERT_TRUE(iterator->NextRow());
-  ZETASQL_ASSERT_OK(iterator->Status());
+  GOOGLESQL_ASSERT_OK(iterator->Status());
   EXPECT_EQ(iterator->GetValue(0).int64_value(), 42);
   EXPECT_EQ(iterator->GetValue(1).string_value(), "foo");
   ASSERT_FALSE(iterator->NextRow());

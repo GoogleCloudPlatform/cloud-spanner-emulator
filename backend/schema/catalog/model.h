@@ -24,9 +24,10 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/types/type.h"
+#include "googlesql/public/types/type.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
+#include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "backend/schema/graph/schema_node.h"
 
@@ -35,11 +36,13 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 
+class ModelEvaluator;
+
 class Model : public SchemaNode {
  public:
   struct ModelColumn {
     std::string name;
-    const zetasql::Type* type = nullptr;
+    const googlesql::Type* type = nullptr;
     bool is_explicit;
     std::optional<bool> is_required;
   };
@@ -79,6 +82,23 @@ class Model : public SchemaNode {
   Model(const ValidationFn& validate, const UpdateValidationFn& validate_update)
       : validate_(validate), validate_update_(validate_update) {}
   Model(const Model&) = default;
+
+  // Relying on Model::Builder inside function catalog creates a circular
+  // dependency.
+  friend class ModelEvaluator;
+  Model(absl::string_view name, bool is_remote,
+        absl::Span<const ModelColumn> input,
+        absl::Span<const ModelColumn> output,
+        std::optional<std::string> endpoint, std::vector<std::string> endpoints,
+        std::optional<int64_t> default_batch_size)
+      : name_(name),
+        is_remote_(is_remote),
+        input_(input.begin(), input.end()),
+        output_(output.begin(), output.end()),
+        endpoint_(endpoint),
+        endpoints_(endpoints),
+        default_batch_size_(default_batch_size) {}
+
   std::unique_ptr<SchemaNode> ShallowClone() const override {
     return absl::WrapUnique(new Model(*this));
   }

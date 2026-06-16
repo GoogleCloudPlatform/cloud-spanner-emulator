@@ -56,6 +56,7 @@ cc_library(
         "sharedtuplestore.c",
         "sortsupport.c",
         "tuplesort.c",
+        "tuplesortvariants.c",
         "tuplestore.c",
     ],
     copts = [

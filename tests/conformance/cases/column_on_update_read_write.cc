@@ -19,7 +19,7 @@
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/strings/substitute.h"
@@ -36,7 +36,7 @@ namespace test {
 
 namespace {
 
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 class ColumnOnUpdateReadWriteTest
     : public DatabaseTest,
@@ -66,10 +66,10 @@ INSTANTIATE_TEST_SUITE_P(
 
 TEST_P(ColumnOnUpdateReadWriteTest, MutationPCT) {
   // Insert two rows with explicit values.
-  ZETASQL_EXPECT_OK(Insert(
+  GOOGLESQL_EXPECT_OK(Insert(
       "on_update", {"k", "ts_on_update"},
       {1, cloud::spanner::MakeTimestamp(absl::FromUnixSeconds(10)).value()}));
-  ZETASQL_EXPECT_OK(Insert(
+  GOOGLESQL_EXPECT_OK(Insert(
       "on_update", {"k", "ts_on_update"},
       {2, cloud::spanner::MakeTimestamp(absl::FromUnixSeconds(20)).value()}));
   EXPECT_THAT(
@@ -81,7 +81,7 @@ TEST_P(ColumnOnUpdateReadWriteTest, MutationPCT) {
                    .value()}}));
 
   // Only touch the primary key - should not trigger ON UPDATE.
-  ZETASQL_EXPECT_OK(Update("on_update", {"k"}, {1}));
+  GOOGLESQL_EXPECT_OK(Update("on_update", {"k"}, {1}));
   EXPECT_THAT(
       Query("SELECT k, ts_on_update from on_update ORDER BY k ASC"),
       IsOkAndHoldsRows(
@@ -91,7 +91,7 @@ TEST_P(ColumnOnUpdateReadWriteTest, MutationPCT) {
                    .value()}}));
 
   // Set an explicit value for the ON UPDATE column.
-  ZETASQL_EXPECT_OK(Update(
+  GOOGLESQL_EXPECT_OK(Update(
       "on_update", {"k", "ts_on_update"},
       {2, cloud::spanner::MakeTimestamp(absl::FromUnixSeconds(30)).value()}));
   EXPECT_THAT(
@@ -103,7 +103,7 @@ TEST_P(ColumnOnUpdateReadWriteTest, MutationPCT) {
                    .value()}}));
 
   // Trigger ON UPDATE by touching a non-key column.
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       Update("on_update", {"k", "ts"}, {1, "spanner.commit_timestamp()"}));
   EXPECT_THAT(Query("SELECT k from on_update WHERE ts = ts_on_update"),
               IsOkAndHoldsRows({{1}}));
@@ -120,7 +120,7 @@ TEST_P(ColumnOnUpdateReadWriteTest, DMLsWithPCT) {
           : "TIMESTAMP_SECONDS";
 
   // Insert two rows with explicit values.
-  ZETASQL_ASSERT_OK(CommitDml({SqlStatement(
+  GOOGLESQL_ASSERT_OK(CommitDml({SqlStatement(
       absl::Substitute("INSERT INTO on_update(k, ts_on_update) VALUES "
                        "(1, $0(10)), (2, $0(20))",
                        timestamp_function))}));
@@ -140,7 +140,7 @@ TEST_P(ColumnOnUpdateReadWriteTest, DMLsWithPCT) {
   } else {
     sql = absl::Substitute(sql, "OR UPDATE", "");
   }
-  ZETASQL_ASSERT_OK(CommitDml({SqlStatement(sql)}));
+  GOOGLESQL_ASSERT_OK(CommitDml({SqlStatement(sql)}));
   EXPECT_THAT(
       Query("SELECT k, ts_on_update from on_update ORDER BY k ASC"),
       IsOkAndHoldsRows(
@@ -150,7 +150,7 @@ TEST_P(ColumnOnUpdateReadWriteTest, DMLsWithPCT) {
                    .value()}}));
 
   // Set an explicit value for the ON UPDATE column.
-  ZETASQL_ASSERT_OK(CommitDml(
+  GOOGLESQL_ASSERT_OK(CommitDml(
       {SqlStatement(absl::Substitute("UPDATE on_update SET ts_on_update = "
                                      "$0(30) WHERE k = 2",
                                      timestamp_function))}));
@@ -163,7 +163,7 @@ TEST_P(ColumnOnUpdateReadWriteTest, DMLsWithPCT) {
                    .value()}}));
 
   // Trigger ON UPDATE by touching a non-key column.
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       CommitDml({SqlStatement(absl::Substitute("UPDATE on_update SET ts = "
                                                "$0() WHERE k = 1",
                                                pct_function))}));

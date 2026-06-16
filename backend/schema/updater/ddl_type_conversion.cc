@@ -18,30 +18,30 @@
 
 #include <vector>
 
-#include "zetasql/public/types/struct_type.h"
-#include "zetasql/public/types/type.h"
-#include "zetasql/public/types/type_factory.h"
+#include "googlesql/public/types/struct_type.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/public/types/type_factory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "backend/schema/catalog/proto_bundle.h"
 #include "backend/schema/ddl/operations.pb.h"
 #include "third_party/spanner_pg/catalog/spangres_type.h"
 #include "google/protobuf/message.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
 namespace emulator {
 namespace backend {
 
-absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
+absl::StatusOr<const googlesql::Type*> DDLColumnTypeToGoogleSqlType(
     const ddl::TypeDefinition& ddl_type_def,
-    zetasql::TypeFactory* type_factory
+    googlesql::TypeFactory* type_factory
     ,
     const ProtoBundle* proto_bundle
 ) {
-  ZETASQL_RET_CHECK(ddl_type_def.has_type())
+  GOOGLESQL_RET_CHECK(ddl_type_def.has_type())
       << "No type field specification in "
       << "ddl::TypeDefinition input: " << ddl_type_def.ShortDebugString();
 
@@ -77,7 +77,7 @@ absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
       return postgres_translator::spangres::types::PgJsonbMapping()
           ->mapped_type();
     case ddl::TypeDefinition::ARRAY: {
-      ZETASQL_RET_CHECK(ddl_type_def.has_array_subtype())
+      GOOGLESQL_RET_CHECK(ddl_type_def.has_array_subtype())
           << "Missing array_subtype field for ddl::TypeDefinition input: "
           << ddl_type_def.ShortDebugString();
       if (ddl_type_def.array_subtype().type() == ddl::TypeDefinition::ARRAY) {
@@ -87,25 +87,25 @@ absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
             absl::StatusCode::kInvalidArgument,
             "Array of arrays type is not supported by the schema.");
       }
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           auto array_element_type,
           DDLColumnTypeToGoogleSqlType(ddl_type_def.array_subtype(),
                                        type_factory
                                        ,
                                        proto_bundle
                                        ));
-      ZETASQL_RET_CHECK_NE(array_element_type, nullptr);
-      const zetasql::Type* array_type;
-      ZETASQL_RETURN_IF_ERROR(
+      GOOGLESQL_RET_CHECK_NE(array_element_type, nullptr);
+      const googlesql::Type* array_type;
+      GOOGLESQL_RETURN_IF_ERROR(
           type_factory->MakeArrayType(array_element_type, &array_type));
       return array_type;
     }
     case ddl::TypeDefinition::STRUCT: {
-      std::vector<zetasql::StructType::StructField> struct_fields;
+      std::vector<googlesql::StructType::StructField> struct_fields;
       for (const ddl::TypeDefinition::StructDescriptor::Field& field :
            ddl_type_def.struct_descriptor().field()) {
-        ZETASQL_ASSIGN_OR_RETURN(
-            const zetasql::Type* type,
+        GOOGLESQL_ASSIGN_OR_RETURN(
+            const googlesql::Type* type,
             DDLColumnTypeToGoogleSqlType(field.type(),
                                          type_factory
                                          ,
@@ -113,8 +113,8 @@ absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
                                          ));
         struct_fields.push_back({field.name(), type});
       }
-      const zetasql::Type* struct_type;
-      ZETASQL_RETURN_IF_ERROR(
+      const googlesql::Type* struct_type;
+      GOOGLESQL_RETURN_IF_ERROR(
           type_factory->MakeStructType(struct_fields, &struct_type));
       return struct_type;
     }
@@ -124,13 +124,13 @@ absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
     default:
       if (ddl_type_def.type() == ddl::TypeDefinition::NONE &&
           ddl_type_def.has_proto_type_name()) {
-        ZETASQL_RET_CHECK_NE(proto_bundle, nullptr);
+        GOOGLESQL_RET_CHECK_NE(proto_bundle, nullptr);
         auto proto_descriptor =
             proto_bundle->GetTypeDescriptor(ddl_type_def.proto_type_name());
         if (proto_descriptor.ok()) {
           // PROTO
-          const zetasql::Type* proto_type;
-          ZETASQL_RETURN_IF_ERROR(type_factory->MakeProtoType(proto_descriptor.value(),
+          const googlesql::Type* proto_type;
+          GOOGLESQL_RETURN_IF_ERROR(type_factory->MakeProtoType(proto_descriptor.value(),
                                                       &proto_type));
           return proto_type;
         }
@@ -138,21 +138,21 @@ absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
             proto_bundle->GetEnumTypeDescriptor(ddl_type_def.proto_type_name());
         if (enum_descriptor.ok()) {
           // ENUM
-          const zetasql::Type* enum_type;
-          ZETASQL_RETURN_IF_ERROR(
+          const googlesql::Type* enum_type;
+          GOOGLESQL_RETURN_IF_ERROR(
               type_factory->MakeEnumType(enum_descriptor.value(), &enum_type));
           return enum_type;
         }
       }
-      ZETASQL_RET_CHECK_FAIL() << "Unrecognized ddl::TypeDefinition: "
+      GOOGLESQL_RET_CHECK_FAIL() << "Unrecognized ddl::TypeDefinition: "
                        << ddl_type_def.ShortDebugString();
   }
 }
 
-absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
+absl::StatusOr<const googlesql::Type*> DDLColumnTypeToGoogleSqlType(
     const ddl::ColumnDefinition& ddl_column_def,
-    zetasql::TypeFactory* type_factory, const ProtoBundle* proto_bundle) {
-  ZETASQL_RET_CHECK(ddl_column_def.has_type())
+    googlesql::TypeFactory* type_factory, const ProtoBundle* proto_bundle) {
+  GOOGLESQL_RET_CHECK(ddl_column_def.has_type())
       << "No type field specification in "
       << "ddl::ColumnDefinition input: " << ddl_column_def.ShortDebugString();
 
@@ -188,7 +188,7 @@ absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
     case ddl::ColumnDefinition::UUID:
       return type_factory->get_uuid();
     case ddl::ColumnDefinition::ARRAY: {
-      ZETASQL_RET_CHECK(ddl_column_def.has_array_subtype())
+      GOOGLESQL_RET_CHECK(ddl_column_def.has_array_subtype())
           << "Missing array_subtype field for ddl::ColumnDefinition input: "
           << ddl_column_def.ShortDebugString();
       if (ddl_column_def.array_subtype().type() ==
@@ -199,13 +199,13 @@ absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
             absl::StatusCode::kInvalidArgument,
             "Array of arrays type is not supported by the schema.");
       }
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           auto array_element_type,
           DDLColumnTypeToGoogleSqlType(ddl_column_def.array_subtype(),
                                        type_factory, proto_bundle));
-      ZETASQL_RET_CHECK_NE(array_element_type, nullptr);
-      const zetasql::Type* array_type;
-      ZETASQL_RETURN_IF_ERROR(
+      GOOGLESQL_RET_CHECK_NE(array_element_type, nullptr);
+      const googlesql::Type* array_type;
+      GOOGLESQL_RETURN_IF_ERROR(
           type_factory->MakeArrayType(array_element_type, &array_type));
       return array_type;
     }
@@ -219,13 +219,13 @@ absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
     default:
       if (ddl_column_def.type() == ddl::ColumnDefinition::NONE &&
           ddl_column_def.has_proto_type_name()) {
-        ZETASQL_RET_CHECK_NE(proto_bundle, nullptr);
+        GOOGLESQL_RET_CHECK_NE(proto_bundle, nullptr);
         auto proto_descriptor =
             proto_bundle->GetTypeDescriptor(ddl_column_def.proto_type_name());
         if (proto_descriptor.ok()) {
           // PROTO
-          const zetasql::Type* proto_type;
-          ZETASQL_RETURN_IF_ERROR(type_factory->MakeProtoType(proto_descriptor.value(),
+          const googlesql::Type* proto_type;
+          GOOGLESQL_RETURN_IF_ERROR(type_factory->MakeProtoType(proto_descriptor.value(),
                                                       &proto_type));
           return proto_type;
         }
@@ -233,19 +233,19 @@ absl::StatusOr<const zetasql::Type*> DDLColumnTypeToGoogleSqlType(
             ddl_column_def.proto_type_name());
         if (enum_descriptor.ok()) {
           // ENUM
-          const zetasql::Type* enum_type;
-          ZETASQL_RETURN_IF_ERROR(
+          const googlesql::Type* enum_type;
+          GOOGLESQL_RETURN_IF_ERROR(
               type_factory->MakeEnumType(enum_descriptor.value(), &enum_type));
           return enum_type;
         }
       }
-      ZETASQL_RET_CHECK(false).SetErrorCode(absl::StatusCode::kInternal)
+      GOOGLESQL_RET_CHECK(false).SetErrorCode(absl::StatusCode::kInternal)
           << "Unrecognized ddl::ColumnDefinition: "
           << (ddl_column_def).ShortDebugString();
   }
 }
 
-ddl::TypeDefinition GoogleSqlTypeToDDLType(const zetasql::Type* type) {
+ddl::TypeDefinition GoogleSqlTypeToDDLType(const googlesql::Type* type) {
   ddl::TypeDefinition type_def;
   if (type->IsArray()) {
     type_def.set_type(ddl::TypeDefinition::ARRAY);
@@ -255,7 +255,7 @@ ddl::TypeDefinition GoogleSqlTypeToDDLType(const zetasql::Type* type) {
   }
   if (type->IsStruct()) {
     type_def.set_type(ddl::TypeDefinition::STRUCT);
-    for (const zetasql::StructField& field : type->AsStruct()->fields()) {
+    for (const googlesql::StructField& field : type->AsStruct()->fields()) {
       ddl::TypeDefinition::StructDescriptor::Field* ddl_field =
           type_def.mutable_struct_descriptor()->add_field();
 
@@ -302,7 +302,7 @@ ddl::TypeDefinition GoogleSqlTypeToDDLType(const zetasql::Type* type) {
 }
 
 ddl::ColumnDefinition GoogleSqlTypeToDDLColumnType(
-    const zetasql::Type* type) {
+    const googlesql::Type* type) {
   ddl::ColumnDefinition ddl_column_def;
   if (type->IsArray()) {
     ddl_column_def.set_type(ddl::ColumnDefinition::ARRAY);

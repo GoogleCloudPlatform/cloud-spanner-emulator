@@ -35,14 +35,14 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
 #include "absl/types/span.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/util/valid_memory_context_fixture.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator {
 namespace {
@@ -52,13 +52,13 @@ using ::testing::HasSubstr;
 using ::testing::IsSupersetOf;
 using ::testing::SizeIs;
 using ::testing::UnorderedElementsAre;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 
 using BootstrapCatalogWithShimsTest =
     ::postgres_translator::test::ValidMemoryContext;
 
 absl::StatusOr<std::vector<Oid>> GetProcOids(absl::string_view name) {
-  ZETASQL_ASSIGN_OR_RETURN(absl::Span<const FormData_pg_proc* const> procs,
+  GOOGLESQL_ASSIGN_OR_RETURN(absl::Span<const FormData_pg_proc* const> procs,
                    PgBootstrapCatalog::Default()->GetProcsByName(name));
 
   std::vector<Oid> proc_oids;
@@ -69,7 +69,7 @@ absl::StatusOr<std::vector<Oid>> GetProcOids(absl::string_view name) {
 }
 
 TEST(BootstrapCatalog, GetCollationByName) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       const FormData_pg_collation* collation,
       PgBootstrapCatalog::Default()->GetCollationByName("default"));
   EXPECT_EQ(collation->oid, DEFAULT_COLLATION_OID);
@@ -82,7 +82,7 @@ TEST(BootstrapCatalog, FailedGetCollationByName) {
 }
 
 TEST(BootstrapCatalog, GetCollationOid) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const Oid collation_oid,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const Oid collation_oid,
                        PgBootstrapCatalog::Default()->GetCollationOid("C"));
   EXPECT_EQ(collation_oid, C_COLLATION_OID);
 }
@@ -93,17 +93,17 @@ TEST(BootStrapCatalog, FailedGetCollationOid) {
 }
 
 TEST(BootstrapCatalog, GetNamespaceRoundtrip) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       const Oid namespace_oid,
       PgBootstrapCatalog::Default()->GetNamespaceOid("pg_catalog"));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       const char* namespace_name,
       PgBootstrapCatalog::Default()->GetNamespaceName(namespace_oid));
   EXPECT_STREQ(namespace_name, "pg_catalog");
 }
 
 TEST(BootstrapCatalog, GetTypeBool) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const FormData_pg_type* data,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const FormData_pg_type* data,
                        PgBootstrapCatalog::Default()->GetType(BOOLOID));
 
   ASSERT_NE(data, nullptr);
@@ -111,21 +111,21 @@ TEST(BootstrapCatalog, GetTypeBool) {
 }
 
 TEST_F(BootstrapCatalogWithShimsTest, GetTypeNameBool) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const char* type_name,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const char* type_name,
                        PgBootstrapCatalog::Default()->GetTypeName(BOOLOID));
   EXPECT_STREQ(type_name, "bool");
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       const char* formatted_type_name,
       PgBootstrapCatalog::Default()->GetFormattedTypeName(BOOLOID));
   EXPECT_STREQ(formatted_type_name, "boolean");
 }
 
 TEST_F(BootstrapCatalogWithShimsTest, GetTypeNameArray) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       const char* type_name,
       PgBootstrapCatalog::Default()->GetTypeName(TEXTARRAYOID));
   EXPECT_STREQ(type_name, "_text");
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       const char* formatted_type_name,
       PgBootstrapCatalog::Default()->GetFormattedTypeName(TEXTARRAYOID));
   EXPECT_STREQ(formatted_type_name, "text[]");
@@ -137,7 +137,7 @@ TEST(BootstrapCatalog, GetTypeNameUnknown) {
 }
 
 TEST(BootstrapCatalog, GetTypesByNameBool) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Span<const FormData_pg_type* const> type_list,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Span<const FormData_pg_type* const> type_list,
                        PgBootstrapCatalog::Default()->GetTypesByName("bool"));
   EXPECT_EQ(type_list.size(), 1);
   EXPECT_EQ(type_list.data()[0]->oid, BOOLOID);
@@ -150,7 +150,7 @@ TEST(BootstrapCatalog, GetTypesByNameUnknown) {
 
 TEST(BootstrapCatalog, GetProcInt8Sum) {
   const Oid sum_oid = 1842;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const FormData_pg_proc* data,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const FormData_pg_proc* data,
                        PgBootstrapCatalog::Default()->GetProc(sum_oid));
 
   ASSERT_NE(data, nullptr);
@@ -159,12 +159,12 @@ TEST(BootstrapCatalog, GetProcInt8Sum) {
 
 TEST(BootstrapCatalog, GetProcProtoInt8Sum) {
   const Oid sum_oid = 1842;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const PgProcData* proc_proto,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const PgProcData* proc_proto,
                        PgBootstrapCatalog::Default()->GetProcProto(sum_oid));
   ASSERT_NE(proc_proto, nullptr);
   EXPECT_EQ(proc_proto->oid(), sum_oid);
   EXPECT_EQ(proc_proto->proname(), "int8_sum");
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const FormData_pg_proc* data,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const FormData_pg_proc* data,
                        PgBootstrapCatalog::Default()->GetProc(sum_oid));
 
   // Check that the data in the proto matches the data in the struct.
@@ -194,31 +194,31 @@ TEST(BootstrapCatalog, GetProcProtoInt8Sum) {
 }
 
 TEST(BootstrapCatalog, GetProcOidInt8Sum) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<Oid> int8_sum_oid, GetProcOids("int8_sum"));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<Oid> int8_sum_oid, GetProcOids("int8_sum"));
   EXPECT_THAT(int8_sum_oid, ElementsAre(1842));
 }
 
 TEST(BootstrapCatalog, SpannerCompactAllProc) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Oid compact_all_oid,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Oid compact_all_oid,
                        PgBootstrapCatalog::Default()->GetProcOid(
                            "spanner", "compact_all", {}));
   EXPECT_EQ(compact_all_oid, 50077);
 }
 
 TEST(BootstrapCatalog, GetProcOidsLog) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<Oid> log_oids, GetProcOids("log"));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<Oid> log_oids, GetProcOids("log"));
   EXPECT_THAT(log_oids, ElementsAre(1340, 1736, 1741));
 }
 
 TEST(BootstrapCatalog, GetProcProtoSubstring) {
   const Oid substring_oid = 936;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       const PgProcData* proc_proto,
       PgBootstrapCatalog::Default()->GetProcProto(substring_oid));
   ASSERT_NE(proc_proto, nullptr);
   EXPECT_EQ(proc_proto->oid(), substring_oid);
   EXPECT_EQ(proc_proto->proname(), "substring");
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const FormData_pg_proc* data,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const FormData_pg_proc* data,
                        PgBootstrapCatalog::Default()->GetProc(substring_oid));
 
   // Check that the signature was modified.
@@ -254,7 +254,7 @@ TEST(BootstrapCatalog, GetProcProtoSubstring) {
 
 TEST(BootstrapCatalog, GetProcOidSubstring) {
   std::vector<Oid> argument_types{TEXTOID, INT8OID, INT8OID};
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Oid substring_oid,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Oid substring_oid,
                        PgBootstrapCatalog::Default()->GetProcOid(
                            "pg_catalog", "substring", argument_types));
   EXPECT_EQ(substring_oid, 936);
@@ -282,7 +282,7 @@ TEST_F(BootstrapCatalogWithShimsTest, GetProcOidInvalidNamespace) {
 }
 
 TEST(BootstrapCatalog, GetCastInt4ToInt8) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       const FormData_pg_cast* int4_to_int8,
       PgBootstrapCatalog::Default()->GetCast(INT4OID, INT8OID));
 
@@ -294,7 +294,7 @@ TEST(BootstrapCatalog, GetCastInt4ToInt8) {
 }
 
 TEST(BootstrapCatalog, GetCastFloat8ToFloat4) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       const FormData_pg_cast* float8_to_float4,
       PgBootstrapCatalog::Default()->GetCast(FLOAT8OID, FLOAT4OID));
 
@@ -306,7 +306,7 @@ TEST(BootstrapCatalog, GetCastFloat8ToFloat4) {
 }
 
 TEST(BootstrapCatalog, GetCastByFunctionOidInt4ToInt8) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       const FormData_pg_cast* int4_to_int8,
       PgBootstrapCatalog::Default()->GetCastByFunctionOid(481));
   ASSERT_NE(int4_to_int8, nullptr);
@@ -316,7 +316,7 @@ TEST(BootstrapCatalog, GetCastByFunctionOidInt4ToInt8) {
 
 TEST(BootstrapCatalog, GetCastByFunctionOidNotFound) {
   EXPECT_THAT(PgBootstrapCatalog::Default()->GetCastByFunctionOid(0),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST(BootstrapCatalog, GetOperatorEquals) {
@@ -327,11 +327,11 @@ TEST(BootstrapCatalog, GetOperatorEquals) {
   constexpr Oid equals_oid = 96;
 
   // Get the Oid of the proc named "int4eq" for comparison below.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<Oid> proc_oid_list, GetProcOids("int4eq"));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<Oid> proc_oid_list, GetProcOids("int4eq"));
   ASSERT_EQ(proc_oid_list.size(), 1);
   const Oid equals_proc_oid = proc_oid_list[0];
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const FormData_pg_operator* equals_data,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const FormData_pg_operator* equals_data,
                        PgBootstrapCatalog::Default()->GetOperator(equals_oid));
 
   ASSERT_NE(equals_data, nullptr);
@@ -353,11 +353,11 @@ TEST(BootstrapCatalog, GetOperatorNegation) {
   constexpr Oid negation_oid = 484;
 
   // Get the Oid of the proc named "int8um" for comparison below.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<Oid> proc_oid_list, GetProcOids("int8um"));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<Oid> proc_oid_list, GetProcOids("int8um"));
   ASSERT_EQ(proc_oid_list.size(), 1);
   const Oid negation_proc_oid = proc_oid_list[0];
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       const FormData_pg_operator* negation_data,
       PgBootstrapCatalog::Default()->GetOperator(negation_oid));
 
@@ -374,13 +374,13 @@ TEST(BootstrapCatalog, GetOperatorNegation) {
 }
 
 TEST(BootstrapCatalog, GetOperatorOidsPercent) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Span<const Oid> percent_oids,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Span<const Oid> percent_oids,
                        PgBootstrapCatalog::Default()->GetOperatorOids("%"));
   EXPECT_THAT(percent_oids, UnorderedElementsAre(439, 529, 530, 1762));
 }
 
 TEST(BootstrapCatalog, GetOperatorOidsEquals) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Span<const Oid> equals_oids,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Span<const Oid> equals_oids,
                        PgBootstrapCatalog::Default()->GetOperatorOids("="));
   // There are lots of equals oids. Just check count and a few examples.
   EXPECT_THAT(equals_oids, SizeIs(63));
@@ -389,10 +389,10 @@ TEST(BootstrapCatalog, GetOperatorOidsEquals) {
 
 TEST(BootstrapCatalog, GetOperatorOidsBoxOverlap) {
   // Get the "&&" operator for box_overlap.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const FormData_pg_operator* box_overlap_new,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const FormData_pg_operator* box_overlap_new,
                        PgBootstrapCatalog::Default()->GetOperator(500));
   // Get the "?#" operator for box_overlap.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const FormData_pg_operator* box_overlap_old,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const FormData_pg_operator* box_overlap_old,
                        PgBootstrapCatalog::Default()->GetOperator(802));
 
   // The oprcode for both operators should be the function oid for box_overlap.
@@ -400,7 +400,7 @@ TEST(BootstrapCatalog, GetOperatorOidsBoxOverlap) {
   EXPECT_EQ(box_overlap_old->oprcode, 125);
 
   // Check that the reverse lookup from oprcode to operator oid finds both oids.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       absl::Span<const Oid> box_overlap_oids_new,
       PgBootstrapCatalog::Default()->GetOperatorOidsByOprcode(125));
   EXPECT_THAT(box_overlap_oids_new, UnorderedElementsAre(500, 802));
@@ -409,7 +409,7 @@ TEST(BootstrapCatalog, GetOperatorOidsBoxOverlap) {
 // Test verifies that the expected operator is returned when INT8OIDs are both
 // the left and right values.
 TEST(BootstrapCatalog, GetOperatorOidByOprLeftRightEqualsInt) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       const Oid matching_oid,
       PgBootstrapCatalog::Default()->GetOperatorOidByOprLeftRight("=", INT8OID,
                                                                   INT8OID));
@@ -419,7 +419,7 @@ TEST(BootstrapCatalog, GetOperatorOidByOprLeftRightEqualsInt) {
 // Test verifies that the exper expected operator is returned when BOXOIF and
 // POINTOID are the left and right values.
 TEST(BootstrapCatalog, GetOperatorOidByOprLeftRightBoxAdd) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       const Oid matching_oid,
       PgBootstrapCatalog::Default()->GetOperatorOidByOprLeftRight("+", BOXOID,
                                                                   POINTOID));
@@ -433,7 +433,7 @@ TEST(BootstrapCatalog, GetAggregateSum) {
   // database entry.
   constexpr Oid int4_sum_oid = 2108;
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       const FormData_pg_aggregate* agg_data,
       PgBootstrapCatalog::Default()->GetAggregate(int4_sum_oid));
 
@@ -456,7 +456,7 @@ TEST(BootstrapCatalog, GetAggregateFailure) {
 TEST(BootstrapCatalog, Int8TypByVal) {
   // The value of 'typbyval' for INT8 is set by a constant rather than a
   // literal.  Verify that gen_catalog_info.pl passes it through correctly.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const FormData_pg_type* form_data,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const FormData_pg_type* form_data,
                        PgBootstrapCatalog::Default()->GetType(INT8OID));
   EXPECT_TRUE(form_data->typbyval);
 }
@@ -474,13 +474,13 @@ TEST(BootstrapCatalog, PrunedInt4Functions) {
 }
 
 TEST(BootstrapCatalog, OpClassByAccessMethod) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       absl::Span<const Oid> btree_opclasses,
       PgBootstrapCatalog::Default()->GetOpclassesByAm(BTREE_AM_OID));
 
   ASSERT_GT(btree_opclasses.length(), 0);
   for (const Oid& opclass_id : btree_opclasses) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(const FormData_pg_opclass* opclass,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(const FormData_pg_opclass* opclass,
                          PgBootstrapCatalog::Default()->GetOpclass(opclass_id));
     EXPECT_EQ(opclass->opcmethod, BTREE_AM_OID);
   }
@@ -488,13 +488,13 @@ TEST(BootstrapCatalog, OpClassByAccessMethod) {
 
 TEST(BootstrapCatalog, AmopByFamily) {
   // Get a sample opfamily.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       const FormData_pg_opclass* int8_opclass,
       PgBootstrapCatalog::Default()->GetOpclass(INT8_BTREE_OPS_OID));
   ASSERT_NE(int8_opclass, nullptr);
   Oid int8_opfamily = int8_opclass->opcfamily;
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const FormData_pg_amop* amop,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const FormData_pg_amop* amop,
                        PgBootstrapCatalog::Default()->GetAmopByFamily(
                            int8_opfamily,
                            /*lefttype =*/INT8OID,
@@ -514,12 +514,12 @@ TEST(BootstrapCatalog, AmopByFamily) {
 
 TEST(BootstrapCatalog, AmopsByOprOid) {
   // Get a sample operator oid.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       const Oid int8_eq_oid,
       PgBootstrapCatalog::Default()->GetOperatorOidByOprLeftRight(
           "=", INT8OID, INT8OID));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       absl::Span<const FormData_pg_amop* const> amops,
       PgBootstrapCatalog::Default()->GetAmopsByAmopOpId(int8_eq_oid));
 
@@ -529,13 +529,13 @@ TEST(BootstrapCatalog, AmopsByOprOid) {
 
 TEST(BootstrapCatalog, AmprocByFamily) {
   // Get a sample opfamily.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       const FormData_pg_opclass* int8_opclass,
       PgBootstrapCatalog::Default()->GetOpclass(INT8_BTREE_OPS_OID));
   ASSERT_NE(int8_opclass, nullptr);
   Oid int8_opfamily = int8_opclass->opcfamily;
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const FormData_pg_amproc* amproc,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const FormData_pg_amproc* amproc,
                        PgBootstrapCatalog::Default()->GetAmprocByFamily(
                            int8_opfamily,
                            /*lefttype =*/INT8OID,
@@ -548,17 +548,17 @@ TEST(BootstrapCatalog, AmprocByFamily) {
   EXPECT_EQ(amproc->amprocrighttype, INT8OID);
   EXPECT_EQ(amproc->amprocnum, BTORDER_PROC);
   // Find the expected function Oid.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<Oid> proc_oids, GetProcOids("btint8cmp"));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<Oid> proc_oids, GetProcOids("btint8cmp"));
   ASSERT_EQ(proc_oids.size(), 1);
   EXPECT_EQ(amproc->amproc, proc_oids[0]);
 }
 
 TEST(BootstrapCatalog, SpannerPendingCommitTimestampProc) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       Oid namespace_oid,
       PgBootstrapCatalog::Default()->GetNamespaceOid("spanner"));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Span<const FormData_pg_proc* const> procs,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Span<const FormData_pg_proc* const> procs,
                        PgBootstrapCatalog::Default()->GetProcsByName(
                            "pending_commit_timestamp"));
 
@@ -567,11 +567,11 @@ TEST(BootstrapCatalog, SpannerPendingCommitTimestampProc) {
 }
 
 TEST(BootstrapCatalog, SpannerBitReverseProc) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       Oid namespace_oid,
       PgBootstrapCatalog::Default()->GetNamespaceOid("spanner"));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       absl::Span<const FormData_pg_proc* const> procs,
       PgBootstrapCatalog::Default()->GetProcsByName("bit_reverse"));
 
@@ -581,11 +581,11 @@ TEST(BootstrapCatalog, SpannerBitReverseProc) {
 }
 
 TEST(BootstrapCatalog, SpannerFarmFingerprintProc) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       Oid namespace_oid,
       PgBootstrapCatalog::Default()->GetNamespaceOid("spanner"));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       absl::Span<const FormData_pg_proc* const> procs,
       PgBootstrapCatalog::Default()->GetProcsByName("farm_fingerprint"));
 
@@ -597,11 +597,11 @@ TEST(BootstrapCatalog, SpannerFarmFingerprintProc) {
 }
 
 TEST(BootstrapCatalog, SpannerGetInternalSequenceStateProc) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       Oid namespace_oid,
       PgBootstrapCatalog::Default()->GetNamespaceOid("spanner"));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       absl::Span<const FormData_pg_proc* const> procs,
       PgBootstrapCatalog::Default()->GetProcsByName(
           "get_internal_sequence_state"));
@@ -612,11 +612,11 @@ TEST(BootstrapCatalog, SpannerGetInternalSequenceStateProc) {
 }
 
 TEST(BootstrapCatalog, SpannerGetTableColumnIdentityStateProc) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       Oid namespace_oid,
       PgBootstrapCatalog::Default()->GetNamespaceOid("spanner"));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Span<const FormData_pg_proc* const> procs,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Span<const FormData_pg_proc* const> procs,
                        PgBootstrapCatalog::Default()->GetProcsByName(
                            "get_table_column_identity_state"));
 
@@ -626,11 +626,11 @@ TEST(BootstrapCatalog, SpannerGetTableColumnIdentityStateProc) {
 }
 
 TEST(BootstrapCatalog, SpannerGenerateUuidProc) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       Oid namespace_oid,
       PgBootstrapCatalog::Default()->GetNamespaceOid("spanner"));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       absl::Span<const FormData_pg_proc* const> procs,
       PgBootstrapCatalog::Default()->GetProcsByName("generate_uuid"));
 
@@ -641,7 +641,7 @@ TEST(BootstrapCatalog, SpannerGenerateUuidProc) {
 
 TEST(BootstrapCatalog, TimestampFromUnixMicrosProc) {
   for (Oid input_arg : {INT8OID, TIMESTAMPTZOID}) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         Oid function_oid,
         PgBootstrapCatalog::Default()->GetProcOid(
             "spanner", "timestamp_from_unix_micros", {input_arg}));
@@ -651,7 +651,7 @@ TEST(BootstrapCatalog, TimestampFromUnixMicrosProc) {
 
 TEST(BootstrapCatalog, TimestampFromUnixMillisProc) {
   for (Oid input_arg : {INT8OID, TIMESTAMPTZOID}) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         Oid function_oid,
         PgBootstrapCatalog::Default()->GetProcOid(
             "spanner", "timestamp_from_unix_millis", {input_arg}));
@@ -660,7 +660,7 @@ TEST(BootstrapCatalog, TimestampFromUnixMillisProc) {
 }
 
 TEST(BootstrapCatalog, GetLanguageByName) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const FormData_pg_language* language,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const FormData_pg_language* language,
                        PgBootstrapCatalog::Default()->GetLanguageByName("sql"));
   EXPECT_EQ(language->oid, SQLlanguageId);
 }
@@ -671,10 +671,10 @@ TEST(BootstrapCatalog, FailedGetLanguageByName) {
 }
 
 TEST(BootstrapCatalog, SpannerDateProc) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       Oid namespace_oid,
       PgBootstrapCatalog::Default()->GetNamespaceOid("spanner"));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Span<const FormData_pg_proc* const> procs,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Span<const FormData_pg_proc* const> procs,
                        PgBootstrapCatalog::Default()->GetProcsByName(
                            "date"));
   // `procs` also contains `date(timestamp)` and `date(timestamptz)` from PG so

@@ -22,7 +22,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
@@ -50,7 +50,7 @@ using cloud::spanner::JsonB;
 using cloud::spanner::MakePgNumeric;
 using cloud::spanner::PgNumeric;
 using postgres_translator::spangres::datatypes::common::MaxNumericString;
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 class QueryTest
     : public DatabaseTest,
@@ -76,7 +76,7 @@ class QueryTest
  protected:
   void PopulateScalarTypesTable() {
     if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-      ZETASQL_EXPECT_OK(MultiInsert(
+      GOOGLESQL_EXPECT_OK(MultiInsert(
           "scalar_types_table",
           {"int_val", "bool_val", "bytes_val", "date_val", "float_val",
            "string_val", "numeric_val", "timestamp_val", "json_val"},
@@ -86,7 +86,7 @@ class QueryTest
            {1, true, Bytes("bytes"), Date(2020, 12, 1), 345.123, "stringValue",
             *MakePgNumeric("1.23"), Timestamp(), JsonB(R"({"key": 123})")}}));
     } else {
-      ZETASQL_EXPECT_OK(MultiInsert(
+      GOOGLESQL_EXPECT_OK(MultiInsert(
           "scalar_types_table",
           {"int_val", "bool_val", "bytes_val", "date_val", "float_val",
            "string_val", "numeric_val", "timestamp_val", "json_val"},
@@ -100,12 +100,12 @@ class QueryTest
   }
 
   void PopulateDatabase() {
-    ZETASQL_EXPECT_OK(MultiInsert("users", {"user_id", "name", "age"},
+    GOOGLESQL_EXPECT_OK(MultiInsert("users", {"user_id", "name", "age"},
                           {{1, "Douglas Adams", 49},
                            {2, "Suzanne Collins", 61},
                            {3, "J.R.R. Tolkien", 81}}));
 
-    ZETASQL_EXPECT_OK(MultiInsert("threads", {"user_id", "thread_id", "starred"},
+    GOOGLESQL_EXPECT_OK(MultiInsert("threads", {"user_id", "thread_id", "starred"},
                           {{1, 1, true},
                            {1, 2, true},
                            {1, 3, true},
@@ -114,7 +114,7 @@ class QueryTest
                            {2, 2, true},
                            {3, 1, false}}));
 
-    ZETASQL_EXPECT_OK(MultiInsert("messages",
+    GOOGLESQL_EXPECT_OK(MultiInsert("messages",
                           {"user_id", "thread_id", "message_id", "subject"},
                           {{1, 1, 1, "a code review"},
                            {1, 1, 2, "Re: a code review"},
@@ -128,19 +128,19 @@ class QueryTest
     PopulateScalarTypesTable();
 
     if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
-      ZETASQL_EXPECT_OK(MultiInsert("numeric_table", {"key", "val"},
+      GOOGLESQL_EXPECT_OK(MultiInsert("numeric_table", {"key", "val"},
                             {{-2, Null<PgNumeric>()},
                              {-1, *MakePgNumeric("-12.3")},
                              {0, *MakePgNumeric("0")},
                              {1, *MakePgNumeric("12.3")}}));
     } else {
-      ZETASQL_EXPECT_OK(
+      GOOGLESQL_EXPECT_OK(
           MultiInsert("numeric_table", {"key", "val"},
                       {{Null<Numeric>(), Null<std::int64_t>()},
                        {cloud::spanner::MakeNumeric("-12.3").value(), -1},
                        {cloud::spanner::MakeNumeric("0").value(), 0},
                        {cloud::spanner::MakeNumeric("12.3").value(), 1}}));
-      ZETASQL_ASSERT_OK(MultiInsert("array_table", {"key", "string_array"},
+      GOOGLESQL_ASSERT_OK(MultiInsert("array_table", {"key", "string_array"},
                             {{1, Array<std::string>{"test1"}},
                              {2, Array<std::string>{"not_applicable"}},
                              {3, Array<std::string>{"test2"}}}));
@@ -394,6 +394,13 @@ TEST_P(QueryTest, JSONFunctions) {
     )"),
                 StatusIs(absl::StatusCode::kOutOfRange));
 
+    PopulateDatabase();
+
+    EXPECT_THAT(Query(R"(
+      GRAPH test_graph MATCH (n) WHERE n.user_id = 1 RETURN JSON_VALUE(SAFE_TO_JSON(n), '$.properties.name') AS name
+    )"),
+                IsOkAndHoldsRow({"Douglas Adams"}));
+
     EXPECT_THAT(Query(R"(SELECT TO_JSON_STRING(JSON '{"a":"str", "b":2}'))"),
                 IsOkAndHoldsRow({R"({"a":"str","b":2})"}));
     EXPECT_THAT(
@@ -530,7 +537,7 @@ TEST_P(QueryTest, NETFunctions) {
                               NET.HOST("A"),
                               NET.PUBLIC_SUFFIX("B"),
                               NET.REG_DOMAIN("C"))"),
-              zetasql_base::testing::IsOk());
+              googlesql_base::testing::IsOk());
 }
 
 TEST_P(QueryTest, CanReturnArrayOfStructTypedColumns) {
@@ -862,6 +869,120 @@ TEST_P(QueryTest, UnnestWithOrdinalityOrOffset) {
                       "offset as offset_col order by offset_col"),
                 IsOkAndHoldsRows({{10, 0}, {20, 1}}));
   }
+}
+
+TEST_P(QueryTest, UnnestArrayColumnWithOrdinality) {
+  if (GetParam() != database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  PopulateDatabase();
+
+  GOOGLESQL_EXPECT_OK(MultiInsert("EntityWithArrays", {"id", "the_array"},
+                        {{2, Array<std::string>{"abc", "def", "ghi"}}}));
+
+  EXPECT_THAT(
+      Query("SELECT ewa1_0.id, a1_0.ordinality, a1_0.a1_0 "
+            "FROM EntityWithArrays ewa1_0 "
+            "JOIN UNNEST(ewa1_0.the_array) WITH ORDINALITY a1_0 ON true "
+            "ORDER BY ewa1_0.id, a1_0.ordinality"),
+      IsOkAndHoldsRows({{2, 1, "abc"}, {2, 2, "def"}, {2, 3, "ghi"}}));
+}
+
+TEST_P(QueryTest, UnnestArrayColumnWithOrdinality_Filter) {
+  if (GetParam() != database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  PopulateDatabase();
+
+  GOOGLESQL_EXPECT_OK(MultiInsert("EntityWithArrays", {"id", "the_array"},
+                        {{2, Array<std::string>{"abc", "def", "ghi"}}}));
+
+  EXPECT_THAT(
+      Query("SELECT ewa1_0.id, a1_0.ordinality, a1_0.a1_0 "
+            "FROM EntityWithArrays ewa1_0 "
+            "JOIN UNNEST(ewa1_0.the_array) WITH ORDINALITY a1_0 ON true "
+            "WHERE a1_0.ordinality > 1 "
+            "ORDER BY ewa1_0.id, a1_0.ordinality"),
+      IsOkAndHoldsRows({{2, 2, "def"}, {2, 3, "ghi"}}));
+}
+
+TEST_P(QueryTest, UnnestArrayColumnWithOrdinality_EmptyAndNull) {
+  if (GetParam() != database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  PopulateDatabase();
+
+  GOOGLESQL_EXPECT_OK(MultiInsert("EntityWithArrays", {"id", "the_array"},
+                        {{1, Array<std::string>{}},           // Empty array
+                         {2, Null<Array<std::string>>()}}));  // NULL array
+
+  // UNNEST of empty or NULL array should return 0 rows
+  EXPECT_THAT(
+      Query("SELECT ewa1_0.id, a1_0.ordinality, a1_0.a1_0 "
+            "FROM EntityWithArrays ewa1_0 "
+            "JOIN UNNEST(ewa1_0.the_array) WITH ORDINALITY a1_0 ON true "
+            "ORDER BY ewa1_0.id, a1_0.ordinality"),
+      IsOkAndHoldsRows({}));
+}
+
+TEST_P(QueryTest, UnnestArrayColumnWithOrdinality_Join) {
+  if (GetParam() != database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  PopulateDatabase();
+
+  GOOGLESQL_EXPECT_OK(MultiInsert(
+      "EntityWithArrays", {"id", "the_array"},
+      {{2, Array<std::string>{"Douglas Adams", "Suzanne Collins"}}}));
+
+  // Join unnested array values with users table on name
+  EXPECT_THAT(
+      Query("SELECT ewa1_0.id, a1_0.ordinality, u.user_id "
+            "FROM EntityWithArrays ewa1_0 "
+            "JOIN UNNEST(ewa1_0.the_array) WITH ORDINALITY a1_0 ON true "
+            "JOIN users u ON a1_0.a1_0 = u.name "
+            "ORDER BY ewa1_0.id, a1_0.ordinality"),
+      IsOkAndHoldsRows({{2, 1, 1}, {2, 2, 2}}));
+}
+
+TEST_P(QueryTest, UnnestArrayColumnWithOrdinality_CommaJoin) {
+  if (GetParam() != database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  PopulateDatabase();
+
+  GOOGLESQL_EXPECT_OK(MultiInsert("EntityWithArrays", {"id", "the_array"},
+                        {{2, Array<std::string>{"abc", "def"}}}));
+
+  // Comma join (Cross Join)
+  EXPECT_THAT(Query("SELECT ewa1_0.id, a1_0.ordinality, a1_0.a1_0 "
+                    "FROM EntityWithArrays ewa1_0, "
+                    "UNNEST(ewa1_0.the_array) WITH ORDINALITY a1_0 "
+                    "ORDER BY ewa1_0.id, a1_0.ordinality"),
+              IsOkAndHoldsRows({{2, 1, "abc"}, {2, 2, "def"}}));
+}
+
+TEST_P(QueryTest, UnnestArrayColumnWithOrdinality_LeftJoin) {
+  if (GetParam() != database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  PopulateDatabase();
+
+  GOOGLESQL_EXPECT_OK(MultiInsert("EntityWithArrays", {"id", "the_array"},
+                        {{1, Array<std::string>{}},        // Empty array
+                         {2, Null<Array<std::string>>()},  // NULL array
+                         {3, Array<std::string>{"xyz"}}}));
+
+  // LEFT JOIN should preserve rows with empty/NULL arrays, returning NULLs for
+  // unnested columns
+  EXPECT_THAT(
+      Query("SELECT ewa1_0.id, a1_0.ordinality, a1_0.a1_0 "
+            "FROM EntityWithArrays ewa1_0 "
+            "LEFT JOIN UNNEST(ewa1_0.the_array) WITH ORDINALITY a1_0 ON true "
+            "ORDER BY ewa1_0.id, a1_0.ordinality"),
+      IsOkAndHoldsRows({{1, Null<int64_t>(), Null<std::string>()},
+                        {2, Null<int64_t>(), Null<std::string>()},
+                        {3, 1, "xyz"}}));
 }
 
 TEST_P(QueryTest, UnnestWithOrdinality) {

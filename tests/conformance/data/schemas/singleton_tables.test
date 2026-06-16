@@ -1,0 +1,5 @@
+@Dialect=GOOGLE_STANDARD_SQL
+CREATE TABLE Singleton(
+  col1 STRING(MAX),
+  col2 STRING(MAX)
+) PRIMARY KEY ();

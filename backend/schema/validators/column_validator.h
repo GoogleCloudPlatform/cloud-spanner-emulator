@@ -36,9 +36,9 @@ class ColumnValidator {
                                      const Column* old_column,
                                      SchemaValidationContext* context);
   static absl::Status ValidateTypeExistsInProtoBundle(
-      const zetasql::Type* type, const ProtoBundle* proto_bundle,
+      const googlesql::Type* type, const ProtoBundle* proto_bundle,
       const std::string& column_name);
-  static bool TypeExistsInProtoBundle(const zetasql::Type* type,
+  static bool TypeExistsInProtoBundle(const googlesql::Type* type,
                                       const ProtoBundle* proto_bundle);
 };
 

@@ -3,7 +3,7 @@
  * fe-exec.c
  *	  functions related to sending a query down to the backend
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -508,7 +508,7 @@ PQsetvalue(PGresult *res, int tup_num, int field_num, char *value, int len)
 	}
 	else
 	{
-		attval->value = (char *) pqResultAlloc(res, len + 1, true);
+		attval->value = (char *) pqResultAlloc(res, (size_t) len + 1, true);
 		if (!attval->value)
 			goto fail;
 		attval->len = len;
@@ -600,8 +600,13 @@ pqResultAlloc(PGresult *res, size_t nBytes, bool isBinary)
 	 */
 	if (nBytes >= PGRESULT_SEP_ALLOC_THRESHOLD)
 	{
-		size_t		alloc_size = nBytes + PGRESULT_BLOCK_OVERHEAD;
+		size_t		alloc_size;
 
+		/* Don't wrap around with overly large requests. */
+		if (nBytes > SIZE_MAX - PGRESULT_BLOCK_OVERHEAD)
+			return NULL;
+
+		alloc_size = nBytes + PGRESULT_BLOCK_OVERHEAD;
 		block = (PGresult_data *) malloc(alloc_size);
 		if (!block)
 			return NULL;
@@ -742,8 +747,7 @@ PQclear(PGresult *res)
 		free(res->events[i].name);
 	}
 
-	if (res->events)
-		free(res->events);
+	free(res->events);
 
 	/* Free all the subsidiary blocks */
 	while ((block = res->curBlock) != NULL)
@@ -753,8 +757,7 @@ PQclear(PGresult *res)
 	}
 
 	/* Free the top-level tuple pointer array */
-	if (res->tuples)
-		free(res->tuples);
+	free(res->tuples);
 
 	/* zero out the pointer fields to catch programming errors */
 	res->attDescs = NULL;
@@ -777,12 +780,10 @@ PQclear(PGresult *res)
 void
 pqClearAsyncResult(PGconn *conn)
 {
-	if (conn->result)
-		PQclear(conn->result);
+	PQclear(conn->result);
 	conn->result = NULL;
 	conn->error_result = false;
-	if (conn->next_result)
-		PQclear(conn->next_result);
+	PQclear(conn->next_result);
 	conn->next_result = NULL;
 }
 
@@ -832,8 +833,7 @@ pqSaveWriteError(PGconn *conn)
 		conn->write_err_msg[0] = '\0';
 	}
 	else
-		appendPQExpBufferStr(&conn->errorMessage,
-							 libpq_gettext("write to server failed\n"));
+		libpq_append_conn_error(conn, "write to server failed");
 
 	pqSaveErrorResult(conn);
 }
@@ -873,8 +873,7 @@ pqPrepareAsyncResult(PGconn *conn)
 		 * text.
 		 */
 		if (!conn->error_result)
-			appendPQExpBufferStr(&conn->errorMessage,
-								 libpq_gettext("no error text available\n"));
+			libpq_append_conn_error(conn, "no error text available");
 
 		/* Paranoia: be sure errorReported offset is sane */
 		if (conn->errorReported < 0 ||
@@ -1189,6 +1188,10 @@ pqSaveParameterStatus(PGconn *conn, const char *name, const char *value)
 		conn->in_hot_standby =
 			(strcmp(value, "on") == 0) ? PG_BOOL_YES : PG_BOOL_NO;
 	}
+	else if (strcmp(name, "scram_iterations") == 0)
+	{
+		conn->scram_sha_256_iterations = atoi(value);
+	}
 }
 
 
@@ -1259,7 +1262,7 @@ pqRowProcessor(PGconn *conn, const char **errmsgp)
 			bool		isbinary = (res->attDescs[i].format != 0);
 			char	   *val;
 
-			val = (char *) pqResultAlloc(res, clen + 1, isbinary);
+			val = (char *) pqResultAlloc(res, (size_t) clen + 1, isbinary);
 			if (val == NULL)
 				goto fail;
 
@@ -1322,8 +1325,7 @@ pqAllocCmdQueueEntry(PGconn *conn)
 		entry = (PGcmdQueueEntry *) malloc(sizeof(PGcmdQueueEntry));
 		if (entry == NULL)
 		{
-			appendPQExpBufferStr(&conn->errorMessage,
-								 libpq_gettext("out of memory\n"));
+			libpq_append_conn_error(conn, "out of memory");
 			return NULL;
 		}
 	}
@@ -1446,16 +1448,14 @@ PQsendQueryInternal(PGconn *conn, const char *query, bool newQuery)
 	/* check the argument */
 	if (!query)
 	{
-		appendPQExpBufferStr(&conn->errorMessage,
-							 libpq_gettext("command string is a null pointer\n"));
+		libpq_append_conn_error(conn, "command string is a null pointer");
 		return 0;
 	}
 
 	if (conn->pipelineStatus != PQ_PIPELINE_OFF)
 	{
-		appendPQExpBuffer(&conn->errorMessage,
-						  libpq_gettext("%s not allowed in pipeline mode\n"),
-						  "PQsendQuery");
+		libpq_append_conn_error(conn, "%s not allowed in pipeline mode",
+								"PQsendQuery");
 		return 0;
 	}
 
@@ -1517,15 +1517,13 @@ PQsendQueryParams(PGconn *conn,
 	/* check the arguments */
 	if (!command)
 	{
-		appendPQExpBufferStr(&conn->errorMessage,
-							 libpq_gettext("command string is a null pointer\n"));
+		libpq_append_conn_error(conn, "command string is a null pointer");
 		return 0;
 	}
 	if (nParams < 0 || nParams > PQ_QUERY_PARAM_MAX_LIMIT)
 	{
-		appendPQExpBuffer(&conn->errorMessage,
-						  libpq_gettext("number of parameters must be between 0 and %d\n"),
-						  PQ_QUERY_PARAM_MAX_LIMIT);
+		libpq_append_conn_error(conn, "number of parameters must be between 0 and %d",
+								PQ_QUERY_PARAM_MAX_LIMIT);
 		return 0;
 	}
 
@@ -1560,21 +1558,18 @@ PQsendPrepare(PGconn *conn,
 	/* check the arguments */
 	if (!stmtName)
 	{
-		appendPQExpBufferStr(&conn->errorMessage,
-							 libpq_gettext("statement name is a null pointer\n"));
+		libpq_append_conn_error(conn, "statement name is a null pointer");
 		return 0;
 	}
 	if (!query)
 	{
-		appendPQExpBufferStr(&conn->errorMessage,
-							 libpq_gettext("command string is a null pointer\n"));
+		libpq_append_conn_error(conn, "command string is a null pointer");
 		return 0;
 	}
 	if (nParams < 0 || nParams > PQ_QUERY_PARAM_MAX_LIMIT)
 	{
-		appendPQExpBuffer(&conn->errorMessage,
-						  libpq_gettext("number of parameters must be between 0 and %d\n"),
-						  PQ_QUERY_PARAM_MAX_LIMIT);
+		libpq_append_conn_error(conn, "number of parameters must be between 0 and %d",
+								PQ_QUERY_PARAM_MAX_LIMIT);
 		return 0;
 	}
 
@@ -1662,15 +1657,13 @@ PQsendQueryPrepared(PGconn *conn,
 	/* check the arguments */
 	if (!stmtName)
 	{
-		appendPQExpBufferStr(&conn->errorMessage,
-							 libpq_gettext("statement name is a null pointer\n"));
+		libpq_append_conn_error(conn, "statement name is a null pointer");
 		return 0;
 	}
 	if (nParams < 0 || nParams > PQ_QUERY_PARAM_MAX_LIMIT)
 	{
-		appendPQExpBuffer(&conn->errorMessage,
-						  libpq_gettext("number of parameters must be between 0 and %d\n"),
-						  PQ_QUERY_PARAM_MAX_LIMIT);
+		libpq_append_conn_error(conn, "number of parameters must be between 0 and %d",
+								PQ_QUERY_PARAM_MAX_LIMIT);
 		return 0;
 	}
 
@@ -1706,8 +1699,7 @@ PQsendQueryStart(PGconn *conn, bool newQuery)
 	/* Don't try to send if we know there's no live connection. */
 	if (conn->status != CONNECTION_OK)
 	{
-		appendPQExpBufferStr(&conn->errorMessage,
-							 libpq_gettext("no connection to the server\n"));
+		libpq_append_conn_error(conn, "no connection to the server");
 		return false;
 	}
 
@@ -1715,8 +1707,7 @@ PQsendQueryStart(PGconn *conn, bool newQuery)
 	if (conn->asyncStatus != PGASYNC_IDLE &&
 		conn->pipelineStatus == PQ_PIPELINE_OFF)
 	{
-		appendPQExpBufferStr(&conn->errorMessage,
-							 libpq_gettext("another command is already in progress\n"));
+		libpq_append_conn_error(conn, "another command is already in progress");
 		return false;
 	}
 
@@ -1746,8 +1737,7 @@ PQsendQueryStart(PGconn *conn, bool newQuery)
 			case PGASYNC_COPY_IN:
 			case PGASYNC_COPY_OUT:
 			case PGASYNC_COPY_BOTH:
-				appendPQExpBufferStr(&conn->errorMessage,
-									 libpq_gettext("cannot queue commands during COPY\n"));
+				libpq_append_conn_error(conn, "cannot queue commands during COPY");
 				return false;
 		}
 	}
@@ -1864,8 +1854,7 @@ PQsendQueryGuts(PGconn *conn,
 					nbytes = paramLengths[i];
 				else
 				{
-					appendPQExpBufferStr(&conn->errorMessage,
-										 libpq_gettext("length must be given for binary parameter\n"));
+					libpq_append_conn_error(conn, "length must be given for binary parameter");
 					goto sendFailed;
 				}
 			}
@@ -2179,9 +2168,7 @@ PQgetResult(PGconn *conn)
 			res = getCopyResult(conn, PGRES_COPY_BOTH);
 			break;
 		default:
-			appendPQExpBuffer(&conn->errorMessage,
-							  libpq_gettext("unexpected asyncStatus: %d\n"),
-							  (int) conn->asyncStatus);
+			libpq_append_conn_error(conn, "unexpected asyncStatus: %d", (int) conn->asyncStatus);
 			pqSaveErrorResult(conn);
 			conn->asyncStatus = PGASYNC_IDLE;	/* try to restore valid state */
 			res = pqPrepareAsyncResult(conn);
@@ -2337,8 +2324,7 @@ PQexecStart(PGconn *conn)
 
 	if (conn->pipelineStatus != PQ_PIPELINE_OFF)
 	{
-		appendPQExpBufferStr(&conn->errorMessage,
-							 libpq_gettext("synchronous command execution functions are not allowed in pipeline mode\n"));
+		libpq_append_conn_error(conn, "synchronous command execution functions are not allowed in pipeline mode");
 		return false;
 	}
 
@@ -2371,8 +2357,7 @@ PQexecStart(PGconn *conn)
 		else if (resultStatus == PGRES_COPY_BOTH)
 		{
 			/* We don't allow PQexec during COPY BOTH */
-			appendPQExpBufferStr(&conn->errorMessage,
-								 libpq_gettext("PQexec not allowed during COPY BOTH\n"));
+			libpq_append_conn_error(conn, "PQexec not allowed during COPY BOTH");
 			return false;
 		}
 		/* check for loss of connection, too */
@@ -2407,8 +2392,7 @@ PQexecFinish(PGconn *conn)
 	lastResult = NULL;
 	while ((result = PQgetResult(conn)) != NULL)
 	{
-		if (lastResult)
-			PQclear(lastResult);
+		PQclear(lastResult);
 		lastResult = result;
 		if (result->resultStatus == PGRES_COPY_IN ||
 			result->resultStatus == PGRES_COPY_OUT ||
@@ -2599,8 +2583,7 @@ PQputCopyData(PGconn *conn, const char *buffer, int nbytes)
 	if (conn->asyncStatus != PGASYNC_COPY_IN &&
 		conn->asyncStatus != PGASYNC_COPY_BOTH)
 	{
-		appendPQExpBufferStr(&conn->errorMessage,
-							 libpq_gettext("no COPY in progress\n"));
+		libpq_append_conn_error(conn, "no COPY in progress");
 		return -1;
 	}
 
@@ -2655,8 +2638,7 @@ PQputCopyEnd(PGconn *conn, const char *errormsg)
 	if (conn->asyncStatus != PGASYNC_COPY_IN &&
 		conn->asyncStatus != PGASYNC_COPY_BOTH)
 	{
-		appendPQExpBufferStr(&conn->errorMessage,
-							 libpq_gettext("no COPY in progress\n"));
+		libpq_append_conn_error(conn, "no COPY in progress");
 		return -1;
 	}
 
@@ -2724,8 +2706,7 @@ PQgetCopyData(PGconn *conn, char **buffer, int async)
 	if (conn->asyncStatus != PGASYNC_COPY_OUT &&
 		conn->asyncStatus != PGASYNC_COPY_BOTH)
 	{
-		appendPQExpBufferStr(&conn->errorMessage,
-							 libpq_gettext("no COPY in progress\n"));
+		libpq_append_conn_error(conn, "no COPY in progress");
 		return -2;
 	}
 	return pqGetCopyData3(conn, buffer, async);
@@ -2735,12 +2716,12 @@ PQgetCopyData(PGconn *conn, char **buffer, int async)
  * PQgetline - gets a newline-terminated string from the backend.
  *
  * Chiefly here so that applications can use "COPY <rel> to stdout"
- * and read the output string.  Returns a null-terminated string in s.
+ * and read the output string.  Returns a null-terminated string in `buffer`.
  *
  * XXX this routine is now deprecated, because it can't handle binary data.
  * If called during a COPY BINARY we return EOF.
  *
- * PQgetline reads up to maxlen-1 characters (like fgets(3)) but strips
+ * PQgetline reads up to `length`-1 characters (like fgets(3)) but strips
  * the terminating \n (like gets(3)).
  *
  * CAUTION: the caller is responsible for detecting the end-of-copy signal
@@ -2751,23 +2732,23 @@ PQgetCopyData(PGconn *conn, char **buffer, int async)
  *		0 if EOL is reached (i.e., \n has been read)
  *				(this is required for backward-compatibility -- this
  *				 routine used to always return EOF or 0, assuming that
- *				 the line ended within maxlen bytes.)
+ *				 the line ended within `length` bytes.)
  *		1 in other cases (i.e., the buffer was filled before \n is reached)
  */
 int
-PQgetline(PGconn *conn, char *s, int maxlen)
+PQgetline(PGconn *conn, char *buffer, int length)
 {
-	if (!s || maxlen <= 0)
+	if (!buffer || length <= 0)
 		return EOF;
-	*s = '\0';
-	/* maxlen must be at least 3 to hold the \. terminator! */
-	if (maxlen < 3)
+	*buffer = '\0';
+	/* length must be at least 3 to hold the \. terminator! */
+	if (length < 3)
 		return EOF;
 
 	if (!conn)
 		return EOF;
 
-	return pqGetline3(conn, s, maxlen);
+	return pqGetline3(conn, buffer, length);
 }
 
 /*
@@ -2819,9 +2800,9 @@ PQgetlineAsync(PGconn *conn, char *buffer, int bufsize)
  * send failure.
  */
 int
-PQputline(PGconn *conn, const char *s)
+PQputline(PGconn *conn, const char *string)
 {
-	return PQputnbytes(conn, s, strlen(s));
+	return PQputnbytes(conn, string, strlen(string));
 }
 
 /*
@@ -2904,17 +2885,14 @@ PQfn(PGconn *conn,
 
 	if (conn->pipelineStatus != PQ_PIPELINE_OFF)
 	{
-		appendPQExpBuffer(&conn->errorMessage,
-						  libpq_gettext("%s not allowed in pipeline mode\n"),
-						  "PQfn");
+		libpq_append_conn_error(conn, "%s not allowed in pipeline mode", "PQfn");
 		return NULL;
 	}
 
 	if (conn->sock == PGINVALID_SOCKET || conn->asyncStatus != PGASYNC_IDLE ||
 		pgHavePendingResult(conn))
 	{
-		appendPQExpBufferStr(&conn->errorMessage,
-							 libpq_gettext("connection in wrong state\n"));
+		libpq_append_conn_error(conn, "connection in wrong state");
 		return NULL;
 	}
 
@@ -2957,8 +2935,7 @@ PQenterPipelineMode(PGconn *conn)
 
 	if (conn->asyncStatus != PGASYNC_IDLE)
 	{
-		appendPQExpBufferStr(&conn->errorMessage,
-							 libpq_gettext("cannot enter pipeline mode, connection not idle\n"));
+		libpq_append_conn_error(conn, "cannot enter pipeline mode, connection not idle");
 		return 0;
 	}
 
@@ -2994,13 +2971,11 @@ PQexitPipelineMode(PGconn *conn)
 		case PGASYNC_READY:
 		case PGASYNC_READY_MORE:
 			/* there are some uncollected results */
-			appendPQExpBufferStr(&conn->errorMessage,
-								 libpq_gettext("cannot exit pipeline mode with uncollected results\n"));
+			libpq_append_conn_error(conn, "cannot exit pipeline mode with uncollected results");
 			return 0;
 
 		case PGASYNC_BUSY:
-			appendPQExpBufferStr(&conn->errorMessage,
-								 libpq_gettext("cannot exit pipeline mode while busy\n"));
+			libpq_append_conn_error(conn, "cannot exit pipeline mode while busy");
 			return 0;
 
 		case PGASYNC_IDLE:
@@ -3011,15 +2986,13 @@ PQexitPipelineMode(PGconn *conn)
 		case PGASYNC_COPY_IN:
 		case PGASYNC_COPY_OUT:
 		case PGASYNC_COPY_BOTH:
-			appendPQExpBufferStr(&conn->errorMessage,
-								 libpq_gettext("cannot exit pipeline mode while in COPY\n"));
+			libpq_append_conn_error(conn, "cannot exit pipeline mode while in COPY");
 	}
 
 	/* still work to process */
 	if (conn->cmd_queue_head != NULL)
 	{
-		appendPQExpBufferStr(&conn->errorMessage,
-							 libpq_gettext("cannot exit pipeline mode with uncollected results\n"));
+		libpq_append_conn_error(conn, "cannot exit pipeline mode with uncollected results");
 		return 0;
 	}
 
@@ -3161,8 +3134,7 @@ pqPipelineProcessQueue(PGconn *conn)
 		conn->result = PQmakeEmptyPGresult(conn, PGRES_PIPELINE_ABORTED);
 		if (!conn->result)
 		{
-			appendPQExpBufferStr(&conn->errorMessage,
-								 libpq_gettext("out of memory\n"));
+			libpq_append_conn_error(conn, "out of memory");
 			pqSaveErrorResult(conn);
 			return;
 		}
@@ -3205,8 +3177,7 @@ PQpipelineSync(PGconn *conn)
 
 	if (conn->pipelineStatus == PQ_PIPELINE_OFF)
 	{
-		appendPQExpBufferStr(&conn->errorMessage,
-							 libpq_gettext("cannot send pipeline when not in pipeline mode\n"));
+		libpq_append_conn_error(conn, "cannot send pipeline when not in pipeline mode");
 		return 0;
 	}
 
@@ -3272,8 +3243,7 @@ PQsendFlushRequest(PGconn *conn)
 	/* Don't try to send if we know there's no live connection. */
 	if (conn->status != CONNECTION_OK)
 	{
-		appendPQExpBufferStr(&conn->errorMessage,
-							 libpq_gettext("no connection to the server\n"));
+		libpq_append_conn_error(conn, "no connection to the server");
 		return 0;
 	}
 
@@ -3281,8 +3251,7 @@ PQsendFlushRequest(PGconn *conn)
 	if (conn->asyncStatus != PGASYNC_IDLE &&
 		conn->pipelineStatus == PQ_PIPELINE_OFF)
 	{
-		appendPQExpBufferStr(&conn->errorMessage,
-							 libpq_gettext("another command is already in progress\n"));
+		libpq_append_conn_error(conn, "another command is already in progress");
 		return 0;
 	}
 
@@ -3977,15 +3946,16 @@ PQescapeStringInternal(PGconn *conn,
 {
 	const char *source = from;
 	char	   *target = to;
-	size_t		remaining = length;
+	size_t		remaining = strnlen(from, length);
+	bool		already_complained = false;
 
 	if (error)
 		*error = 0;
 
-	while (remaining > 0 && *source != '\0')
+	while (remaining > 0)
 	{
 		char		c = *source;
-		int			len;
+		int			charlen;
 		int			i;
 
 		/* Fast path for plain ASCII */
@@ -4002,39 +3972,69 @@ PQescapeStringInternal(PGconn *conn,
 		}
 
 		/* Slow path for possible multibyte characters */
-		len = pg_encoding_mblen(encoding, source);
+		charlen = pg_encoding_mblen_or_incomplete(encoding,
+												  source, remaining);
 
-		/* Copy the character */
-		for (i = 0; i < len; i++)
+		if (remaining < charlen ||
+			pg_encoding_verifymbchar(encoding, source, charlen) == -1)
 		{
-			if (remaining == 0 || *source == '\0')
-				break;
-			*target++ = *source++;
-			remaining--;
-		}
-
-		/*
-		 * If we hit premature end of string (ie, incomplete multibyte
-		 * character), try to pad out to the correct length with spaces. We
-		 * may not be able to pad completely, but we will always be able to
-		 * insert at least one pad space (since we'd not have quoted a
-		 * multibyte character).  This should be enough to make a string that
-		 * the server will error out on.
-		 */
-		if (i < len)
-		{
+			/*
+			 * Multibyte character is invalid.  It's important to verify that
+			 * as invalid multibyte characters could e.g. be used to "skip"
+			 * over quote characters, e.g. when parsing
+			 * character-by-character.
+			 *
+			 * Report an error if possible, and replace the character's first
+			 * byte with an invalid sequence. The invalid sequence ensures
+			 * that the escaped string will trigger an error on the
+			 * server-side, even if we can't directly report an error here.
+			 *
+			 * This isn't *that* crucial when we can report an error to the
+			 * caller; but if we can't or the caller ignores it, the caller
+			 * will use this string unmodified and it needs to be safe for
+			 * parsing.
+			 *
+			 * We know there's enough space for the invalid sequence because
+			 * the "to" buffer needs to be at least 2 * length + 1 long, and
+			 * at worst we're replacing a single input byte with two invalid
+			 * bytes.
+			 *
+			 * It would be a bit faster to verify the whole string the first
+			 * time we encounter a set highbit, but this way we can replace
+			 * just the invalid data, which probably makes it easier for users
+			 * to find the invalidly encoded portion of a larger string.
+			 */
 			if (error)
 				*error = 1;
-			if (conn)
-				appendPQExpBufferStr(&conn->errorMessage,
-									 libpq_gettext("incomplete multibyte character\n"));
-			for (; i < len; i++)
+			if (conn && !already_complained)
 			{
-				if (((size_t) (target - to)) / 2 >= length)
-					break;
-				*target++ = ' ';
+				if (remaining < charlen)
+					libpq_append_conn_error(conn, "incomplete multibyte character");
+				else
+					libpq_append_conn_error(conn, "invalid multibyte character");
+				/* Issue a complaint only once per string */
+				already_complained = true;
 			}
-			break;
+
+			pg_encoding_set_invalid(encoding, target);
+			target += 2;
+
+			/*
+			 * Handle the following bytes as if this byte didn't exist. That's
+			 * safer in case the subsequent bytes contain important characters
+			 * for the caller (e.g. '>' in html).
+			 */
+			source++;
+			remaining--;
+		}
+		else
+		{
+			/* Copy the character */
+			for (i = 0; i < charlen; i++)
+			{
+				*target++ = *source++;
+				remaining--;
+			}
 		}
 	}
 
@@ -4076,6 +4076,27 @@ PQescapeString(char *to, const char *from, size_t length)
 
 
 /*
+ * Frontend version of the backend's add_size(), intended to be API-compatible
+ * with the pg_add_*_overflow() helpers. Stores the result into *dst on success.
+ * Returns true instead if the addition overflows.
+ *
+ * TODO: move to common/int.h
+ */
+static bool
+add_size_overflow(size_t s1, size_t s2, size_t *dst)
+{
+	size_t		result;
+
+	result = s1 + s2;
+	if (result < s1 || result < s2)
+		return true;
+
+	*dst = result;
+	return false;
+}
+
+
+/*
  * Escape arbitrary strings.  If as_ident is true, we escape the result
  * as an identifier; if false, as a literal.  The result is returned in
  * a newly allocated buffer.  If we fail due to an encoding violation or out
@@ -4087,11 +4108,12 @@ PQescapeInternal(PGconn *conn, const char *str, size_t len, bool as_ident)
 	const char *s;
 	char	   *result;
 	char	   *rp;
-	int			num_quotes = 0; /* single or double, depending on as_ident */
-	int			num_backslashes = 0;
-	int			input_len;
-	int			result_size;
+	size_t		num_quotes = 0; /* single or double, depending on as_ident */
+	size_t		num_backslashes = 0;
+	size_t		input_len = strnlen(str, len);
+	size_t		result_size;
 	char		quote_char = as_ident ? '"' : '\'';
+	bool		validated_mb = false;
 
 	/* We must have a connection, else fail immediately. */
 	if (!conn)
@@ -4100,8 +4122,12 @@ PQescapeInternal(PGconn *conn, const char *str, size_t len, bool as_ident)
 	if (conn->cmd_queue_head == NULL)
 		pqClearConnErrorState(conn);
 
-	/* Scan the string for characters that must be escaped. */
-	for (s = str; (s - str) < len && *s != '\0'; ++s)
+	/*
+	 * Scan the string for characters that must be escaped and for invalidly
+	 * encoded data.
+	 */
+	s = str;
+	for (size_t remaining = input_len; remaining > 0; remaining--, s++)
 	{
 		if (*s == quote_char)
 			++num_quotes;
@@ -4112,31 +4138,62 @@ PQescapeInternal(PGconn *conn, const char *str, size_t len, bool as_ident)
 			int			charlen;
 
 			/* Slow path for possible multibyte characters */
-			charlen = pg_encoding_mblen(conn->client_encoding, s);
+			charlen = pg_encoding_mblen_or_incomplete(conn->client_encoding,
+													  s, remaining);
 
-			/* Multibyte character overruns allowable length. */
-			if ((s - str) + charlen > len || memchr(s, 0, charlen) != NULL)
+			if (charlen > remaining)
 			{
-				appendPQExpBufferStr(&conn->errorMessage,
-									 libpq_gettext("incomplete multibyte character\n"));
+				/* Multibyte character overruns allowable length. */
+				libpq_append_conn_error(conn, "incomplete multibyte character");
 				return NULL;
+			}
+
+			/*
+			 * If we haven't already, check that multibyte characters are
+			 * valid. It's important to verify that as invalid multi-byte
+			 * characters could e.g. be used to "skip" over quote characters,
+			 * e.g. when parsing character-by-character.
+			 *
+			 * We check validity once, for the whole remainder of the string,
+			 * when we first encounter any multi-byte character. Some
+			 * encodings have optimized implementations for longer strings.
+			 */
+			if (!validated_mb)
+			{
+				if (pg_encoding_verifymbstr(conn->client_encoding, s, remaining)
+					!= remaining)
+				{
+					libpq_append_conn_error(conn, "invalid multibyte character");
+					return NULL;
+				}
+				validated_mb = true;
 			}
 
 			/* Adjust s, bearing in mind that for loop will increment it. */
 			s += charlen - 1;
+			remaining -= charlen - 1;
 		}
 	}
 
-	/* Allocate output buffer. */
-	input_len = s - str;
-	result_size = input_len + num_quotes + 3;	/* two quotes, plus a NUL */
+	/*
+	 * Allocate output buffer. Protect against overflow, in case the caller
+	 * has allocated a large fraction of the available size_t.
+	 */
+	if (add_size_overflow(input_len, num_quotes, &result_size) ||
+		add_size_overflow(result_size, 3, &result_size))	/* two quotes plus a NUL */
+		goto overflow;
+
 	if (!as_ident && num_backslashes > 0)
-		result_size += num_backslashes + 2;
+	{
+		if (add_size_overflow(result_size, num_backslashes, &result_size) ||
+			add_size_overflow(result_size, 2, &result_size))	/* for " E" prefix */
+			goto overflow;
+	}
+
 	result = rp = (char *) malloc(result_size);
 	if (rp == NULL)
 	{
-		appendPQExpBufferStr(&conn->errorMessage,
-							 libpq_gettext("out of memory\n"));
+		libpq_append_conn_error(conn, "out of memory");
 		return NULL;
 	}
 
@@ -4174,7 +4231,8 @@ PQescapeInternal(PGconn *conn, const char *str, size_t len, bool as_ident)
 	}
 	else
 	{
-		for (s = str; s - str < input_len; ++s)
+		s = str;
+		for (size_t remaining = input_len; remaining > 0; remaining--, s++)
 		{
 			if (*s == quote_char || (!as_ident && *s == '\\'))
 			{
@@ -4192,6 +4250,7 @@ PQescapeInternal(PGconn *conn, const char *str, size_t len, bool as_ident)
 					*rp++ = *s;
 					if (--i == 0)
 						break;
+					remaining--;
 					++s;		/* for loop will provide the final increment */
 				}
 			}
@@ -4203,6 +4262,12 @@ PQescapeInternal(PGconn *conn, const char *str, size_t len, bool as_ident)
 	*rp = '\0';
 
 	return result;
+
+overflow:
+	libpq_append_conn_error(conn,
+							"escaped string size exceeds the maximum allowed (%zu)",
+							SIZE_MAX);
+	return NULL;
 }
 
 char *
@@ -4268,16 +4333,25 @@ PQescapeByteaInternal(PGconn *conn,
 	unsigned char *result;
 	size_t		i;
 	size_t		len;
-	size_t		bslash_len = (std_strings ? 1 : 2);
+	const size_t bslash_len = (std_strings ? 1 : 2);
 
 	/*
-	 * empty string has 1 char ('\0')
+	 * Calculate the escaped length, watching for overflow as we do with
+	 * PQescapeInternal(). The following code relies on a small constant
+	 * bslash_len so that small additions and multiplications don't need their
+	 * own overflow checks.
+	 *
+	 * Start with the empty string, which has 1 char ('\0').
 	 */
 	len = 1;
 
 	if (use_hex)
 	{
-		len += bslash_len + 1 + 2 * from_length;
+		/* We prepend "\x" and double each input character. */
+		if (add_size_overflow(len, bslash_len + 1, &len) ||
+			add_size_overflow(len, from_length, &len) ||
+			add_size_overflow(len, from_length, &len))
+			goto overflow;
 	}
 	else
 	{
@@ -4285,13 +4359,25 @@ PQescapeByteaInternal(PGconn *conn,
 		for (i = from_length; i > 0; i--, vp++)
 		{
 			if (*vp < 0x20 || *vp > 0x7e)
-				len += bslash_len + 3;
+			{
+				if (add_size_overflow(len, bslash_len + 3, &len))	/* octal "\ooo" */
+					goto overflow;
+			}
 			else if (*vp == '\'')
-				len += 2;
+			{
+				if (add_size_overflow(len, 2, &len))	/* double each quote */
+					goto overflow;
+			}
 			else if (*vp == '\\')
-				len += bslash_len + bslash_len;
+			{
+				if (add_size_overflow(len, bslash_len * 2, &len))	/* double each backslash */
+					goto overflow;
+			}
 			else
-				len++;
+			{
+				if (add_size_overflow(len, 1, &len))
+					goto overflow;
+			}
 		}
 	}
 
@@ -4300,8 +4386,7 @@ PQescapeByteaInternal(PGconn *conn,
 	if (rp == NULL)
 	{
 		if (conn)
-			appendPQExpBufferStr(&conn->errorMessage,
-								 libpq_gettext("out of memory\n"));
+			libpq_append_conn_error(conn, "out of memory");
 		return NULL;
 	}
 
@@ -4353,6 +4438,13 @@ PQescapeByteaInternal(PGconn *conn,
 	*rp = '\0';
 
 	return result;
+
+overflow:
+	if (conn)
+		libpq_append_conn_error(conn,
+								"escaped bytea size exceeds the maximum allowed (%zu)",
+								SIZE_MAX);
+	return NULL;
 }
 
 unsigned char *

@@ -33,8 +33,8 @@
 #define SPANGRES_DATATYPES_EXTENDED_PG_NUMERIC_TYPE_H_
 
 #include <cstdint>
-#include "zetasql/public/types/type.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/public/value.h"
 #include "absl/flags/declare.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/cord.h"
@@ -47,28 +47,28 @@ namespace postgres_translator::spangres::datatypes {
 const SpannerExtendedType* GetPgNumericType();
 
 // Returns a global static instance of an ARRAY<PG.NUMERIC> type.
-const zetasql::ArrayType* GetPgNumericArrayType();
+const googlesql::ArrayType* GetPgNumericArrayType();
 
-// Create a zetasql::Value from the input ASCII decimal format or an ASCII
+// Create a googlesql::Value from the input ASCII decimal format or an ASCII
 // scientific notation format `readable_numeric`.
-absl::StatusOr<zetasql::Value> CreatePgNumericValue(
+absl::StatusOr<googlesql::Value> CreatePgNumericValue(
     absl::string_view readable_numeric);
 
 // Create PG.NUMERIC value in a valid memory context which is required for
 // calling PG code. This function is intended to be used in tests where a memory
 // context is sometimes not initialized.
-absl::StatusOr<zetasql::Value> CreatePgNumericValueWithMemoryContext(
+absl::StatusOr<googlesql::Value> CreatePgNumericValueWithMemoryContext(
     absl::string_view numeric_string);
 
 // Retrieves an `absl::Cord` normalized representation of PG.NUMERIC value from
-// the ZetaSQL `value`. Returns error if `value` doesn't contain non-NULL
+// the GoogleSQL `value`. Returns error if `value` doesn't contain non-NULL
 // value of PG.NUMERIC.
 absl::StatusOr<absl::Cord> GetPgNumericNormalizedValue(
-    const zetasql::Value& value);
+    const googlesql::Value& value);
 
-// Create a zetasql::Value from the input ASCII decimal format or an ASCII
+// Create a googlesql::Value from the input ASCII decimal format or an ASCII
 // scientific notation format `readable_numeric` and precision and scale.
-absl::StatusOr<zetasql::Value> CreatePgNumericValueWithPrecisionAndScale(
+absl::StatusOr<googlesql::Value> CreatePgNumericValueWithPrecisionAndScale(
     absl::string_view readable_numeric, int64_t precision, int64_t scale = 0);
 }  // namespace postgres_translator::spangres::datatypes
 #endif  // SPANGRES_DATATYPES_EXTENDED_PG_NUMERIC_TYPE_H_

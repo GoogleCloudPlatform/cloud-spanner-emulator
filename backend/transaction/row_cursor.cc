@@ -50,10 +50,10 @@ absl::Status StorageIteratorRowCursor::Status() const {
   return iterators_.at(current_)->Status();
 }
 
-const zetasql::Value StorageIteratorRowCursor::ColumnValue(int i) const {
+const googlesql::Value StorageIteratorRowCursor::ColumnValue(int i) const {
   auto value = iterators_.at(current_)->ColumnValue(i);
   if (!value.is_valid()) {
-    return zetasql::Value::Null(ColumnType(i));
+    return googlesql::Value::Null(ColumnType(i));
   }
   return value;
 }
@@ -64,7 +64,7 @@ const std::string StorageIteratorRowCursor::ColumnName(int i) const {
   return columns_.at(i)->Name();
 }
 
-const zetasql::Type* StorageIteratorRowCursor::ColumnType(int i) const {
+const googlesql::Type* StorageIteratorRowCursor::ColumnType(int i) const {
   return columns_.at(i)->GetType();
 }
 

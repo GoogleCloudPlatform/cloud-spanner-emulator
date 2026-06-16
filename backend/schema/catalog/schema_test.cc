@@ -22,10 +22,12 @@
 #include <vector>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
-#include "zetasql/public/type.h"
+#include "googlesql/public/function_signature.h"
+#include "googlesql/public/type.h"
+#include "googlesql/public/types/type_factory.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -69,13 +71,13 @@ namespace {
 using absl::StatusCode;
 using test::ScopedEmulatorFeatureFlagsSetter;
 using ::testing::ElementsAre;
-using ::zetasql_base::testing::IsOkAndHolds;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::IsOkAndHolds;
+using ::googlesql_base::testing::StatusIs;
 
 class SchemaTest : public testing::Test {
  public:
   SchemaTest()
-      : type_factory_(std::make_unique<zetasql::TypeFactory>()),
+      : type_factory_(std::make_unique<googlesql::TypeFactory>()),
         base_schema_(test::CreateSchemaWithOneTable(type_factory_.get())),
         flag_setter_({
             .enable_fk_delete_cascade_action = true,
@@ -156,7 +158,7 @@ class SchemaTest : public testing::Test {
   SchemaValidationContext context_;
 
   // The type factory must outlive the type objects that it has made.
-  std::unique_ptr<zetasql::TypeFactory> type_factory_;
+  std::unique_ptr<googlesql::TypeFactory> type_factory_;
 
   // Base schema for use in tests.
   std::unique_ptr<const Schema> base_schema_;
@@ -178,14 +180,14 @@ TEST_F(SchemaTest, Basic) {
   const Column* col1 = table->FindColumn("int64_col");
   ASSERT_NE(col1, nullptr);
   EXPECT_EQ(col1->Name(), "int64_col");
-  EXPECT_EQ(col1->GetType()->kind(), zetasql::TYPE_INT64);
+  EXPECT_EQ(col1->GetType()->kind(), googlesql::TYPE_INT64);
   EXPECT_FALSE(col1->is_nullable());
   EXPECT_NE(table->FindKeyColumn("int64_col"), nullptr);
 
   const Column* col2 = table->FindColumn("string_col");
   ASSERT_NE(col2, nullptr);
   EXPECT_EQ(col2->Name(), "string_col");
-  EXPECT_EQ(col2->GetType()->kind(), zetasql::TYPE_STRING);
+  EXPECT_EQ(col2->GetType()->kind(), googlesql::TYPE_STRING);
   EXPECT_TRUE(col2->is_nullable());
   EXPECT_FALSE(col2->declared_max_length().has_value());
   EXPECT_EQ(table->FindKeyColumn("string_col"), nullptr);
@@ -211,14 +213,14 @@ TEST_F(SchemaTest, Basic) {
   const Column* index_col1 = index_data_table->FindColumn("string_col");
   ASSERT_NE(index_col1, nullptr);
   EXPECT_EQ(index_col1->Name(), "string_col");
-  EXPECT_EQ(index_col1->GetType()->kind(), zetasql::TYPE_STRING);
+  EXPECT_EQ(index_col1->GetType()->kind(), googlesql::TYPE_STRING);
   EXPECT_TRUE(index_col1->is_nullable());
   EXPECT_FALSE(index_col1->declared_max_length().has_value());
 
   const Column* index_col2 = index_data_table->FindColumn("int64_col");
   ASSERT_NE(index_col2, nullptr);
   EXPECT_EQ(index_col2->Name(), "int64_col");
-  EXPECT_EQ(index_col2->GetType()->kind(), zetasql::TYPE_INT64);
+  EXPECT_EQ(index_col2->GetType()->kind(), googlesql::TYPE_INT64);
   EXPECT_FALSE(index_col2->is_nullable());
 
   EXPECT_EQ(index_data_table->primary_key().size(), 2);
@@ -268,7 +270,7 @@ TEST_F(SchemaTest, ChangeStreamBasic) {
 
 TEST_F(SchemaTest, SequenceBasic) {
   EXPECT_EQ(base_schema_->sequences().size(), 0);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(base_schema_,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(base_schema_,
                        test::CreateSchemaWithOneSequence(type_factory_.get()));
   EXPECT_EQ(base_schema_->sequences().size(), 2);
   const Sequence* sequence = base_schema_->FindSequence("myseq");
@@ -309,7 +311,7 @@ TEST_F(SchemaTest, InterleaveTest) {
 }
 
 TEST_F(SchemaTest, NonParentInterleaveTest) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       base_schema_,
       test::CreateSchemaWithNonParentInterleaving(type_factory_.get()));
   EXPECT_EQ(base_schema_->tables().size(), 2);
@@ -347,7 +349,7 @@ TEST_F(SchemaTest, ColumnBuilder) {
   EXPECT_TRUE(c1->is_nullable());
   EXPECT_EQ(c1->declared_max_length(), 23);
   EXPECT_EQ(c1->effective_max_length(), 23);
-  ZETASQL_EXPECT_OK(c1->Validate(&context_));
+  GOOGLESQL_EXPECT_OK(c1->Validate(&context_));
 
   Column::Builder b2;
   b2.set_name("C2")
@@ -362,7 +364,7 @@ TEST_F(SchemaTest, ColumnBuilder) {
   EXPECT_TRUE(c2->GetType()->Equals(c1->GetType()));
   EXPECT_EQ(c2->declared_max_length(), 23);
   EXPECT_EQ(c2->effective_max_length(), 23);
-  ZETASQL_EXPECT_OK(c2->Validate(&context_));
+  GOOGLESQL_EXPECT_OK(c2->Validate(&context_));
 
   Column::Builder b3;
   b3.set_name("C3")
@@ -403,7 +405,7 @@ TEST_F(SchemaTest, ColumnBuilder) {
   b6.set_name("c6").set_id("C1").set_table(table).set_type(
       type_factory_->get_bytes());
   auto c6 = b6.build();
-  ZETASQL_EXPECT_OK(c6->Validate(&context_));
+  GOOGLESQL_EXPECT_OK(c6->Validate(&context_));
   EXPECT_FALSE(c6->declared_max_length().has_value());
   EXPECT_EQ(c6->effective_max_length(), limits::kMaxBytesColumnLength);
 }
@@ -420,10 +422,10 @@ TEST_F(SchemaTest, KeyColumnBuilder) {
   auto k1 = kb1.build();
   EXPECT_EQ(k1->column(), c1.get());
   EXPECT_EQ(k1->is_descending(), true);
-  ZETASQL_EXPECT_OK(k1->Validate(&context_));
+  GOOGLESQL_EXPECT_OK(k1->Validate(&context_));
 
-  const zetasql::ArrayType* array_type;
-  ZETASQL_ASSERT_OK(
+  const googlesql::ArrayType* array_type;
+  GOOGLESQL_ASSERT_OK(
       type_factory_->MakeArrayType(type_factory_->get_int64(), &array_type));
   Column::Builder c2;
   c2.set_name("C2").set_id("C2").set_table(table).set_type(array_type);
@@ -438,13 +440,13 @@ TEST_F(SchemaTest, KeyColumnBuilder) {
 
 TEST_F(SchemaTest, TableBuilder) {
   auto t = table_builder("T").build();
-  ZETASQL_EXPECT_OK(t->Validate(&context_));
+  GOOGLESQL_EXPECT_OK(t->Validate(&context_));
 
   Table::Builder tb = table_builder("T1");
   auto c1 = column_builder("C1", tb.get()).build();
   auto k1 = KeyColumn::Builder().set_column(c1.get()).build();
   auto t1 = tb.add_column(c1.get()).add_key_column(k1.get()).build();
-  ZETASQL_EXPECT_OK(t1->Validate(&context_));
+  GOOGLESQL_EXPECT_OK(t1->Validate(&context_));
 
   tb = table_builder("T2");
   auto c2 = column_builder("C1", tb.get()).build();
@@ -454,7 +456,7 @@ TEST_F(SchemaTest, TableBuilder) {
                 .set_parent_table(t1.get())
                 .set_on_delete(Table::OnDeleteAction::kNoAction)
                 .build();
-  ZETASQL_EXPECT_OK(t2->Validate(&context_));
+  GOOGLESQL_EXPECT_OK(t2->Validate(&context_));
 
   tb = table_builder("T3");
   auto c3 = column_builder("C3", tb.get()).build();
@@ -494,13 +496,13 @@ TEST_F(SchemaTest, TableBuilder) {
 
 TEST_F(SchemaTest, TableSynonymBuilder) {
   auto t = table_builder("T", "S").build();
-  ZETASQL_EXPECT_OK(t->Validate(&context_));
+  GOOGLESQL_EXPECT_OK(t->Validate(&context_));
 
   Table::Builder tb = table_builder("T1", "S1");
   auto c1 = column_builder("C1", tb.get()).build();
   auto k1 = KeyColumn::Builder().set_column(c1.get()).build();
   auto t1 = tb.add_column(c1.get()).add_key_column(k1.get()).build();
-  ZETASQL_EXPECT_OK(t1->Validate(&context_));
+  GOOGLESQL_EXPECT_OK(t1->Validate(&context_));
 
   const std::string synonym(130, 'S');
   auto t2 = table_builder("T1", synonym).build();
@@ -510,7 +512,7 @@ TEST_F(SchemaTest, TableSynonymBuilder) {
 
 TEST_F(SchemaTest, PlacementBuilder) {
   auto p = placement_builder("P").build();
-  ZETASQL_EXPECT_OK(p->Validate(&context_));
+  GOOGLESQL_EXPECT_OK(p->Validate(&context_));
 }
 
 TEST_F(SchemaTest, PlacementBuilderInvalid) {
@@ -522,7 +524,7 @@ TEST_F(SchemaTest, PlacementBuilderInvalid) {
 
 TEST_F(SchemaTest, ChangeStreamBuilderValid) {
   auto c = change_stream_builder("CS").build();
-  ZETASQL_EXPECT_OK(c->Validate(&context_));
+  GOOGLESQL_EXPECT_OK(c->Validate(&context_));
 }
 
 TEST_F(SchemaTest, ChangeStreamBuilderInvalid) {
@@ -534,7 +536,7 @@ TEST_F(SchemaTest, ChangeStreamBuilderInvalid) {
 
 TEST_F(SchemaTest, SequenceBuilderValid) {
   auto c = sequence_builder("Sequence").build();
-  ZETASQL_EXPECT_OK(c->Validate(&context_));
+  GOOGLESQL_EXPECT_OK(c->Validate(&context_));
 }
 
 TEST_F(SchemaTest, SequenceBuilderInvalid) {
@@ -546,7 +548,7 @@ TEST_F(SchemaTest, SequenceBuilderInvalid) {
 
 TEST_F(SchemaTest, DatabaseOptionsBuilderValid) {
   auto c = database_options_builder("c").build();
-  ZETASQL_EXPECT_OK(c->Validate(&context_));
+  GOOGLESQL_EXPECT_OK(c->Validate(&context_));
 }
 
 TEST_F(SchemaTest, DatabaseOptionsBuilderInvalidLength) {
@@ -567,7 +569,7 @@ TEST_F(SchemaTest, DatabaseOptionsBuilderInvalidStartingWithUppercase) {
 
 TEST_F(SchemaTest, LocalityGroupBuilderValid) {
   auto lg = locality_group_builder("LG").build();
-  ZETASQL_EXPECT_OK(lg->Validate(&context_));
+  GOOGLESQL_EXPECT_OK(lg->Validate(&context_));
 }
 
 TEST_F(SchemaTest, LocalityGroupBuilderInvalid) {
@@ -582,8 +584,8 @@ TEST_F(SchemaTest, IndexBuilder) {
   Table::Builder tb = table_builder("T1");
   auto c1 = column_builder("c1", tb.get()).build();
   auto c2 = column_builder("c2", tb.get()).build();
-  const zetasql::ArrayType* array_type;
-  ZETASQL_ASSERT_OK(
+  const googlesql::ArrayType* array_type;
+  GOOGLESQL_ASSERT_OK(
       type_factory_->MakeArrayType(type_factory_->get_int64(), &array_type));
   auto c3 = Column::Builder()
                 .set_name("c3")
@@ -625,8 +627,8 @@ TEST_F(SchemaTest, IndexBuilder) {
                 .build();
 
   // Basic null-filtered unique index.
-  ZETASQL_EXPECT_OK(idt->Validate(&context_));
-  ZETASQL_EXPECT_OK(i1->Validate(&context_));
+  GOOGLESQL_EXPECT_OK(idt->Validate(&context_));
+  GOOGLESQL_EXPECT_OK(i1->Validate(&context_));
 
   // Index with array column as key column.
   ib = Index::Builder();
@@ -664,7 +666,7 @@ TEST_F(SchemaTest, IndexBuilder) {
                 .add_key_column(k1_dt.get())
                 .add_stored_column(c3_dt.get())
                 .build();
-  ZETASQL_EXPECT_OK(i3->Validate(&context_));
+  GOOGLESQL_EXPECT_OK(i3->Validate(&context_));
 
   // Key and stored column same.
   ib = Index::Builder();
@@ -700,7 +702,7 @@ TEST_F(SchemaTest, IndexBuilder) {
 }
 
 TEST_F(SchemaTest, PrintDDLStatementsTestSearchIndexWithOptions) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const backend::Schema> schema,
       test::CreateSchemaFromDDL(
           {
@@ -746,7 +748,7 @@ TEST_F(SchemaTest, ViewBuilder) {
 
   auto view = vb.build();
 
-  ZETASQL_EXPECT_OK(view->Validate(&context_));
+  GOOGLESQL_EXPECT_OK(view->Validate(&context_));
   EXPECT_EQ(view->Name(), "V1");
   EXPECT_EQ(view->body(), "SELECT t.int64_col AS c1 FROM test_table t");
   EXPECT_THAT(view->dependencies(), testing::ElementsAreArray({test_table}));
@@ -794,7 +796,7 @@ TEST_F(SchemaTest, NamedSchemaBuilder) {
   nsb.add_index(index.get());
 
   auto named_schema = nsb.build();
-  ZETASQL_EXPECT_OK(named_schema->Validate(&context_));
+  GOOGLESQL_EXPECT_OK(named_schema->Validate(&context_));
   EXPECT_EQ(named_schema->Name(), "ns1");
   EXPECT_EQ(named_schema->id(), "ns1");
   EXPECT_THAT(named_schema->tables(), testing::ElementsAreArray({t1.get()}));
@@ -815,7 +817,7 @@ TEST_F(SchemaTest, UdfBuilder) {
       "CREATE FUNCTION udf_simple_add(a INT64, b INT64) RETURNS INT64 AS (a + "
       "b)");
   auto udf_simple_add = udf_builder_simple_add.build();
-  ZETASQL_EXPECT_OK(udf_simple_add->Validate(&context_));
+  GOOGLESQL_EXPECT_OK(udf_simple_add->Validate(&context_));
   EXPECT_EQ(udf_simple_add->Name(), "udf_simple_add");
   EXPECT_EQ(udf_simple_add->body(),
             "CREATE FUNCTION udf_simple_add(a INT64, b INT64) RETURNS INT64 AS "
@@ -848,7 +850,7 @@ TEST_F(SchemaTest, UdfBuilder) {
   udf_builder_no_name.set_sql_body(
       "CREATE FUNCTION udf_no_name(a INT64, b INT64) RETURNS INT64 AS (a + b)");
   auto udf_no_name = udf_builder_no_name.build();
-  // Handled in the parsers so a ZETASQL_RET_CHECK failure is expected.
+  // Handled in the parsers so a GOOGLESQL_RET_CHECK failure is expected.
   EXPECT_THAT(
       udf_no_name->Validate(&context_),
       StatusIs(StatusCode::kInternal, testing::HasSubstr("RET_CHECK failure")));
@@ -858,7 +860,7 @@ TEST_F(SchemaTest, UdfBuilder) {
   udf_builder_no_body.set_name("udf_no_body");
   udf_builder_no_body.set_sql_security(Udf::SqlSecurity::INVOKER);
   auto udf_no_body = udf_builder_no_body.build();
-  // Handled in the parsers so a ZETASQL_RET_CHECK failure is expected.
+  // Handled in the parsers so a GOOGLESQL_RET_CHECK failure is expected.
   EXPECT_THAT(
       udf_no_body->Validate(&context_),
       StatusIs(StatusCode::kInternal, testing::HasSubstr("RET_CHECK failure")));
@@ -870,18 +872,24 @@ TEST_F(SchemaTest, UdfBuilder) {
   udf_builder_reserved_keyword.set_sql_body(
       "CREATE FUNCTION `function`(a INT64) RETURNS INT64 AS (a * 2)");
   auto udf_reserved_keyword = udf_builder_reserved_keyword.build();
-  ZETASQL_EXPECT_OK(udf_reserved_keyword->Validate(&context_));
+  GOOGLESQL_EXPECT_OK(udf_reserved_keyword->Validate(&context_));
   EXPECT_EQ(udf_reserved_keyword->Name(), "function");
 
   // Remote UDF
   Udf::Builder udf_builder_remote;
   udf_builder_remote.set_name("udf_remote");
   udf_builder_remote.set_sql_security(Udf::SqlSecurity::INVOKER);
+  udf_builder_remote.set_determinism_level(Udf::NOT_DETERMINISTIC_VOLATILE);
   udf_builder_remote.set_language(Udf::Language::REMOTE);
   udf_builder_remote.set_endpoint("https://www.google.com");
   udf_builder_remote.set_max_batching_rows(10);
+  udf_builder_remote.set_signature(
+      std::make_unique<googlesql::FunctionSignature>(
+          googlesql::types::Int64Type(),
+          std::vector<googlesql::FunctionArgumentType>{},
+          /*context_ptr=*/nullptr));
   auto udf_remote = udf_builder_remote.build();
-  ZETASQL_EXPECT_OK(udf_remote->Validate(&context_));
+  GOOGLESQL_EXPECT_OK(udf_remote->Validate(&context_));
   EXPECT_EQ(udf_remote->Name(), "udf_remote");
   EXPECT_EQ(udf_remote->language(), Udf::Language::REMOTE);
   EXPECT_EQ(udf_remote->endpoint(), "https://www.google.com");
@@ -891,26 +899,59 @@ TEST_F(SchemaTest, UdfBuilder) {
   Udf::Builder udf_builder_remote_is_remote;
   udf_builder_remote_is_remote.set_name("udf_remote");
   udf_builder_remote_is_remote.set_sql_security(Udf::SqlSecurity::INVOKER);
+  udf_builder_remote_is_remote.set_determinism_level(
+      Udf::NOT_DETERMINISTIC_VOLATILE);
   udf_builder_remote_is_remote.set_is_remote(true);
   udf_builder_remote_is_remote.set_endpoint("https://www.google.com");
   udf_builder_remote_is_remote.set_max_batching_rows(10);
+  udf_builder_remote_is_remote.set_signature(
+      std::make_unique<googlesql::FunctionSignature>(
+          googlesql::types::Int64Type(),
+          std::vector<googlesql::FunctionArgumentType>{},
+          /*context_ptr=*/nullptr));
   auto udf_remote_is_remote = udf_builder_remote_is_remote.build();
-  ZETASQL_EXPECT_OK(udf_remote_is_remote->Validate(&context_));
+  GOOGLESQL_EXPECT_OK(udf_remote_is_remote->Validate(&context_));
   EXPECT_EQ(udf_remote_is_remote->Name(), "udf_remote");
   EXPECT_EQ(udf_remote_is_remote->language(),
             Udf::Language::LANGUAGE_UNSPECIFIED);
   EXPECT_EQ(*udf_remote_is_remote->endpoint(), "https://www.google.com");
   EXPECT_EQ(*udf_remote_is_remote->max_batching_rows(), 10);
 
+  // Remote UDF no determinism level
+  Udf::Builder udf_builder_remote_no_determinism;
+  udf_builder_remote_no_determinism.set_name("udf_remote");
+  udf_builder_remote_no_determinism.set_sql_security(Udf::SqlSecurity::INVOKER);
+  udf_builder_remote_no_determinism.set_language(Udf::Language::REMOTE);
+  udf_builder_remote_no_determinism.set_endpoint("https://www.google.com");
+  udf_builder_remote_no_determinism.set_max_batching_rows(10);
+  udf_builder_remote_no_determinism.set_signature(
+      std::make_unique<googlesql::FunctionSignature>(
+          googlesql::types::Int64Type(),
+          std::vector<googlesql::FunctionArgumentType>{},
+          /*context_ptr=*/nullptr));
+  auto udf_remote_no_determinism = udf_builder_remote_no_determinism.build();
+  EXPECT_THAT(udf_remote_no_determinism->Validate(&context_),
+              StatusIs(StatusCode::kInvalidArgument,
+                       testing::HasSubstr(
+                           "must specify the NOT DETERMINISTIC attribute")));
+
   // Remote UDF with SQL body (should fail validation)
   Udf::Builder udf_builder_remote_with_sql_body;
   udf_builder_remote_with_sql_body.set_name("udf_remote_with_sql_body");
   udf_builder_remote_with_sql_body.set_sql_security(Udf::SqlSecurity::INVOKER);
+  udf_builder_remote_with_sql_body.set_determinism_level(
+      Udf::NOT_DETERMINISTIC_VOLATILE);
   udf_builder_remote_with_sql_body.set_language(Udf::Language::REMOTE);
   udf_builder_remote_with_sql_body.set_endpoint("https://www.google.com");
   udf_builder_remote_with_sql_body.set_sql_body(
       "CREATE FUNCTION udf_remote_with_sql_body(a INT64) RETURNS INT64 AS (a "
       "+ 1)");
+  udf_builder_remote_with_sql_body.set_signature(
+      std::make_unique<googlesql::FunctionSignature>(
+          googlesql::types::Int64Type(),
+          std::vector<googlesql::FunctionArgumentType>{
+              {googlesql::types::Int64Type()}},
+          /*context_ptr=*/nullptr));
   auto udf_remote_with_sql_body = udf_builder_remote_with_sql_body.build();
   EXPECT_THAT(
       udf_remote_with_sql_body->Validate(&context_),
@@ -920,11 +961,21 @@ TEST_F(SchemaTest, UdfBuilder) {
   Udf::Builder udf_builder_remote_no_endpoint;
   udf_builder_remote_no_endpoint.set_name("udf_remote_no_endpoint");
   udf_builder_remote_no_endpoint.set_sql_security(Udf::SqlSecurity::INVOKER);
+  udf_builder_remote_no_endpoint.set_determinism_level(
+      Udf::NOT_DETERMINISTIC_VOLATILE);
   udf_builder_remote_no_endpoint.set_language(Udf::Language::REMOTE);
+  udf_builder_remote_no_endpoint.set_signature(
+      std::make_unique<googlesql::FunctionSignature>(
+          googlesql::types::Int64Type(),
+          std::vector<googlesql::FunctionArgumentType>{},
+          /*context_ptr=*/nullptr));
   auto udf_remote_no_endpoint = udf_builder_remote_no_endpoint.build();
-  EXPECT_THAT(udf_remote_no_endpoint->Validate(&context_),
-              StatusIs(StatusCode::kInternal,
-                       testing::HasSubstr("udf->endpoint_.has_value()")));
+  EXPECT_THAT(
+      udf_remote_no_endpoint->Validate(&context_),
+      StatusIs(
+          StatusCode::kInvalidArgument,
+          testing::HasSubstr(
+              R"(Missing option endpoint for function udf_remote_no_endpoint.)")));
 
   // Remote UDF with negative max batching size (should fail validation)
   Udf::Builder udf_builder_remote_negative_max_batching_rows;
@@ -932,25 +983,42 @@ TEST_F(SchemaTest, UdfBuilder) {
       "udf_remote_negative_max_batching_rows");
   udf_builder_remote_negative_max_batching_rows.set_sql_security(
       Udf::SqlSecurity::INVOKER);
+  udf_builder_remote_negative_max_batching_rows.set_determinism_level(
+      Udf::NOT_DETERMINISTIC_VOLATILE);
   udf_builder_remote_negative_max_batching_rows.set_language(
       Udf::Language::REMOTE);
   udf_builder_remote_negative_max_batching_rows.set_endpoint(
       "https://www.google.com");
   udf_builder_remote_negative_max_batching_rows.set_max_batching_rows(-1);
+  udf_builder_remote_negative_max_batching_rows.set_signature(
+      std::make_unique<googlesql::FunctionSignature>(
+          googlesql::types::Int64Type(),
+          std::vector<googlesql::FunctionArgumentType>{},
+          /*context_ptr=*/nullptr));
   auto udf_remote_negative_max_batching_rows =
       udf_builder_remote_negative_max_batching_rows.build();
-  EXPECT_THAT(udf_remote_negative_max_batching_rows->Validate(&context_),
-              StatusIs(StatusCode::kInternal,
-                       testing::HasSubstr("udf->max_batching_rows_ >= 0")));
+  EXPECT_THAT(
+      udf_remote_negative_max_batching_rows->Validate(&context_),
+      StatusIs(
+          StatusCode::kInvalidArgument,
+          testing::HasSubstr(
+              R"(Invalid option value -1 for option max_batching_rows of function udf_remote_negative_max_batching_rows.)")));
 
   // Remote UDF with Language SQL (should fail validation)
   Udf::Builder udf_builder_remote_with_language_sql;
   udf_builder_remote_with_language_sql.set_name("udf_remote_with_language_sql");
   udf_builder_remote_with_language_sql.set_sql_security(
       Udf::SqlSecurity::INVOKER);
+  udf_builder_remote_with_language_sql.set_determinism_level(
+      Udf::NOT_DETERMINISTIC_VOLATILE);
   udf_builder_remote_with_language_sql.set_is_remote(true);
   udf_builder_remote_with_language_sql.set_language(Udf::Language::SQL);
   udf_builder_remote_with_language_sql.set_endpoint("https://www.google.com");
+  udf_builder_remote_with_language_sql.set_signature(
+      std::make_unique<googlesql::FunctionSignature>(
+          googlesql::types::Int64Type(),
+          std::vector<googlesql::FunctionArgumentType>{},
+          /*context_ptr=*/nullptr));
   auto udf_remote_with_language_sql =
       udf_builder_remote_with_language_sql.build();
   EXPECT_THAT(
@@ -958,6 +1026,19 @@ TEST_F(SchemaTest, UdfBuilder) {
       StatusIs(StatusCode::kInternal,
                testing::HasSubstr(
                    "udf->language() == Udf::Language::LANGUAGE_UNSPECIFIED")));
+
+  // Remote UDF without signature.
+  Udf::Builder udf_builder_remote_no_signature;
+  udf_builder_remote_no_signature.set_name("udf_remote");
+  udf_builder_remote_no_signature.set_sql_security(Udf::SqlSecurity::INVOKER);
+  udf_builder_remote_no_signature.set_determinism_level(
+      Udf::NOT_DETERMINISTIC_VOLATILE);
+  udf_builder_remote_no_signature.set_language(Udf::Language::REMOTE);
+  udf_builder_remote_no_signature.set_endpoint("https://www.google.com");
+  auto udf_remote_no_signature = udf_builder_remote_no_signature.build();
+  EXPECT_THAT(
+      udf_remote_no_signature->Validate(&context_),
+      StatusIs(StatusCode::kInternal, testing::HasSubstr("RET_CHECK failure")));
 
   // UDF with name starting with a number, invalid even when quoted.
   Udf::Builder udf_builder_number_start;
@@ -977,7 +1058,7 @@ TEST_F(SchemaTest, UdfBuilder) {
   udf_builder_uppercase.set_sql_body(
       "CREATE FUNCTION UDF_UPPERCASE(a INT64) RETURNS INT64 AS (a - 1)");
   auto udf_uppercase = udf_builder_uppercase.build();
-  ZETASQL_EXPECT_OK(udf_uppercase->Validate(&context_));
+  GOOGLESQL_EXPECT_OK(udf_uppercase->Validate(&context_));
   EXPECT_EQ(udf_uppercase->Name(), "UDF_UPPERCASE");
 
   // UDF calling another UDF
@@ -988,7 +1069,7 @@ TEST_F(SchemaTest, UdfBuilder) {
   udf_builder_helper.set_sql_body(
       "CREATE FUNCTION helper_udf(a INT64) RETURNS INT64 AS (a * a)");
   auto udf_helper = udf_builder_helper.build();
-  ZETASQL_EXPECT_OK(udf_helper->Validate(&context_));
+  GOOGLESQL_EXPECT_OK(udf_helper->Validate(&context_));
   EXPECT_EQ(udf_helper->Name(), "helper_udf");
 
   // Now, define a UDF that calls the helper UDF
@@ -1000,7 +1081,7 @@ TEST_F(SchemaTest, UdfBuilder) {
       "1)");
   udf_builder_caller.add_dependency(udf_helper.get());
   auto udf_caller = udf_builder_caller.build();
-  ZETASQL_EXPECT_OK(udf_caller->Validate(&context_));
+  GOOGLESQL_EXPECT_OK(udf_caller->Validate(&context_));
   EXPECT_EQ(udf_caller->Name(), "caller_udf");
 }
 
@@ -1037,7 +1118,7 @@ TEST_F(SchemaTest, PrintDDLStatementsTestOneTableWithSynonym) {
 }
 
 TEST_F(SchemaTest, PrintDDLStatementsTestOneTableDrop) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const backend::Schema> schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const backend::Schema> schema,
                        test::CreateSchemaFromDDL(
                            {
                                R"(CREATE TABLE T (
@@ -1067,14 +1148,15 @@ TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestOneTable) {
   absl::StatusOr<std::vector<std::string>> statements =
       PrintDDLStatements(schema.get());
 
-  EXPECT_THAT(statements, IsOkAndHolds(ElementsAre(
-                              R"(CREATE TABLE test_table (
+  EXPECT_THAT(statements,
+              IsOkAndHolds(ElementsAre(
+                  R"(CREATE TABLE test_table (
   int64_col bigint NOT NULL,
   string_col character varying,
   PRIMARY KEY(int64_col)
 ))",
-                              "CREATE UNIQUE INDEX test_index ON test_table "
-                              "(string_col DESC)")));
+                  "CREATE UNIQUE INDEX test_index ON test_table "
+                  "(string_col DESC) WHERE (string_col IS NOT NULL)")));
 }
 
 TEST_F(SchemaTest, PrintDDLStatementsTestInterleaving) {
@@ -1130,7 +1212,7 @@ TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestInterleaving) {
 }
 
 TEST_F(SchemaTest, PrintDDLStatementsTestNonParentInterleaving) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const Schema> schema,
       test::CreateSchemaWithNonParentInterleaving(type_factory_.get()));
   absl::StatusOr<std::vector<std::string>> statements =
@@ -1151,7 +1233,7 @@ TEST_F(SchemaTest, PrintDDLStatementsTestNonParentInterleaving) {
 
 TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestNonParentInterleaving) {
   SetPostgresqlDialect();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const Schema> schema,
       test::CreateSchemaWithNonParentInterleaving(
           type_factory_.get(), database_api::DatabaseDialect::POSTGRESQL));
@@ -1319,7 +1401,7 @@ TEST_F(SchemaTest, PrintDDLStatementsTestColumnExpressions) {
               test_table,
           },
           type_factory_.get());
-  ZETASQL_ASSERT_OK(schema);
+  GOOGLESQL_ASSERT_OK(schema);
   absl::StatusOr<std::vector<std::string>> statements =
       PrintDDLStatements(schema.value().get());
 
@@ -1352,11 +1434,11 @@ TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestColumnExpressions) {
           type_factory_.get(),
           /*proto_descriptor_bytes=*/"",
           database_api::DatabaseDialect::POSTGRESQL);
-  ZETASQL_ASSERT_OK(schema);
+  GOOGLESQL_ASSERT_OK(schema);
   absl::StatusOr<std::vector<std::string>> statements =
       PrintDDLStatements(schema.value().get());
 
-  EXPECT_THAT(statements, zetasql_base::testing::IsOkAndHolds(
+  EXPECT_THAT(statements, googlesql_base::testing::IsOkAndHolds(
                               testing::ElementsAre(R"(CREATE TABLE test_table (
   int64_col bigint NOT NULL,
   string_col character varying(10),
@@ -1368,7 +1450,7 @@ TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestColumnExpressions) {
 }
 
 TEST_F(SchemaTest, PrintDDLStatementsTestAllowCommitTimestamp) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const backend::Schema> schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const backend::Schema> schema,
                        test::CreateSchemaFromDDL(
                            {
                                R"(
@@ -1392,7 +1474,7 @@ TEST_F(SchemaTest, PrintDDLStatementsTestAllowCommitTimestamp) {
 
 TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestAllowCommitTimestamp) {
   SetPostgresqlDialect();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const backend::Schema> schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const backend::Schema> schema,
                        test::CreateSchemaFromDDL(
                            {
                                R"(
@@ -1414,7 +1496,7 @@ TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestAllowCommitTimestamp) {
 }
 
 TEST_F(SchemaTest, PrintDDLStatementsTestCheckConstraints) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const backend::Schema> schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const backend::Schema> schema,
                        test::CreateSchemaFromDDL(
                            {R"(CREATE TABLE T (
              K INT64,
@@ -1435,7 +1517,7 @@ TEST_F(SchemaTest, PrintDDLStatementsTestCheckConstraints) {
 
 TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestCheckConstraints) {
   SetPostgresqlDialect();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const backend::Schema> schema,
       test::CreateSchemaFromDDL(
           {R"(
@@ -1459,7 +1541,7 @@ TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestCheckConstraints) {
 }
 
 TEST_F(SchemaTest, PrintDDLStatementsTestNoNameCheckConstraints) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const backend::Schema> schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const backend::Schema> schema,
                        test::CreateSchemaFromDDL({R"(CREATE TABLE T (
              K INT64,
              V INT64,
@@ -1477,7 +1559,7 @@ TEST_F(SchemaTest, PrintDDLStatementsTestNoNameCheckConstraints) {
 
 TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestNoNameCheckConstraints) {
   SetPostgresqlDialect();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const backend::Schema> schema,
       test::CreateSchemaFromDDL({R"(
           CREATE TABLE "T" (
@@ -1499,7 +1581,7 @@ TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestNoNameCheckConstraints) {
 
 TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestCheckConstraintsOrdering) {
   SetPostgresqlDialect();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const backend::Schema> schema,
       test::CreateSchemaFromDDL({R"(
   CREATE TABLE Users(
@@ -1531,7 +1613,7 @@ TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestCheckConstraintsOrdering) {
 }
 
 TEST_F(SchemaTest, PrintDDLStatementsTestViews) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const backend::Schema> schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const backend::Schema> schema,
                        test::CreateSchemaFromDDL({R"(
     CREATE TABLE T(
       col1 INT64,
@@ -1556,7 +1638,7 @@ TEST_F(SchemaTest, PrintDDLStatementsTestViews) {
 
 TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestViews) {
   SetPostgresqlDialect();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const backend::Schema> schema,
       test::CreateSchemaFromDDL({R"(
     CREATE TABLE t(
@@ -1571,7 +1653,7 @@ TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestViews) {
                                 /*proto_descriptor_bytes=*/"",
                                 database_api::DatabaseDialect::POSTGRESQL));
 
-  ZETASQL_EXPECT_OK(PrintDDLStatements(schema.get()));
+  GOOGLESQL_EXPECT_OK(PrintDDLStatements(schema.get()));
   // TODO: Re-enable this once the new printer syntax is rolled
   // out.
   //  EXPECT_THAT(
@@ -1587,7 +1669,7 @@ TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestViews) {
 }
 
 TEST_F(SchemaTest, PrintDDLStatementsTestStoredIndex) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const backend::Schema> schema,
       test::CreateSchemaFromDDL(
           {R"(
@@ -1614,7 +1696,7 @@ TEST_F(SchemaTest, PrintDDLStatementsTestStoredIndex) {
 
 TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestStoredIndex) {
   SetPostgresqlDialect();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const backend::Schema> schema,
       test::CreateSchemaFromDDL(
           {R"(
@@ -1643,10 +1725,10 @@ TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestStoredIndex) {
                   "(col3, col4)")));
 }
 
-TEST_F(SchemaTest, ZetaSQLPrintDDLStatementsTestCreateChangeStreams) {
+TEST_F(SchemaTest, GoogleSQLPrintDDLStatementsTestCreateChangeStreams) {
   // Test CREATE CHANGE STREAM statements tracking nothing, pk columns
   // implicitly, one entire table, and ALL.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const backend::Schema> schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const backend::Schema> schema,
                        test::CreateSchemaFromDDL(
                            {
                                R"(CREATE TABLE T1 (
@@ -1686,7 +1768,7 @@ TEST_F(SchemaTest, ZetaSQLPrintDDLStatementsTestCreateChangeStreams) {
                               R"(CREATE CHANGE STREAM cs_T1_T2 FOR T1, T2)")));
 
   // Test CREATE CHANGE STREAM statements tracking columns specifically.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       schema,
       test::CreateSchemaFromDDL(
           {
@@ -1726,10 +1808,10 @@ TEST_F(SchemaTest, ZetaSQLPrintDDLStatementsTestCreateChangeStreams) {
 
 TEST_F(
     SchemaTest,
-    ZetaSQLPrintDDLStatementsTestCreateChangeStreamsWithSpecialTableNames) {
+    GoogleSQLPrintDDLStatementsTestCreateChangeStreamsWithSpecialTableNames) {
   // Test CREATE CHANGE STREAM statements tracking nothing, pk columns
   // implicitly, one entire table, and ALL.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const backend::Schema> schema,
       test::CreateSchemaFromDDL(
           {R"(CREATE TABLE `ALL` (Id STRING(20) NOT NULL,`All` STRING(20),) PRIMARY KEY(Id))",
@@ -1748,8 +1830,8 @@ TEST_F(
 }
 
 TEST_F(SchemaTest,
-       ZetaSQLPrintDDLStatementsTestCreateChangeStreamsValueCaptureTypes) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+       GoogleSQLPrintDDLStatementsTestCreateChangeStreamsValueCaptureTypes) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const backend::Schema> schema,
       test::CreateSchemaFromDDL(
           {R"(
@@ -1779,8 +1861,8 @@ TEST_F(SchemaTest,
 }
 
 TEST_F(SchemaTest,
-       ZetaSQLPrintDDLStatementsTestCreateChangeStreamsTwoOptions) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+       GoogleSQLPrintDDLStatementsTestCreateChangeStreamsTwoOptions) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const backend::Schema> schema,
       test::CreateSchemaFromDDL(
           {R"(
@@ -1808,9 +1890,9 @@ TEST_F(SchemaTest,
 }
 
 TEST_F(SchemaTest,
-       ZetaSQLPrintDDLStatementsTestAlterChangeStreamsSetOptions) {
+       GoogleSQLPrintDDLStatementsTestAlterChangeStreamsSetOptions) {
   // ALTER retention_period
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const backend::Schema> schema,
       test::CreateSchemaFromDDL(
           {R"(
@@ -1834,7 +1916,7 @@ TEST_F(SchemaTest,
           R"(CREATE CHANGE STREAM cs_T FOR T OPTIONS ( retention_period = '36h' ))")));
 
   // ALTER value_capture_type
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       schema,
       test::CreateSchemaFromDDL(
           {R"(
@@ -1857,9 +1939,9 @@ TEST_F(SchemaTest,
           R"(CREATE CHANGE STREAM cs_T FOR T OPTIONS ( value_capture_type = 'NEW_VALUES' ))")));
 }
 
-TEST_F(SchemaTest, ZetaSQLPrintDDLStatementsTestAlterChangeStreamsSetFor) {
+TEST_F(SchemaTest, GoogleSQLPrintDDLStatementsTestAlterChangeStreamsSetFor) {
   // ALTER tracked object
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const backend::Schema> schema,
       test::CreateSchemaFromDDL({R"(
     CREATE TABLE T (
@@ -1881,9 +1963,9 @@ TEST_F(SchemaTest, ZetaSQLPrintDDLStatementsTestAlterChangeStreamsSetFor) {
 }
 
 TEST_F(SchemaTest,
-       ZetaSQLPrintDDLStatementsTestAlterChangeStreamsDropForAll) {
+       GoogleSQLPrintDDLStatementsTestAlterChangeStreamsDropForAll) {
   // ALTER drop for all
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const backend::Schema> schema,
       test::CreateSchemaFromDDL(
           {R"(
@@ -1906,8 +1988,8 @@ TEST_F(SchemaTest,
           R"(CREATE CHANGE STREAM cs_T OPTIONS ( value_capture_type = 'NEW_VALUES' ))")));
 }
 
-TEST_F(SchemaTest, ZetaSQLPrintDDLStatementsTestDropChangeStreams) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+TEST_F(SchemaTest, GoogleSQLPrintDDLStatementsTestDropChangeStreams) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const backend::Schema> schema,
       test::CreateSchemaFromDDL(
           {R"(
@@ -1929,7 +2011,7 @@ TEST_F(SchemaTest, ZetaSQLPrintDDLStatementsTestDropChangeStreams) {
 
 TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestChangeStreams) {
   SetPostgresqlDialect();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const backend::Schema> schema,
       test::CreateSchemaFromDDL({R"(
     CREATE TABLE t(
@@ -1955,8 +2037,38 @@ TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestChangeStreams) {
 FOR t)")));
 }
 
+TEST_F(SchemaTest,
+       PostgreSQLPrintDDLStatementsTestChangeStreamsAllowTxnExclusionOption) {
+  SetPostgresqlDialect();
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const backend::Schema> schema,
+      test::CreateSchemaFromDDL({R"(
+    CREATE TABLE t(
+      col1 bigint primary key,
+      col2 varchar
+    )
+  )",
+                                 R"(
+    CREATE CHANGE STREAM change_stream FOR t WITH (allow_txn_exclusion = true)
+  )"},
+                                type_factory_.get(),
+                                /*proto_descriptor_bytes=*/"",
+                                database_api::DatabaseDialect::POSTGRESQL));
+
+  EXPECT_THAT(PrintDDLStatements(schema.get()),
+              IsOkAndHolds(ElementsAre(
+                  R"(CREATE TABLE t (
+  col1 bigint NOT NULL,
+  col2 character varying,
+  PRIMARY KEY(col1)
+))",
+                  R"(CREATE CHANGE STREAM change_stream
+FOR t
+WITH (allow_txn_exclusion = true))")));
+}
+
 TEST_F(SchemaTest, PrintDDLStatementsTestSequences) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const backend::Schema> schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const backend::Schema> schema,
                        test::CreateSchemaWithOneSequence(type_factory_.get()));
 
   EXPECT_THAT(PrintDDLStatements(schema.get()),
@@ -1977,7 +2089,7 @@ TEST_F(SchemaTest, PrintDDLStatementsTestSequences) {
 
 TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestSequences) {
   SetPostgresqlDialect();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const backend::Schema> schema,
       test::CreateSchemaWithOneSequence(
           type_factory_.get(), database_api::DatabaseDialect::POSTGRESQL));
@@ -2000,7 +2112,7 @@ TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestSequences) {
 
 TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestArrays) {
   SetPostgresqlDialect();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const backend::Schema> schema,
       test::CreateSchemaFromDDL({R"(
 CREATE TABLE base (
@@ -2035,7 +2147,7 @@ CREATE TABLE base (
 
 TEST_F(SchemaTest, PostgreSQLPrintDDLStatementsTestTTL) {
   SetPostgresqlDialect();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const backend::Schema> schema,
       test::CreateSchemaFromDDL({R"(
 CREATE TABLE vanishing_data (
@@ -2058,8 +2170,8 @@ ALTER TABLE vanishing_data ALTER TTL INTERVAL '3 WEEKS 2 DAYS' ON shadow_date
 ) TTL INTERVAL '3 WEEKS 2 DAYS' ON shadow_date)")));
 }
 
-TEST_F(SchemaTest, ZetaSQLPrintDDLStatementsIdentityColumns) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const backend::Schema> schema,
+TEST_F(SchemaTest, GoogleSQLPrintDDLStatementsIdentityColumns) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const backend::Schema> schema,
                        test::CreateSchemaFromDDL(
                            {"ALTER DATABASE db SET OPTIONS "
                             "(default_sequence_kind = 'bit_reversed_positive')",
@@ -2088,8 +2200,8 @@ TEST_F(SchemaTest, ZetaSQLPrintDDLStatementsIdentityColumns) {
 ) PRIMARY KEY(id))")));
 }
 
-TEST_F(SchemaTest, ZetaSQLPrintDDLStatementsSequenceClause) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const backend::Schema> schema,
+TEST_F(SchemaTest, GoogleSQLPrintDDLStatementsSequenceClause) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const backend::Schema> schema,
                        test::CreateSchemaFromDDL(
                            {"ALTER DATABASE db SET OPTIONS "
                             "(default_sequence_kind = 'bit_reversed_positive')",
@@ -2126,8 +2238,8 @@ TEST_F(SchemaTest, ZetaSQLPrintDDLStatementsSequenceClause) {
   start_with_counter = 2000))")));
 }
 
-TEST_F(SchemaTest, ZetaSQLPrintDDLStatementsTestCreateLocalityGroup) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+TEST_F(SchemaTest, GoogleSQLPrintDDLStatementsTestCreateLocalityGroup) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const backend::Schema> schema,
       test::CreateSchemaFromDDL(
           {R"(CREATE LOCALITY GROUP lg OPTIONS ( storage = 'ssd' ))"},
@@ -2140,8 +2252,8 @@ TEST_F(SchemaTest, ZetaSQLPrintDDLStatementsTestCreateLocalityGroup) {
                   R"(CREATE LOCALITY GROUP lg OPTIONS ( storage = 'ssd' ))")));
 }
 
-TEST_F(SchemaTest, ZetaSQLPrintDDLStatementsTestAlterLocalityGroup) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+TEST_F(SchemaTest, GoogleSQLPrintDDLStatementsTestAlterLocalityGroup) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const backend::Schema> schema,
       test::CreateSchemaFromDDL(
           {R"(CREATE LOCALITY GROUP lg)",
@@ -2156,8 +2268,8 @@ TEST_F(SchemaTest, ZetaSQLPrintDDLStatementsTestAlterLocalityGroup) {
           R"(CREATE LOCALITY GROUP lg OPTIONS ( storage = 'ssd', ssd_to_hdd_spill_timespan = '10m' ))")));
 }
 
-TEST_F(SchemaTest, ZetaSQLPrintDDLStatementsTestDropLocalityGroup) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+TEST_F(SchemaTest, GoogleSQLPrintDDLStatementsTestDropLocalityGroup) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const backend::Schema> schema,
       test::CreateSchemaFromDDL(
           {R"(CREATE LOCALITY GROUP lg)", R"(CREATE LOCALITY GROUP lg2)",
@@ -2171,7 +2283,7 @@ TEST_F(SchemaTest, ZetaSQLPrintDDLStatementsTestDropLocalityGroup) {
 }
 
 TEST_F(SchemaTest, PrintDDLStatementsTestUDFsWithDependencies) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const backend::Schema> schema,
       test::CreateSchemaFromDDL(
           {R"(CREATE FUNCTION udf_base(x INT64 DEFAULT 1) RETURNS INT64 SQL SECURITY INVOKER AS (x + 1))",
@@ -2209,7 +2321,7 @@ TEST_F(SchemaTest, PrintDDLStatementsTestUDFsWithDependencies) {
 }
 
 TEST_F(SchemaTest, PrintDDLStatementsTestNamedSchemas) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const backend::Schema> schema,
       test::CreateSchemaFromDDL(
           {R"(CREATE SCHEMA s1)", R"(CREATE SCHEMA s2)", R"(DROP SCHEMA s1)"},
@@ -2218,6 +2330,70 @@ TEST_F(SchemaTest, PrintDDLStatementsTestNamedSchemas) {
       PrintDDLStatements(schema.get());
 
   EXPECT_THAT(statements, IsOkAndHolds(ElementsAre(R"(CREATE SCHEMA s2)")));
+}
+
+TEST_F(SchemaTest, FullDebugStringAndPrintIndexFilter) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const backend::Schema> schema,
+      test::CreateSchemaFromDDL(
+          {
+              R"(CREATE TABLE T (
+                k1 INT64,
+                c1 STRING(MAX),
+                c2 STRING(MAX),
+              ) PRIMARY KEY(k1))",
+              R"(CREATE INDEX IdxPartial ON T(c1) WHERE c1 IS NOT NULL AND c2 IS NOT NULL)",
+              R"(CREATE INDEX IdxNormal ON T(c1))",
+          },
+          type_factory_.get()));
+
+  const Index* idx_partial = schema->FindIndex("IdxPartial");
+  ASSERT_NE(idx_partial, nullptr);
+  EXPECT_THAT(idx_partial->FullDebugString(),
+              testing::HasSubstr(
+                  "Index Filter: WHERE c1 IS NOT NULL AND c2 IS NOT NULL"));
+
+  const Index* idx_normal = schema->FindIndex("IdxNormal");
+  ASSERT_NE(idx_normal, nullptr);
+  EXPECT_EQ(PrintIndexFilter(idx_normal), "");
+}
+
+TEST_F(SchemaTest, NullFilteredIndexPrintDDL) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const backend::Schema> schema,
+                       test::CreateSchemaFromDDL(
+                           {
+                               R"(CREATE TABLE T (
+                k1 INT64,
+                c1 STRING(MAX),
+              ) PRIMARY KEY(k1))",
+                           },
+                           type_factory_.get()));
+
+  const Table* table = schema->FindTable("T");
+  ASSERT_NE(table, nullptr);
+  const Column* col = table->FindColumn("c1");
+  ASSERT_NE(col, nullptr);
+
+  // Manually build an index that is NULL_FILTERED and has
+  // null_filtered_columns. This state is not reachable via standard DDL in the
+  // emulator, but is possible via internal builder. This tests if PrintIndex
+  // correctly handles this by NOT printing an extra WHERE clause (which is what
+  // NULL_FILTERED implies).
+  Index::Builder builder;
+  builder.set_name("Idx")
+      .set_indexed_table(table)
+      .set_index_data_table(table)  // Not accurate but enough for PrintIndex
+      .set_null_filtered(true)
+      .add_null_filtered_column(col);
+
+  std::unique_ptr<const Index> index = builder.build();
+
+  // The output should NOT contain a WHERE clause because it already has
+  // NULL_FILTERED. Original code at L280 in print_ddl.cc ensures this with
+  // !index->is_null_filtered().
+  std::string ddl = PrintIndex(index.get());
+  EXPECT_THAT(ddl, testing::HasSubstr("NULL_FILTERED INDEX Idx"));
+  EXPECT_THAT(ddl, testing::Not(testing::HasSubstr("WHERE")));
 }
 
 }  // namespace

@@ -35,9 +35,10 @@
 #include <map>
 #include <string>
 
-#include "zetasql/base/logging.h"
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/types/type.h"
+#include "googlesql/base/logging.h"
+#include "third_party/spanner_pg/util/integral_types.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/types/type.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/optional.h"
@@ -62,24 +63,24 @@ class Transformer {
   // This function is static so that the analyzer can use it without defining
   // a Transformer instance.
   static absl::StatusOr<RangeTblEntry*> BuildPgRangeTblEntry(
-      CatalogAdapter& adapter, const zetasql::Table& resolved_table,
+      CatalogAdapter& adapter, const googlesql::Table& resolved_table,
       Alias* alias, bool inFromCl, AclMode acl_mode);
   static absl::StatusOr<RangeTblEntry*> BuildPgRangeTblEntry(
       CatalogAdapter& adapter, Oid oid, Alias* alias, bool inFromCl,
       AclMode acl_mode);
 
   static absl::StatusOr<Oid> BuildPgTypeOid(CatalogAdapter& catalog_adapter,
-                                            const zetasql::Type* gsql_type);
+                                            const googlesql::Type* gsql_type);
 
-  // Given a map of parameter name -> ZetaSQL type, get the parameters in
-  // order and transform each parameter type from a ZetaSQL type to a
+  // Given a map of parameter name -> GoogleSQL type, get the parameters in
+  // order and transform each parameter type from a GoogleSQL type to a
   // PostgreSQL type. Return an error if any parameter names don't match the
   // expected naming scheme (p1, p2, p3, etc).
   // Set max_param to the largest parameter number seen, which may differ
   // from the size of gsql_param_types if there are missing parameter types.
   static absl::StatusOr<Oid*> BuildPgParameterTypeList(
       CatalogAdapter& catalog_adapter,
-      const std::map<std::string, const zetasql::Type*>& gsql_param_types,
+      const std::map<std::string, const googlesql::Type*>& gsql_param_types,
       int* max_param);
 };
 

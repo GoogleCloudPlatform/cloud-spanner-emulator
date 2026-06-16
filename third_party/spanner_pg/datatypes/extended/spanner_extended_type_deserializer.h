@@ -32,23 +32,23 @@
 #ifndef DATATYPES_EXTENDED_SPANNER_EXTENDED_TYPE_DESERIALIZER_H_
 #define DATATYPES_EXTENDED_SPANNER_EXTENDED_TYPE_DESERIALIZER_H_
 
-#include "zetasql/public/type.pb.h"
-#include "zetasql/public/types/extended_type.h"
-#include "zetasql/public/types/type_deserializer.h"
+#include "googlesql/public/type.pb.h"
+#include "googlesql/public/types/extended_type.h"
+#include "googlesql/public/types/type_deserializer.h"
 #include "absl/status/statusor.h"
 
 namespace postgres_translator::spangres {
 namespace datatypes {
 
 class SpannerExtendedTypeDeserializer
-    : public zetasql::ExtendedTypeDeserializer {
+    : public googlesql::ExtendedTypeDeserializer {
  public:
   SpannerExtendedTypeDeserializer() = default;
 
-  // Input `type_proto` must be an extended ZetaSQL type.
-  absl::StatusOr<const zetasql::ExtendedType*> Deserialize(
-      const zetasql::TypeProto& type_proto,
-      const zetasql::TypeDeserializer& type_deserializer) const override;
+  // Input `type_proto` must be an extended GoogleSQL type.
+  absl::StatusOr<const googlesql::ExtendedType*> Deserialize(
+      const googlesql::TypeProto& type_proto,
+      const googlesql::TypeDeserializer& type_deserializer) const override;
 };
 
 }  // namespace datatypes

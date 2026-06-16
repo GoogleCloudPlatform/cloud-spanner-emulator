@@ -32,15 +32,15 @@
 #ifndef DATATYPES_EXTENDED_PG_OID_CONVERSION_FUNCTIONS_H_
 #define DATATYPES_EXTENDED_PG_OID_CONVERSION_FUNCTIONS_H_
 
-#include "zetasql/public/function.h"
+#include "googlesql/public/function.h"
 
 namespace postgres_translator::spangres::datatypes {
 
 // PG.OID conversion functions
-const zetasql::Function* GetInt64ToPgOidConversion();
-const zetasql::Function* GetPgOidToInt64Conversion();
-const zetasql::Function* GetStringToPgOidConversion();
-const zetasql::Function* GetPgOidToStringConversion();
+const googlesql::Function* GetInt64ToPgOidConversion();
+const googlesql::Function* GetPgOidToInt64Conversion();
+const googlesql::Function* GetStringToPgOidConversion();
+const googlesql::Function* GetPgOidToStringConversion();
 
 }  // namespace postgres_translator::spangres::datatypes
 

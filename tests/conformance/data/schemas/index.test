@@ -1,0 +1,29 @@
+@Dialect=GOOGLE_STANDARD_SQL
+CREATE TABLE Users(
+  ID   INT64 NOT NULL,
+  Name STRING(MAX),
+  Age  INT64
+) PRIMARY KEY (ID);
+CREATE INDEX UsersByName ON Users(Name);
+CREATE INDEX UsersByNameDescending ON Users(Name DESC);
+CREATE NULL_FILTERED INDEX UsersByNameNullFiltered ON Users(Name, Age);
+CREATE UNIQUE INDEX UsersByNameAgeUnique ON Users(Name, Age);
+CREATE UNIQUE NULL_FILTERED INDEX UsersByNameUniqueFiltered ON Users(Name);
+CREATE TABLE NoPkTable ( Col1 INT64 ) PRIMARY KEY();
+CREATE INDEX NoPkTableIdx ON NoPkTable(Col1);
+CREATE INDEX UsersByNameAgeNotNull ON Users(Name, Age) WHERE Name IS NOT NULL AND Age IS NOT NULL;
+CREATE INDEX UsersByNameStoreAgeNotNull ON Users(Name) STORING(Age) WHERE Age IS NOT NULL;
+===
+@Dialect=POSTGRESQL
+CREATE TABLE Users(
+  ID   bigint NOT NULL PRIMARY KEY,
+  Name varchar,
+  Age  bigint
+);
+CREATE INDEX UsersByName ON Users(Name);
+CREATE INDEX UsersByNameDescending ON Users(Name DESC);
+CREATE INDEX UsersByNameNullFiltered ON Users(Name, Age) WHERE Name IS NOT NULL AND Age IS NOT NULL;
+CREATE UNIQUE INDEX UsersByNameAgeUnique ON Users(Name, Age);
+CREATE UNIQUE INDEX UsersByNameUniqueFiltered ON Users(Name) WHERE Name IS NOT NULL;
+CREATE INDEX UsersByNameAgeNotNull ON Users(Name, Age) WHERE Name IS NOT NULL AND Age IS NOT NULL;
+CREATE INDEX UsersByNameStoreAgeNotNull ON Users(Name) INCLUDE(Age) WHERE Age IS NOT NULL;

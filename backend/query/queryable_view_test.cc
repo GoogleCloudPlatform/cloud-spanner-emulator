@@ -21,12 +21,12 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/type.h"
-#include "zetasql/public/type.pb.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/type.h"
+#include "googlesql/public/type.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/statusor.h"
 #include "absl/types/span.h"
 #include "backend/query/catalog.h"
@@ -51,12 +51,12 @@ class QueryableViewTest : public testing::Test {
         {R"(CREATE VIEW test_view SQL SECURITY INVOKER AS
               SELECT TRUE AS bool_col)"},
         &type_factory_);
-    ZETASQL_EXPECT_OK(schema.status());
+    GOOGLESQL_EXPECT_OK(schema.status());
     schema_ = std::move(schema.value());
   }
 
  protected:
-  zetasql::TypeFactory type_factory_;
+  googlesql::TypeFactory type_factory_;
   std::unique_ptr<test::ScopedEmulatorFeatureFlagsSetter> flag_setter_;
   std::unique_ptr<const Schema> schema_;
 };

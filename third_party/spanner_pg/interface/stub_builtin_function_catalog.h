@@ -36,15 +36,15 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/builtin_function.h"
-#include "zetasql/public/builtin_function_options.h"
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/function.h"
-#include "zetasql/public/function_signature.h"
-#include "zetasql/public/language_options.h"
-#include "zetasql/public/table_valued_function.h"
-#include "zetasql/public/types/type.h"
-#include "zetasql/public/types/type_factory.h"
+#include "googlesql/public/builtin_function.h"
+#include "googlesql/public/builtin_function_options.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/function.h"
+#include "googlesql/public/function_signature.h"
+#include "googlesql/public/language_options.h"
+#include "googlesql/public/table_valued_function.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/public/types/type_factory.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/log/check.h"
@@ -54,17 +54,17 @@
 namespace postgres_translator {
 
 // Stub version of EngineBuiltinFunctionCatalog that holds:
-// * ZetaSQL builtin functions.
+// * GoogleSQL builtin functions.
 // * a few namespaced functions.
 class StubBuiltinFunctionCatalog : public EngineBuiltinFunctionCatalog {
  public:
   explicit StubBuiltinFunctionCatalog(
-      const zetasql::LanguageOptions& language_options)
+      const googlesql::LanguageOptions& language_options)
       : EngineBuiltinFunctionCatalog() {
-    absl::flat_hash_map<std::string, const zetasql::Type*>
+    absl::flat_hash_map<std::string, const googlesql::Type*>
         googlesql_builtin_types_unused_;
-    absl::Status status = zetasql::GetBuiltinFunctionsAndTypes(
-        zetasql::BuiltinFunctionOptions(language_options), *type_factory(),
+    absl::Status status = googlesql::GetBuiltinFunctionsAndTypes(
+        googlesql::BuiltinFunctionOptions(language_options), *type_factory(),
         functions_, googlesql_builtin_types_unused_);
     // `status` can be an error when `BuiltinFunctionOptions` is misconfigured.
     // The call above only supplies a `LangaugeOptions` and is low risk. If that
@@ -74,17 +74,17 @@ class StubBuiltinFunctionCatalog : public EngineBuiltinFunctionCatalog {
     ABSL_DCHECK_OK(status);
 
     // Add a function in a different namespace.
-    functions_.insert({"ai.if", std::make_unique<zetasql::Function>(
+    functions_.insert({"ai.if", std::make_unique<googlesql::Function>(
                                     std::vector<std::string>{"ai", "if"}, "pg",
-                                    zetasql::Function::SCALAR,
+                                    googlesql::Function::SCALAR,
                                     /*function_signatures=*/
-                                    std::vector<zetasql::FunctionSignature>{
-                                        {zetasql::types::BoolType(),
-                                         {zetasql::types::StringType()},
+                                    std::vector<googlesql::FunctionSignature>{
+                                        {googlesql::types::BoolType(),
+                                         {googlesql::types::StringType()},
                                          /*context_ptr=*/nullptr}})});
   }
 
-  absl::StatusOr<const zetasql::Function*> GetFunction(
+  absl::StatusOr<const googlesql::Function*> GetFunction(
       const std::string& name) const override {
     auto it = functions_.find(name);
     if (it != functions_.end()) {
@@ -94,18 +94,18 @@ class StubBuiltinFunctionCatalog : public EngineBuiltinFunctionCatalog {
     }
   }
 
-  absl::StatusOr<const zetasql::Procedure*> GetProcedure(
+  absl::StatusOr<const googlesql::Procedure*> GetProcedure(
       const std::string& name) const override {
     return absl::UnimplementedError("GetProcedure is not supported");
   }
 
-  absl::StatusOr<const zetasql::TableValuedFunction*> GetTableValuedFunction(
+  absl::StatusOr<const googlesql::TableValuedFunction*> GetTableValuedFunction(
       const std::string& name) const override {
     return absl::UnimplementedError("GetTableValuedFunction is not supported");
   }
 
   absl::Status GetFunctions(
-      absl::flat_hash_set<const zetasql::Function*>* output) const override {
+      absl::flat_hash_set<const googlesql::Function*>* output) const override {
     for (const auto& function_mapping : functions_) {
       output->insert(function_mapping.second.get());
     }
@@ -113,17 +113,17 @@ class StubBuiltinFunctionCatalog : public EngineBuiltinFunctionCatalog {
   }
 
   absl::Status GetProcedures(
-      absl::flat_hash_set<const zetasql::Procedure*>* output) const override {
+      absl::flat_hash_set<const googlesql::Procedure*>* output) const override {
     return absl::OkStatus();
   }
 
  private:
-  // This is the full set of ZetaSQL built-in functions.
+  // This is the full set of GoogleSQL built-in functions.
   // It is a superset of the built-in functions which are available through the
   // PostgreSQL interface.
   // Each PostgresExtendedFunction must have its own implementation in the
-  // storage engine or map to a ZetaSQL function in this set.
-  absl::flat_hash_map<std::string, std::unique_ptr<zetasql::Function>>
+  // storage engine or map to a GoogleSQL function in this set.
+  absl::flat_hash_map<std::string, std::unique_ptr<googlesql::Function>>
       functions_;
 };
 

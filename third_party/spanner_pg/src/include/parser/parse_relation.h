@@ -4,7 +4,7 @@
  *	  prototypes for parse_relation.c.
  *
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/parser/parse_relation.h
@@ -47,12 +47,13 @@ extern Node *scanNSItemForColumn(ParseState *pstate, ParseNamespaceItem *nsitem,
 								 int location);
 extern Node *colNameToVar(ParseState *pstate, const char *colname, bool localonly,
 						  int location);
+extern void markNullableIfNeeded(ParseState *pstate, Var *var);
 extern void markVarForSelectPriv(ParseState *pstate, Var *var);
 extern Relation parserOpenTable(ParseState *pstate, const RangeVar *relation,
 								int lockmode);
 // SPANGRES BEGIN
 // Performs a lookup in googlesql's Catalog and translates a looked-up
-// zetasql::Table into an RTE.
+// googlesql::Table into an RTE.
 ParseNamespaceItem* addRangeTableEntry(struct ParseState* pstate,
                                        RangeVar* relation, Alias* alias,
                                        bool inh, bool inFromCl);
@@ -135,7 +136,7 @@ extern ParseNamespaceItem *addRangeTableEntryForJoin(ParseState *pstate,
 													 List *aliasvars,
 													 List *leftcols,
 													 List *rightcols,
-													 Alias *joinalias,
+													 Alias *join_using_alias,
 													 Alias *alias,
 													 bool inFromCl);
 extern ParseNamespaceItem *addRangeTableEntryForCTE(ParseState *pstate,
@@ -146,6 +147,10 @@ extern ParseNamespaceItem *addRangeTableEntryForCTE(ParseState *pstate,
 extern ParseNamespaceItem *addRangeTableEntryForENR(ParseState *pstate,
 													RangeVar *rv,
 													bool inFromCl);
+extern RTEPermissionInfo *addRTEPermissionInfo(List **rteperminfos,
+											   RangeTblEntry *rte);
+extern RTEPermissionInfo *getRTEPermissionInfo(List *rteperminfos,
+											   RangeTblEntry *rte);
 extern bool isLockedRefname(ParseState *pstate, const char *refname);
 extern void addNSItemToQuery(ParseState *pstate, ParseNamespaceItem *nsitem,
 							 bool addToJoinList,

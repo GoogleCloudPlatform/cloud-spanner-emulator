@@ -28,11 +28,11 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "frontend/server/server.h"
+#include "googlesql/base/status_macros.h"
 #include "grpcpp/channel.h"
 #include "grpcpp/client_context.h"
 #include "grpcpp/create_channel.h"
 #include "grpcpp/security/credentials.h"
-#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -81,7 +81,7 @@ void TestEnv::SetupServer() {
   frontend::Server::Options options;
   options.server_address = "localhost:0";
   server_ = frontend::Server::Create(options);
-  ZETASQL_VLOG(server_ != nullptr);  // Crash ok
+  GOOGLESQL_VLOG(server_ != nullptr);  // Crash ok
   ASSERT_EQ(server_->host(), "localhost");
   host_port_ = absl::StrCat(server_->host(), ":", server_->port());
   ABSL_LOG(INFO) << "Cloud Spanner Emulator running in test.";

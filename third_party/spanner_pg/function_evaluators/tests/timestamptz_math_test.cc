@@ -32,10 +32,10 @@
 #include <cstdint>
 #include <string>
 
-#include "zetasql/public/interval_value.h"
+#include "googlesql/public/interval_value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/flags/flag.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
@@ -50,7 +50,7 @@ namespace {
 constexpr char kDefaultTimezone[] = "America/Los_Angeles";
 
 using ::testing::HasSubstr;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 
 struct TimestamptzMathTestCase {
   TimestamptzMathTestCase(std::string timestamptz_input_in,
@@ -73,7 +73,7 @@ class TimestamptzMathTest
  protected:
   void SetUp() override {
     PgEvaluatorTestWithParam<TimestamptzMathTestCase>::SetUp();
-    ZETASQL_ASSERT_OK(InitTimezone(kDefaultTimezone));
+    GOOGLESQL_ASSERT_OK(InitTimezone(kDefaultTimezone));
   }
 
   void TearDown() override {
@@ -85,21 +85,21 @@ class TimestamptzMathTest
 
 TEST_P(TimestamptzMathTest, TimestamptzAddIntervalString) {
   const TimestamptzMathTestCase& test_case = GetParam();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Time timestamptz_input,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Time timestamptz_input,
                        PgTimestamptzIn(test_case.timestamptz_input_str));
   std::string interval =
       absl::StrCat(test_case.interval_value, " ", test_case.interval_type);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Time computed_time,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Time computed_time,
                        PgTimestamptzAdd(timestamptz_input, interval));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Time expected_timestamptz,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Time expected_timestamptz,
                        PgTimestamptzIn(test_case.expected_timestamptz_str));
   EXPECT_EQ(expected_timestamptz, computed_time);
 }
 
 TEST_P(TimestamptzMathTest, TimestamptzSubtractIntervalString) {
   const TimestamptzMathTestCase& test_case = GetParam();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Time timestamptz_input,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Time timestamptz_input,
                        PgTimestamptzIn(test_case.timestamptz_input_str));
 
   // Turn each add case into a subtract case by multiplying the interval
@@ -108,27 +108,27 @@ TEST_P(TimestamptzMathTest, TimestamptzSubtractIntervalString) {
   std::string interval =
       absl::StrCat(interval_value, " ", test_case.interval_type);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Time computed_time,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Time computed_time,
                        PgTimestamptzSubtract(timestamptz_input, interval));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Time expected_timestamptz,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Time expected_timestamptz,
                        PgTimestamptzIn(test_case.expected_timestamptz_str));
   EXPECT_EQ(expected_timestamptz, computed_time);
 }
 
 TEST_P(TimestamptzMathTest, TimestamptzAddInterval) {
   const TimestamptzMathTestCase& test_case = GetParam();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Time timestamptz_input,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Time timestamptz_input,
                        PgTimestamptzIn(test_case.timestamptz_input_str));
   std::string interval =
       absl::StrCat(test_case.interval_value, " ", test_case.interval_type);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::IntervalValue gsql_interval,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(googlesql::IntervalValue gsql_interval,
                        PgIntervalIn(interval));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Time computed_time,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Time computed_time,
                        PgTimestamptzAdd(timestamptz_input, gsql_interval));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Time expected_timestamptz,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Time expected_timestamptz,
                        PgTimestamptzIn(test_case.expected_timestamptz_str));
   EXPECT_EQ(expected_timestamptz, computed_time)
       << "Input Time: " << test_case.timestamptz_input_str
@@ -137,7 +137,7 @@ TEST_P(TimestamptzMathTest, TimestamptzAddInterval) {
 
 TEST_P(TimestamptzMathTest, TimestamptzSubtractInterval) {
   const TimestamptzMathTestCase& test_case = GetParam();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Time timestamptz_input,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Time timestamptz_input,
                        PgTimestamptzIn(test_case.timestamptz_input_str));
 
   // Turn each add case into a subtract case by multiplying the interval
@@ -145,12 +145,12 @@ TEST_P(TimestamptzMathTest, TimestamptzSubtractInterval) {
   double interval_value = -1 * test_case.interval_value;
   std::string interval =
       absl::StrCat(interval_value, " ", test_case.interval_type);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::IntervalValue gsql_interval,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(googlesql::IntervalValue gsql_interval,
                        PgIntervalIn(interval));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Time computed_time,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Time computed_time,
                        PgTimestamptzSubtract(timestamptz_input, gsql_interval));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Time expected_timestamptz,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Time expected_timestamptz,
                        PgTimestamptzIn(test_case.expected_timestamptz_str));
 
   EXPECT_EQ(expected_timestamptz, computed_time)
@@ -171,7 +171,7 @@ INSTANTIATE_TEST_SUITE_P(
                                  "2022-10-28 16:00:00"}),
         TimestamptzMathTestCase({"2021-10-31 00:00:00+02", -1, "DAY",
                                  "2021-10-29 15:00:00"}),
-        // From the ZetaSQL timestamp test suite.
+        // From the GoogleSQL timestamp test suite.
         // Microseconds
         TimestamptzMathTestCase({"2000-01-01 00:11:22.345678", 0,
                                  "microseconds", "2000-01-01 0:11:22.345678"}),
@@ -315,7 +315,7 @@ class TimestamptzMathErrorTest
  protected:
   void SetUp() override {
     PgEvaluatorTestWithParam<TimestamptzMathErrorTestCase>::SetUp();
-    ZETASQL_ASSERT_OK(InitTimezone(kDefaultTimezone));
+    GOOGLESQL_ASSERT_OK(InitTimezone(kDefaultTimezone));
   }
 
   void TearDown() override {
@@ -327,7 +327,7 @@ class TimestamptzMathErrorTest
 
 TEST_P(TimestamptzMathErrorTest, TimestamptzMathError) {
   const TimestamptzMathErrorTestCase& test_case = GetParam();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Time time_input,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Time time_input,
                        PgTimestamptzIn(test_case.timestamptz));
   std::string interval =
       absl::StrCat(test_case.interval_value, " ", test_case.interval_part);

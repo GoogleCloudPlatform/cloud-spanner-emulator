@@ -22,10 +22,10 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/json_value.h"
-#include "zetasql/public/options.pb.h"
-#include "zetasql/public/type.pb.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/json_value.h"
+#include "googlesql/public/options.pb.h"
+#include "googlesql/public/type.pb.h"
+#include "googlesql/public/value.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
@@ -45,9 +45,9 @@
 #include "common/constants.h"
 #include "common/errors.h"
 #include "common/limits.h"
+#include "googlesql/base/status_macros.h"
 #include "nlohmann/json_fwd.hpp"
 #include "nlohmann/json.hpp"
-#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -58,7 +58,7 @@ using JSON = ::nlohmann::json;
 
 absl::Status TestReadOnlyStore::Insert(
     const Table* table, const Key& key, absl::Span<const Column* const> columns,
-    const std::vector<zetasql::Value>& values) {
+    const std::vector<googlesql::Value>& values) {
   return store_.Write(absl::InfiniteFuture(), table->id(), key,
                       GetColumnIDs(columns), values);
 }
@@ -83,12 +83,12 @@ absl::StatusOr<bool> TestReadOnlyStore::Exists(const Table* table,
 absl::StatusOr<bool> TestReadOnlyStore::PrefixExists(
     const Table* table, const Key& prefix_key) const {
   std::unique_ptr<StorageIterator> itr;
-  ZETASQL_RETURN_IF_ERROR(store_.Read(absl::InfiniteFuture(), table->id(),
+  GOOGLESQL_RETURN_IF_ERROR(store_.Read(absl::InfiniteFuture(), table->id(),
                               KeyRange::Point(prefix_key), {}, &itr));
   if (itr->Next() && itr->Status().ok()) {
     return true;
   }
-  ZETASQL_RETURN_IF_ERROR(itr->Status());
+  GOOGLESQL_RETURN_IF_ERROR(itr->Status());
   return false;
 }
 
@@ -96,7 +96,7 @@ absl::StatusOr<ValueList> TestReadOnlyStore::ReadCommitted(
     const Table* table, const Key& key,
     std::vector<const Column*> columns) const {
   std::unique_ptr<StorageIterator> itr;
-  ZETASQL_RETURN_IF_ERROR(store_.Read(absl::InfiniteFuture(), table->id(),
+  GOOGLESQL_RETURN_IF_ERROR(store_.Read(absl::InfiniteFuture(), table->id(),
                               KeyRange::Point(key), GetColumnIDs(columns),
                               &itr));
   ValueList values;
@@ -105,7 +105,7 @@ absl::StatusOr<ValueList> TestReadOnlyStore::ReadCommitted(
       if (itr->ColumnValue(i).is_valid()) {
         values.push_back(itr->ColumnValue(i));
       } else {
-        values.push_back(zetasql::values::Null(columns[i]->GetType()));
+        values.push_back(googlesql::values::Null(columns[i]->GetType()));
       }
     }
   }
@@ -117,21 +117,21 @@ absl::StatusOr<std::unique_ptr<StorageIterator>> TestReadOnlyStore::Read(
     const absl::Span<const Column* const> columns,
     bool allow_pending_commit_timestamps_in_read) const {
   std::unique_ptr<StorageIterator> itr;
-  ZETASQL_RETURN_IF_ERROR(store_.Read(absl::InfiniteFuture(), table->id(), key_range,
+  GOOGLESQL_RETURN_IF_ERROR(store_.Read(absl::InfiniteFuture(), table->id(), key_range,
                               GetColumnIDs(columns), &itr));
   return itr;
 }
 
 void TestEffectsBuffer::Insert(const Table* table, const Key& key,
                                const absl::Span<const Column* const> columns,
-                               const std::vector<zetasql::Value>& values) {
+                               const std::vector<googlesql::Value>& values) {
   ops_queue_->push(
       InsertOp{table, key, {columns.begin(), columns.end()}, values});
 }
 
 void TestEffectsBuffer::Update(const Table* table, const Key& key,
                                const absl::Span<const Column* const> columns,
-                               const std::vector<zetasql::Value>& values) {
+                               const std::vector<googlesql::Value>& values) {
   ops_queue_->push(
       UpdateOp{table, key, {columns.begin(), columns.end()}, values});
 }
@@ -142,13 +142,13 @@ void TestEffectsBuffer::Delete(const Table* table, const Key& key) {
 
 WriteOp ActionsTest::Insert(const Table* table, const Key& key,
                             absl::Span<const Column* const> columns,
-                            const std::vector<zetasql::Value> values) {
+                            const std::vector<googlesql::Value> values) {
   return InsertOp{table, key, {columns.begin(), columns.end()}, values};
 }
 
 WriteOp ActionsTest::Update(const Table* table, const Key& key,
                             absl::Span<const Column* const> columns,
-                            const std::vector<zetasql::Value> values) {
+                            const std::vector<googlesql::Value> values) {
   return UpdateOp{table, key, {columns.begin(), columns.end()}, values};
 }
 

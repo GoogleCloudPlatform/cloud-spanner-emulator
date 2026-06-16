@@ -31,7 +31,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/test_catalog/test_catalog.h"
 #include "third_party/spanner_pg/util/unittest_utils.h"
@@ -48,13 +48,13 @@ namespace {
 using PostgresE2ETest = ::postgres_translator::test::ValidMemoryContext;
 
 absl::StatusOr<Query*> ParseAndAnalyzeFromPostgres(const std::string& sql) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
   List* pg_parse_tree;
-  ZETASQL_ASSIGN_OR_RETURN(pg_parse_tree, ParseFromPostgres(sql.c_str()));
-  ZETASQL_RET_CHECK_EQ(list_length(pg_parse_tree), 1);
+  GOOGLESQL_ASSIGN_OR_RETURN(pg_parse_tree, ParseFromPostgres(sql.c_str()));
+  GOOGLESQL_RET_CHECK_EQ(list_length(pg_parse_tree), 1);
   return AnalyzeFromPostgresForTest(sql, pg_parse_tree,
                                     GetSpangresTestAnalyzerOptions());
 }
@@ -64,7 +64,7 @@ absl::StatusOr<Query*> ParseAndAnalyzeFromPostgres(const std::string& sql) {
 TEST_F(PostgresE2ETest, HintParsesAndAnalyzes) {
   const std::string test_string = "/*@ statement_hint = 1 */ select 1;";
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const Query* query,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const Query* query,
                        ParseAndAnalyzeFromPostgres(test_string));
 
   // Verify the Query Tree has a single hint node which contains the name

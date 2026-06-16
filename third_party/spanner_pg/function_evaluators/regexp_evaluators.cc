@@ -42,7 +42,7 @@
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
 #include "third_party/spanner_pg/src/backend/catalog/pg_type_d.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator::function_evaluators {
 
@@ -53,30 +53,30 @@ void CleanupRegexCache() { CleanupCompiledRegexCache(); }
 static absl::StatusOr<std::unique_ptr<std::vector<std::string>>>
 RegexpSplitToArray(absl::string_view string, absl::string_view pattern,
                    std::optional<absl::string_view> flags) {
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       Datum string_in_datum,
       CheckedPgStringToDatum(std::string(string).c_str(), TEXTOID));
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       Datum pattern_in_datum,
       CheckedPgStringToDatum(std::string(pattern).c_str(), TEXTOID));
 
   Datum matches_datum;
   if (flags.has_value()) {
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         Datum flags_in_datum,
         CheckedPgStringToDatum(std::string(flags.value()).c_str(), TEXTOID));
-    ZETASQL_ASSIGN_OR_RETURN(matches_datum,
+    GOOGLESQL_ASSIGN_OR_RETURN(matches_datum,
                      postgres_translator::CheckedOidFunctionCall3(
                          F_REGEXP_SPLIT_TO_ARRAY_TEXT_TEXT_TEXT,
                          string_in_datum, pattern_in_datum, flags_in_datum));
   } else {
-    ZETASQL_ASSIGN_OR_RETURN(matches_datum,
+    GOOGLESQL_ASSIGN_OR_RETURN(matches_datum,
                      postgres_translator::CheckedOidFunctionCall2(
                          F_REGEXP_SPLIT_TO_ARRAY_TEXT_TEXT, string_in_datum,
                          pattern_in_datum));
   }
 
-  ZETASQL_ASSIGN_OR_RETURN(ArrayType * matches_array,
+  GOOGLESQL_ASSIGN_OR_RETURN(ArrayType * matches_array,
                    CheckedPgDatumGetArrayTypeP(matches_datum));
 
   if (matches_array == nullptr) {
@@ -90,22 +90,22 @@ RegexpSplitToArray(absl::string_view string, absl::string_view pattern,
     return absl::InternalError(
         "regex produced invalid lower bound for matches");
   }
-  ZETASQL_ASSIGN_OR_RETURN(ArrayIterator it,
+  GOOGLESQL_ASSIGN_OR_RETURN(ArrayIterator it,
                    CheckedPgArrayCreateIterator(matches_array, /*slice_ndim=*/0,
                                                 /*mstate=*/nullptr));
   Datum element;
   bool is_null;
   auto result = std::make_unique<std::vector<std::string>>();
-  ZETASQL_ASSIGN_OR_RETURN(bool has_next,
+  GOOGLESQL_ASSIGN_OR_RETURN(bool has_next,
                    CheckedPgArrayIterate(it, &element, &is_null));
   while (has_next) {
     if (is_null) {
       return absl::InternalError("null match when trying to split array");
     }
-    ZETASQL_ASSIGN_OR_RETURN(char* value, CheckedPgTextDatumGetCString(element));
+    GOOGLESQL_ASSIGN_OR_RETURN(char* value, CheckedPgTextDatumGetCString(element));
     result->push_back(value);
 
-    ZETASQL_ASSIGN_OR_RETURN(has_next, CheckedPgArrayIterate(it, &element, &is_null));
+    GOOGLESQL_ASSIGN_OR_RETURN(has_next, CheckedPgArrayIterate(it, &element, &is_null));
   }
   return result;
 }
@@ -124,24 +124,24 @@ absl::StatusOr<std::unique_ptr<std::vector<std::string>>> RegexpSplitToArray(
 static absl::StatusOr<std::unique_ptr<std::vector<std::optional<std::string>>>>
 RegexpMatch(absl::string_view string, absl::string_view pattern,
             std::optional<absl::string_view> flags) {
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       Datum string_in_datum,
       CheckedPgStringToDatum(std::string(string).c_str(), TEXTOID));
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       Datum pattern_in_datum,
       CheckedPgStringToDatum(std::string(pattern).c_str(), TEXTOID));
 
   Datum matches_datum;
   if (flags.has_value()) {
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         Datum flags_in_datum,
         CheckedPgStringToDatum(std::string(flags.value()).c_str(), TEXTOID));
-    ZETASQL_ASSIGN_OR_RETURN(matches_datum,
+    GOOGLESQL_ASSIGN_OR_RETURN(matches_datum,
                      postgres_translator::CheckedNullableOidFunctionCall3(
                          F_REGEXP_MATCH_TEXT_TEXT_TEXT, string_in_datum,
                          pattern_in_datum, flags_in_datum));
   } else {
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         matches_datum,
         postgres_translator::CheckedNullableOidFunctionCall2(
             F_REGEXP_MATCH_TEXT_TEXT, string_in_datum, pattern_in_datum));
@@ -150,7 +150,7 @@ RegexpMatch(absl::string_view string, absl::string_view pattern,
     return nullptr;
   }
 
-  ZETASQL_ASSIGN_OR_RETURN(ArrayType * matches_array,
+  GOOGLESQL_ASSIGN_OR_RETURN(ArrayType * matches_array,
                    CheckedPgDatumGetArrayTypeP(matches_datum));
 
   if (ARR_NDIM(matches_array) != 1) {
@@ -161,23 +161,23 @@ RegexpMatch(absl::string_view string, absl::string_view pattern,
     return absl::InternalError(
         "regex produced invalid lower bound for matches");
   }
-  ZETASQL_ASSIGN_OR_RETURN(ArrayIterator it,
+  GOOGLESQL_ASSIGN_OR_RETURN(ArrayIterator it,
                    CheckedPgArrayCreateIterator(matches_array, /*slice_ndim=*/0,
                                                 /*mstate=*/nullptr));
   Datum element;
   bool is_null;
   auto result = std::make_unique<std::vector<std::optional<std::string>>>();
-  ZETASQL_ASSIGN_OR_RETURN(bool has_next,
+  GOOGLESQL_ASSIGN_OR_RETURN(bool has_next,
                    CheckedPgArrayIterate(it, &element, &is_null));
   while (has_next) {
     if (is_null) {
       result->push_back(std::nullopt);
     } else {
-      ZETASQL_ASSIGN_OR_RETURN(char* value, CheckedPgTextDatumGetCString(element));
+      GOOGLESQL_ASSIGN_OR_RETURN(char* value, CheckedPgTextDatumGetCString(element));
       result->push_back(std::make_optional<std::string>(value));
     }
 
-    ZETASQL_ASSIGN_OR_RETURN(has_next, CheckedPgArrayIterate(it, &element, &is_null));
+    GOOGLESQL_ASSIGN_OR_RETURN(has_next, CheckedPgArrayIterate(it, &element, &is_null));
   }
   return result;
 }
@@ -195,14 +195,14 @@ RegexpMatch(absl::string_view string, absl::string_view pattern,
 
 absl::StatusOr<bool> Textregexeq(absl::string_view string,
                                  absl::string_view pattern) {
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       Datum string_in_datum,
       CheckedPgStringToDatum(std::string(string).c_str(), TEXTOID));
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       Datum pattern_in_datum,
       CheckedPgStringToDatum(std::string(pattern).c_str(), TEXTOID));
 
-  ZETASQL_ASSIGN_OR_RETURN(Datum result_datum,
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum result_datum,
                    postgres_translator::CheckedOidFunctionCall2(
                        F_TEXTREGEXEQ, string_in_datum, pattern_in_datum));
 
@@ -211,15 +211,15 @@ absl::StatusOr<bool> Textregexeq(absl::string_view string,
 
 absl::StatusOr<bool> Textregexne(absl::string_view string,
                                  absl::string_view pattern) {
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       Datum string_in_datum,
       CheckedPgStringToDatum(std::string(string).c_str(), TEXTOID));
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       Datum pattern_in_datum,
       CheckedPgStringToDatum(std::string(pattern).c_str(), TEXTOID));
 
   // The PostgreSQL function returns true if there was no match
-  ZETASQL_ASSIGN_OR_RETURN(Datum is_no_match,
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum is_no_match,
                    postgres_translator::CheckedOidFunctionCall2(
                        F_TEXTREGEXNE, string_in_datum, pattern_in_datum));
 
@@ -228,14 +228,14 @@ absl::StatusOr<bool> Textregexne(absl::string_view string,
 
 absl::StatusOr<std::unique_ptr<std::string>> Textregexsubstr(
     absl::string_view string, absl::string_view pattern) {
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       Datum string_in_datum,
       CheckedPgStringToDatum(std::string(string).c_str(), TEXTOID));
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       Datum pattern_in_datum,
       CheckedPgStringToDatum(std::string(pattern).c_str(), TEXTOID));
 
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       Datum substring_datum,
       postgres_translator::CheckedNullableOidFunctionCall2(
           F_SUBSTRING_TEXT_TEXT, string_in_datum, pattern_in_datum));
@@ -243,7 +243,7 @@ absl::StatusOr<std::unique_ptr<std::string>> Textregexsubstr(
   if (substring_datum == kNullDatum) {
     return nullptr;
   }
-  ZETASQL_ASSIGN_OR_RETURN(char* substring,
+  GOOGLESQL_ASSIGN_OR_RETURN(char* substring,
                    CheckedPgTextDatumGetCString(substring_datum));
   return std::make_unique<std::string>(substring);
 }
@@ -251,27 +251,27 @@ absl::StatusOr<std::unique_ptr<std::string>> Textregexsubstr(
 absl::StatusOr<std::string> Textregexreplace(
     absl::string_view source, absl::string_view pattern,
     absl::string_view replacement, std::optional<absl::string_view> flags) {
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       Datum source_in_datum,
       CheckedPgStringToDatum(std::string(source).c_str(), TEXTOID));
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       Datum pattern_in_datum,
       CheckedPgStringToDatum(std::string(pattern).c_str(), TEXTOID));
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       Datum replacement_in_datum,
       CheckedPgStringToDatum(std::string(replacement).c_str(), TEXTOID));
 
   Datum result_datum;
   if (flags) {
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         Datum flags_in_datum,
         CheckedPgStringToDatum(std::string(flags.value()).c_str(), TEXTOID));
-    ZETASQL_ASSIGN_OR_RETURN(result_datum, postgres_translator::CheckedOidFunctionCall4(
+    GOOGLESQL_ASSIGN_OR_RETURN(result_datum, postgres_translator::CheckedOidFunctionCall4(
                                        F_REGEXP_REPLACE_TEXT_TEXT_TEXT_TEXT,
                                        source_in_datum, pattern_in_datum,
                                        replacement_in_datum, flags_in_datum));
   } else {
-    ZETASQL_ASSIGN_OR_RETURN(result_datum,
+    GOOGLESQL_ASSIGN_OR_RETURN(result_datum,
                      postgres_translator::CheckedOidFunctionCall3(
                          F_REGEXP_REPLACE_TEXT_TEXT_TEXT, source_in_datum,
                          pattern_in_datum, replacement_in_datum));

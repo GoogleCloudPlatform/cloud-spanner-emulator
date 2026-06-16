@@ -19,13 +19,13 @@
 #include <memory>
 #include <string>
 
-#include "zetasql/public/analyzer.h"
-#include "zetasql/public/type.pb.h"
-#include "zetasql/public/types/type_factory.h"
-#include "zetasql/resolved_ast/resolved_ast.h"
+#include "googlesql/public/analyzer.h"
+#include "googlesql/public/type.pb.h"
+#include "googlesql/public/types/type_factory.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
 #include "backend/query/analyzer_options.h"
 #include "backend/query/catalog.h"
@@ -54,18 +54,18 @@ class PartitionedDMLValidatorTest : public testing::Test {
             schema_.get(), &fn_catalog_, &type_factory_, analyzer_options_)) {}
 
  protected:
-  std::unique_ptr<const zetasql::AnalyzerOutput> AnalyzeQuery(
+  std::unique_ptr<const googlesql::AnalyzerOutput> AnalyzeQuery(
       const std::string& sql) {
-    std::unique_ptr<const zetasql::AnalyzerOutput> output;
-    ZETASQL_EXPECT_OK(zetasql::AnalyzeStatement(
+    std::unique_ptr<const googlesql::AnalyzerOutput> output;
+    GOOGLESQL_EXPECT_OK(googlesql::AnalyzeStatement(
         sql, analyzer_options_, catalog_.get(), &type_factory_, &output));
     return output;
   }
 
  private:
-  zetasql::TypeFactory type_factory_;
+  googlesql::TypeFactory type_factory_;
 
-  const zetasql::AnalyzerOptions analyzer_options_;
+  const googlesql::AnalyzerOptions analyzer_options_;
 
   std::unique_ptr<const Schema> schema_;
 

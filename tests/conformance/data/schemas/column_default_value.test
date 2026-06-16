@@ -36,6 +36,10 @@ CREATE TABLE default_pct(
   ts_default TIMESTAMP DEFAULT (PENDING_COMMIT_TIMESTAMP())
     OPTIONS (allow_commit_timestamp = true),
 ) PRIMARY KEY (k);
+CREATE TABLE timestamp_table (
+  id INT64,
+  created_at TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP()),
+) PRIMARY KEY (id);
 ===
 @Dialect=POSTGRESQL
 CREATE TABLE t(
@@ -69,4 +73,9 @@ CREATE TABLE default_pct(
   ts SPANNER.COMMIT_TIMESTAMP,
   ts_default SPANNER.COMMIT_TIMESTAMP DEFAULT SPANNER.PENDING_COMMIT_TIMESTAMP(),
   PRIMARY KEY (k)
+);
+CREATE TABLE timestamp_table (
+  id bigint,
+  created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id)
 );

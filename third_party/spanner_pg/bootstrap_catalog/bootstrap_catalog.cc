@@ -40,7 +40,7 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/base/logging.h"
+#include "googlesql/base/logging.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -54,8 +54,8 @@
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
 #include "google/protobuf/text_format.h"
-#include "zetasql/base/status_builder.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_builder.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator {
 
@@ -253,7 +253,7 @@ PgBootstrapCatalog::GetCollationByName(
 
 absl::StatusOr<Oid> PgBootstrapCatalog::GetCollationOid(
     absl::string_view collation_name) const {
-  ZETASQL_ASSIGN_OR_RETURN(auto collation, GetCollationByName(collation_name));
+  GOOGLESQL_ASSIGN_OR_RETURN(auto collation, GetCollationByName(collation_name));
   return collation->oid;
 }
 
@@ -288,7 +288,7 @@ absl::StatusOr<const FormData_pg_type*> PgBootstrapCatalog::GetType(
 }
 
 absl::StatusOr<const char*> PgBootstrapCatalog::GetTypeName(Oid oid) const {
-  ZETASQL_ASSIGN_OR_RETURN(const FormData_pg_type* pg_type, GetType(oid));
+  GOOGLESQL_ASSIGN_OR_RETURN(const FormData_pg_type* pg_type, GetType(oid));
   return NameStr(pg_type->typname);
 }
 
@@ -302,7 +302,7 @@ PgBootstrapCatalog::GetFormattedTypeNames(
     absl::Span<const Oid> type_oids) const {
   std::vector<const char*> type_names;
   for (const Oid oid : type_oids) {
-    ZETASQL_ASSIGN_OR_RETURN(const char* type_name, GetFormattedTypeName(oid));
+    GOOGLESQL_ASSIGN_OR_RETURN(const char* type_name, GetFormattedTypeName(oid));
     type_names.push_back(type_name);
   }
   return type_names;
@@ -339,7 +339,7 @@ absl::StatusOr<const PgProcData*> PgBootstrapCatalog::GetProcProto(
 }
 
 absl::StatusOr<const char*> PgBootstrapCatalog::GetProcName(Oid oid) const {
-  ZETASQL_ASSIGN_OR_RETURN(const PgProcData* proc_proto, GetProcProto(oid));
+  GOOGLESQL_ASSIGN_OR_RETURN(const PgProcData* proc_proto, GetProcProto(oid));
   return proc_proto->proname().c_str();
 }
 
@@ -356,9 +356,9 @@ PgBootstrapCatalog::GetProcsByName(absl::string_view name) const {
 absl::StatusOr<Oid> PgBootstrapCatalog::GetProcOid(
     absl::string_view namespace_name, absl::string_view proc_name,
     absl::Span<const Oid> argument_types) const {
-  ZETASQL_ASSIGN_OR_RETURN(Oid namespace_oid, GetNamespaceOid(namespace_name));
+  GOOGLESQL_ASSIGN_OR_RETURN(Oid namespace_oid, GetNamespaceOid(namespace_name));
 
-  ZETASQL_ASSIGN_OR_RETURN(absl::Span<const FormData_pg_proc* const> proc_data,
+  GOOGLESQL_ASSIGN_OR_RETURN(absl::Span<const FormData_pg_proc* const> proc_data,
                    GetProcsByName(proc_name));
   for (const FormData_pg_proc* proc : proc_data) {
     if (proc->pronamespace != namespace_oid) {
@@ -367,7 +367,7 @@ absl::StatusOr<Oid> PgBootstrapCatalog::GetProcOid(
 
     // FormData_pg_proc does not have proargtypes data so we need to get the
     // proc proto to get the argument types.
-    ZETASQL_ASSIGN_OR_RETURN(const PgProcData* proc_proto, GetProcProto(proc->oid));
+    GOOGLESQL_ASSIGN_OR_RETURN(const PgProcData* proc_proto, GetProcProto(proc->oid));
     if (proc_proto->proargtypes().size() != argument_types.size()) {
       continue;
     }
@@ -407,7 +407,7 @@ absl::StatusOr<const FormData_pg_cast*> PgBootstrapCatalog::GetCast(
   auto it = cast_by_castkey_.find(
       {.source = source_type_id, .target = target_type_id});
   if (it == cast_by_castkey_.end()) {
-    return zetasql_base::NotFoundErrorBuilder()
+    return googlesql_base::NotFoundErrorBuilder()
            << "Cast function from type oid " << source_type_id
            << " to type oid " << target_type_id << " not found";
   }
@@ -456,10 +456,10 @@ absl::StatusOr<absl::Span<const Oid>> PgBootstrapCatalog::GetOperatorOids(
 
 absl::StatusOr<Oid> PgBootstrapCatalog::GetOperatorOidByOprLeftRight(
     absl::string_view name, Oid oprleft, Oid oprright) const {
-  ZETASQL_ASSIGN_OR_RETURN(absl::Span<const Oid> oper_oid_list, GetOperatorOids(name));
+  GOOGLESQL_ASSIGN_OR_RETURN(absl::Span<const Oid> oper_oid_list, GetOperatorOids(name));
 
   for (const Oid oper_oid : oper_oid_list) {
-    ZETASQL_ASSIGN_OR_RETURN(const FormData_pg_operator* curr_oper,
+    GOOGLESQL_ASSIGN_OR_RETURN(const FormData_pg_operator* curr_oper,
                      PgBootstrapCatalog::Default()->GetOperator(oper_oid));
     // If left and right values match, then return operator oid. Else return a
     // NotFoundError.

@@ -23,13 +23,13 @@
 #include "google/spanner/v1/transaction.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "tests/common/proto_matchers.h"
 #include "tests/conformance/common/database_test_base.h"
+#include "googlesql/base/status_macros.h"
 #include "absl/status/status.h"
-#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -40,7 +40,7 @@ namespace {
 
 using test::EqualsProto;
 using test::proto::Partially;
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 class DmlReplayTest
     : public DatabaseTest,
@@ -52,11 +52,11 @@ class DmlReplayTest
   }
 
   absl::Status SetUpDatabase() override {
-    ZETASQL_RETURN_IF_ERROR(SetSchemaFromFile("dml_replay.test"));
+    GOOGLESQL_RETURN_IF_ERROR(SetSchemaFromFile("dml_replay.test"));
 
     // Create a raw session for tests which cannot use the C++ client library
     // directly.
-    ZETASQL_RETURN_IF_ERROR(CreateSession(database()->FullName()));
+    GOOGLESQL_RETURN_IF_ERROR(CreateSession(database()->FullName()));
     return absl::OkStatus();
   }
 
@@ -66,7 +66,7 @@ class DmlReplayTest
     spanner_api::CreateSessionRequest request;
     request.set_database(std::string(database_uri));  // NOLINT
     spanner_api::Session response;
-    ZETASQL_RETURN_IF_ERROR(raw_client()->CreateSession(&context, request, &response));
+    GOOGLESQL_RETURN_IF_ERROR(raw_client()->CreateSession(&context, request, &response));
     session_name_ = response.name();
     return absl::OkStatus();
   }
@@ -114,7 +114,7 @@ INSTANTIATE_TEST_SUITE_P(
 
 TEST_P(DmlReplayTest, DMLSequenceNumberOutOfOrderReturnsError) {
   spanner_api::Transaction txn;
-  ZETASQL_EXPECT_OK(BeginReadWriteTransaction(&txn));
+  GOOGLESQL_EXPECT_OK(BeginReadWriteTransaction(&txn));
 
   {
     spanner_api::ExecuteSqlRequest dml_request = PARSE_TEXT_PROTO(R"(
@@ -127,7 +127,7 @@ TEST_P(DmlReplayTest, DMLSequenceNumberOutOfOrderReturnsError) {
 
     spanner_api::ResultSet response;
     grpc::ClientContext context;
-    ZETASQL_EXPECT_OK(raw_client()->ExecuteSql(&context, dml_request, &response));
+    GOOGLESQL_EXPECT_OK(raw_client()->ExecuteSql(&context, dml_request, &response));
   }
 
   {
@@ -158,13 +158,13 @@ TEST_P(DmlReplayTest, DMLSequenceNumberOutOfOrderReturnsError) {
 
     spanner_api::ResultSet response;
     grpc::ClientContext context;
-    ZETASQL_EXPECT_OK(raw_client()->ExecuteSql(&context, dml_request, &response));
+    GOOGLESQL_EXPECT_OK(raw_client()->ExecuteSql(&context, dml_request, &response));
   }
 }
 
 TEST_P(DmlReplayTest, StreamingDMLSequenceNumberOutOfOrderReturnsError) {
   spanner_api::Transaction txn;
-  ZETASQL_EXPECT_OK(BeginReadWriteTransaction(&txn));
+  GOOGLESQL_EXPECT_OK(BeginReadWriteTransaction(&txn));
 
   {
     spanner_api::ExecuteSqlRequest dml_request = PARSE_TEXT_PROTO(R"(
@@ -179,7 +179,7 @@ TEST_P(DmlReplayTest, StreamingDMLSequenceNumberOutOfOrderReturnsError) {
     grpc::ClientContext context;
     auto client_reader =
         raw_client()->ExecuteStreamingSql(&context, dml_request);
-    ZETASQL_EXPECT_OK(ReadFromClientReader(std::move(client_reader), &response));
+    GOOGLESQL_EXPECT_OK(ReadFromClientReader(std::move(client_reader), &response));
   }
 
   {
@@ -214,13 +214,13 @@ TEST_P(DmlReplayTest, StreamingDMLSequenceNumberOutOfOrderReturnsError) {
     grpc::ClientContext context;
     auto client_reader =
         raw_client()->ExecuteStreamingSql(&context, dml_request);
-    ZETASQL_EXPECT_OK(ReadFromClientReader(std::move(client_reader), &response));
+    GOOGLESQL_EXPECT_OK(ReadFromClientReader(std::move(client_reader), &response));
   }
 }
 
 TEST_P(DmlReplayTest, BatchDMLSequenceNumberOutOfOrderReturnsError) {
   spanner_api::Transaction txn;
-  ZETASQL_EXPECT_OK(BeginReadWriteTransaction(&txn));
+  GOOGLESQL_EXPECT_OK(BeginReadWriteTransaction(&txn));
 
   {
     spanner_api::ExecuteBatchDmlRequest dml_request = PARSE_TEXT_PROTO(R"(
@@ -232,8 +232,8 @@ TEST_P(DmlReplayTest, BatchDMLSequenceNumberOutOfOrderReturnsError) {
 
     spanner_api::ExecuteBatchDmlResponse response;
     grpc::ClientContext context;
-    ZETASQL_EXPECT_OK(raw_client()->ExecuteBatchDml(&context, dml_request, &response));
-    ZETASQL_EXPECT_OK(absl::Status(absl::StatusCode(response.status().code()),
+    GOOGLESQL_EXPECT_OK(raw_client()->ExecuteBatchDml(&context, dml_request, &response));
+    GOOGLESQL_EXPECT_OK(absl::Status(absl::StatusCode(response.status().code()),
                            response.status().message()));
   }
 
@@ -263,15 +263,15 @@ TEST_P(DmlReplayTest, BatchDMLSequenceNumberOutOfOrderReturnsError) {
 
     spanner_api::ExecuteBatchDmlResponse response;
     grpc::ClientContext context;
-    ZETASQL_EXPECT_OK(raw_client()->ExecuteBatchDml(&context, dml_request, &response));
-    ZETASQL_EXPECT_OK(absl::Status(absl::StatusCode(response.status().code()),
+    GOOGLESQL_EXPECT_OK(raw_client()->ExecuteBatchDml(&context, dml_request, &response));
+    GOOGLESQL_EXPECT_OK(absl::Status(absl::StatusCode(response.status().code()),
                            response.status().message()));
   }
 }
 
 TEST_P(DmlReplayTest, DMLRequestHashMismatchReturnsError) {
   spanner_api::Transaction txn;
-  ZETASQL_EXPECT_OK(BeginReadWriteTransaction(&txn));
+  GOOGLESQL_EXPECT_OK(BeginReadWriteTransaction(&txn));
 
   {
     spanner_api::ExecuteSqlRequest dml_request = PARSE_TEXT_PROTO(R"(
@@ -284,7 +284,7 @@ TEST_P(DmlReplayTest, DMLRequestHashMismatchReturnsError) {
 
     spanner_api::ResultSet response;
     grpc::ClientContext context;
-    ZETASQL_EXPECT_OK(raw_client()->ExecuteSql(&context, dml_request, &response));
+    GOOGLESQL_EXPECT_OK(raw_client()->ExecuteSql(&context, dml_request, &response));
   }
 
   {
@@ -315,16 +315,16 @@ TEST_P(DmlReplayTest, DMLRequestHashMismatchReturnsError) {
 
     spanner_api::ResultSet response;
     grpc::ClientContext context;
-    ZETASQL_EXPECT_OK(raw_client()->ExecuteSql(&context, dml_request, &response));
+    GOOGLESQL_EXPECT_OK(raw_client()->ExecuteSql(&context, dml_request, &response));
   }
 
   spanner_api::CommitResponse response;
-  ZETASQL_EXPECT_OK(Commit(txn.id(), &response));
+  GOOGLESQL_EXPECT_OK(Commit(txn.id(), &response));
 }
 
 TEST_P(DmlReplayTest, StreamingDMLRequestHashMismatchReturnsError) {
   spanner_api::Transaction txn;
-  ZETASQL_EXPECT_OK(BeginReadWriteTransaction(&txn));
+  GOOGLESQL_EXPECT_OK(BeginReadWriteTransaction(&txn));
 
   {
     spanner_api::ExecuteSqlRequest dml_request = PARSE_TEXT_PROTO(R"(
@@ -339,7 +339,7 @@ TEST_P(DmlReplayTest, StreamingDMLRequestHashMismatchReturnsError) {
     grpc::ClientContext context;
     auto client_reader =
         raw_client()->ExecuteStreamingSql(&context, dml_request);
-    ZETASQL_EXPECT_OK(ReadFromClientReader(std::move(client_reader), &response));
+    GOOGLESQL_EXPECT_OK(ReadFromClientReader(std::move(client_reader), &response));
   }
 
   {
@@ -374,16 +374,16 @@ TEST_P(DmlReplayTest, StreamingDMLRequestHashMismatchReturnsError) {
     grpc::ClientContext context;
     auto client_reader =
         raw_client()->ExecuteStreamingSql(&context, dml_request);
-    ZETASQL_EXPECT_OK(ReadFromClientReader(std::move(client_reader), &response));
+    GOOGLESQL_EXPECT_OK(ReadFromClientReader(std::move(client_reader), &response));
   }
 
   spanner_api::CommitResponse response;
-  ZETASQL_EXPECT_OK(Commit(txn.id(), &response));
+  GOOGLESQL_EXPECT_OK(Commit(txn.id(), &response));
 }
 
 TEST_P(DmlReplayTest, BatchDMLRequestHashMismatchReturnsError) {
   spanner_api::Transaction txn;
-  ZETASQL_EXPECT_OK(BeginReadWriteTransaction(&txn));
+  GOOGLESQL_EXPECT_OK(BeginReadWriteTransaction(&txn));
 
   {
     spanner_api::ExecuteBatchDmlRequest dml_request = PARSE_TEXT_PROTO(R"(
@@ -395,8 +395,8 @@ TEST_P(DmlReplayTest, BatchDMLRequestHashMismatchReturnsError) {
 
     spanner_api::ExecuteBatchDmlResponse response;
     grpc::ClientContext context;
-    ZETASQL_EXPECT_OK(raw_client()->ExecuteBatchDml(&context, dml_request, &response));
-    ZETASQL_EXPECT_OK(absl::Status(absl::StatusCode(response.status().code()),
+    GOOGLESQL_EXPECT_OK(raw_client()->ExecuteBatchDml(&context, dml_request, &response));
+    GOOGLESQL_EXPECT_OK(absl::Status(absl::StatusCode(response.status().code()),
                            response.status().message()));
   }
 
@@ -426,18 +426,18 @@ TEST_P(DmlReplayTest, BatchDMLRequestHashMismatchReturnsError) {
 
     spanner_api::ExecuteBatchDmlResponse response;
     grpc::ClientContext context;
-    ZETASQL_EXPECT_OK(raw_client()->ExecuteBatchDml(&context, dml_request, &response));
-    ZETASQL_EXPECT_OK(absl::Status(absl::StatusCode(response.status().code()),
+    GOOGLESQL_EXPECT_OK(raw_client()->ExecuteBatchDml(&context, dml_request, &response));
+    GOOGLESQL_EXPECT_OK(absl::Status(absl::StatusCode(response.status().code()),
                            response.status().message()));
   }
 
   spanner_api::CommitResponse response;
-  ZETASQL_EXPECT_OK(Commit(txn.id(), &response));
+  GOOGLESQL_EXPECT_OK(Commit(txn.id(), &response));
 }
 
 TEST_P(DmlReplayTest, DMLSequenceReplaySucceeds) {
   spanner_api::Transaction txn;
-  ZETASQL_EXPECT_OK(BeginReadWriteTransaction(&txn));
+  GOOGLESQL_EXPECT_OK(BeginReadWriteTransaction(&txn));
 
   {
     spanner_api::ExecuteSqlRequest dml_request = PARSE_TEXT_PROTO(R"(
@@ -450,7 +450,7 @@ TEST_P(DmlReplayTest, DMLSequenceReplaySucceeds) {
 
     spanner_api::ResultSet response;
     grpc::ClientContext context;
-    ZETASQL_EXPECT_OK(raw_client()->ExecuteSql(&context, dml_request, &response));
+    GOOGLESQL_EXPECT_OK(raw_client()->ExecuteSql(&context, dml_request, &response));
     EXPECT_THAT(response, Partially(EqualsProto(R"pb(
                   metadata { row_type {} }
                   stats { row_count_exact: 1 }
@@ -485,7 +485,7 @@ TEST_P(DmlReplayTest, DMLSequenceReplaySucceeds) {
 
     spanner_api::ResultSet response;
     grpc::ClientContext context;
-    ZETASQL_EXPECT_OK(raw_client()->ExecuteSql(&context, dml_request, &response));
+    GOOGLESQL_EXPECT_OK(raw_client()->ExecuteSql(&context, dml_request, &response));
     EXPECT_THAT(response, Partially(EqualsProto(R"pb(
                   metadata { row_type {} }
                   stats { row_count_exact: 1 }
@@ -511,7 +511,7 @@ TEST_P(DmlReplayTest, DMLSequenceReplaySucceeds) {
 
 TEST_P(DmlReplayTest, StreamingDMLSequenceReplaySucceeds) {
   spanner_api::Transaction txn;
-  ZETASQL_EXPECT_OK(BeginReadWriteTransaction(&txn));
+  GOOGLESQL_EXPECT_OK(BeginReadWriteTransaction(&txn));
 
   {
     spanner_api::ExecuteSqlRequest dml_request = PARSE_TEXT_PROTO(R"(
@@ -526,7 +526,7 @@ TEST_P(DmlReplayTest, StreamingDMLSequenceReplaySucceeds) {
     grpc::ClientContext context;
     auto client_reader =
         raw_client()->ExecuteStreamingSql(&context, dml_request);
-    ZETASQL_EXPECT_OK(ReadFromClientReader(std::move(client_reader), &response));
+    GOOGLESQL_EXPECT_OK(ReadFromClientReader(std::move(client_reader), &response));
     EXPECT_THAT(response[0], Partially(EqualsProto(R"pb(
                   metadata { row_type {} }
                   stats { row_count_exact: 1 }
@@ -565,7 +565,7 @@ TEST_P(DmlReplayTest, StreamingDMLSequenceReplaySucceeds) {
     grpc::ClientContext context;
     auto client_reader =
         raw_client()->ExecuteStreamingSql(&context, dml_request);
-    ZETASQL_EXPECT_OK(ReadFromClientReader(std::move(client_reader), &response));
+    GOOGLESQL_EXPECT_OK(ReadFromClientReader(std::move(client_reader), &response));
     EXPECT_THAT(response[0], Partially(EqualsProto(R"pb(
                   metadata { row_type {} }
                   stats { row_count_exact: 1 }
@@ -593,7 +593,7 @@ TEST_P(DmlReplayTest, StreamingDMLSequenceReplaySucceeds) {
 
 TEST_P(DmlReplayTest, BatchDMLSequenceReplaySucceeds) {
   spanner_api::Transaction txn;
-  ZETASQL_EXPECT_OK(BeginReadWriteTransaction(&txn));
+  GOOGLESQL_EXPECT_OK(BeginReadWriteTransaction(&txn));
 
   {
     spanner_api::ExecuteBatchDmlRequest dml_request = PARSE_TEXT_PROTO(R"(
@@ -605,7 +605,7 @@ TEST_P(DmlReplayTest, BatchDMLSequenceReplaySucceeds) {
 
     spanner_api::ExecuteBatchDmlResponse response;
     grpc::ClientContext context;
-    ZETASQL_EXPECT_OK(raw_client()->ExecuteBatchDml(&context, dml_request, &response));
+    GOOGLESQL_EXPECT_OK(raw_client()->ExecuteBatchDml(&context, dml_request, &response));
     EXPECT_THAT(response, EqualsProto(R"(
                   result_sets {
                     metadata { row_type {} }
@@ -626,7 +626,7 @@ TEST_P(DmlReplayTest, BatchDMLSequenceReplaySucceeds) {
 
     spanner_api::ExecuteBatchDmlResponse response;
     grpc::ClientContext context;
-    ZETASQL_EXPECT_OK(raw_client()->ExecuteBatchDml(&context, dml_request, &response));
+    GOOGLESQL_EXPECT_OK(raw_client()->ExecuteBatchDml(&context, dml_request, &response));
     EXPECT_THAT(response, Partially(EqualsProto(R"(
                   status { code: 6 }
                 )")));
@@ -643,7 +643,7 @@ TEST_P(DmlReplayTest, BatchDMLSequenceReplaySucceeds) {
 
     spanner_api::ExecuteBatchDmlResponse response;
     grpc::ClientContext context;
-    ZETASQL_EXPECT_OK(raw_client()->ExecuteBatchDml(&context, dml_request, &response));
+    GOOGLESQL_EXPECT_OK(raw_client()->ExecuteBatchDml(&context, dml_request, &response));
     EXPECT_THAT(response, EqualsProto(R"(
                   result_sets {
                     metadata { row_type {} }
@@ -664,7 +664,7 @@ TEST_P(DmlReplayTest, BatchDMLSequenceReplaySucceeds) {
 
     spanner_api::ExecuteBatchDmlResponse response;
     grpc::ClientContext context;
-    ZETASQL_EXPECT_OK(raw_client()->ExecuteBatchDml(&context, dml_request, &response));
+    GOOGLESQL_EXPECT_OK(raw_client()->ExecuteBatchDml(&context, dml_request, &response));
     EXPECT_THAT(response, Partially(EqualsProto(R"(
                   status { code: 6 }
                 )")));
@@ -673,7 +673,7 @@ TEST_P(DmlReplayTest, BatchDMLSequenceReplaySucceeds) {
 
 TEST_P(DmlReplayTest, ExecuteAndCommitBatchDMLWithReplaySucceeds) {
   spanner_api::Transaction txn;
-  ZETASQL_EXPECT_OK(BeginReadWriteTransaction(&txn));
+  GOOGLESQL_EXPECT_OK(BeginReadWriteTransaction(&txn));
 
   {
     spanner_api::ExecuteBatchDmlRequest dml_request = PARSE_TEXT_PROTO(R"(
@@ -687,7 +687,7 @@ TEST_P(DmlReplayTest, ExecuteAndCommitBatchDMLWithReplaySucceeds) {
 
     spanner_api::ExecuteBatchDmlResponse response;
     grpc::ClientContext context;
-    ZETASQL_EXPECT_OK(raw_client()->ExecuteBatchDml(&context, dml_request, &response));
+    GOOGLESQL_EXPECT_OK(raw_client()->ExecuteBatchDml(&context, dml_request, &response));
     EXPECT_THAT(response, EqualsProto(R"(
                   result_sets {
                     metadata { row_type {} }
@@ -712,7 +712,7 @@ TEST_P(DmlReplayTest, ExecuteAndCommitBatchDMLWithReplaySucceeds) {
 
     spanner_api::ExecuteBatchDmlResponse response;
     grpc::ClientContext context;
-    ZETASQL_EXPECT_OK(raw_client()->ExecuteBatchDml(&context, dml_request, &response));
+    GOOGLESQL_EXPECT_OK(raw_client()->ExecuteBatchDml(&context, dml_request, &response));
     EXPECT_THAT(response, EqualsProto(R"(
                   result_sets {
                     metadata { row_type {} }
@@ -725,12 +725,12 @@ TEST_P(DmlReplayTest, ExecuteAndCommitBatchDMLWithReplaySucceeds) {
   }
 
   spanner_api::CommitResponse response;
-  ZETASQL_EXPECT_OK(Commit(txn.id(), &response));
+  GOOGLESQL_EXPECT_OK(Commit(txn.id(), &response));
 }
 
 TEST_P(DmlReplayTest, BatchDMLReturnsTransactionInResponse) {
   spanner_api::Transaction txn;
-  ZETASQL_EXPECT_OK(BeginReadWriteTransaction(&txn));
+  GOOGLESQL_EXPECT_OK(BeginReadWriteTransaction(&txn));
 
   {
     spanner_api::ExecuteBatchDmlRequest dml_request = PARSE_TEXT_PROTO(R"(
@@ -743,7 +743,7 @@ TEST_P(DmlReplayTest, BatchDMLReturnsTransactionInResponse) {
 
     spanner_api::ExecuteBatchDmlResponse response;
     grpc::ClientContext context;
-    ZETASQL_EXPECT_OK(raw_client()->ExecuteBatchDml(&context, dml_request, &response));
+    GOOGLESQL_EXPECT_OK(raw_client()->ExecuteBatchDml(&context, dml_request, &response));
     EXPECT_THAT(response, EqualsProto(R"(
                   result_sets {
                     metadata { row_type {} }
@@ -766,7 +766,7 @@ TEST_P(DmlReplayTest, BatchDMLReturnsTransactionInResponse) {
 
     spanner_api::ExecuteBatchDmlResponse response;
     grpc::ClientContext context;
-    ZETASQL_EXPECT_OK(raw_client()->ExecuteBatchDml(&context, dml_request, &response));
+    GOOGLESQL_EXPECT_OK(raw_client()->ExecuteBatchDml(&context, dml_request, &response));
     EXPECT_THAT(response, EqualsProto(R"(
                   result_sets {
                     metadata { row_type {} }

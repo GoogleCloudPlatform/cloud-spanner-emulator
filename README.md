@@ -20,9 +20,8 @@ all the emulator dependencies inside a docker container. Opening this repository
 in vscode will automatically use the devcontainer defined in .devcontainer
 directory. This requires docker to be installed on the local machine.
 
-To work directly in the browser without installing docker, a github Codespace
+To work directly in the browser without installing docker, a GitHub Codespace
 can be created and opened in vscode.dev in the browser.
-
 
 ### Via gcloud
 
@@ -62,7 +61,8 @@ The emulator is also distributed as a standalone linux binary. Note that this
 binary is not fully static, but has been tested on Ubuntu 18.04+, CentOS
 7+, RHEL 8+ and Debian 10+.
 
-Set `ARCHITECTURE` to `arm64` in following command if you are working on arm machine.
+Set `ARCHITECTURE` to `arm64` in following command if you are working on arm
+machine.
 ```shell
 VERSION=1.5.6
 ARCHITECTURE=amd64
@@ -119,7 +119,7 @@ Works on x86 and arm64 architectures.
 
 ## Technical Details
 
-The Cloud Spanner Emulator is built using the [ZetaSQL](https://github.com/google/zetasql)
+The Cloud Spanner Emulator is built using the [GoogleSQL](https://github.com/google/googlesql)
 reference implementation and is divided into three layers (each in its own
 directory):
 
@@ -129,8 +129,9 @@ directory):
 
 The core emulator codebase is in C++, and the REST wrapper is written in Go.
 SQL query execution, value/type classes, and SQL functions are provided by the
-ZetaSQL reference implementation. The API surface, DDL, transactional semantics,
-constraint enforcement, and in-memory storage are implemented in this codebase.
+GoogleSQL reference implementation. The API surface, DDL, transactional
+semantics, constraint enforcement, and in-memory storage are implemented in
+this codebase.
 
 ## Features and Limitations
 
@@ -139,6 +140,8 @@ Notable supported features:
 - DDL schema changes
 
 - Full SQL/DML query execution (limitations noted below)
+
+- [GQL support](https://docs.cloud.google.com/spanner/docs/reference/standard-sql/graph-intro)
 
 - DML sequence numbers
 
@@ -175,7 +178,6 @@ Notable supported features:
 
 - [Connecting with PostgreSQL drivers and tools through PGAdapter](
   https://github.com/GoogleCloudPlatform/pgadapter/blob/postgresql-dialect/docs/emulator.md).
-
 
 Notable limitations:
 
@@ -214,7 +216,7 @@ Notable limitations:
   time. The execution time has no relation with what the execution time on
   Cloud Spanner will be.
 
-- Some queries that use SQL functionality present in ZetaSQL but not in
+- Some queries that use SQL functionality present in GoogleSQL but not in
   Cloud Spanner service may succeed instead of being rejected as invalid.
 
 - Certain quotas and limits (such as admin api rate limits and mutation size
@@ -251,7 +253,6 @@ Notable limitations:
   - `CREATE SEARCH INDEX` accepts `OPTIONS` clause but takes no action on it.
 
 ## Frequently Asked Questions (FAQ)
-
 
 #### Which [client library](https://cloud.google.com/spanner/docs/reference/libraries) versions are supported?
 

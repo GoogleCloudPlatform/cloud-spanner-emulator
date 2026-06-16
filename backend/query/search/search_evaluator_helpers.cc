@@ -19,11 +19,12 @@
 #include <algorithm>
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/algorithm/container.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_split.h"
@@ -32,8 +33,8 @@
 #include "backend/query/search/query_parser.h"
 #include "backend/query/search/tokenizer.h"
 #include "common/errors.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -43,11 +44,11 @@ namespace query {
 namespace search {
 
 absl::StatusOr<TokenMap> SearchHelper::BuildTokenMap(
-    const zetasql::Value& token_list, absl::string_view func_name,
+    const googlesql::Value& token_list, absl::string_view func_name,
     bool& source_is_null) {
-  ZETASQL_ASSIGN_OR_RETURN(auto tokens, StringsFromTokenList(token_list));
+  GOOGLESQL_ASSIGN_OR_RETURN(auto tokens, StringsFromTokenList(token_list));
 
-  ZETASQL_RET_CHECK(!tokens.empty() && !tokens[0].empty());
+  GOOGLESQL_RET_CHECK(!tokens.empty() && !tokens[0].empty());
 
   TokenMap token_map;
   int num_of_signatures = 0;
@@ -61,7 +62,7 @@ absl::StatusOr<TokenMap> SearchHelper::BuildTokenMap(
       if (signature[0] != kFullTextTokenizer) {
         return error::TokenListNotMatchSearch(func_name, "TOKENIZE_FULLTEXT");
       }
-      ZETASQL_RET_CHECK(signature.size() == kTokenizerSignatureArgumentSize);
+      GOOGLESQL_RET_CHECK(signature.size() == kTokenizerSignatureArgumentSize);
       if (pos == 0) {
         source_is_null = signature[1] != "0";
       } else {
@@ -84,9 +85,8 @@ absl::StatusOr<TokenMap> SearchHelper::BuildTokenMap(
 absl::StatusOr<SimpleNode*> SearchQueryCache::GetParsedQuery(
     const std::string& query_string) {
   if (query_cache_.find(query_string) == query_cache_.end()) {
-    QueryParser parser(query_string);
-    ZETASQL_RETURN_IF_ERROR(parser.ParseSearchQuery());
-
+    RQueryParser parser(query_string);
+    GOOGLESQL_RETURN_IF_ERROR(parser.Parse());
     query_cache_[query_string] = std::move(parser.ReleaseTree());
   }
 

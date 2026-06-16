@@ -31,7 +31,7 @@
 
 #include <cstdint>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
@@ -39,17 +39,17 @@
 
 namespace postgres_translator::function_evaluators {
 
-absl::StatusOr<zetasql::Value> JsonbArrayElement(
+absl::StatusOr<googlesql::Value> JsonbArrayElement(
     absl::string_view jsonb_string, int64_t element) {
   return absl::UnimplementedError("invoked stub JsonbArrayElement");
 }
 
-absl::StatusOr<zetasql::Value> JsonbObjectField(
+absl::StatusOr<googlesql::Value> JsonbObjectField(
     absl::string_view jsonb_string, absl::string_view key) {
   return absl::UnimplementedError("invoked stub JsonbObjectField");
 }
 
-absl::StatusOr<zetasql::Value> JsonbTypeof(absl::string_view jsonb_string) {
+absl::StatusOr<googlesql::Value> JsonbTypeof(absl::string_view jsonb_string) {
   return absl::UnimplementedError("invoked stub JsonbTypeof");
 }
 }  // namespace postgres_translator::function_evaluators

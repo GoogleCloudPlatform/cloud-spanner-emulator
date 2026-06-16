@@ -32,7 +32,7 @@
 #include "third_party/spanner_pg/catalog/pg_catalog_util.h"
 
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 
 namespace postgres_translator {
 

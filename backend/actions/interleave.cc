@@ -46,7 +46,7 @@ absl::Status InterleaveParentValidator::Validate(const ActionContext* ctx,
 
   switch (on_delete_action_) {
     case Table::OnDeleteAction::kNoAction: {
-      ZETASQL_ASSIGN_OR_RETURN(bool has_children,
+      GOOGLESQL_ASSIGN_OR_RETURN(bool has_children,
                        ctx->store()->PrefixExists(child_, op.key));
       if (has_children) {
         return error::ChildKeyExists(parent_->Name(), child_->Name(),
@@ -73,7 +73,7 @@ absl::Status InterleaveParentEffector::Effect(const ActionContext* ctx,
       return absl::OkStatus();
     }
     case Table::OnDeleteAction::kCascade: {
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           std::unique_ptr<StorageIterator> itr,
           ctx->store()->Read(child_, KeyRange::Prefix(op.key), {}));
       while (itr->Next()) {
@@ -102,7 +102,7 @@ absl::Status InterleaveChildValidator::Validate(const ActionContext* ctx,
     return absl::OkStatus();
   }
 
-  ZETASQL_ASSIGN_OR_RETURN(bool has_parent, ctx->store()->Exists(parent_, parent_key));
+  GOOGLESQL_ASSIGN_OR_RETURN(bool has_parent, ctx->store()->Exists(parent_, parent_key));
   if (!has_parent) {
     return error::ParentKeyNotFound(parent_->Name(), child_->Name(),
                                     parent_key.DebugString());

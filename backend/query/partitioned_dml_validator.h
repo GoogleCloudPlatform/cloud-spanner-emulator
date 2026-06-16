@@ -17,9 +17,9 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_PARTITIONED_DML_VALIDATOR_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_PARTITIONED_DML_VALIDATOR_H_
 
-#include "zetasql/resolved_ast/resolved_ast.h"
-#include "zetasql/resolved_ast/resolved_ast_visitor.h"
-#include "zetasql/resolved_ast/resolved_node_kind.pb.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_ast_visitor.h"
+#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 #include "absl/status/status.h"
 #include "common/errors.h"
 #include "absl/status/status.h"
@@ -31,29 +31,29 @@ namespace backend {
 
 // Validates whether a DML update or delete statement can be executed through
 // partitioned DML.
-class PartitionedDMLValidator : public zetasql::ResolvedASTVisitor {
+class PartitionedDMLValidator : public googlesql::ResolvedASTVisitor {
  public:
   PartitionedDMLValidator() = default;
 
-  absl::Status DefaultVisit(const zetasql::ResolvedNode* node) override {
-    if (node->node_kind() == zetasql::RESOLVED_INSERT_STMT) {
+  absl::Status DefaultVisit(const googlesql::ResolvedNode* node) override {
+    if (node->node_kind() == googlesql::RESOLVED_INSERT_STMT) {
       return error::NoInsertForPartitionedDML();
     }
     // For other kinds of DML statements, visit the full tree to collect
     // the number of tables involved.
-    return zetasql::ResolvedASTVisitor::DefaultVisit(node);
+    return googlesql::ResolvedASTVisitor::DefaultVisit(node);
   }
 
  private:
   absl::Status VisitResolvedTableScan(
-      const zetasql::ResolvedTableScan* scan) final {
+      const googlesql::ResolvedTableScan* scan) final {
     num_tables_++;
     // Partitioned DML does not support more than 1 table.
     if (num_tables_ > 1) {
       return error::PartitionedDMLOnlySupportsSimpleQuery();
     }
     // Continue to visit the rest of the tree.
-    return zetasql::ResolvedASTVisitor::DefaultVisit(scan);
+    return googlesql::ResolvedASTVisitor::DefaultVisit(scan);
   }
 
   // Number of tables referenced in the DML statement.

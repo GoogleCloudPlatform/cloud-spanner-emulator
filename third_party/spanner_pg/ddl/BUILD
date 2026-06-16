@@ -31,6 +31,8 @@
 
 # Package contains functionality for translation between PostgreSQL and Spanner DDL dialects.
 
+load("@com_google_protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
+load("@com_google_protobuf//bazel:proto_library.bzl", "proto_library")
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
 package(
@@ -49,7 +51,7 @@ cc_library(
         "//third_party/spanner_pg/interface:parser_interface",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
-        "@com_google_zetasql//zetasql/base:ret_check",
+        "@com_google_googlesql//googlesql/base:ret_check",
     ],
 )
 
@@ -65,6 +67,7 @@ cc_library(
         "//third_party/spanner_pg/interface:parser_interface",
         "//third_party/spanner_pg/postgres_includes",
         "//third_party/spanner_pg/shims:error_shim",
+        "//third_party/spanner_pg/src/include",
         "//third_party/spanner_pg/util:interval_helpers",
         "//third_party/spanner_pg/util:pg_list_iterators",
         "//third_party/spanner_pg/util:postgres",
@@ -77,10 +80,11 @@ cc_library(
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/types:optional",
+        "@com_google_googlesql//googlesql/base",
+        "@com_google_googlesql//googlesql/base:ret_check",
         "@com_google_protobuf//:protobuf_lite",
-        "@com_google_zetasql//zetasql/base",
-        "@com_google_zetasql//zetasql/base:ret_check",
         "@com_googlesource_code_re2//:re2",
+        "@json",
     ],
 )
 
@@ -110,8 +114,8 @@ cc_library(
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
-        "@com_google_zetasql//zetasql/base",
-        "@com_google_zetasql//zetasql/base:ret_check",
+        "@com_google_googlesql//googlesql/base",
+        "@com_google_googlesql//googlesql/base:ret_check",
     ],
 )
 
@@ -131,11 +135,11 @@ cc_test(
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
+        "@com_google_googlesql//googlesql/base:logging",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
         "@com_google_protobuf//:protobuf",
-        "@com_google_zetasql//zetasql/base:logging",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -165,9 +169,9 @@ cc_test(
         ":translation_utils",
         "//third_party/spanner_pg/postgres_includes",
         "@com_google_absl//absl/status",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -184,10 +188,10 @@ cc_library(
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:optional",
+        "@com_google_googlesql//googlesql/base",
+        "@com_google_googlesql//googlesql/base:ret_check",
         "@com_google_protobuf//:protobuf_headers",
         "@com_google_protobuf//:protobuf_lite",
-        "@com_google_zetasql//zetasql/base",
-        "@com_google_zetasql//zetasql/base:ret_check",
         "@com_googlesource_code_re2//:re2",
     ],
 )
@@ -207,6 +211,8 @@ cc_library(
         ":translation_utils",
         "//third_party/spanner_pg/postgres_includes",
         "//third_party/spanner_pg/shims:error_shim",
+        "//third_party/spanner_pg/src/include",
+        "//third_party/spanner_pg/util:nodetag_to_string",
         "//third_party/spanner_pg/util:pg_list_iterators",
         "//third_party/spanner_pg/util:postgres",
         "@com_google_absl//absl/algorithm:container",
@@ -216,6 +222,7 @@ cc_library(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
-        "@com_google_zetasql//zetasql/base:ret_check",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_googlesql//googlesql/base:ret_check",
     ],
 )

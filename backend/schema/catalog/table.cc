@@ -36,7 +36,7 @@
 #include "backend/schema/graph/schema_graph_editor.h"
 #include "backend/schema/graph/schema_node.h"
 #include "backend/schema/updater/schema_validation_context.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -179,12 +179,12 @@ absl::Status Table::ValidateUpdate(const SchemaNode* orig,
 absl::Status Table::DeepClone(SchemaGraphEditor* editor,
                               const SchemaNode* orig) {
   if (parent_table_) {
-    ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(parent_table_));
+    GOOGLESQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(parent_table_));
     parent_table_ = schema_node->As<const Table>();
   }
 
   for (auto it = columns_.begin(); it != columns_.end();) {
-    ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(*it));
+    GOOGLESQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(*it));
     if (schema_node->is_deleted()) {
       columns_map_.erase((*it)->Name());
       it = columns_.erase(it);
@@ -197,21 +197,21 @@ absl::Status Table::DeepClone(SchemaGraphEditor* editor,
   }
 
   for (auto& key_column : primary_key_) {
-    ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(key_column));
+    GOOGLESQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(key_column));
     key_column = schema_node->As<const KeyColumn>();
   }
 
-  ZETASQL_RETURN_IF_ERROR(editor->CloneVector(&child_tables_));
-  ZETASQL_RETURN_IF_ERROR(editor->CloneVector(&indexes_));
-  ZETASQL_RETURN_IF_ERROR(editor->CloneVector(&check_constraints_));
-  ZETASQL_RETURN_IF_ERROR(editor->CloneVector(&foreign_keys_));
-  ZETASQL_RETURN_IF_ERROR(editor->CloneVector(&referencing_foreign_keys_));
-  ZETASQL_RETURN_IF_ERROR(editor->CloneVector(&change_streams_));
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(editor->CloneVector(&child_tables_));
+  GOOGLESQL_RETURN_IF_ERROR(editor->CloneVector(&indexes_));
+  GOOGLESQL_RETURN_IF_ERROR(editor->CloneVector(&check_constraints_));
+  GOOGLESQL_RETURN_IF_ERROR(editor->CloneVector(&foreign_keys_));
+  GOOGLESQL_RETURN_IF_ERROR(editor->CloneVector(&referencing_foreign_keys_));
+  GOOGLESQL_RETURN_IF_ERROR(editor->CloneVector(&change_streams_));
+  GOOGLESQL_RETURN_IF_ERROR(
       editor->CloneVector(&change_streams_explicitly_tracking_table_));
 
   if (owner_index_) {
-    ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(owner_index_));
+    GOOGLESQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(owner_index_));
     owner_index_ = schema_node->As<const Index>();
     if (owner_index_->is_deleted()) {
       MarkDeleted();
@@ -219,7 +219,7 @@ absl::Status Table::DeepClone(SchemaGraphEditor* editor,
   }
 
   if (owner_change_stream_) {
-    ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node,
+    GOOGLESQL_ASSIGN_OR_RETURN(const auto* schema_node,
                      editor->Clone(owner_change_stream_));
     owner_change_stream_ = schema_node->As<const ChangeStream>();
     if (owner_change_stream_->is_deleted()) {
@@ -228,7 +228,7 @@ absl::Status Table::DeepClone(SchemaGraphEditor* editor,
   }
 
   if (locality_group_) {
-    ZETASQL_ASSIGN_OR_RETURN(const auto* locality_group_clone,
+    GOOGLESQL_ASSIGN_OR_RETURN(const auto* locality_group_clone,
                      editor->Clone(locality_group_));
     locality_group_ = locality_group_clone->As<const LocalityGroup>();
   }

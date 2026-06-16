@@ -32,9 +32,9 @@
 #include "third_party/spanner_pg/test_catalog/test_catalog.h"
 
 #include "backend/query/analyzer_options.h"
-#include "zetasql/public/analyzer_options.h"
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/simple_catalog.h"
+#include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/simple_catalog.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/flags/flag.h"
 #include "absl/log/check.h"
@@ -52,48 +52,48 @@
 // clang-format on
 #include "third_party/spanner_pg/test_catalog/emulator_catalog.h"
 #include "third_party/spanner_pg/test_catalog/spanner_test_catalog.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator::spangres::test {
 
 namespace {
 
-void MutateLanguageOptionsForSpangres(zetasql::LanguageOptions* options) {
-  // Override the name resolution mode -- it only applies to ZetaSQL queries
+void MutateLanguageOptionsForSpangres(googlesql::LanguageOptions* options) {
+  // Override the name resolution mode -- it only applies to GoogleSQL queries
   // in the golden tests/unit tests, not to PostgreSQL queries and most of the
-  // existing Spangres tests have non-strict mode ZetaSQL queries.
-  options->set_name_resolution_mode(zetasql::NAME_RESOLUTION_DEFAULT);
+  // existing Spangres tests have non-strict mode GoogleSQL queries.
+  options->set_name_resolution_mode(googlesql::NAME_RESOLUTION_DEFAULT);
 
-  options->EnableLanguageFeature(zetasql::FEATURE_DML_RETURNING);
+  options->EnableLanguageFeature(googlesql::FEATURE_DML_RETURNING);
 
   // Proto and enum are not supported in spangres.
-  options->DisableLanguageFeature(zetasql::FEATURE_PROTO_BASE);
+  options->DisableLanguageFeature(googlesql::FEATURE_PROTO_BASE);
 
   // TODO: Support Map type in Spangres RQG.
-  options->DisableLanguageFeature(zetasql::FEATURE_MAP_TYPE);
+  options->DisableLanguageFeature(googlesql::FEATURE_MAP_TYPE);
 
   options->EnableLanguageFeature(
-      zetasql::FEATURE_NULLS_FIRST_LAST_IN_ORDER_BY);
+      googlesql::FEATURE_NULLS_FIRST_LAST_IN_ORDER_BY);
 
-  options->EnableLanguageFeature(zetasql::FEATURE_FOR_UPDATE);
+  options->EnableLanguageFeature(googlesql::FEATURE_FOR_UPDATE);
 
   // `SELECT ARRAY_AGG(x HAVING MAX y) FROM (SELECT 1 as x, 2 as y UNION ALL
   //  SELECT 2, 3)` not supported in PostgreSQL.
-  options->DisableLanguageFeature(zetasql::FEATURE_HAVING_IN_AGGREGATE);
+  options->DisableLanguageFeature(googlesql::FEATURE_HAVING_IN_AGGREGATE);
   // `SELECT ARRAY_AGG(x LIMIT 10) FROM (SELECT 1 as x)` not supported in
   // PostgreSQL.
-  options->DisableLanguageFeature(zetasql::FEATURE_LIMIT_IN_AGGREGATE);
+  options->DisableLanguageFeature(googlesql::FEATURE_LIMIT_IN_AGGREGATE);
   // `SELECT ARRAY_AGG(x IGNORE NULLS) FROM (SELECT null as x
   //  union all select 3)` not supported in PostgreSQL.
   options->DisableLanguageFeature(
-      zetasql::FEATURE_NULL_HANDLING_MODIFIER_IN_AGGREGATE);
+      googlesql::FEATURE_NULL_HANDLING_MODIFIER_IN_AGGREGATE);
 }
 
 }  // namespace
 
-zetasql::AnalyzerOptions GetSpangresTestAnalyzerOptions() {
+googlesql::AnalyzerOptions GetSpangresTestAnalyzerOptions() {
 
-  zetasql::AnalyzerOptions options =
+  googlesql::AnalyzerOptions options =
       google::spanner::emulator::backend::MakeGoogleSqlAnalyzerOptions();
   // We set this option to true as some tests expect it. But the transformer can
   // run without this option as well.
@@ -108,14 +108,14 @@ zetasql::AnalyzerOptions GetSpangresTestAnalyzerOptions() {
 
 std::unique_ptr<EngineBuiltinFunctionCatalog>
 GetSpangresTestBuiltinFunctionCatalog(
-    const zetasql::LanguageOptions& language_options) {
+    const googlesql::LanguageOptions& language_options) {
   return absl::make_unique<EmulatorBuiltinFunctionCatalog>(
       absl::make_unique<google::spanner::emulator::backend::FunctionCatalog>(
       GetTypeFactory()));
 }
 
 EngineSystemCatalog* GetSpangresTestSystemCatalog(
-    const zetasql::LanguageOptions& language_options) {
+    const googlesql::LanguageOptions& language_options) {
   // Initialize the EngineSystemCatalog singleton as needed, but throw away
   // the result since it's ok if it was already initialized.
   std::unique_ptr<EngineBuiltinFunctionCatalog> builtin_function_catalog;
@@ -136,10 +136,10 @@ EngineSystemCatalog* GetSpangresTestSystemCatalog(
 }
 
 std::unique_ptr<CatalogAdapter> GetSpangresTestCatalogAdapter(
-    const zetasql::AnalyzerOptions& analyzer_options,
-    zetasql::EnumerableCatalog* rqg_user_catalog,
+    const googlesql::AnalyzerOptions& analyzer_options,
+    googlesql::EnumerableCatalog* rqg_user_catalog,
     absl::flat_hash_map<int, int> token_locations) {
-  zetasql::EnumerableCatalog* engine_provided_catalog;
+  googlesql::EnumerableCatalog* engine_provided_catalog;
   if (rqg_user_catalog != nullptr) {
     engine_provided_catalog = rqg_user_catalog;
   } else {
@@ -162,8 +162,8 @@ std::unique_ptr<CatalogAdapter> GetSpangresTestCatalogAdapter(
 }
 
 std::unique_ptr<CatalogAdapterHolder> GetSpangresTestCatalogAdapterHolder(
-    const zetasql::AnalyzerOptions& analyzer_options,
-    zetasql::EnumerableCatalog* rqg_user_catalog,
+    const googlesql::AnalyzerOptions& analyzer_options,
+    googlesql::EnumerableCatalog* rqg_user_catalog,
     absl::flat_hash_map<int, int> token_locations) {
   auto catalog_adapter_holder_or =
       CatalogAdapterHolder::Create(GetSpangresTestCatalogAdapter(

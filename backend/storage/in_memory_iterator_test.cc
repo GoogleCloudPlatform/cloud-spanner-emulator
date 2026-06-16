@@ -19,10 +19,10 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "backend/datamodel/key.h"
 
@@ -32,8 +32,8 @@ namespace emulator {
 namespace backend {
 namespace {
 
-using zetasql::Value;
-using zetasql::values::Int64;
+using googlesql::Value;
+using googlesql::values::Int64;
 
 TEST(FixedRowStorageIterator, CreateIterator) {
   std::vector<std::pair<Key, std::vector<Value>>> row_values = {

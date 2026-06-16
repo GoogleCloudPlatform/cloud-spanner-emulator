@@ -22,14 +22,14 @@
 #include "google/spanner/v1/mutation.pb.h"
 #include "google/spanner/v1/result_set.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
-#include "zetasql/public/interval_value.h"
-#include "zetasql/public/type.h"
-#include "zetasql/public/types/type_factory.h"
-#include "zetasql/public/uuid_value.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/interval_value.h"
+#include "googlesql/public/type.h"
+#include "googlesql/public/types/type_factory.h"
+#include "googlesql/public/uuid_value.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "backend/datamodel/key_range.h"
@@ -50,38 +50,38 @@ using ::google::spanner::emulator::test::TestRowCursor;
 using ::google::spanner::v1::PartialResultSet;
 using ::google::spanner::v1::ReadRequest;
 using ::google::spanner::v1::ResultSet;
-using zetasql::IntervalValue;
-using zetasql::StructField;
-using zetasql::UuidValue;
-using zetasql::Value;
-using zetasql::types::BoolType;
-using zetasql::types::BytesType;
-using zetasql::types::DatetimeType;
-using zetasql::types::DateType;
-using zetasql::types::DoubleType;
-using zetasql::types::FloatType;
-using zetasql::types::GeographyType;
-using zetasql::types::Int64ArrayType;
-using zetasql::types::Int64Type;
-using zetasql::types::IntervalType;
-using zetasql::types::StringType;
-using zetasql::types::TimestampType;
-using zetasql::types::UuidType;
-using zetasql::values::Bool;
-using zetasql::values::Datetime;
-using zetasql::values::Double;
-using zetasql::values::Float;
-using zetasql::values::Int64;
-using zetasql::values::Interval;
-using zetasql::values::NullString;
-using zetasql::values::String;
-using zetasql::values::Uuid;
-using zetasql_base::testing::StatusIs;
+using googlesql::IntervalValue;
+using googlesql::StructField;
+using googlesql::UuidValue;
+using googlesql::Value;
+using googlesql::types::BoolType;
+using googlesql::types::BytesType;
+using googlesql::types::DatetimeType;
+using googlesql::types::DateType;
+using googlesql::types::DoubleType;
+using googlesql::types::FloatType;
+using googlesql::types::GeographyType;
+using googlesql::types::Int64ArrayType;
+using googlesql::types::Int64Type;
+using googlesql::types::IntervalType;
+using googlesql::types::StringType;
+using googlesql::types::TimestampType;
+using googlesql::types::UuidType;
+using googlesql::values::Bool;
+using googlesql::values::Datetime;
+using googlesql::values::Double;
+using googlesql::values::Float;
+using googlesql::values::Int64;
+using googlesql::values::Interval;
+using googlesql::values::NullString;
+using googlesql::values::String;
+using googlesql::values::Uuid;
+using googlesql_base::testing::StatusIs;
 
 class AccessProtosTest : public testing::Test {
  public:
   AccessProtosTest()
-      : type_factory_(std::make_unique<zetasql::TypeFactory>()),
+      : type_factory_(std::make_unique<googlesql::TypeFactory>()),
         schema_(test::CreateSchemaWithOneTable(type_factory_.get())) {}
 
  protected:
@@ -102,7 +102,7 @@ class AccessProtosTest : public testing::Test {
   }
 
   // The type factory must outlive the type objects that it has made.
-  const std::unique_ptr<zetasql::TypeFactory> type_factory_;
+  const std::unique_ptr<googlesql::TypeFactory> type_factory_;
   const std::unique_ptr<const backend::Schema> schema_;
 };
 
@@ -115,7 +115,7 @@ TEST_F(AccessProtosTest, CanConvertRowCursorToResultSet) {
        {Int64(3), Bool(false), Double(-9.999), String("Key:Value"),
         NullString()}});
   ResultSet result_pb;
-  ZETASQL_EXPECT_OK(RowCursorToResultSetProto(&cursor, 0, &result_pb));
+  GOOGLESQL_EXPECT_OK(RowCursorToResultSetProto(&cursor, 0, &result_pb));
 
   EXPECT_THAT(result_pb, test::EqualsProto(
                              R"(metadata {
@@ -174,7 +174,7 @@ TEST_F(AccessProtosTest, CanConvertRowCursorToResultSetWithLimit) {
        {Int64(3), Bool(false), Double(-9.999), String("Key:Value"),
         NullString()}});
   ResultSet result_pb;
-  ZETASQL_EXPECT_OK(RowCursorToResultSetProto(&cursor, 1, &result_pb));
+  GOOGLESQL_EXPECT_OK(RowCursorToResultSetProto(&cursor, 1, &result_pb));
 
   EXPECT_THAT(result_pb, test::EqualsProto(
                              R"(metadata {
@@ -219,7 +219,7 @@ TEST_F(AccessProtosTest, CanConvertRowCursorToPartialResultSet) {
        {Int64(3), Bool(false), Double(-9.999), String("Key:Value"),
         NullString()}});
   std::vector<PartialResultSet> results;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(results, RowCursorToPartialResultSetProtos(&cursor, 0));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(results, RowCursorToPartialResultSetProtos(&cursor, 0));
 
   EXPECT_THAT(results[0], test::EqualsProto(
                               R"(metadata {
@@ -273,7 +273,7 @@ TEST_F(AccessProtosTest, CanConvertRowCursorToPartialResultSetWithLimit) {
        {Int64(3), Bool(false), Double(-9.999), String("Key:Value"),
         NullString()}});
   std::vector<PartialResultSet> results;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(results, RowCursorToPartialResultSetProtos(&cursor, 1));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(results, RowCursorToPartialResultSetProtos(&cursor, 1));
 
   EXPECT_THAT(results[0], test::EqualsProto(
                               R"(metadata {
@@ -309,8 +309,8 @@ TEST_F(AccessProtosTest, CanConvertRowCursorToPartialResultSetWithLimit) {
 }
 
 TEST_F(AccessProtosTest, CanConvertEmptyRowCursorToResultSet) {
-  const zetasql::Type* struct_array;
-  ZETASQL_EXPECT_OK(type_factory_->MakeStructTypeFromVector(
+  const googlesql::Type* struct_array;
+  GOOGLESQL_EXPECT_OK(type_factory_->MakeStructTypeFromVector(
       {StructField("element1", Int64Type()),
        StructField("element2", Int64Type()),
        StructField("element3", Int64Type())},
@@ -323,7 +323,7 @@ TEST_F(AccessProtosTest, CanConvertEmptyRowCursorToResultSet) {
        TimestampType(), DateType(), Int64ArrayType(), struct_array},
       {});
   ResultSet result_pb;
-  ZETASQL_EXPECT_OK(RowCursorToResultSetProto(&cursor, 0, &result_pb));
+  GOOGLESQL_EXPECT_OK(RowCursorToResultSetProto(&cursor, 0, &result_pb));
 
   EXPECT_THAT(result_pb, test::EqualsProto(
                              R"pb(metadata {
@@ -394,7 +394,7 @@ TEST_F(AccessProtosTest, CanConvertFloat32RowCursorToResultSet) {
                         {Int64(2), Float(0.0f)},
                         {Int64(3), Float(-1.0f)}});
   ResultSet result_pb;
-  ZETASQL_EXPECT_OK(RowCursorToResultSetProto(&cursor, 0, &result_pb));
+  GOOGLESQL_EXPECT_OK(RowCursorToResultSetProto(&cursor, 0, &result_pb));
 
   EXPECT_THAT(result_pb, test::EqualsProto(
                              R"pb(metadata {
@@ -429,7 +429,7 @@ TEST_F(AccessProtosTest, CanConvertFloat32RowCursorToResultSetWithLimit) {
                         {Int64(2), Float(0.0f)},
                         {Int64(3), Float(-1.0f)}});
   ResultSet result_pb;
-  ZETASQL_EXPECT_OK(RowCursorToResultSetProto(&cursor, 1, &result_pb));
+  GOOGLESQL_EXPECT_OK(RowCursorToResultSetProto(&cursor, 1, &result_pb));
 
   EXPECT_THAT(result_pb, test::EqualsProto(
                              R"pb(metadata {
@@ -456,7 +456,7 @@ TEST_F(AccessProtosTest, CanConvertFloat32RowCursorToPartialResultSet) {
                         {Int64(2), Float(0.0f)},
                         {Int64(3), Float(-1.0f)}});
   std::vector<PartialResultSet> results;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(results, RowCursorToPartialResultSetProtos(&cursor, 0));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(results, RowCursorToPartialResultSetProtos(&cursor, 0));
 
   EXPECT_THAT(results[0], test::EqualsProto(
                               R"pb(metadata {
@@ -487,7 +487,7 @@ TEST_F(AccessProtosTest,
                         {Int64(2), Float(0.0)},
                         {Int64(3), Float(-1.0f)}});
   std::vector<PartialResultSet> results;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(results, RowCursorToPartialResultSetProtos(&cursor, 1));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(results, RowCursorToPartialResultSetProtos(&cursor, 1));
 
   EXPECT_THAT(results[0], test::EqualsProto(
                               R"pb(metadata {
@@ -510,7 +510,7 @@ TEST_F(AccessProtosTest,
 TEST_F(AccessProtosTest, CanConvertEmptyFloat32RowCursorToResultSet) {
   TestRowCursor cursor({"int64", "float"}, {Int64Type(), FloatType()}, {});
   ResultSet result_pb;
-  ZETASQL_EXPECT_OK(RowCursorToResultSetProto(&cursor, 0, &result_pb));
+  GOOGLESQL_EXPECT_OK(RowCursorToResultSetProto(&cursor, 0, &result_pb));
 
   EXPECT_THAT(result_pb, test::EqualsProto(
                              R"pb(metadata {
@@ -541,7 +541,7 @@ TEST_F(AccessProtosTest, CannotConvertInvalidRowCursorToResultSet) {
 
   // Test invalid value.
   TestRowCursor cursor4({"col1"}, {Int64Type()},
-                        {{Value(Datetime(zetasql::DatetimeValue()))}});
+                        {{Value(Datetime(googlesql::DatetimeValue()))}});
   EXPECT_THAT(RowCursorToResultSetProto(&cursor4, 0, &result_pb),
               StatusIs(absl::StatusCode::kInternal));
 }
@@ -560,7 +560,7 @@ TEST_F(AccessProtosTest, CanReadArgsFromProto) {
     }
   )");
   backend::ReadArg read_arg;
-  ZETASQL_EXPECT_OK(ReadArgFromProto(*schema_.get(), request, &read_arg));
+  GOOGLESQL_EXPECT_OK(ReadArgFromProto(*schema_.get(), request, &read_arg));
 
   // Verify the populated ReadArg
   EXPECT_EQ(read_arg.table, request.table());
@@ -569,17 +569,17 @@ TEST_F(AccessProtosTest, CanReadArgsFromProto) {
 
   auto key = read_arg.key_set.keys()[0];
   EXPECT_EQ(key.NumColumns(), 1);
-  EXPECT_EQ(key.ColumnValue(0), zetasql::values::Int64(123));
+  EXPECT_EQ(key.ColumnValue(0), googlesql::values::Int64(123));
 
   auto key_range = read_arg.key_set.ranges()[0];
   EXPECT_EQ(key_range.start_type(), backend::EndpointType::kClosed);
   EXPECT_EQ(key_range.start_key().NumColumns(), 1);
   EXPECT_EQ(key_range.start_key().ColumnValue(0),
-            zetasql::values::Int64(456));
+            googlesql::values::Int64(456));
   EXPECT_EQ(key_range.limit_type(), backend::EndpointType::kOpen);
   EXPECT_EQ(key_range.limit_key().NumColumns(), 1);
   EXPECT_EQ(key_range.limit_key().ColumnValue(0),
-            zetasql::values::Int64(789));
+            googlesql::values::Int64(789));
 }
 
 TEST_F(AccessProtosTest, CannotReadArgsFromProtoWithNoKeySet) {
@@ -601,7 +601,7 @@ TEST_F(AccessProtosTest, CanReadArgsFromProtoWithEmptyKeySet) {
     key_set {}
   )");
   backend::ReadArg read_arg;
-  ZETASQL_EXPECT_OK(ReadArgFromProto(*schema_.get(), request, &read_arg));
+  GOOGLESQL_EXPECT_OK(ReadArgFromProto(*schema_.get(), request, &read_arg));
   // Verify the populated ReadArg
   EXPECT_EQ(read_arg.table, request.table());
   EXPECT_THAT(read_arg.columns,
@@ -655,7 +655,7 @@ TEST_F(AccessProtosTest, ParsesAllKeySet) {
     key_set { all: true }
   )");
   backend::ReadArg read_arg;
-  ZETASQL_EXPECT_OK(ReadArgFromProto(*schema_.get(), request, &read_arg));
+  GOOGLESQL_EXPECT_OK(ReadArgFromProto(*schema_.get(), request, &read_arg));
   EXPECT_EQ("test_table", read_arg.table);
   ASSERT_EQ(1, read_arg.columns.size());
   EXPECT_EQ("int64_col", read_arg.columns[0]);
@@ -678,7 +678,7 @@ TEST_F(AccessProtosTest, ReadIndex) {
     }
   )");
   backend::ReadArg read_arg;
-  ZETASQL_EXPECT_OK(ReadArgFromProto(*schema_.get(), request, &read_arg));
+  GOOGLESQL_EXPECT_OK(ReadArgFromProto(*schema_.get(), request, &read_arg));
 
   // Verify the populated ReadArg
   EXPECT_EQ(read_arg.table, request.table());
@@ -688,19 +688,19 @@ TEST_F(AccessProtosTest, ReadIndex) {
 
   auto key = read_arg.key_set.keys()[0];
   EXPECT_EQ(key.NumColumns(), 1);
-  EXPECT_EQ(key.ColumnValue(0), zetasql::values::String("123"));
+  EXPECT_EQ(key.ColumnValue(0), googlesql::values::String("123"));
   EXPECT_TRUE(key.IsColumnDescending(0));
 
   auto key_range = read_arg.key_set.ranges()[0];
   EXPECT_EQ(key_range.start_type(), backend::EndpointType::kClosed);
   EXPECT_EQ(key_range.start_key().NumColumns(), 1);
   EXPECT_EQ(key_range.start_key().ColumnValue(0),
-            zetasql::values::String("456"));
+            googlesql::values::String("456"));
   EXPECT_TRUE(key_range.start_key().IsColumnDescending(0));
   EXPECT_EQ(key_range.limit_type(), backend::EndpointType::kOpen);
   EXPECT_EQ(key_range.limit_key().NumColumns(), 1);
   EXPECT_EQ(key_range.limit_key().ColumnValue(0),
-            zetasql::values::String("789"));
+            googlesql::values::String("789"));
   EXPECT_TRUE(key_range.limit_key().IsColumnDescending(0));
 }
 
@@ -710,7 +710,7 @@ TEST_F(AccessProtosTest, CanConvertIntervalRowCursorToResultSet) {
                         {Int64(2), Interval(IntervalValue())},
                         {Int64(3), Interval(IntervalValue::MaxValue())}});
   ResultSet result_pb;
-  ZETASQL_EXPECT_OK(RowCursorToResultSetProto(&cursor, 0, &result_pb));
+  GOOGLESQL_EXPECT_OK(RowCursorToResultSetProto(&cursor, 0, &result_pb));
 
   EXPECT_THAT(result_pb,
               test::EqualsProto(
@@ -746,7 +746,7 @@ TEST_F(AccessProtosTest, CanConvertIntervalRowCursorToResultSetWithLimit) {
                         {Int64(2), Interval(IntervalValue())},
                         {Int64(3), Interval(IntervalValue::MaxValue())}});
   ResultSet result_pb;
-  ZETASQL_EXPECT_OK(RowCursorToResultSetProto(&cursor, 1, &result_pb));
+  GOOGLESQL_EXPECT_OK(RowCursorToResultSetProto(&cursor, 1, &result_pb));
 
   EXPECT_THAT(result_pb,
               test::EqualsProto(
@@ -774,7 +774,7 @@ TEST_F(AccessProtosTest, CanConvertIntervalRowCursorToPartialResultSet) {
                         {Int64(2), Interval(IntervalValue())},
                         {Int64(3), Interval(IntervalValue::MaxValue())}});
   std::vector<PartialResultSet> results;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(results, RowCursorToPartialResultSetProtos(&cursor, 0));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(results, RowCursorToPartialResultSetProtos(&cursor, 0));
 
   EXPECT_THAT(results[0],
               test::EqualsProto(
@@ -806,7 +806,7 @@ TEST_F(AccessProtosTest,
                         {Int64(2), Interval(IntervalValue())},
                         {Int64(3), Interval(IntervalValue::MaxValue())}});
   std::vector<PartialResultSet> results;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(results, RowCursorToPartialResultSetProtos(&cursor, 1));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(results, RowCursorToPartialResultSetProtos(&cursor, 1));
 
   EXPECT_THAT(results[0],
               test::EqualsProto(
@@ -831,7 +831,7 @@ TEST_F(AccessProtosTest, CanConvertEmptyIntervalRowCursorToResultSet) {
   TestRowCursor cursor({"int64", "interval"}, {Int64Type(), IntervalType()},
                        {});
   ResultSet result_pb;
-  ZETASQL_EXPECT_OK(RowCursorToResultSetProto(&cursor, 0, &result_pb));
+  GOOGLESQL_EXPECT_OK(RowCursorToResultSetProto(&cursor, 0, &result_pb));
 
   EXPECT_THAT(result_pb, test::EqualsProto(
                              R"pb(metadata {
@@ -855,7 +855,7 @@ TEST_F(AccessProtosTest, CanConvertUuidRowCursorToResultSet) {
                         {Int64(2), Uuid(UuidValue())},
                         {Int64(3), Uuid(UuidValue::MaxValue())}});
   ResultSet result_pb;
-  ZETASQL_EXPECT_OK(RowCursorToResultSetProto(&cursor, 0, &result_pb));
+  GOOGLESQL_EXPECT_OK(RowCursorToResultSetProto(&cursor, 0, &result_pb));
 
   EXPECT_THAT(
       result_pb,
@@ -892,7 +892,7 @@ TEST_F(AccessProtosTest, CanConvertUuidRowCursorToResultSetWithLimit) {
                         {Int64(2), Uuid(UuidValue())},
                         {Int64(3), Uuid(UuidValue::MaxValue())}});
   ResultSet result_pb;
-  ZETASQL_EXPECT_OK(RowCursorToResultSetProto(&cursor, 1, &result_pb));
+  GOOGLESQL_EXPECT_OK(RowCursorToResultSetProto(&cursor, 1, &result_pb));
 
   EXPECT_THAT(
       result_pb,
@@ -921,7 +921,7 @@ TEST_F(AccessProtosTest, CanConvertUuidRowCursorToPartialResultSet) {
                         {Int64(2), Uuid(UuidValue())},
                         {Int64(3), Uuid(UuidValue::MaxValue())}});
   std::vector<PartialResultSet> results;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(results, RowCursorToPartialResultSetProtos(&cursor, 0));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(results, RowCursorToPartialResultSetProtos(&cursor, 0));
 
   EXPECT_THAT(
       results[0],
@@ -953,7 +953,7 @@ TEST_F(AccessProtosTest, CanConvertUuidRowCursorToPartialResultSetWithLimit) {
                         {Int64(2), Uuid(UuidValue())},
                         {Int64(3), Uuid(UuidValue::MaxValue())}});
   std::vector<PartialResultSet> results;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(results, RowCursorToPartialResultSetProtos(&cursor, 1));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(results, RowCursorToPartialResultSetProtos(&cursor, 1));
 
   EXPECT_THAT(
       results[0],
@@ -978,7 +978,7 @@ TEST_F(AccessProtosTest, CanConvertUuidRowCursorToPartialResultSetWithLimit) {
 TEST_F(AccessProtosTest, CanConvertEmptyUuidRowCursorToResultSet) {
   TestRowCursor cursor({"int64", "uuid"}, {Int64Type(), UuidType()}, {});
   ResultSet result_pb;
-  ZETASQL_EXPECT_OK(RowCursorToResultSetProto(&cursor, 0, &result_pb));
+  GOOGLESQL_EXPECT_OK(RowCursorToResultSetProto(&cursor, 0, &result_pb));
 
   EXPECT_THAT(result_pb, test::EqualsProto(
                              R"pb(metadata {

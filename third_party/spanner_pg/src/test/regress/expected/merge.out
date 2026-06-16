@@ -162,7 +162,7 @@ DROP MATERIALIZED VIEW mv;
 -- permissions
 SET SESSION AUTHORIZATION regress_merge_none;
 MERGE INTO target
-USING (SELECT 1) AS s
+USING (SELECT 1)
 ON true
 WHEN MATCHED THEN
 	DO NOTHING;
@@ -206,7 +206,7 @@ WHEN NOT MATCHED THEN
 ERROR:  invalid reference to FROM-clause entry for table "t"
 LINE 2: USING (SELECT * FROM source WHERE t.tid > sid) s
                                           ^
-HINT:  There is an entry for table "t", but it cannot be referenced from this part of the query.
+DETAIL:  There is an entry for table "t", but it cannot be referenced from this part of the query.
 --
 -- initial tests
 --
@@ -627,7 +627,7 @@ WHEN NOT MATCHED THEN
 ERROR:  invalid reference to FROM-clause entry for table "t"
 LINE 5:  INSERT (tid, balance) VALUES (t.tid, s.delta);
                                        ^
-HINT:  There is an entry for table "t", but it cannot be referenced from this part of the query.
+DETAIL:  There is an entry for table "t", but it cannot be referenced from this part of the query.
 -- and again with a constant ON clause
 BEGIN;
 MERGE INTO target t
@@ -638,7 +638,7 @@ WHEN NOT MATCHED THEN
 ERROR:  invalid reference to FROM-clause entry for table "t"
 LINE 5:  INSERT (tid, balance) VALUES (t.tid, s.delta);
                                        ^
-HINT:  There is an entry for table "t", but it cannot be referenced from this part of the query.
+DETAIL:  There is an entry for table "t", but it cannot be referenced from this part of the query.
 SELECT * FROM target ORDER BY tid;
 ERROR:  current transaction is aborted, commands ignored until end of transaction block
 ROLLBACK;
@@ -733,7 +733,7 @@ WHEN NOT MATCHED AND t.balance = 100 THEN
 ERROR:  invalid reference to FROM-clause entry for table "t"
 LINE 3: WHEN NOT MATCHED AND t.balance = 100 THEN
                              ^
-HINT:  There is an entry for table "t", but it cannot be referenced from this part of the query.
+DETAIL:  There is an entry for table "t", but it cannot be referenced from this part of the query.
 SELECT * FROM wq_target;
 ERROR:  current transaction is aborted, commands ignored until end of transaction block
 ROLLBACK;
@@ -1699,6 +1699,23 @@ SELECT * FROM pa_target ORDER BY tid;
 (14 rows)
 
 ROLLBACK;
+-- bug #18871: ExecInitPartitionInfo()'s handling of DO NOTHING actions
+BEGIN;
+TRUNCATE pa_target;
+MERGE INTO pa_target t
+  USING (VALUES (10, 100)) AS s(sid, delta)
+  ON t.tid = s.sid
+  WHEN NOT MATCHED THEN
+    INSERT VALUES (1, 10, 'inserted by merge')
+  WHEN MATCHED THEN
+    DO NOTHING;
+SELECT * FROM pa_target ORDER BY tid, val;
+ tid | balance |        val        
+-----+---------+-------------------
+   1 |      10 | inserted by merge
+(1 row)
+
+ROLLBACK;
 DROP TABLE pa_target CASCADE;
 -- The target table is partitioned in the same way, but this time by attaching
 -- partitions which have columns in different order, dropped columns etc.
@@ -1974,18 +1991,21 @@ INSERT INTO pa_source VALUES (1), (2);
 EXPLAIN (VERBOSE, COSTS OFF)
 MERGE INTO pa_target t USING pa_source s ON t.tid = s.sid
   WHEN NOT MATCHED THEN INSERT VALUES (s.sid);
-                              QUERY PLAN                               
------------------------------------------------------------------------
+                         QUERY PLAN                          
+-------------------------------------------------------------
  Merge on public.pa_target t
    Merge on public.pa_targetp t_1
-   ->  Nested Loop Left Join
+   ->  Hash Left Join
          Output: s.sid, s.ctid, t_1.tableoid, t_1.ctid
+         Inner Unique: true
+         Hash Cond: (s.sid = t_1.tid)
          ->  Seq Scan on public.pa_source s
                Output: s.sid, s.ctid
-         ->  Index Scan using pa_targetp_pkey on public.pa_targetp t_1
+         ->  Hash
                Output: t_1.tid, t_1.tableoid, t_1.ctid
-               Index Cond: (t_1.tid = s.sid)
-(9 rows)
+               ->  Seq Scan on public.pa_targetp t_1
+                     Output: t_1.tid, t_1.tableoid, t_1.ctid
+(12 rows)
 
 MERGE INTO pa_target t USING pa_source s ON t.tid = s.sid
   WHEN NOT MATCHED THEN INSERT VALUES (s.sid);
@@ -2007,6 +2027,7 @@ MERGE INTO pa_target t USING pa_source s ON t.tid = s.sid
  Merge on public.pa_target t
    ->  Hash Left Join
          Output: s.sid, s.ctid, t.ctid
+         Inner Unique: true
          Hash Cond: (s.sid = t.tid)
          ->  Seq Scan on public.pa_source s
                Output: s.sid, s.ctid
@@ -2015,7 +2036,7 @@ MERGE INTO pa_target t USING pa_source s ON t.tid = s.sid
                ->  Result
                      Output: t.tid, t.ctid
                      One-Time Filter: false
-(11 rows)
+(12 rows)
 
 MERGE INTO pa_target t USING pa_source s ON t.tid = s.sid
   WHEN NOT MATCHED THEN INSERT VALUES (s.sid);
@@ -2288,6 +2309,64 @@ SELECT * FROM new_measurement ORDER BY city_id, logdate;
 ---------+------------+----------+-----------
        1 | 03-27-2006 |          |          
        1 | 01-17-2007 |          |          
+(2 rows)
+
+-- MERGE into inheritance root table
+DROP TRIGGER insert_measurement_trigger ON measurement;
+ALTER TABLE measurement ADD CONSTRAINT mcheck CHECK (city_id = 0) NO INHERIT;
+EXPLAIN (COSTS OFF)
+MERGE INTO measurement m
+ USING (VALUES (1, '01-17-2007'::date)) nm(city_id, logdate) ON
+      (m.city_id = nm.city_id and m.logdate=nm.logdate)
+WHEN NOT MATCHED THEN INSERT
+     (city_id, logdate, peaktemp, unitsales)
+   VALUES (city_id - 1, logdate, 25, 100);
+                                QUERY PLAN                                
+--------------------------------------------------------------------------
+ Merge on measurement m
+   Merge on measurement_y2007m01 m_1
+   ->  Nested Loop Left Join
+         ->  Result
+         ->  Seq Scan on measurement_y2007m01 m_1
+               Filter: ((city_id = 1) AND (logdate = '01-17-2007'::date))
+(6 rows)
+
+BEGIN;
+MERGE INTO measurement m
+ USING (VALUES (1, '01-17-2007'::date)) nm(city_id, logdate) ON
+      (m.city_id = nm.city_id and m.logdate=nm.logdate)
+WHEN NOT MATCHED THEN INSERT
+     (city_id, logdate, peaktemp, unitsales)
+   VALUES (city_id - 1, logdate, 25, 100);
+SELECT * FROM ONLY measurement ORDER BY city_id, logdate;
+ city_id |  logdate   | peaktemp | unitsales 
+---------+------------+----------+-----------
+       0 | 07-21-2005 |       25 |        35
+       0 | 01-17-2007 |       25 |       100
+(2 rows)
+
+ROLLBACK;
+ALTER TABLE measurement ENABLE ROW LEVEL SECURITY;
+ALTER TABLE measurement FORCE ROW LEVEL SECURITY;
+CREATE POLICY measurement_p ON measurement USING (peaktemp IS NOT NULL);
+MERGE INTO measurement m
+ USING (VALUES (1, '01-17-2007'::date)) nm(city_id, logdate) ON
+      (m.city_id = nm.city_id and m.logdate=nm.logdate)
+WHEN NOT MATCHED THEN INSERT
+     (city_id, logdate, peaktemp, unitsales)
+   VALUES (city_id - 1, logdate, NULL, 100); -- should fail
+ERROR:  new row violates row-level security policy for table "measurement"
+MERGE INTO measurement m
+ USING (VALUES (1, '01-17-2007'::date)) nm(city_id, logdate) ON
+      (m.city_id = nm.city_id and m.logdate=nm.logdate)
+WHEN NOT MATCHED THEN INSERT
+     (city_id, logdate, peaktemp, unitsales)
+   VALUES (city_id - 1, logdate, 25, 100); -- ok
+SELECT * FROM ONLY measurement ORDER BY city_id, logdate;
+ city_id |  logdate   | peaktemp | unitsales 
+---------+------------+----------+-----------
+       0 | 07-21-2005 |       25 |        35
+       0 | 01-17-2007 |       25 |       100
 (2 rows)
 
 DROP TABLE measurement, new_measurement CASCADE;

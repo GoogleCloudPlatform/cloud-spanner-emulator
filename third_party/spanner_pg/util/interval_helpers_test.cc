@@ -34,7 +34,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 
 namespace {
 
@@ -47,13 +47,13 @@ void Validate(const PGInterval& lhs, const PGInterval& rhs) {
 TEST(Intervals, IntervalToSecs) {
   // Make sure that we get errors for bad intervals, and no errors for good
   // ones.
-  EXPECT_THAT(IntervalToSecs("1 day"), zetasql_base::testing::IsOk());
-  EXPECT_THAT(IntervalToSecs("P1Y2M3DT4H5M6S"), zetasql_base::testing::IsOk());
-  EXPECT_THAT(IntervalToSecs("P-1Y2M3DT4H5M6S"), zetasql_base::testing::IsOk());
-  EXPECT_THAT(IntervalToSecs("greeble"), testing::Not(zetasql_base::testing::IsOk()));
-  EXPECT_THAT(IntervalToSecs("Pasdf"), testing::Not(zetasql_base::testing::IsOk()));
+  EXPECT_THAT(IntervalToSecs("1 day"), googlesql_base::testing::IsOk());
+  EXPECT_THAT(IntervalToSecs("P1Y2M3DT4H5M6S"), googlesql_base::testing::IsOk());
+  EXPECT_THAT(IntervalToSecs("P-1Y2M3DT4H5M6S"), googlesql_base::testing::IsOk());
+  EXPECT_THAT(IntervalToSecs("greeble"), testing::Not(googlesql_base::testing::IsOk()));
+  EXPECT_THAT(IntervalToSecs("Pasdf"), testing::Not(googlesql_base::testing::IsOk()));
   EXPECT_THAT(IntervalToSecs("November 17, 1858"),
-              testing::Not(zetasql_base::testing::IsOk()));
+              testing::Not(googlesql_base::testing::IsOk()));
 
   // Test that some conversions work
   EXPECT_EQ(86400, IntervalToSecs("1 day").value());
@@ -73,13 +73,13 @@ TEST(Intervals, IntervalToSecs) {
 TEST(Intervals, ParseInterval) {
   // Make sure that we get errors for bad intervals, and no errors for good
   // ones.
-  EXPECT_THAT(ParseInterval("1 day"), zetasql_base::testing::IsOk());
-  EXPECT_THAT(ParseInterval("P1Y2M3DT4H5M6S"), zetasql_base::testing::IsOk());
-  EXPECT_THAT(ParseInterval("P-1Y2M3DT4H5M6S"), zetasql_base::testing::IsOk());
-  EXPECT_THAT(ParseInterval("greeble"), testing::Not(zetasql_base::testing::IsOk()));
-  EXPECT_THAT(ParseInterval("Pasdf"), testing::Not(zetasql_base::testing::IsOk()));
+  EXPECT_THAT(ParseInterval("1 day"), googlesql_base::testing::IsOk());
+  EXPECT_THAT(ParseInterval("P1Y2M3DT4H5M6S"), googlesql_base::testing::IsOk());
+  EXPECT_THAT(ParseInterval("P-1Y2M3DT4H5M6S"), googlesql_base::testing::IsOk());
+  EXPECT_THAT(ParseInterval("greeble"), testing::Not(googlesql_base::testing::IsOk()));
+  EXPECT_THAT(ParseInterval("Pasdf"), testing::Not(googlesql_base::testing::IsOk()));
   EXPECT_THAT(ParseInterval("November 17, 1858"),
-              testing::Not(zetasql_base::testing::IsOk()));
+              testing::Not(googlesql_base::testing::IsOk()));
 
   // Test that some conversions work
   Validate(ParseInterval("1 day").value(),

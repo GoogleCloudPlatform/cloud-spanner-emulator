@@ -22,8 +22,8 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/evaluator_table_iterator.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/evaluator_table_iterator.h"
 #include "absl/status/statusor.h"
 #include "absl/types/span.h"
 #include "backend/access/read.h"
@@ -37,18 +37,18 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 
-// A wrapper over Table class which implements zetasql::Table.
+// A wrapper over Table class which implements googlesql::Table.
 // QueryableTable builds instances of EvalutorTableIterator by reading data of
 // the table through a RowReader.
-class QueryableTable : public zetasql::Table {
+class QueryableTable : public googlesql::Table {
  public:
   // 'options' , 'catalog' , 'type_factory' must be non-null when specifying a
   // QueryableTable with default value columns.
   QueryableTable(
       const backend::Table* table, RowReader* reader,
-      std::optional<const zetasql::AnalyzerOptions> options = std::nullopt,
-      zetasql::Catalog* catalog = nullptr,
-      zetasql::TypeFactory* type_factory = nullptr, bool is_synonym = false);
+      std::optional<const googlesql::AnalyzerOptions> options = std::nullopt,
+      googlesql::Catalog* catalog = nullptr,
+      googlesql::TypeFactory* type_factory = nullptr, bool is_synonym = false);
 
   std::string Name() const override {
     return std::string(SDLObjectName::GetInSchemaName(SynonymOrName()));
@@ -59,11 +59,11 @@ class QueryableTable : public zetasql::Table {
 
   int NumColumns() const override { return columns_.size(); }
 
-  const zetasql::Column* GetColumn(int i) const override {
+  const googlesql::Column* GetColumn(int i) const override {
     return columns_[i].get();
   }
 
-  const zetasql::Column* FindColumnByName(
+  const googlesql::Column* FindColumnByName(
       const std::string& name) const override;
 
   std::optional<std::vector<int>> PrimaryKey() const override {
@@ -75,16 +75,16 @@ class QueryableTable : public zetasql::Table {
   const backend::Table* wrapped_table() const { return wrapped_table_; }
 
   // Override CreateEvaluatorTableIterator.
-  absl::StatusOr<std::unique_ptr<zetasql::EvaluatorTableIterator>>
+  absl::StatusOr<std::unique_ptr<googlesql::EvaluatorTableIterator>>
   CreateEvaluatorTableIterator(
       absl::Span<const int> column_idxs) const override;
 
  private:
-  absl::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>>
+  absl::StatusOr<std::unique_ptr<const googlesql::AnalyzerOutput>>
   AnalyzeColumnExpression(
-      const Column* column, zetasql::TypeFactory* type_factory,
-      zetasql::Catalog* catalog,
-      std::optional<const zetasql::AnalyzerOptions> opt_options) const;
+      const Column* column, googlesql::TypeFactory* type_factory,
+      googlesql::Catalog* catalog,
+      std::optional<const googlesql::AnalyzerOptions> opt_options) const;
 
   // Whether the table should be treated as a synonym.
   bool is_synonym_;

@@ -22,7 +22,7 @@
 #include <vector>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
-#include "zetasql/public/type.h"
+#include "googlesql/public/type.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
@@ -52,7 +52,7 @@ struct SchemaChangeOperation {
 // Database context within which a schema change is processed.
 struct SchemaChangeContext {
   // Type factory for the database.
-  zetasql::TypeFactory* type_factory;
+  googlesql::TypeFactory* type_factory;
 
   // Unique table ID generator for the database.
   TableIDGenerator* table_id_generator;

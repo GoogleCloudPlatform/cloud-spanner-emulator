@@ -45,7 +45,7 @@
 #include "frontend/collections/instance_manager.h"
 #include "frontend/entities/database.h"
 #include "frontend/entities/instance.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {

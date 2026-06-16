@@ -23,7 +23,7 @@
 #include "google/protobuf/descriptor.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/container/btree_set.h"
 #include "absl/status/status.h"
@@ -33,7 +33,7 @@
 #include "tests/common/test.pb.h"
 #include "tests/common/test_2.pb.h"
 #include "google/protobuf/descriptor.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -41,7 +41,7 @@ namespace emulator {
 namespace backend {
 
 using ::testing::HasSubstr;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 
 MATCHER_P(EqualsMessageDescriptor, expected_descriptor,
           negation ? "does not equal message descriptor"
@@ -97,8 +97,7 @@ class ProtoBundleTest : public ::testing::Test {
   std::string GenerateProtoDescriptorBytesAsString(
       std::string annotation_suffix, std::string annotation_value,
       std::string package) {
-    std::string annotation_prefix =
-    "zetasql";
+    std::string annotation_prefix = "googlesql";
 
     std::string annotation_name =
         "[" + annotation_prefix + "." + annotation_suffix + "]";
@@ -165,7 +164,7 @@ class ProtoBundleTest : public ::testing::Test {
       "emulator.tests.common.ImportingAndNestingEnumContainer.TestEnum";
 };
 
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 TEST_F(ProtoBundleTest, CreateEmpty_CreatesAnEmptyBundle) {
   auto proto_bundle = ProtoBundle::CreateEmpty();
@@ -173,11 +172,11 @@ TEST_F(ProtoBundleTest, CreateEmpty_CreatesAnEmptyBundle) {
 }
 
 TEST_F(ProtoBundleTest, UnsupportedFormatAnnotations) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto proto_bundle_builder_v1,
       ProtoBundle::Builder::New(GenerateProtoDescriptorBytesAsString(
           "format", "NUMERIC", "customer.app")));
-  ZETASQL_ASSERT_OK(proto_bundle_builder_v1->InsertTypes(
+  GOOGLESQL_ASSERT_OK(proto_bundle_builder_v1->InsertTypes(
       std::vector<std::string>{"customer.app.User"}));
   EXPECT_THAT(proto_bundle_builder_v1->Build(),
               StatusIs(absl::StatusCode::kUnimplemented,
@@ -186,11 +185,11 @@ TEST_F(ProtoBundleTest, UnsupportedFormatAnnotations) {
 }
 
 TEST_F(ProtoBundleTest, UnsupportedNestedFormatAnnotations) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto proto_bundle_builder_v1,
       ProtoBundle::Builder::New(GenerateProtoDescriptorBytesAsString(
           "format", "NUMERIC", "customer.app")));
-  ZETASQL_ASSERT_OK(proto_bundle_builder_v1->InsertTypes(
+  GOOGLESQL_ASSERT_OK(proto_bundle_builder_v1->InsertTypes(
       std::vector<std::string>{"customer.app.NestedUser"}));
   EXPECT_THAT(proto_bundle_builder_v1->Build(),
               StatusIs(absl::StatusCode::kUnimplemented,
@@ -199,11 +198,11 @@ TEST_F(ProtoBundleTest, UnsupportedNestedFormatAnnotations) {
 }
 
 TEST_F(ProtoBundleTest, UnsupportedUseDefaultsAnnotations) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto proto_bundle_builder_v1,
       ProtoBundle::Builder::New(GenerateProtoDescriptorBytesAsString(
           "use_defaults", "true", "customer.app")));
-  ZETASQL_ASSERT_OK(proto_bundle_builder_v1->InsertTypes(
+  GOOGLESQL_ASSERT_OK(proto_bundle_builder_v1->InsertTypes(
       std::vector<std::string>{"customer.app.User"}));
   EXPECT_THAT(proto_bundle_builder_v1->Build(),
               StatusIs(absl::StatusCode::kUnimplemented,
@@ -212,11 +211,11 @@ TEST_F(ProtoBundleTest, UnsupportedUseDefaultsAnnotations) {
 }
 
 TEST_F(ProtoBundleTest, UnsupportedTypeAnnotations) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto proto_bundle_builder_v1,
       ProtoBundle::Builder::New(GenerateProtoDescriptorBytesAsString(
           "type", "DATE_DECIMAL", "customer.app")));
-  ZETASQL_ASSERT_OK(proto_bundle_builder_v1->InsertTypes(
+  GOOGLESQL_ASSERT_OK(proto_bundle_builder_v1->InsertTypes(
       std::vector<std::string>{"customer.app.User"}));
   EXPECT_THAT(proto_bundle_builder_v1->Build(),
               StatusIs(absl::StatusCode::kUnimplemented,
@@ -226,7 +225,7 @@ TEST_F(ProtoBundleTest, UnsupportedTypeAnnotations) {
 
 TEST_F(ProtoBundleTest, UnsupportedUseFieldDefaultsAnnotations) {
   std::string prefix =
-  "zetasql";
+      "googlesql";
   const google::protobuf::FileDescriptorProto file_descriptor =
       PARSE_TEXT_PROTO(absl::Substitute(R"pb(
                                           syntax: "proto2"
@@ -249,9 +248,9 @@ TEST_F(ProtoBundleTest, UnsupportedUseFieldDefaultsAnnotations) {
   google::protobuf::FileDescriptorSet file_descriptor_set;
   *file_descriptor_set.add_file() = file_descriptor;
   std::string descriptor_bytes = file_descriptor_set.SerializeAsString();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle_builder_v1,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle_builder_v1,
                        ProtoBundle::Builder::New(descriptor_bytes));
-  ZETASQL_ASSERT_OK(proto_bundle_builder_v1->InsertTypes(
+  GOOGLESQL_ASSERT_OK(proto_bundle_builder_v1->InsertTypes(
       std::vector<std::string>{"customer.app.User"}));
   EXPECT_THAT(proto_bundle_builder_v1->Build(),
               StatusIs(absl::StatusCode::kUnimplemented,
@@ -288,11 +287,11 @@ TEST_F(ProtoBundleTest, AllowsRecursiveProtos) {
   google::protobuf::FileDescriptorSet file_descriptor_set;
   *file_descriptor_set.add_file() = file_descriptor;
   std::string descriptor_bytes = file_descriptor_set.SerializeAsString();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle_builder_v1,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle_builder_v1,
                        ProtoBundle::Builder::New(descriptor_bytes));
-  ZETASQL_ASSERT_OK(proto_bundle_builder_v1->InsertTypes(
+  GOOGLESQL_ASSERT_OK(proto_bundle_builder_v1->InsertTypes(
       std::vector<std::string>{"customer.app.Simple"}));
-  ZETASQL_EXPECT_OK(proto_bundle_builder_v1->Build());
+  GOOGLESQL_EXPECT_OK(proto_bundle_builder_v1->Build());
 }
 
 TEST_F(ProtoBundleTest, UnsupportedMessageSetExtensions) {
@@ -315,9 +314,9 @@ TEST_F(ProtoBundleTest, UnsupportedMessageSetExtensions) {
   google::protobuf::FileDescriptorSet file_descriptor_set;
   *file_descriptor_set.add_file() = file_descriptor;
   std::string descriptor_bytes = file_descriptor_set.SerializeAsString();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle_builder_v1,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle_builder_v1,
                        ProtoBundle::Builder::New(descriptor_bytes));
-  ZETASQL_ASSERT_OK(proto_bundle_builder_v1->InsertTypes(
+  GOOGLESQL_ASSERT_OK(proto_bundle_builder_v1->InsertTypes(
       std::vector<std::string>{"customer.app.User"}));
   EXPECT_THAT(proto_bundle_builder_v1->Build(),
               StatusIs(absl::StatusCode::kUnimplemented,
@@ -344,24 +343,24 @@ TEST_F(ProtoBundleTest, UnsupportedMessageSetFields) {
   google::protobuf::FileDescriptorSet file_descriptor_set;
   *file_descriptor_set.add_file() = file_descriptor;
   std::string descriptor_bytes = file_descriptor_set.SerializeAsString();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle_builder_v1,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle_builder_v1,
                        ProtoBundle::Builder::New(descriptor_bytes));
-  ZETASQL_ASSERT_OK(proto_bundle_builder_v1->InsertTypes(
+  GOOGLESQL_ASSERT_OK(proto_bundle_builder_v1->InsertTypes(
       std::vector<std::string>{"customer.app.User"}));
   EXPECT_THAT(
       proto_bundle_builder_v1->Build(),
-      zetasql_base::testing::StatusIs(
+      googlesql_base::testing::StatusIs(
           absl::StatusCode::kUnimplemented,
           testing::HasSubstr(
               "Message type `proto2.bridge.MessageSet` is not supported")));
 }
 
 TEST_F(ProtoBundleTest, CannotUseRestrictedSpannerPackages) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto proto_bundle_builder_v1,
       ProtoBundle::Builder::New(GenerateProtoDescriptorBytesAsString(
           "format", "NUMERIC", "spanner.geometry")));
-  ZETASQL_ASSERT_OK(proto_bundle_builder_v1->InsertTypes(
+  GOOGLESQL_ASSERT_OK(proto_bundle_builder_v1->InsertTypes(
       std::vector<std::string>{"spanner.geometry.Point"}));
   EXPECT_THAT(proto_bundle_builder_v1->Build(),
               StatusIs(absl::StatusCode::kFailedPrecondition,
@@ -370,11 +369,11 @@ TEST_F(ProtoBundleTest, CannotUseRestrictedSpannerPackages) {
 }
 
 TEST_F(ProtoBundleTest, CannotUseRestrictedTechSpannerPackages) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto proto_bundle_builder_v1,
       ProtoBundle::Builder::New(GenerateProtoDescriptorBytesAsString(
           "format", "NUMERIC", "tech.spanner")));
-  ZETASQL_ASSERT_OK(proto_bundle_builder_v1->InsertTypes(
+  GOOGLESQL_ASSERT_OK(proto_bundle_builder_v1->InsertTypes(
       std::vector<std::string>{"tech.spanner.Point"}));
   EXPECT_THAT(proto_bundle_builder_v1->Build(),
               StatusIs(absl::StatusCode::kFailedPrecondition,
@@ -384,20 +383,20 @@ TEST_F(ProtoBundleTest, CannotUseRestrictedTechSpannerPackages) {
 
 TEST_F(ProtoBundleTest,
        ProtoBundleUsedAsPrevBundle_SubsequentBundleBuildersCanBeCreated) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle_builder_v1,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle_builder_v1,
                        ProtoBundle::Builder::New(read_descriptors()));
-  ZETASQL_ASSERT_OK(proto_bundle_builder_v1->InsertTypes(
+  GOOGLESQL_ASSERT_OK(proto_bundle_builder_v1->InsertTypes(
       std::vector<std::string>{kSimpleProtoName}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle_v1, proto_bundle_builder_v1->Build());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle_v1, proto_bundle_builder_v1->Build());
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto proto_bundle_builder_v2,
       ProtoBundle::Builder::New(read_descriptors(), proto_bundle_v1.get()));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle_v2, proto_bundle_builder_v2->Build());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle_v2, proto_bundle_builder_v2->Build());
 
   EXPECT_THAT(proto_bundle_v2->types(), testing::ElementsAre(kSimpleProtoName));
   auto descriptor_result = proto_bundle_v1->GetTypeDescriptor(kSimpleProtoName);
-  ZETASQL_EXPECT_OK(descriptor_result.status());
+  GOOGLESQL_EXPECT_OK(descriptor_result.status());
   EXPECT_THAT(
       descriptor_result.value(),
       EqualsMessageDescriptor(::emulator::tests::common::Simple::descriptor()));
@@ -413,39 +412,39 @@ TEST_F(ProtoBundleTest,
 
 TEST_F(ProtoBundleTest, OnlyInsert) {
   auto insert_proto_types = std::vector<std::string>{};
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto builder,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto builder,
                        ProtoBundle::Builder::New(read_descriptors()));
 
-  ZETASQL_ASSERT_OK(builder->InsertTypes(std::vector<std::string>{kSimpleProtoName}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle, builder->Build());
+  GOOGLESQL_ASSERT_OK(builder->InsertTypes(std::vector<std::string>{kSimpleProtoName}));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle, builder->Build());
 
   EXPECT_THAT(proto_bundle->types(), testing::ElementsAre(kSimpleProtoName));
 }
 
 TEST_F(ProtoBundleTest, InsertFailsWithUnknownDescriptor) {
   auto insert_proto_types = std::vector<std::string>{};
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto builder,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto builder,
                        ProtoBundle::Builder::New(read_descriptors()));
 
   EXPECT_THAT(
       builder->InsertTypes(std::vector<std::string>{"customer.app.User"}),
-      zetasql_base::testing::StatusIs(
+      googlesql_base::testing::StatusIs(
           absl::StatusCode::kNotFound,
           testing::HasSubstr("Missing descriptor for `customer.app.User`")));
 }
 
 TEST_F(ProtoBundleTest, InsertDuplicates_Fails) {
   auto insert_proto_types = std::vector<std::string>{};
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto builder,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto builder,
                        ProtoBundle::Builder::New(read_descriptors()));
 
-  ZETASQL_ASSERT_OK(builder->InsertTypes(std::vector<std::string>{kSimpleProtoName}));
+  GOOGLESQL_ASSERT_OK(builder->InsertTypes(std::vector<std::string>{kSimpleProtoName}));
   EXPECT_THAT(builder->InsertTypes(std::vector<std::string>{kSimpleProtoName}),
               StatusIs(absl::StatusCode::kAlreadyExists));
 }
 
 TEST_F(ProtoBundleTest, OnlyUpdateWithoutPreviousBundle_Fails) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto builder,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto builder,
                        ProtoBundle::Builder::New(read_descriptors()));
 
   ASSERT_THAT(builder->UpdateTypes(std::vector<std::string>{kSimpleProtoName}),
@@ -453,26 +452,26 @@ TEST_F(ProtoBundleTest, OnlyUpdateWithoutPreviousBundle_Fails) {
 }
 
 TEST_F(ProtoBundleTest, OnlyUpdateWithPreviousBundle_Succeeds) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto builder,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto builder,
                        ProtoBundle::Builder::New(read_descriptors()));
-  ZETASQL_ASSERT_OK(builder->InsertTypes(std::vector<std::string>{kSimpleProtoName}));
+  GOOGLESQL_ASSERT_OK(builder->InsertTypes(std::vector<std::string>{kSimpleProtoName}));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle_v1, builder->Build());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle_v1, builder->Build());
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto builder_v2,
       ProtoBundle::Builder::New(read_descriptors(), proto_bundle_v1.get()));
 
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       builder_v2->UpdateTypes(std::vector<std::string>{kSimpleProtoName}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle_v2, builder_v2->Build());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle_v2, builder_v2->Build());
 
   EXPECT_THAT(proto_bundle_v2->types(),
               testing::UnorderedElementsAre(kSimpleProtoName));
 }
 
 TEST_F(ProtoBundleTest, OnlyDeleteWithoutPreviousBundle_Fails) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto builder,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto builder,
                        ProtoBundle::Builder::New(read_descriptors()));
 
   EXPECT_THAT(builder->DeleteTypes(std::vector<std::string>{kSimpleProtoName}),
@@ -480,20 +479,20 @@ TEST_F(ProtoBundleTest, OnlyDeleteWithoutPreviousBundle_Fails) {
 }
 
 TEST_F(ProtoBundleTest, OnlyDeleteWithPreviousLoad_Succeeds) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto builder,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto builder,
                        ProtoBundle::Builder::New(read_descriptors()));
-  ZETASQL_ASSERT_OK(builder->InsertTypes(std::vector<std::string>{kSimpleProtoName}));
+  GOOGLESQL_ASSERT_OK(builder->InsertTypes(std::vector<std::string>{kSimpleProtoName}));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle_v1, builder->Build());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle_v1, builder->Build());
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto builder_v2,
       ProtoBundle::Builder::New(read_descriptors(), proto_bundle_v1.get()));
 
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       builder_v2->DeleteTypes(std::vector<std::string>{kSimpleProtoName}));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle_v2, builder_v2->Build());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle_v2, builder_v2->Build());
 
   EXPECT_TRUE(proto_bundle_v2->empty());
   EXPECT_THAT(proto_bundle_v2->GetTypeDescriptor(kSimpleProtoName),
@@ -503,13 +502,13 @@ TEST_F(ProtoBundleTest, OnlyDeleteWithPreviousLoad_Succeeds) {
 }
 
 TEST_F(ProtoBundleTest, InsertAndDelete_DoesNotLoadDescriptor) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto builder,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto builder,
                        ProtoBundle::Builder::New(read_descriptors()));
 
-  ZETASQL_ASSERT_OK(builder->InsertTypes(std::vector<std::string>{kSimpleProtoName}));
-  ZETASQL_ASSERT_OK(builder->DeleteTypes(std::vector<std::string>{kSimpleProtoName}));
+  GOOGLESQL_ASSERT_OK(builder->InsertTypes(std::vector<std::string>{kSimpleProtoName}));
+  GOOGLESQL_ASSERT_OK(builder->DeleteTypes(std::vector<std::string>{kSimpleProtoName}));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle, builder->Build());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle, builder->Build());
 
   EXPECT_TRUE(proto_bundle->empty());
   EXPECT_THAT(proto_bundle->GetTypeDescriptor(kSimpleProtoName),
@@ -517,18 +516,18 @@ TEST_F(ProtoBundleTest, InsertAndDelete_DoesNotLoadDescriptor) {
 }
 
 TEST_F(ProtoBundleTest, AllOperations) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto builder,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto builder,
                        ProtoBundle::Builder::New(read_descriptors()));
 
-  ZETASQL_ASSERT_OK(builder->InsertTypes(
+  GOOGLESQL_ASSERT_OK(builder->InsertTypes(
       std::vector<std::string>{kSimpleProtoName, kParentProtoName,
                                kGlobalEnumName, kImportingNestingEnumName}));
-  ZETASQL_ASSERT_OK(builder->UpdateTypes(
+  GOOGLESQL_ASSERT_OK(builder->UpdateTypes(
       std::vector<std::string>{kParentProtoName, kGlobalEnumName}));
-  ZETASQL_ASSERT_OK(builder->DeleteTypes(
+  GOOGLESQL_ASSERT_OK(builder->DeleteTypes(
       std::vector<std::string>{kSimpleProtoName, kGlobalEnumName}));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle, builder->Build());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle, builder->Build());
 
   EXPECT_THAT(proto_bundle->types(),
               testing::UnorderedElementsAre(kParentProtoName,
@@ -536,14 +535,14 @@ TEST_F(ProtoBundleTest, AllOperations) {
 }
 
 TEST_F(ProtoBundleTest, GetTypeDescriptor) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto builder,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto builder,
                        ProtoBundle::Builder::New(read_descriptors()));
 
-  ZETASQL_ASSERT_OK(builder->InsertTypes(std::vector<std::string>{kSimpleProtoName}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle, builder->Build());
+  GOOGLESQL_ASSERT_OK(builder->InsertTypes(std::vector<std::string>{kSimpleProtoName}));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle, builder->Build());
 
   auto descriptor_result = proto_bundle->GetTypeDescriptor(kSimpleProtoName);
-  ZETASQL_EXPECT_OK(descriptor_result.status());
+  GOOGLESQL_EXPECT_OK(descriptor_result.status());
   EXPECT_THAT(
       descriptor_result.value(),
       EqualsMessageDescriptor(::emulator::tests::common::Simple::descriptor()));
@@ -562,21 +561,21 @@ TEST_F(ProtoBundleTest, GetTypeDescriptor) {
 }
 
 TEST_F(ProtoBundleTest, GetTypeDescriptor_SecondGenerationProtoBundle) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto builder_v1,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto builder_v1,
                        ProtoBundle::Builder::New(read_descriptors()));
 
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       builder_v1->InsertTypes(std::vector<std::string>{kSimpleProtoName}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle_v1, builder_v1->Build());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle_v1, builder_v1->Build());
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto builder_v2,
       ProtoBundle::Builder::New(read_descriptors(), proto_bundle_v1.get()));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle_v2, builder_v2->Build());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle_v2, builder_v2->Build());
 
   auto descriptor_result_v2 =
       proto_bundle_v2->GetTypeDescriptor(kSimpleProtoName);
-  ZETASQL_EXPECT_OK(descriptor_result_v2.status());
+  GOOGLESQL_EXPECT_OK(descriptor_result_v2.status());
   EXPECT_THAT(
       descriptor_result_v2.value(),
       EqualsMessageDescriptor(::emulator::tests::common::Simple::descriptor()));
@@ -584,21 +583,21 @@ TEST_F(ProtoBundleTest, GetTypeDescriptor_SecondGenerationProtoBundle) {
   // Sanity check v1 too.
   auto descriptor_result_v1 =
       proto_bundle_v1->GetTypeDescriptor(kSimpleProtoName);
-  ZETASQL_EXPECT_OK(descriptor_result_v1.status());
+  GOOGLESQL_EXPECT_OK(descriptor_result_v1.status());
   EXPECT_THAT(
       descriptor_result_v1.value(),
       EqualsMessageDescriptor(::emulator::tests::common::Simple::descriptor()));
 }
 
 TEST_F(ProtoBundleTest, GetEnumTypeDescriptor) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto builder,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto builder,
                        ProtoBundle::Builder::New(read_descriptors()));
 
-  ZETASQL_ASSERT_OK(builder->InsertTypes(std::vector<std::string>{kGlobalEnumName}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle, builder->Build());
+  GOOGLESQL_ASSERT_OK(builder->InsertTypes(std::vector<std::string>{kGlobalEnumName}));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle, builder->Build());
 
   auto descriptor_result = proto_bundle->GetEnumTypeDescriptor(kGlobalEnumName);
-  ZETASQL_EXPECT_OK(descriptor_result.status());
+  GOOGLESQL_EXPECT_OK(descriptor_result.status());
   EXPECT_THAT(
       descriptor_result.value(),
       EqualsEnumDescriptor(::emulator::tests::common::TestEnum_descriptor()));
@@ -617,20 +616,20 @@ TEST_F(ProtoBundleTest, GetEnumTypeDescriptor) {
 }
 
 TEST_F(ProtoBundleTest, GetEnumTypeDescriptor_SecondGenerationBundle) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto builder_v1,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto builder_v1,
                        ProtoBundle::Builder::New(read_descriptors()));
 
-  ZETASQL_ASSERT_OK(builder_v1->InsertTypes(std::vector<std::string>{kGlobalEnumName}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle_v1, builder_v1->Build());
+  GOOGLESQL_ASSERT_OK(builder_v1->InsertTypes(std::vector<std::string>{kGlobalEnumName}));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle_v1, builder_v1->Build());
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto builder_v2,
       ProtoBundle::Builder::New(read_descriptors(), proto_bundle_v1.get()));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle_v2, builder_v2->Build());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle_v2, builder_v2->Build());
 
   auto descriptor_result_v2 =
       proto_bundle_v2->GetEnumTypeDescriptor(kGlobalEnumName);
-  ZETASQL_EXPECT_OK(descriptor_result_v2.status());
+  GOOGLESQL_EXPECT_OK(descriptor_result_v2.status());
   EXPECT_THAT(
       descriptor_result_v2.value(),
       EqualsEnumDescriptor(::emulator::tests::common::TestEnum_descriptor()));
@@ -638,7 +637,7 @@ TEST_F(ProtoBundleTest, GetEnumTypeDescriptor_SecondGenerationBundle) {
   // Sanity check v1 too.
   auto descriptor_result_v1 =
       proto_bundle_v1->GetEnumTypeDescriptor(kGlobalEnumName);
-  ZETASQL_EXPECT_OK(descriptor_result_v1.status());
+  GOOGLESQL_EXPECT_OK(descriptor_result_v1.status());
   EXPECT_THAT(
       descriptor_result_v1.value(),
       EqualsEnumDescriptor(::emulator::tests::common::TestEnum_descriptor()));
@@ -647,15 +646,15 @@ TEST_F(ProtoBundleTest, GetEnumTypeDescriptor_SecondGenerationBundle) {
 // If the `Parent` proto type is added to the protodb before adding the
 // child's proto type (`Simple`), there should not be an issue.
 TEST_F(ProtoBundleTest, MessageTopologicalOrder_WithoutImports_Succeeds) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto builder,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto builder,
                        ProtoBundle::Builder::New(read_descriptors()));
 
-  ZETASQL_ASSERT_OK(builder->InsertTypes(
+  GOOGLESQL_ASSERT_OK(builder->InsertTypes(
       std::vector<std::string>{kParentProtoName, kSimpleProtoName}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle, builder->Build());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle, builder->Build());
 
   auto descriptor_result = proto_bundle->GetTypeDescriptor(kParentProtoName);
-  ZETASQL_EXPECT_OK(descriptor_result.status());
+  GOOGLESQL_EXPECT_OK(descriptor_result.status());
   EXPECT_THAT(
       descriptor_result.value(),
       EqualsMessageDescriptor(::emulator::tests::common::Parent::descriptor()));
@@ -664,17 +663,17 @@ TEST_F(ProtoBundleTest, MessageTopologicalOrder_WithoutImports_Succeeds) {
 // If the `ImportingParent` proto type is added to the protodb before adding
 // the child's proto type (`Simple`), there should not be an issue.
 TEST_F(ProtoBundleTest, MessageTopologicalOrder_WithImports_Succeeds) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto builder,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto builder,
                        ProtoBundle::Builder::New(read_descriptors()));
 
-  ZETASQL_ASSERT_OK(builder->InsertTypes(
+  GOOGLESQL_ASSERT_OK(builder->InsertTypes(
       std::vector<std::string>{kImportingParentingLevelTwoProtoName,
                                kImportingParentProtoName, kSimpleProtoName}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle, builder->Build());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle, builder->Build());
 
   auto descriptor_result =
       proto_bundle->GetTypeDescriptor(kImportingParentingLevelTwoProtoName);
-  ZETASQL_EXPECT_OK(descriptor_result.status());
+  GOOGLESQL_EXPECT_OK(descriptor_result.status());
   EXPECT_THAT(
       descriptor_result.value(),
       EqualsMessageDescriptor(::emulator::tests::common::
@@ -687,14 +686,14 @@ TEST_F(ProtoBundleTest, MessageTopologicalOrder_WithImports_Succeeds) {
 // being returned.
 TEST_F(ProtoBundleTest,
        MessageTopologicalOrder_MissingDependentMessageType_Succeeds) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto builder,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto builder,
                        ProtoBundle::Builder::New(read_descriptors()));
 
-  ZETASQL_ASSERT_OK(builder->InsertTypes(std::vector<std::string>{kParentProtoName}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle, builder->Build());
+  GOOGLESQL_ASSERT_OK(builder->InsertTypes(std::vector<std::string>{kParentProtoName}));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle, builder->Build());
 
   auto descriptor_result = proto_bundle->GetTypeDescriptor(kParentProtoName);
-  ZETASQL_EXPECT_OK(descriptor_result.status());
+  GOOGLESQL_EXPECT_OK(descriptor_result.status());
   EXPECT_THAT(
       descriptor_result.value(),
       EqualsMessageDescriptor(::emulator::tests::common::Parent::descriptor()));
@@ -709,16 +708,16 @@ TEST_F(ProtoBundleTest,
 TEST_F(
     ProtoBundleTest,
     MessageTopologicalOrder_MissingImportedDependency_ReturnsPlaceholderDescriptor) {  // NOLINT
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto builder,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto builder,
                        ProtoBundle::Builder::New(read_descriptors()));
 
-  ZETASQL_ASSERT_OK(builder->InsertTypes(std::vector<std::string>{
+  GOOGLESQL_ASSERT_OK(builder->InsertTypes(std::vector<std::string>{
       kImportingParentingLevelTwoProtoName, kImportingParentProtoName}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle, builder->Build());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle, builder->Build());
 
   auto descriptor_result_level_two =
       proto_bundle->GetTypeDescriptor(kImportingParentingLevelTwoProtoName);
-  ZETASQL_EXPECT_OK(descriptor_result_level_two.status());
+  GOOGLESQL_EXPECT_OK(descriptor_result_level_two.status());
   EXPECT_TRUE(descriptor_result_level_two.value()
                   ->FindFieldByName("from_another_file")
                   ->message_type()
@@ -735,7 +734,7 @@ TEST_F(
 
   auto descriptor_result =
       proto_bundle->GetTypeDescriptor(kImportingParentProtoName);
-  ZETASQL_EXPECT_OK(descriptor_result.status());
+  GOOGLESQL_EXPECT_OK(descriptor_result.status());
   EXPECT_TRUE(descriptor_result.value()
                   ->FindFieldByName("imported")
                   ->message_type()
@@ -747,16 +746,16 @@ TEST_F(
 // before adding the enum type and the global namespaced `TestEnum`, there
 // should not be an issue.
 TEST_F(ProtoBundleTest, EnumLocalTopologicalOrder_WithoutImports_Succeeds) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto builder,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto builder,
                        ProtoBundle::Builder::New(read_descriptors()));
 
-  ZETASQL_ASSERT_OK(builder->InsertTypes(std::vector<std::string>{
+  GOOGLESQL_ASSERT_OK(builder->InsertTypes(std::vector<std::string>{
       kNamespacedEnumName, kEnumContainerProtoName, kGlobalEnumName}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle, builder->Build());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle, builder->Build());
 
   auto descriptor_result =
       proto_bundle->GetEnumTypeDescriptor(kNamespacedEnumName);
-  ZETASQL_EXPECT_OK(descriptor_result.status());
+  GOOGLESQL_EXPECT_OK(descriptor_result.status());
   EXPECT_THAT(
       descriptor_result.value(),
       EqualsEnumDescriptor(
@@ -767,16 +766,16 @@ TEST_F(ProtoBundleTest, EnumLocalTopologicalOrder_WithoutImports_Succeeds) {
 // before adding the inner enum types which need to be imported, there should
 // not be an issue.
 TEST_F(ProtoBundleTest, EnumTopologicalOrder_WithImports_Succeeds) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto builder,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto builder,
                        ProtoBundle::Builder::New(read_descriptors()));
 
-  ZETASQL_ASSERT_OK(builder->InsertTypes(std::vector<std::string>{
+  GOOGLESQL_ASSERT_OK(builder->InsertTypes(std::vector<std::string>{
       kImportingNestingEnumName, kNamespacedEnumName, kGlobalEnumName}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle, builder->Build());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle, builder->Build());
 
   auto descriptor_result =
       proto_bundle->GetEnumTypeDescriptor(kImportingNestingEnumName);
-  ZETASQL_EXPECT_OK(descriptor_result.status());
+  GOOGLESQL_EXPECT_OK(descriptor_result.status());
   EXPECT_THAT(descriptor_result.value(),
               EqualsEnumDescriptor(
                   ::emulator::tests::common::ImportingAndNestingEnumContainer::
@@ -784,13 +783,13 @@ TEST_F(ProtoBundleTest, EnumTopologicalOrder_WithImports_Succeeds) {
 }
 
 TEST_F(ProtoBundleTest, GetProtoDescriptorBytes) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto builder,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto builder,
                        ProtoBundle::Builder::New(read_descriptors()));
-  ZETASQL_ASSERT_OK(builder->InsertTypes(
+  GOOGLESQL_ASSERT_OK(builder->InsertTypes(
       std::vector<std::string>{kSimpleProtoName, kParentProtoName,
                                kGlobalEnumName, kImportingNestingEnumName}));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle, builder->Build());
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::string proto_descriptor_bytes,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto proto_bundle, builder->Build());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::string proto_descriptor_bytes,
                        proto_bundle->GetProtoDescriptorBytes());
   EXPECT_EQ(proto_descriptor_bytes, read_descriptors());
 }

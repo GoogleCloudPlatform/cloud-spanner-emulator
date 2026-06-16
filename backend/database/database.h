@@ -22,7 +22,7 @@
 #include <vector>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
-#include "zetasql/public/type.h"
+#include "googlesql/public/type.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
@@ -134,7 +134,7 @@ class Database {
   // Accessors for persistence support.
   Storage* storage() { return storage_.get(); }
   const std::string& database_id() const { return database_id_; }
-  zetasql::TypeFactory* type_factory() { return type_factory_.get(); }
+  googlesql::TypeFactory* type_factory() { return type_factory_.get(); }
 
   // ID generator accessors for persistence save/restore.
   TransactionIDGenerator& transaction_id_generator() {
@@ -178,8 +178,8 @@ class Database {
   // Lock management.
   std::unique_ptr<LockManager> lock_manager_;
 
-  // Type factory used for all ZetaSQL operations on this database.
-  std::unique_ptr<zetasql::TypeFactory> type_factory_;
+  // Type factory used for all GoogleSQL operations on this database.
+  std::unique_ptr<googlesql::TypeFactory> type_factory_;
 
   // Versioned catalog of this database.
   std::unique_ptr<VersionedCatalog> versioned_catalog_;

@@ -2,7 +2,7 @@
  *
  * explicit_bzero.c
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -12,9 +12,11 @@
  *-------------------------------------------------------------------------
  */
 
+#define __STDC_WANT_LIB_EXT1__ 1	/* needed to access memset_s() */
+
 #include "c.h"
 
-#if defined(HAVE_MEMSET_S)
+#if HAVE_DECL_MEMSET_S
 
 void
 explicit_bzero(void *buf, size_t len)

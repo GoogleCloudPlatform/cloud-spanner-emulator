@@ -20,8 +20,8 @@
 #include "backend/schema/catalog/locality_group.h"
 #include "backend/schema/updater/global_schema_names.h"
 #include "backend/schema/updater/schema_validation_context.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -30,8 +30,8 @@ namespace backend {
 
 absl::Status LocalityGroupValidator::Validate(
     const LocalityGroup* locality_group, SchemaValidationContext* context) {
-  ZETASQL_RET_CHECK(!locality_group->Name().empty());
-  ZETASQL_RETURN_IF_ERROR(GlobalSchemaNames::ValidateSchemaName(
+  GOOGLESQL_RET_CHECK(!locality_group->Name().empty());
+  GOOGLESQL_RETURN_IF_ERROR(GlobalSchemaNames::ValidateSchemaName(
       "Locality Group", locality_group->Name()));
 
   return absl::OkStatus();
@@ -41,11 +41,11 @@ absl::Status LocalityGroupValidator::ValidateUpdate(
     const LocalityGroup* locality_group,
     const LocalityGroup* old_locality_group, SchemaValidationContext* context) {
   if (locality_group->is_deleted()) {
-    ZETASQL_RET_CHECK_EQ(locality_group->use_count(), 0);
+    GOOGLESQL_RET_CHECK_EQ(locality_group->use_count(), 0);
     context->global_names()->RemoveName(locality_group->Name());
     return absl::OkStatus();
   }
-  ZETASQL_RET_CHECK_EQ(locality_group->Name(), old_locality_group->Name());
+  GOOGLESQL_RET_CHECK_EQ(locality_group->Name(), old_locality_group->Name());
   return absl::OkStatus();
 }
 }  // namespace backend

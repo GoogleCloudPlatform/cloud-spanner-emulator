@@ -24,8 +24,8 @@
 #include "backend/schema/updater/global_schema_names.h"
 #include "backend/schema/updater/schema_validation_context.h"
 #include "common/errors.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -34,8 +34,8 @@ namespace backend {
 
 absl::Status PropertyGraphValidator::Validate(
     const PropertyGraph* graph, SchemaValidationContext* context) {
-  ZETASQL_RET_CHECK(!graph->name_.empty());
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RET_CHECK(!graph->name_.empty());
+  GOOGLESQL_RETURN_IF_ERROR(
       GlobalSchemaNames::ValidateSchemaName("Property Graph", graph->name_));
 
   CaseInsensitiveStringSet unique_label_names;
@@ -114,7 +114,7 @@ absl::Status PropertyGraphValidator::ValidateUpdate(
     context->global_names()->RemoveName(graph->name_);
     return absl::OkStatus();
   }
-  ZETASQL_RET_CHECK_EQ(graph->name_, old_graph->name_);
+  GOOGLESQL_RET_CHECK_EQ(graph->name_, old_graph->name_);
   return absl::OkStatus();
 }
 

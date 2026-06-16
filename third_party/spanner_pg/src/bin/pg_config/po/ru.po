@@ -10,8 +10,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: pg_config (PostgreSQL current)\n"
 "Report-Msgid-Bugs-To: pgsql-bugs@lists.postgresql.org\n"
-"POT-Creation-Date: 2022-08-27 14:52+0300\n"
-"PO-Revision-Date: 2021-09-04 12:15+0300\n"
+"POT-Creation-Date: 2023-08-28 07:59+0300\n"
+"PO-Revision-Date: 2023-08-29 10:19+0300\n"
 "Last-Translator: Alexander Lakhin <exclusion@gmail.com>\n"
 "Language-Team: Russian <pgsql-ru-general@postgresql.org>\n"
 "Language: ru\n"
@@ -28,42 +28,32 @@ msgstr ""
 msgid "not recorded"
 msgstr "не записано"
 
-#: ../../common/exec.c:149 ../../common/exec.c:266 ../../common/exec.c:312
+#: ../../common/exec.c:172
 #, c-format
-msgid "could not identify current directory: %m"
-msgstr "не удалось определить текущий каталог: %m"
+msgid "invalid binary \"%s\": %m"
+msgstr "неверный исполняемый файл \"%s\": %m"
 
-#: ../../common/exec.c:168
+#: ../../common/exec.c:215
 #, c-format
-msgid "invalid binary \"%s\""
-msgstr "неверный исполняемый файл \"%s\""
+msgid "could not read binary \"%s\": %m"
+msgstr "не удалось прочитать исполняемый файл \"%s\": %m"
 
-#: ../../common/exec.c:218
-#, c-format
-msgid "could not read binary \"%s\""
-msgstr "не удалось прочитать исполняемый файл \"%s\""
-
-#: ../../common/exec.c:226
+#: ../../common/exec.c:223
 #, c-format
 msgid "could not find a \"%s\" to execute"
 msgstr "не удалось найти запускаемый файл \"%s\""
 
-#: ../../common/exec.c:282 ../../common/exec.c:321
+#: ../../common/exec.c:250
 #, c-format
-msgid "could not change directory to \"%s\": %m"
-msgstr "не удалось перейти в каталог \"%s\": %m"
+msgid "could not resolve path \"%s\" to absolute form: %m"
+msgstr "не удалось преобразовать относительный путь \"%s\" в абсолютный: %m"
 
-#: ../../common/exec.c:299
-#, c-format
-msgid "could not read symbolic link \"%s\": %m"
-msgstr "не удалось прочитать символическую ссылку \"%s\": %m"
-
-#: ../../common/exec.c:422
+#: ../../common/exec.c:412
 #, c-format
 msgid "%s() failed: %m"
 msgstr "ошибка в %s(): %m"
 
-#: ../../common/exec.c:560 ../../common/exec.c:605 ../../common/exec.c:697
+#: ../../common/exec.c:550 ../../common/exec.c:595 ../../common/exec.c:687
 msgid "out of memory"
 msgstr "нехватка памяти"
 
@@ -300,6 +290,18 @@ msgstr "%s: не удалось найти свой исполняемый фа�
 #, c-format
 msgid "%s: invalid argument: %s\n"
 msgstr "%s: неверный аргумент: %s\n"
+
+#, c-format
+#~ msgid "could not identify current directory: %m"
+#~ msgstr "не удалось определить текущий каталог: %m"
+
+#, c-format
+#~ msgid "could not change directory to \"%s\": %m"
+#~ msgstr "не удалось перейти в каталог \"%s\": %m"
+
+#, c-format
+#~ msgid "could not read symbolic link \"%s\": %m"
+#~ msgstr "не удалось прочитать символическую ссылку \"%s\": %m"
 
 #~ msgid "Report bugs to <pgsql-bugs@lists.postgresql.org>.\n"
 #~ msgstr "Об ошибках сообщайте по адресу <pgsql-bugs@lists.postgresql.org>.\n"

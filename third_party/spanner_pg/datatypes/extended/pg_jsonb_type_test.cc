@@ -34,13 +34,13 @@
 #include <string>
 
 #include "google/spanner/v1/type.pb.h"
-#include "zetasql/public/language_options.h"
-#include "zetasql/public/strings.h"
-#include "zetasql/public/types/array_type.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/language_options.h"
+#include "googlesql/public/strings.h"
+#include "googlesql/public/types/array_type.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/log/check.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/cord.h"
@@ -62,24 +62,24 @@ using PgJsonbTypeTest = postgres_translator::test::ValidMemoryContext;
 TEST_F(PgJsonbTypeTest, GetExtendedType) {
   const SpannerExtendedType* pg_type = GetPgJsonbType();
   EXPECT_TRUE(pg_type->code() == TypeAnnotationCode::PG_JSONB);
-  EXPECT_EQ(pg_type->ShortTypeName(zetasql::PRODUCT_EXTERNAL), "PG.JSONB");
+  EXPECT_EQ(pg_type->ShortTypeName(googlesql::PRODUCT_EXTERNAL), "PG.JSONB");
   EXPECT_TRUE(pg_type->Equals(GetPgJsonbType()));
   EXPECT_TRUE(pg_type->Equivalent(GetPgJsonbType()));
 
   EXPECT_FALSE(pg_type->SupportsEquality());
-  EXPECT_FALSE(pg_type->SupportsEquality(zetasql::LanguageOptions{}));
-  EXPECT_FALSE(pg_type->SupportsGrouping(zetasql::LanguageOptions{}));
-  EXPECT_FALSE(pg_type->SupportsPartitioning(zetasql::LanguageOptions{}));
+  EXPECT_FALSE(pg_type->SupportsEquality(googlesql::LanguageOptions{}));
+  EXPECT_FALSE(pg_type->SupportsGrouping(googlesql::LanguageOptions{}));
+  EXPECT_FALSE(pg_type->SupportsPartitioning(googlesql::LanguageOptions{}));
   EXPECT_FALSE(pg_type->SupportsOrdering());
-  EXPECT_FALSE(pg_type->SupportsOrdering(zetasql::LanguageOptions{},
+  EXPECT_FALSE(pg_type->SupportsOrdering(googlesql::LanguageOptions{},
                                          /*type_description=*/nullptr));
 }
 
 TEST_F(PgJsonbTypeTest, GetExtendedValue) {
   auto validate_extended_value = [](absl::string_view readable_jsonb) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::Value pg_jsonb,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(googlesql::Value pg_jsonb,
                          CreatePgJsonbValue(readable_jsonb));
-    ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Cord normalized_jsonb,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Cord normalized_jsonb,
                          GetPgJsonbNormalizedValue(pg_jsonb));
     EXPECT_EQ(normalized_jsonb.Flatten(), readable_jsonb);
   };
@@ -92,10 +92,10 @@ TEST_F(PgJsonbTypeTest, GetExtendedValue) {
 }
 
 TEST(PgJsonbArrayTypeTest, ValidateTypeProperties) {
-  const zetasql::ArrayType* type = GetPgJsonbArrayType();
+  const googlesql::ArrayType* type = GetPgJsonbArrayType();
   ASSERT_NE(type, nullptr);
   EXPECT_TRUE(type->element_type()->Equals(GetPgJsonbType()));
-  EXPECT_EQ(type->ShortTypeName(zetasql::PRODUCT_EXTERNAL),
+  EXPECT_EQ(type->ShortTypeName(googlesql::PRODUCT_EXTERNAL),
             "ARRAY<PG.JSONB>");
 }
 
@@ -107,16 +107,16 @@ using ValueErrorsTest =
 TEST_P(ValuePropertiesTest, ValueProperties) {
   std::string input_jsonb = GetParam();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::Value pg_jsonb,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(googlesql::Value pg_jsonb,
                        CreatePgJsonbValue(input_jsonb));
   EXPECT_TRUE(pg_jsonb.type()->Equals(GetPgJsonbType()));
   EXPECT_EQ(pg_jsonb.DebugString(), input_jsonb);
   EXPECT_EQ(pg_jsonb.Format(), "PG.JSONB(" + input_jsonb + ")");
   EXPECT_EQ(pg_jsonb.GetSQL(),
-            "CAST(" + zetasql::ToSingleQuotedStringLiteral(input_jsonb) +
+            "CAST(" + googlesql::ToSingleQuotedStringLiteral(input_jsonb) +
                 " AS PG.JSONB)");
   EXPECT_EQ(pg_jsonb.GetSQLLiteral(),
-            "CAST(" + zetasql::ToSingleQuotedStringLiteral(input_jsonb) +
+            "CAST(" + googlesql::ToSingleQuotedStringLiteral(input_jsonb) +
                 " AS PG.JSONB)");
   EXPECT_FALSE(pg_jsonb.is_null());
 }

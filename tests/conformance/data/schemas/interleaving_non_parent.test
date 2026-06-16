@@ -1,0 +1,52 @@
+@Dialect=GOOGLE_STANDARD_SQL
+CREATE TABLE Users (
+  UserId     INT64,
+  Name       STRING(MAX),
+) PRIMARY KEY (UserId);
+CREATE TABLE Threads (
+  UserId     INT64,
+  ThreadId   INT64,
+  Starred    BOOL
+) PRIMARY KEY (UserId, ThreadId),
+INTERLEAVE IN Users;
+CREATE TABLE Messages (
+  UserId     INT64,
+  ThreadId   INT64,
+  MessageId  INT64,
+  Subject    STRING(MAX),
+) PRIMARY KEY (UserId, ThreadId, MessageId),
+INTERLEAVE IN Threads;
+CREATE TABLE Snoozes (
+  UserId     INT64,
+  ThreadId   INT64,
+  SnoozeId   INT64,
+  SnoozeTs   Timestamp,
+) PRIMARY KEY (UserId, ThreadId, SnoozeId),
+INTERLEAVE IN PARENT Threads ON DELETE NO ACTION;
+===
+@Dialect=POSTGRESQL
+CREATE TABLE Users (
+  UserId     int8,
+  Name       text,
+  PRIMARY KEY (UserId)
+);
+CREATE TABLE Threads (
+  UserId     int8,
+  ThreadId   int8,
+  Starred    bool,
+  PRIMARY KEY (UserId, ThreadId)
+) INTERLEAVE IN Users;
+CREATE TABLE Messages (
+  UserId     int8,
+  ThreadId   int8,
+  MessageId  int8,
+  Subject    text,
+  PRIMARY KEY (UserId, ThreadId, MessageId)
+) INTERLEAVE IN Threads;
+CREATE TABLE Snoozes (
+  UserId     int8,
+  ThreadId   int8,
+  SnoozeId   int8,
+  SnoozeTs   timestamptz,
+  PRIMARY KEY (UserId, ThreadId, SnoozeId)
+) INTERLEAVE IN PARENT Threads ON DELETE NO ACTION;

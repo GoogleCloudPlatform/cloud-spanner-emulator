@@ -20,8 +20,8 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/types/type_factory.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/types/type_factory.h"
+#include "googlesql/public/value.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
@@ -49,7 +49,7 @@
 #include "backend/schema/catalog/placement.h"
 #include "backend/schema/catalog/schema.h"
 #include "common/errors.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -59,7 +59,7 @@ namespace backend {
 absl::Status ActionRegistry::ExecuteValidators(const ActionContext* ctx,
                                                const WriteOp& op) {
   for (auto& validator : table_validators_[TableOf(op)]) {
-    ZETASQL_RETURN_IF_ERROR(validator->Validate(ctx, op));
+    GOOGLESQL_RETURN_IF_ERROR(validator->Validate(ctx, op));
   }
   return absl::OkStatus();
 }
@@ -67,21 +67,21 @@ absl::Status ActionRegistry::ExecuteValidators(const ActionContext* ctx,
 absl::Status ActionRegistry::ExecuteEffectors(const ActionContext* ctx,
                                               const WriteOp& op) {
   for (auto& effector : table_effectors_[TableOf(op)]) {
-    ZETASQL_RETURN_IF_ERROR(effector->Effect(ctx, op));
+    GOOGLESQL_RETURN_IF_ERROR(effector->Effect(ctx, op));
   }
   return absl::OkStatus();
 }
 
 absl::Status ActionRegistry::ExecuteEvaluatedKeyEffectors(
     const MutationOp& op,
-    std::vector<std::vector<zetasql::Value>>* evaluated_values,
+    std::vector<std::vector<googlesql::Value>>* evaluated_values,
     std::vector<const Column*>* columns_with_evaluated_values) {
   if (table_evaluated_key_effectors_.find(op.table) ==
       table_evaluated_key_effectors_.end()) {
     return absl::OkStatus();
   }
 
-  ZETASQL_RETURN_IF_ERROR(table_evaluated_key_effectors_[op.table]->Effect(
+  GOOGLESQL_RETURN_IF_ERROR(table_evaluated_key_effectors_[op.table]->Effect(
       op, evaluated_values, columns_with_evaluated_values));
   return absl::OkStatus();
 }
@@ -89,7 +89,7 @@ absl::Status ActionRegistry::ExecuteEvaluatedKeyEffectors(
 absl::Status ActionRegistry::ExecuteModifiers(const ActionContext* ctx,
                                               const WriteOp& op) {
   for (auto& modifier : table_modifiers_[TableOf(op)]) {
-    ZETASQL_RETURN_IF_ERROR(modifier->Modify(ctx, op));
+    GOOGLESQL_RETURN_IF_ERROR(modifier->Modify(ctx, op));
   }
   return absl::OkStatus();
 }
@@ -97,14 +97,14 @@ absl::Status ActionRegistry::ExecuteModifiers(const ActionContext* ctx,
 absl::Status ActionRegistry::ExecuteVerifiers(const ActionContext* ctx,
                                               const WriteOp& op) {
   for (auto& verifier : table_verifiers_[TableOf(op)]) {
-    ZETASQL_RETURN_IF_ERROR(verifier->Verify(ctx, op));
+    GOOGLESQL_RETURN_IF_ERROR(verifier->Verify(ctx, op));
   }
   return absl::OkStatus();
 }
 
 ActionRegistry::ActionRegistry(const Schema* schema,
                                const FunctionCatalog* function_catalog,
-                               zetasql::TypeFactory* type_factory_)
+                               googlesql::TypeFactory* type_factory_)
     : schema_(schema),
       catalog_(schema, function_catalog, type_factory_,
                MakeGoogleSqlAnalyzerOptions(schema->default_time_zone())) {
@@ -229,8 +229,8 @@ void ActionRegistry::BuildActionRegistry() {
 
 void ActionManager::AddActionsForSchema(const Schema* schema,
                                         const FunctionCatalog* function_catalog,
-                                        zetasql::TypeFactory* type_factory) {
-  absl::MutexLock l(&mutex_);
+                                        googlesql::TypeFactory* type_factory) {
+  absl::MutexLock l(mutex_);
   latest_schema_ = schema;
   registry_ =
       std::make_unique<ActionRegistry>(schema, function_catalog, type_factory);
@@ -238,7 +238,7 @@ void ActionManager::AddActionsForSchema(const Schema* schema,
 
 absl::StatusOr<ActionRegistry*> ActionManager::GetActionsForSchema(
     const Schema* schema) const {
-  absl::MutexLock l(&mutex_);
+  absl::MutexLock l(mutex_);
   if (latest_schema_ != schema) {
     return error::Internal(
         absl::StrCat("Schema generation ", schema->generation(),

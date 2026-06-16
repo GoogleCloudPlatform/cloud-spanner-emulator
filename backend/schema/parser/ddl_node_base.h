@@ -20,7 +20,7 @@
 #include <cstdint>
 #include <string>
 
-#include "zetasql/base/logging.h"
+#include "googlesql/base/logging.h"
 #include "absl/strings/match.h"
 #include "absl/strings/numbers.h"
 

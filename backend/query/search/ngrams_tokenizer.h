@@ -19,7 +19,7 @@
 
 #include <cstdint>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/types/span.h"
@@ -35,8 +35,8 @@ class NgramsTokenizer {
   // Generate tokenlist value by doing ngrams tokenization on the original
   // string (without splitting into separate words) from source column.
  public:
-  static absl::StatusOr<zetasql::Value> Tokenize(
-      absl::Span<const zetasql::Value> args);
+  static absl::StatusOr<googlesql::Value> Tokenize(
+      absl::Span<const googlesql::Value> args);
 
  private:
   static constexpr int64_t kMaxAllowedNgramSizeMax = 12;

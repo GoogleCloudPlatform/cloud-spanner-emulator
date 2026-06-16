@@ -20,12 +20,12 @@
 #include <memory>
 #include <string>
 
-#include "zetasql/public/builtin_function.h"
-#include "zetasql/public/builtin_function_options.h"
-#include "zetasql/public/function.h"
+#include "googlesql/public/builtin_function.h"
+#include "googlesql/public/builtin_function_options.h"
+#include "googlesql/public/function.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/strings/match.h"
 #include "backend/query/analyzer_options.h"
@@ -42,18 +42,18 @@ class GsqlSupportedFunctionsTest : public testing::Test {
   GsqlSupportedFunctionsTest() = default;
 
  protected:
-  zetasql::TypeFactory type_factory_;
+  googlesql::TypeFactory type_factory_;
 };
 
 TEST_F(GsqlSupportedFunctionsTest, SupportedFunctionsAreOnlyGsqlBuiltins) {
   EmulatorFeatureFlags::Flags flags;
   emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
 
-  std::map<std::string, std::unique_ptr<zetasql::Function>>
+  std::map<std::string, std::unique_ptr<googlesql::Function>>
       gsql_builtin_functions;
-  zetasql::GetZetaSQLFunctions(
+  googlesql::GetGoogleSQLFunctions(
       &type_factory_,
-      zetasql::BuiltinFunctionOptions(MakeGoogleSqlLanguageOptions()),
+      googlesql::BuiltinFunctionOptions(MakeGoogleSqlLanguageOptions()),
       &gsql_builtin_functions);
 
   // Collect the function names and their aliases.
@@ -65,9 +65,9 @@ TEST_F(GsqlSupportedFunctionsTest, SupportedFunctionsAreOnlyGsqlBuiltins) {
     }
   }
 
-  // Check that the SupportedZetaSQLFunctions set contains only
-  // ZetaSQL built-in functions and no Cloud Spanner specific ones.
-  for (const auto& function_name : *SupportedZetaSQLFunctions()) {
+  // Check that the SupportedGoogleSQLFunctions set contains only
+  // GoogleSQL built-in functions and no Cloud Spanner specific ones.
+  for (const auto& function_name : *SupportedGoogleSQLFunctions()) {
     SCOPED_TRACE(absl::StrCat("Function: ", function_name));
     EXPECT_NE(gsql_functions.find(function_name), gsql_functions.end());
   }

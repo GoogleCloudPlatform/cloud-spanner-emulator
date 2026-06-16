@@ -31,13 +31,13 @@
 
 #include "third_party/spanner_pg/interface/stub_builtin_function_catalog.h"
 
-#include "zetasql/public/analyzer.h"
-#include "zetasql/public/function.h"
+#include "googlesql/public/analyzer.h"
+#include "googlesql/public/function.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/statusor.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator {
 
@@ -45,21 +45,21 @@ namespace {
 
 TEST(StubBuiltinFunctionCatalogTest, GetFunction) {
   StubBuiltinFunctionCatalog catalog =
-      StubBuiltinFunctionCatalog(zetasql::LanguageOptions());
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const zetasql::Function* function,
+      StubBuiltinFunctionCatalog(googlesql::LanguageOptions());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const googlesql::Function* function,
                        catalog.GetFunction("$add"));
   EXPECT_NE(function, nullptr);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(function,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(function,
                        catalog.GetFunction("unknown_function"));
   EXPECT_EQ(function, nullptr);
 }
 
 TEST(StubBuiltinFunctionCatalogTest, GetFunctions) {
   StubBuiltinFunctionCatalog catalog =
-      StubBuiltinFunctionCatalog(zetasql::LanguageOptions());
+      StubBuiltinFunctionCatalog(googlesql::LanguageOptions());
 
-  absl::flat_hash_set<const zetasql::Function*> all_functions;
-  ZETASQL_ASSERT_OK(catalog.GetFunctions(&all_functions));
+  absl::flat_hash_set<const googlesql::Function*> all_functions;
+  GOOGLESQL_ASSERT_OK(catalog.GetFunctions(&all_functions));
   EXPECT_GT(all_functions.size(), 1);
 }
 

@@ -120,6 +120,9 @@ struct TranslationOptions {
   // enable_change_streams_partition_mode_option allows the partition_mode
   // option for CREATE CHANGE STREAM.
   bool enable_change_streams_partition_mode_option = false;
+  // enable_change_streams_per_placement_tvf_option allows the
+  // per_placement_tvf option for CREATE CHANGE STREAM.
+  bool enable_change_streams_per_placement_tvf_option = false;
   // This enables support for search index in Spangres.
   bool enable_search_index = true;
   // enable_locality_groups allows create/drop/alter locality groups.
@@ -148,6 +151,10 @@ struct TranslationOptions {
   bool enable_serial_types = false;
   // enable_uuid_type allows translation of UUID type.
   bool enable_uuid_type = false;
+  // enable_alter_table_if_exists allows the IF EXISTS clause for ALTER TABLE.
+  bool enable_alter_table_if_exists = false;
+  // enable_hash_sharded_index allows translation of HASH PARTITION KEY.
+  bool enable_hash_sharded_index = false;
 };
 
 // Interface for translating PostgreSQL DDL parse tree (AST) to Spanner schema

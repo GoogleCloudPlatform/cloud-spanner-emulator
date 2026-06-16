@@ -37,15 +37,15 @@
 #include <vector>
 
 #include "google/spanner/v1/type.pb.h"
-#include "zetasql/public/language_options.h"
-#include "zetasql/public/options.pb.h"
-#include "zetasql/public/strings.h"
-#include "zetasql/public/type.h"
-#include "zetasql/public/type.pb.h"
-#include "zetasql/public/types/extended_type.h"
-#include "zetasql/public/types/value_equality_check_options.h"
-#include "zetasql/public/value.h"
-#include "zetasql/public/value_content.h"
+#include "googlesql/public/language_options.h"
+#include "googlesql/public/options.pb.h"
+#include "googlesql/public/strings.h"
+#include "googlesql/public/type.h"
+#include "googlesql/public/type.pb.h"
+#include "googlesql/public/types/extended_type.h"
+#include "googlesql/public/types/value_equality_check_options.h"
+#include "googlesql/public/value.h"
+#include "googlesql/public/value_content.h"
 #include "absl/flags/flag.h"
 #include "absl/hash/hash.h"
 #include "absl/log/check.h"
@@ -59,29 +59,29 @@
 #include "third_party/spanner_pg/datatypes/extended/spanner_extended_type.h"
 #include "third_party/spanner_pg/interface/pg_arena.h"
 #include "third_party/spanner_pg/interface/pg_arena_factory.h"
-#include "zetasql/base/compact_reference_counted.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_builder.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/compact_reference_counted.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_builder.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator::spangres {
 namespace datatypes {
 
-using ExtendedType = ::zetasql::ExtendedType;
-using LanguageOptions = ::zetasql::LanguageOptions;
-using ProductMode = ::zetasql::ProductMode;
-using Type = ::zetasql::Type;
-using TypeParameters = ::zetasql::TypeParameters;
-using TypeParameterValue = ::zetasql::TypeParameterValue;
-using TypeProto = ::zetasql::TypeProto;
-using ValueContent = ::zetasql::ValueContent;
-using ValueProto = ::zetasql::ValueProto;
+using ExtendedType = ::googlesql::ExtendedType;
+using LanguageOptions = ::googlesql::LanguageOptions;
+using ProductMode = ::googlesql::ProductMode;
+using Type = ::googlesql::Type;
+using TypeParameters = ::googlesql::TypeParameters;
+using TypeParameterValue = ::googlesql::TypeParameterValue;
+using TypeProto = ::googlesql::TypeProto;
+using ValueContent = ::googlesql::ValueContent;
+using ValueProto = ::googlesql::ValueProto;
 using postgres_translator::spangres::datatypes::common::jsonb::ParseJsonb;
 using TypeAnnotationCode = ::google::spanner::v1::TypeAnnotationCode;
 
 using absl::StrAppend;
 using absl::StrCat;
-using zetasql_base::refcount::CompactReferenceCounted;
+using googlesql_base::refcount::CompactReferenceCounted;
 
 // PgJsonbRef is ref counted wrapper around an normalized pg_jsonb value
 class PgJsonbRef final : public CompactReferenceCounted<PgJsonbRef> {
@@ -147,8 +147,8 @@ class PgJsonbType : public SpannerExtendedType {
   absl::Status SerializeToProtoAndDistinctFileDescriptorsImpl(
       const BuildFileDescriptorSetMapOptions& options, TypeProto* type_proto,
       FileDescriptorSetMap* file_descriptor_set_map) const override {
-    type_proto->set_type_kind(zetasql::TypeKind::TYPE_EXTENDED);
-    type_proto->set_extended_type_name(TypeName(zetasql::PRODUCT_EXTERNAL));
+    type_proto->set_type_kind(googlesql::TypeKind::TYPE_EXTENDED);
+    type_proto->set_extended_type_name(TypeName(googlesql::PRODUCT_EXTERNAL));
     return absl::OkStatus();
   }
 
@@ -173,7 +173,7 @@ class PgJsonbType : public SpannerExtendedType {
   void DebugStringImpl(bool details, TypeOrStringVector* stack,
                        std::string* debug_string) const override {
     StrAppend(debug_string,
-              ShortTypeName(/*unused=*/zetasql::PRODUCT_EXTERNAL));
+              ShortTypeName(/*unused=*/googlesql::PRODUCT_EXTERNAL));
   }
 
   void CopyValueContent(const ValueContent& from,
@@ -188,14 +188,14 @@ class PgJsonbType : public SpannerExtendedType {
 
   bool ValueContentEquals(
       const ValueContent& x, const ValueContent& y,
-      const zetasql::ValueEqualityCheckOptions& options) const override {
+      const googlesql::ValueEqualityCheckOptions& options) const override {
     return x.GetAs<PgJsonbRef*>()->value().Compare(
                y.GetAs<PgJsonbRef*>()->value()) == 0;
   }
 
   bool ValueContentLess(const ValueContent& x, const ValueContent& y,
                         const Type* other_type) const override {
-    ABSL_LOG(FATAL) << ShortTypeName(/*unused=*/zetasql::PRODUCT_EXTERNAL)
+    ABSL_LOG(FATAL) << ShortTypeName(/*unused=*/googlesql::PRODUCT_EXTERNAL)
                << " does not support comparisons.";
     return false;
   }
@@ -219,7 +219,7 @@ class PgJsonbType : public SpannerExtendedType {
     if (options.mode == FormatValueContentOptions::Mode::kSQLLiteral ||
         options.mode == FormatValueContentOptions::Mode::kSQLExpression) {
       return StrCat("CAST(",
-                    zetasql::ToSingleQuotedStringLiteral(normalized_jsonb),
+                    googlesql::ToSingleQuotedStringLiteral(normalized_jsonb),
                     " AS PG.JSONB)");
     }
     return normalized_jsonb;
@@ -228,14 +228,14 @@ class PgJsonbType : public SpannerExtendedType {
   absl::Status SerializeValueContent(const ValueContent& value,
                                      ValueProto* value_proto) const override {
     return absl::InvalidArgumentError(
-        StrCat(ShortTypeName(/*unused=*/zetasql::PRODUCT_EXTERNAL),
+        StrCat(ShortTypeName(/*unused=*/googlesql::PRODUCT_EXTERNAL),
                " does not support serializing value content."));
   }
 
   absl::Status DeserializeValueContent(const ValueProto& value_proto,
                                        ValueContent* value) const override {
     return absl::InvalidArgumentError(
-        StrCat(ShortTypeName(/*unused=*/zetasql::PRODUCT_EXTERNAL),
+        StrCat(ShortTypeName(/*unused=*/googlesql::PRODUCT_EXTERNAL),
                " does not support deserializing value content."));
   }
 };
@@ -245,9 +245,9 @@ const SpannerExtendedType* GetPgJsonbType() {
   return s_pg_jsonb_type;
 }
 
-const zetasql::ArrayType* GetPgJsonbArrayType() {
-  static const zetasql::ArrayType* s_pg_jsonb_arr_type = []() {
-    const zetasql::ArrayType* pg_jsonb_array_type = nullptr;
+const googlesql::ArrayType* GetPgJsonbArrayType() {
+  static const googlesql::ArrayType* s_pg_jsonb_arr_type = []() {
+    const googlesql::ArrayType* pg_jsonb_array_type = nullptr;
     ABSL_CHECK_OK(GetTypeFactory()->MakeArrayType(GetPgJsonbType(),
                                              &pg_jsonb_array_type));
     return pg_jsonb_array_type;
@@ -255,31 +255,31 @@ const zetasql::ArrayType* GetPgJsonbArrayType() {
   return s_pg_jsonb_arr_type;
 }
 
-absl::StatusOr<zetasql::Value> CreatePgJsonbValue(
+absl::StatusOr<googlesql::Value> CreatePgJsonbValue(
     absl::string_view denormalized_jsonb) {
-  ZETASQL_ASSIGN_OR_RETURN(absl::Cord jsonb, ParseJsonb(denormalized_jsonb));
+  GOOGLESQL_ASSIGN_OR_RETURN(absl::Cord jsonb, ParseJsonb(denormalized_jsonb));
   return CreatePgJsonbValueFromNormalized(jsonb);
 }
 
-absl::StatusOr<zetasql::Value> CreatePgJsonbValueWithMemoryContext(
+absl::StatusOr<googlesql::Value> CreatePgJsonbValueWithMemoryContext(
     absl::string_view jsonb_string) {
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       std::unique_ptr<postgres_translator::interfaces::PGArena> pg_arena,
       postgres_translator::interfaces::CreatePGArena(nullptr));
   return spangres::datatypes::CreatePgJsonbValue(jsonb_string);
 }
 
-zetasql::Value CreatePgJsonbValueFromNormalized(
+googlesql::Value CreatePgJsonbValueFromNormalized(
     const absl::Cord& normalized_jsonb) {
-  return zetasql::Value::Extended(
+  return googlesql::Value::Extended(
       GetPgJsonbType(),
-      zetasql::ValueContent::Create(new PgJsonbRef(normalized_jsonb)));
+      googlesql::ValueContent::Create(new PgJsonbRef(normalized_jsonb)));
 }
 
 absl::StatusOr<absl::Cord> GetPgJsonbNormalizedValue(
-    const zetasql::Value& value) {
-  ZETASQL_RET_CHECK(!value.is_null());
-  ZETASQL_RET_CHECK(value.type() == GetPgJsonbType());
+    const googlesql::Value& value) {
+  GOOGLESQL_RET_CHECK(!value.is_null());
+  GOOGLESQL_RET_CHECK(value.type() == GetPgJsonbType());
   return value.extended_value().GetAs<PgJsonbRef*>()->value();
 }
 

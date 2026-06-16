@@ -19,8 +19,8 @@
 
 #include <string>
 
-#include "zetasql/resolved_ast/resolved_ast.h"
-#include "zetasql/resolved_ast/resolved_ast_deep_copy_visitor.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_ast_deep_copy_visitor.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 
@@ -31,20 +31,20 @@ namespace backend {
 
 bool IsANNFunction(std::string function_name);
 
-// Implements ResolvedASTDeepCopyVisitor to rewrite ANN functions for ZetaSQL
-class ANNFunctionsRewriter : public zetasql::ResolvedASTDeepCopyVisitor {
+// Implements ResolvedASTDeepCopyVisitor to rewrite ANN functions for GoogleSQL
+class ANNFunctionsRewriter : public googlesql::ResolvedASTDeepCopyVisitor {
  public:
   absl::Status VisitResolvedFunctionCall(
-      const zetasql::ResolvedFunctionCall* node) override;
+      const googlesql::ResolvedFunctionCall* node) override;
 
-  absl::flat_hash_set<const zetasql::ResolvedFunctionCall*> ann_functions() {
+  absl::flat_hash_set<const googlesql::ResolvedFunctionCall*> ann_functions() {
     return ann_functions_;
   }
 
  private:
   // This will be used to compare with the ANN functions stored in the
   // ANNValidator to make sure all the ANN functions passed the validation.
-  absl::flat_hash_set<const zetasql::ResolvedFunctionCall*> ann_functions_;
+  absl::flat_hash_set<const googlesql::ResolvedFunctionCall*> ann_functions_;
 };
 
 }  // namespace backend

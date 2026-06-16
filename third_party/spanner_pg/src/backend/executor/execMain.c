@@ -26,7 +26,7 @@
  *	before ExecutorEnd.  This can be omitted only in case of EXPLAIN,
  *	which should also omit ExecutorRun.
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -43,7 +43,6 @@
 #include "access/tableam.h"
 #include "access/transam.h"
 #include "access/xact.h"
-#include "catalog/catalog.h"
 #include "catalog/namespace.h"
 #include "catalog/partition.h"
 #include "catalog/pg_publication.h"
@@ -55,6 +54,7 @@
 #include "jit/jit.h"
 #include "mb/pg_wchar.h"
 #include "miscadmin.h"
+#include "parser/parse_relation.h"
 #include "parser/parsetree.h"
 #include "storage/bufmgr.h"
 #include "storage/lmgr.h"
@@ -74,7 +74,7 @@ ExecutorRun_hook_type ExecutorRun_hook = NULL;
 ExecutorFinish_hook_type ExecutorFinish_hook = NULL;
 ExecutorEnd_hook_type ExecutorEnd_hook = NULL;
 
-/* Hook for plugin to get control in ExecCheckRTPerms() */
+/* Hook for plugin to get control in ExecCheckPermissions() */
 ExecutorCheckPerms_hook_type ExecutorCheckPerms_hook = NULL;
 
 /* decls for local routines only used within this module */
@@ -82,18 +82,15 @@ static void InitPlan(QueryDesc *queryDesc, int eflags);
 static void CheckValidRowMarkRel(Relation rel, RowMarkType markType);
 static void ExecPostprocessPlan(EState *estate);
 static void ExecEndPlan(PlanState *planstate, EState *estate);
-static void ExecutePlan(EState *estate, PlanState *planstate,
-						bool use_parallel_mode,
+static void ExecutePlan(QueryDesc *queryDesc,
 						CmdType operation,
 						bool sendTuples,
 						uint64 numberTuples,
 						ScanDirection direction,
-						DestReceiver *dest,
-						bool execute_once);
-static bool ExecCheckRTEPerms(RangeTblEntry *rte);
-static bool ExecCheckRTEPermsModified(Oid relOid, Oid userid,
-									  Bitmapset *modifiedCols,
-									  AclMode requiredPerms);
+						DestReceiver *dest);
+static bool ExecCheckPermissionsModified(Oid relOid, Oid userid,
+										 Bitmapset *modifiedCols,
+										 AclMode requiredPerms);
 static void ExecCheckXactReadOnly(PlannedStmt *plannedstmt);
 static char *ExecBuildSlotValueDescription(Oid reloid,
 										   TupleTableSlot *slot,
@@ -287,10 +284,14 @@ standard_ExecutorStart(QueryDesc *queryDesc, int eflags)
  *		retrieved tuples, not for instance to those inserted/updated/deleted
  *		by a ModifyTable plan node.
  *
+ *		execute_once is ignored, and is present only to avoid an API break
+ *		in stable branches.
+ *
  *		There is no return value, but output tuples (if any) are sent to
  *		the destination receiver specified in the QueryDesc; and the number
  *		of tuples processed at the top level can be found in
- *		estate->es_processed.
+ *		estate->es_processed.  The total number of tuples processed in all
+ *		the ExecutorRun calls can be found in estate->es_total_processed.
  *
  *		We provide a function hook variable that lets loadable plugins
  *		get control when ExecutorRun is called.  Such a plugin would
@@ -357,21 +358,18 @@ standard_ExecutorRun(QueryDesc *queryDesc,
 	 * run plan
 	 */
 	if (!ScanDirectionIsNoMovement(direction))
-	{
-		if (execute_once && queryDesc->already_executed)
-			elog(ERROR, "can't re-execute query flagged for single execution");
-		queryDesc->already_executed = true;
-
-		ExecutePlan(estate,
-					queryDesc->planstate,
-					queryDesc->plannedstmt->parallelModeNeeded,
+		ExecutePlan(queryDesc,
 					operation,
 					sendTuples,
 					count,
 					direction,
-					dest,
-					execute_once);
-	}
+					dest);
+
+	/*
+	 * Update es_total_processed to keep track of the number of tuples
+	 * processed across multiple ExecutorRun() calls.
+	 */
+	estate->es_total_processed += estate->es_processed;
 
 	/*
 	 * shutdown tuple receiver, if we started it
@@ -556,8 +554,8 @@ ExecutorRewind(QueryDesc *queryDesc)
 
 
 /*
- * ExecCheckRTPerms
- *		Check access permissions for all relations listed in a range table.
+ * ExecCheckPermissions
+ *		Check access permissions of relations mentioned in a query
  *
  * Returns true if permissions are adequate.  Otherwise, throws an appropriate
  * error if ereport_on_violation is true, or simply returns false otherwise.
@@ -567,73 +565,96 @@ ExecutorRewind(QueryDesc *queryDesc)
  * passing, then RLS also needs to be consulted (and check_enable_rls()).
  *
  * See rewrite/rowsecurity.c.
+ *
+ * NB: rangeTable is no longer used by us, but kept around for the hooks that
+ * might still want to look at the RTEs.
  */
 bool
-ExecCheckRTPerms(List *rangeTable, bool ereport_on_violation)
+ExecCheckPermissions(List *rangeTable, List *rteperminfos,
+					 bool ereport_on_violation)
 {
 	ListCell   *l;
 	bool		result = true;
 
+#ifdef USE_ASSERT_CHECKING
+	Bitmapset  *indexset = NULL;
+
+	/* Check that rteperminfos is consistent with rangeTable */
 	foreach(l, rangeTable)
 	{
-		RangeTblEntry *rte = (RangeTblEntry *) lfirst(l);
+		RangeTblEntry *rte = lfirst_node(RangeTblEntry, l);
 
-		result = ExecCheckRTEPerms(rte);
+		if (rte->perminfoindex != 0)
+		{
+			/* Sanity checks */
+
+			/*
+			 * Only relation RTEs and subquery RTEs that were once relation
+			 * RTEs (views) have their perminfoindex set.
+			 */
+			Assert(rte->rtekind == RTE_RELATION ||
+				   (rte->rtekind == RTE_SUBQUERY &&
+					rte->relkind == RELKIND_VIEW));
+
+			(void) getRTEPermissionInfo(rteperminfos, rte);
+			/* Many-to-one mapping not allowed */
+			Assert(!bms_is_member(rte->perminfoindex, indexset));
+			indexset = bms_add_member(indexset, rte->perminfoindex);
+		}
+	}
+
+	/* All rteperminfos are referenced */
+	Assert(bms_num_members(indexset) == list_length(rteperminfos));
+#endif
+
+	foreach(l, rteperminfos)
+	{
+		RTEPermissionInfo *perminfo = lfirst_node(RTEPermissionInfo, l);
+
+		Assert(OidIsValid(perminfo->relid));
+		result = ExecCheckOneRelPerms(perminfo);
 		if (!result)
 		{
-			Assert(rte->rtekind == RTE_RELATION);
 			if (ereport_on_violation)
-				aclcheck_error(ACLCHECK_NO_PRIV, get_relkind_objtype(get_rel_relkind(rte->relid)),
-							   get_rel_name(rte->relid));
+				aclcheck_error(ACLCHECK_NO_PRIV,
+							   get_relkind_objtype(get_rel_relkind(perminfo->relid)),
+							   get_rel_name(perminfo->relid));
 			return false;
 		}
 	}
 
 	if (ExecutorCheckPerms_hook)
-		result = (*ExecutorCheckPerms_hook) (rangeTable,
+		result = (*ExecutorCheckPerms_hook) (rangeTable, rteperminfos,
 											 ereport_on_violation);
 	return result;
 }
 
 /*
- * ExecCheckRTEPerms
- *		Check access permissions for a single RTE.
+ * ExecCheckOneRelPerms
+ *		Check access permissions for a single relation.
  */
-static bool
-ExecCheckRTEPerms(RangeTblEntry *rte)
+bool
+ExecCheckOneRelPerms(RTEPermissionInfo *perminfo)
 {
 	AclMode		requiredPerms;
 	AclMode		relPerms;
 	AclMode		remainingPerms;
-	Oid			relOid;
 	Oid			userid;
+	Oid			relOid = perminfo->relid;
 
-	/*
-	 * Only plain-relation RTEs need to be checked here.  Function RTEs are
-	 * checked when the function is prepared for execution.  Join, subquery,
-	 * and special RTEs need no checks.
-	 */
-	if (rte->rtekind != RTE_RELATION)
-		return true;
-
-	/*
-	 * No work if requiredPerms is empty.
-	 */
-	requiredPerms = rte->requiredPerms;
-	if (requiredPerms == 0)
-		return true;
-
-	relOid = rte->relid;
+	requiredPerms = perminfo->requiredPerms;
+	Assert(requiredPerms != 0);
 
 	/*
 	 * userid to check as: current user unless we have a setuid indication.
 	 *
 	 * Note: GetUserId() is presently fast enough that there's no harm in
-	 * calling it separately for each RTE.  If that stops being true, we could
-	 * call it once in ExecCheckRTPerms and pass the userid down from there.
-	 * But for now, no need for the extra clutter.
+	 * calling it separately for each relation.  If that stops being true, we
+	 * could call it once in ExecCheckPermissions and pass the userid down
+	 * from there.  But for now, no need for the extra clutter.
 	 */
-	userid = rte->checkAsUser ? rte->checkAsUser : GetUserId();
+	userid = OidIsValid(perminfo->checkAsUser) ?
+		perminfo->checkAsUser : GetUserId();
 
 	/*
 	 * We must have *all* the requiredPerms bits, but some of the bits can be
@@ -667,14 +688,14 @@ ExecCheckRTEPerms(RangeTblEntry *rte)
 			 * example, SELECT COUNT(*) FROM table), allow the query if we
 			 * have SELECT on any column of the rel, as per SQL spec.
 			 */
-			if (bms_is_empty(rte->selectedCols))
+			if (bms_is_empty(perminfo->selectedCols))
 			{
 				if (pg_attribute_aclcheck_all(relOid, userid, ACL_SELECT,
 											  ACLMASK_ANY) != ACLCHECK_OK)
 					return false;
 			}
 
-			while ((col = bms_next_member(rte->selectedCols, col)) >= 0)
+			while ((col = bms_next_member(perminfo->selectedCols, col)) >= 0)
 			{
 				/* bit #s are offset by FirstLowInvalidHeapAttributeNumber */
 				AttrNumber	attno = col + FirstLowInvalidHeapAttributeNumber;
@@ -699,29 +720,31 @@ ExecCheckRTEPerms(RangeTblEntry *rte)
 		 * Basically the same for the mod columns, for both INSERT and UPDATE
 		 * privilege as specified by remainingPerms.
 		 */
-		if (remainingPerms & ACL_INSERT && !ExecCheckRTEPermsModified(relOid,
-																	  userid,
-																	  rte->insertedCols,
-																	  ACL_INSERT))
+		if (remainingPerms & ACL_INSERT &&
+			!ExecCheckPermissionsModified(relOid,
+										  userid,
+										  perminfo->insertedCols,
+										  ACL_INSERT))
 			return false;
 
-		if (remainingPerms & ACL_UPDATE && !ExecCheckRTEPermsModified(relOid,
-																	  userid,
-																	  rte->updatedCols,
-																	  ACL_UPDATE))
+		if (remainingPerms & ACL_UPDATE &&
+			!ExecCheckPermissionsModified(relOid,
+										  userid,
+										  perminfo->updatedCols,
+										  ACL_UPDATE))
 			return false;
 	}
 	return true;
 }
 
 /*
- * ExecCheckRTEPermsModified
- *		Check INSERT or UPDATE access permissions for a single RTE (these
+ * ExecCheckPermissionsModified
+ *		Check INSERT or UPDATE access permissions for a single relation (these
  *		are processed uniformly).
  */
 static bool
-ExecCheckRTEPermsModified(Oid relOid, Oid userid, Bitmapset *modifiedCols,
-						  AclMode requiredPerms)
+ExecCheckPermissionsModified(Oid relOid, Oid userid, Bitmapset *modifiedCols,
+							 AclMode requiredPerms)
 {
 	int			col = -1;
 
@@ -775,17 +798,14 @@ ExecCheckXactReadOnly(PlannedStmt *plannedstmt)
 	 * Fail if write permissions are requested in parallel mode for table
 	 * (temp or non-temp), otherwise fail for any non-temp table.
 	 */
-	foreach(l, plannedstmt->rtable)
+	foreach(l, plannedstmt->permInfos)
 	{
-		RangeTblEntry *rte = (RangeTblEntry *) lfirst(l);
+		RTEPermissionInfo *perminfo = lfirst_node(RTEPermissionInfo, l);
 
-		if (rte->rtekind != RTE_RELATION)
+		if ((perminfo->requiredPerms & (~ACL_SELECT)) == 0)
 			continue;
 
-		if ((rte->requiredPerms & (~ACL_SELECT)) == 0)
-			continue;
-
-		if (isTempNamespace(get_rel_namespace(rte->relid)))
+		if (isTempNamespace(get_rel_namespace(perminfo->relid)))
 			continue;
 
 		PreventCommandIfReadOnly(CreateCommandName((Node *) plannedstmt));
@@ -819,12 +839,12 @@ InitPlan(QueryDesc *queryDesc, int eflags)
 	/*
 	 * Do permissions checks
 	 */
-	ExecCheckRTPerms(rangeTable, true);
+	ExecCheckPermissions(rangeTable, plannedstmt->permInfos, true);
 
 	/*
 	 * initialize the node's execution state
 	 */
-	ExecInitRangeTable(estate, rangeTable);
+	ExecInitRangeTable(estate, rangeTable, plannedstmt->permInfos);
 
 	estate->es_plannedstmt = plannedstmt;
 
@@ -920,7 +940,7 @@ InitPlan(QueryDesc *queryDesc, int eflags)
 		 * prepared to handle REWIND efficiently; otherwise there is no need.
 		 */
 		sp_eflags = eflags
-			& (EXEC_FLAG_EXPLAIN_ONLY | EXEC_FLAG_WITH_NO_DATA);
+			& ~(EXEC_FLAG_REWIND | EXEC_FLAG_BACKWARD | EXEC_FLAG_MARK);
 		if (bms_is_member(i, plannedstmt->rewindPlanIDs))
 			sp_eflags |= EXEC_FLAG_REWIND;
 
@@ -989,11 +1009,19 @@ InitPlan(QueryDesc *queryDesc, int eflags)
  * Generally the parser and/or planner should have noticed any such mistake
  * already, but let's make sure.
  *
+ * For INSERT ON CONFLICT, the result relation is required to support the
+ * onConflictAction, regardless of whether a conflict actually occurs.
+ *
+ * For MERGE, mergeActions is the list of actions that may be performed.  The
+ * result relation is required to support every action, regardless of whether
+ * or not they are all executed.
+ *
  * Note: when changing this function, you probably also need to look at
  * CheckValidRowMarkRel.
  */
 void
-CheckValidResultRel(ResultRelInfo *resultRelInfo, CmdType operation)
+CheckValidResultRelNew(ResultRelInfo *resultRelInfo, CmdType operation,
+					   OnConflictAction onConflictAction, List *mergeActions)
 {
 	Relation	resultRel = resultRelInfo->ri_RelationDesc;
 	TriggerDesc *trigDesc = resultRel->trigdesc;
@@ -1007,7 +1035,31 @@ CheckValidResultRel(ResultRelInfo *resultRelInfo, CmdType operation)
 	{
 		case RELKIND_RELATION:
 		case RELKIND_PARTITIONED_TABLE:
-			CheckCmdReplicaIdentity(resultRel, operation);
+
+			/*
+			 * For MERGE, check that the target relation supports each action.
+			 * For other operations, just check the operation itself.
+			 */
+			if (operation == CMD_MERGE)
+			{
+				ListCell   *lc;
+
+				foreach(lc, mergeActions)
+				{
+					MergeAction *action = (MergeAction *) lfirst(lc);
+
+					CheckCmdReplicaIdentity(resultRel, action->commandType);
+				}
+			}
+			else
+				CheckCmdReplicaIdentity(resultRel, operation);
+
+			/*
+			 * For INSERT ON CONFLICT DO UPDATE, additionally check that the
+			 * target relation supports UPDATE.
+			 */
+			if (onConflictAction == ONCONFLICT_UPDATE)
+				CheckCmdReplicaIdentity(resultRel, CMD_UPDATE);
 			break;
 		case RELKIND_SEQUENCE:
 			ereport(ERROR,
@@ -1127,6 +1179,16 @@ CheckValidResultRel(ResultRelInfo *resultRelInfo, CmdType operation)
 }
 
 /*
+ * ABI-compatible wrapper to emulate old version of the above function.
+ * Do not call this version in new code.
+ */
+void
+CheckValidResultRel(ResultRelInfo *resultRelInfo, CmdType operation)
+{
+	CheckValidResultRelNew(resultRelInfo, operation, ONCONFLICT_NONE, NIL);
+}
+
+/*
  * Check that a proposed rowmark target relation is a legal target
  *
  * In most cases parser and/or planner should have noticed this already, but
@@ -1239,6 +1301,7 @@ InitResultRelInfo(ResultRelInfo *resultRelInfo,
 
 	/* The following fields are set later if needed */
 	resultRelInfo->ri_RowIdAttNo = 0;
+	resultRelInfo->ri_extraUpdatedCols = NULL;
 	resultRelInfo->ri_projectNew = NULL;
 	resultRelInfo->ri_newTupleSlot = NULL;
 	resultRelInfo->ri_oldTupleSlot = NULL;
@@ -1246,7 +1309,8 @@ InitResultRelInfo(ResultRelInfo *resultRelInfo,
 	resultRelInfo->ri_FdwState = NULL;
 	resultRelInfo->ri_usesFdwDirectModify = false;
 	resultRelInfo->ri_ConstraintExprs = NULL;
-	resultRelInfo->ri_GeneratedExprs = NULL;
+	resultRelInfo->ri_GeneratedExprsI = NULL;
+	resultRelInfo->ri_GeneratedExprsU = NULL;
 	resultRelInfo->ri_projectReturning = NULL;
 	resultRelInfo->ri_onConflictArbiterIndexes = NIL;
 	resultRelInfo->ri_onConflict = NULL;
@@ -1263,9 +1327,11 @@ InitResultRelInfo(ResultRelInfo *resultRelInfo,
 	 * this field is filled in ExecInitModifyTable().
 	 */
 	resultRelInfo->ri_RootResultRelInfo = partition_root_rri;
-	resultRelInfo->ri_RootToPartitionMap = NULL;	/* set by
-													 * ExecInitRoutingInfo */
-	resultRelInfo->ri_PartitionTupleSlot = NULL;	/* ditto */
+	/* Set by ExecGetRootToChildMap */
+	resultRelInfo->ri_RootToChildMap = NULL;
+	resultRelInfo->ri_RootToChildMapValid = false;
+	/* Set by ExecInitRoutingInfo */
+	resultRelInfo->ri_PartitionTupleSlot = NULL;
 	resultRelInfo->ri_ChildToRootMap = NULL;
 	resultRelInfo->ri_ChildToRootMapValid = false;
 	resultRelInfo->ri_CopyMultiInsertBuffer = NULL;
@@ -1276,10 +1342,9 @@ InitResultRelInfo(ResultRelInfo *resultRelInfo,
  *		Get a ResultRelInfo for a trigger target relation.
  *
  * Most of the time, triggers are fired on one of the result relations of the
- * query, and so we can just return a member of the es_result_relations array,
- * or the es_tuple_routing_result_relations list (if any). (Note: in self-join
- * situations there might be multiple members with the same OID; if so it
- * doesn't matter which one we pick.)
+ * query, and so we can just return a suitable one we already made and stored
+ * in the es_opened_result_relations or es_tuple_routing_result_relations
+ * Lists.
  *
  * However, it is sometimes necessary to fire triggers on other relations;
  * this happens mainly when an RI update trigger queues additional triggers
@@ -1299,11 +1364,20 @@ ExecGetTriggerResultRel(EState *estate, Oid relid,
 	Relation	rel;
 	MemoryContext oldcontext;
 
+	/*
+	 * Before creating a new ResultRelInfo, check if we've already made and
+	 * cached one for this relation.  We must ensure that the given
+	 * 'rootRelInfo' matches the one stored in the cached ResultRelInfo as
+	 * trigger handling for partitions can result in mixed requirements for
+	 * what ri_RootResultRelInfo is set to.
+	 */
+
 	/* Search through the query result relations */
 	foreach(l, estate->es_opened_result_relations)
 	{
 		rInfo = lfirst(l);
-		if (RelationGetRelid(rInfo->ri_RelationDesc) == relid)
+		if (RelationGetRelid(rInfo->ri_RelationDesc) == relid &&
+			rInfo->ri_RootResultRelInfo == rootRelInfo)
 			return rInfo;
 	}
 
@@ -1314,7 +1388,8 @@ ExecGetTriggerResultRel(EState *estate, Oid relid,
 	foreach(l, estate->es_tuple_routing_result_relations)
 	{
 		rInfo = (ResultRelInfo *) lfirst(l);
-		if (RelationGetRelid(rInfo->ri_RelationDesc) == relid)
+		if (RelationGetRelid(rInfo->ri_RelationDesc) == relid &&
+			rInfo->ri_RootResultRelInfo == rootRelInfo)
 			return rInfo;
 	}
 
@@ -1322,7 +1397,8 @@ ExecGetTriggerResultRel(EState *estate, Oid relid,
 	foreach(l, estate->es_trig_target_relations)
 	{
 		rInfo = (ResultRelInfo *) lfirst(l);
-		if (RelationGetRelid(rInfo->ri_RelationDesc) == relid)
+		if (RelationGetRelid(rInfo->ri_RelationDesc) == relid &&
+			rInfo->ri_RootResultRelInfo == rootRelInfo)
 			return rInfo;
 	}
 	/* Nope, so we need a new one */
@@ -1590,22 +1666,19 @@ ExecCloseRangeTableRelations(EState *estate)
  *		moving in the specified direction.
  *
  *		Runs to completion if numberTuples is 0
- *
- * Note: the ctid attribute is a 'junk' attribute that is removed before the
- * user can see it
  * ----------------------------------------------------------------
  */
 static void
-ExecutePlan(EState *estate,
-			PlanState *planstate,
-			bool use_parallel_mode,
+ExecutePlan(QueryDesc *queryDesc,
 			CmdType operation,
 			bool sendTuples,
 			uint64 numberTuples,
 			ScanDirection direction,
-			DestReceiver *dest,
-			bool execute_once)
+			DestReceiver *dest)
 {
+	EState	   *estate = queryDesc->estate;
+	PlanState  *planstate = queryDesc->planstate;
+	bool		use_parallel_mode;
 	TupleTableSlot *slot;
 	uint64		current_tuple_count;
 
@@ -1620,11 +1693,17 @@ ExecutePlan(EState *estate,
 	estate->es_direction = direction;
 
 	/*
-	 * If the plan might potentially be executed multiple times, we must force
-	 * it to run without parallelism, because we might exit early.
+	 * Set up parallel mode if appropriate.
+	 *
+	 * Parallel mode only supports complete execution of a plan.  If we've
+	 * already partially executed it, or if the caller asks us to exit early,
+	 * we must force the plan to run without parallelism.
 	 */
-	if (!execute_once)
+	if (queryDesc->already_executed || numberTuples != 0)
 		use_parallel_mode = false;
+	else
+		use_parallel_mode = queryDesc->plannedstmt->parallelModeNeeded;
+	queryDesc->already_executed = true;
 
 	estate->es_use_parallel_mode = use_parallel_mode;
 	if (use_parallel_mode)
@@ -1699,7 +1778,7 @@ ExecutePlan(EState *estate,
 	 * point.
 	 */
 	if (!(estate->es_top_eflags & EXEC_FLAG_BACKWARD))
-		(void) ExecShutdownNode(planstate);
+		ExecShutdownNode(planstate);
 
 	if (use_parallel_mode)
 		ExitParallelMode();
@@ -1866,7 +1945,7 @@ ExecPartitionCheckEmitError(ResultRelInfo *resultRelInfo,
 
 		old_tupdesc = RelationGetDescr(resultRelInfo->ri_RelationDesc);
 		/* a reverse map */
-		map = build_attrmap_by_name_if_req(old_tupdesc, tupdesc);
+		map = build_attrmap_by_name_if_req(old_tupdesc, tupdesc, false);
 
 		/*
 		 * Partition-specific slot's tupdesc can't be changed, so allocate a
@@ -1951,7 +2030,8 @@ ExecConstraints(ResultRelInfo *resultRelInfo,
 					tupdesc = RelationGetDescr(rootrel->ri_RelationDesc);
 					/* a reverse map */
 					map = build_attrmap_by_name_if_req(orig_tupdesc,
-													   tupdesc);
+													   tupdesc,
+													   false);
 
 					/*
 					 * Partition-specific slot's tupdesc can't be changed, so
@@ -2003,7 +2083,8 @@ ExecConstraints(ResultRelInfo *resultRelInfo,
 				tupdesc = RelationGetDescr(rootrel->ri_RelationDesc);
 				/* a reverse map */
 				map = build_attrmap_by_name_if_req(old_tupdesc,
-												   tupdesc);
+												   tupdesc,
+												   false);
 
 				/*
 				 * Partition-specific slot's tupdesc can't be changed, so
@@ -2110,7 +2191,8 @@ ExecWithCheckOptions(WCOKind kind, ResultRelInfo *resultRelInfo,
 						tupdesc = RelationGetDescr(rootrel->ri_RelationDesc);
 						/* a reverse map */
 						map = build_attrmap_by_name_if_req(old_tupdesc,
-														   tupdesc);
+														   tupdesc,
+														   false);
 
 						/*
 						 * Partition-specific slot's tupdesc can't be changed,
@@ -2489,7 +2571,7 @@ EvalPlanQual(EPQState *epqstate, Relation relation,
 	 * tuple available.)
 	 */
 	epqstate->relsubs_done[rti - 1] = false;
-	epqstate->epqExtra->relsubs_blocked[rti - 1] = false;
+	epqstate->relsubs_blocked[rti - 1] = false;
 
 	/*
 	 * Run the EPQ query.  We assume it will return at most one tuple.
@@ -2512,7 +2594,7 @@ EvalPlanQual(EPQState *epqstate, Relation relation,
 	 * different target relation.
 	 */
 	ExecClearTuple(testslot);
-	epqstate->epqExtra->relsubs_blocked[rti - 1] = true;
+	epqstate->relsubs_blocked[rti - 1] = true;
 
 	return slot;
 }
@@ -2521,40 +2603,26 @@ EvalPlanQual(EPQState *epqstate, Relation relation,
  * EvalPlanQualInit -- initialize during creation of a plan state node
  * that might need to invoke EPQ processing.
  *
- * Note: subplan/auxrowmarks can be NULL/NIL if they will be set later
- * with EvalPlanQualSetPlan.
- */
-void
-EvalPlanQualInit(EPQState *epqstate, EState *parentestate,
-				 Plan *subplan, List *auxrowmarks, int epqParam)
-{
-	EvalPlanQualInitExt(epqstate, parentestate,
-						subplan, auxrowmarks, epqParam, NIL);
-}
-
-/*
- * EvalPlanQualInitExt -- same, but allow specification of resultRelations
- *
  * If the caller intends to use EvalPlanQual(), resultRelations should be
  * a list of RT indexes of potential target relations for EvalPlanQual(),
  * and we will arrange that the other listed relations don't return any
  * tuple during an EvalPlanQual() call.  Otherwise resultRelations
  * should be NIL.
+ *
+ * Note: subplan/auxrowmarks can be NULL/NIL if they will be set later
+ * with EvalPlanQualSetPlan.
  */
 void
-EvalPlanQualInitExt(EPQState *epqstate, EState *parentestate,
-					Plan *subplan, List *auxrowmarks,
-					int epqParam, List *resultRelations)
+EvalPlanQualInit(EPQState *epqstate, EState *parentestate,
+				 Plan *subplan, List *auxrowmarks,
+				 int epqParam, List *resultRelations)
 {
 	Index		rtsize = parentestate->es_range_table_size;
-
-	/* create some extra space to avoid ABI break */
-	epqstate->epqExtra = (EPQStateExtra *) palloc(sizeof(EPQStateExtra));
 
 	/* initialize data not changing over EPQState's lifetime */
 	epqstate->parentestate = parentestate;
 	epqstate->epqParam = epqParam;
-	epqstate->epqExtra->resultRelations = resultRelations;
+	epqstate->resultRelations = resultRelations;
 
 	/*
 	 * Allocate space to reference a slot for each potential rti - do so now
@@ -2563,7 +2631,7 @@ EvalPlanQualInitExt(EPQState *epqstate, EState *parentestate,
 	 * that *may* need EPQ later, without forcing the overhead of
 	 * EvalPlanQualBegin().
 	 */
-	epqstate->epqExtra->tuple_table = NIL;
+	epqstate->tuple_table = NIL;
 	epqstate->relsubs_slot = (TupleTableSlot **)
 		palloc0(rtsize * sizeof(TupleTableSlot *));
 
@@ -2577,7 +2645,7 @@ EvalPlanQualInitExt(EPQState *epqstate, EState *parentestate,
 	epqstate->recheckplanstate = NULL;
 	epqstate->relsubs_rowmark = NULL;
 	epqstate->relsubs_done = NULL;
-	epqstate->epqExtra->relsubs_blocked = NULL;
+	epqstate->relsubs_blocked = NULL;
 }
 
 /*
@@ -2618,7 +2686,7 @@ EvalPlanQualSlot(EPQState *epqstate,
 		MemoryContext oldcontext;
 
 		oldcontext = MemoryContextSwitchTo(epqstate->parentestate->es_query_cxt);
-		*slot = table_slot_create(relation, &epqstate->epqExtra->tuple_table);
+		*slot = table_slot_create(relation, &epqstate->tuple_table);
 		MemoryContextSwitchTo(oldcontext);
 	}
 
@@ -2635,12 +2703,14 @@ bool
 EvalPlanQualFetchRowMark(EPQState *epqstate, Index rti, TupleTableSlot *slot)
 {
 	ExecAuxRowMark *earm = epqstate->relsubs_rowmark[rti - 1];
-	ExecRowMark *erm = earm->rowmark;
+	ExecRowMark *erm;
 	Datum		datum;
 	bool		isNull;
 
 	Assert(earm != NULL);
 	Assert(epqstate->origslot != NULL);
+
+	erm = earm->rowmark;
 
 	if (RowMarkRequiresRowShareLock(erm->markType))
 		elog(ERROR, "EvalPlanQual doesn't support locking rowmarks");
@@ -2780,7 +2850,7 @@ EvalPlanQualBegin(EPQState *epqstate)
 		 * the EPQ run will never attempt to fetch tuples from blocked target
 		 * relations.
 		 */
-		memcpy(epqstate->relsubs_done, epqstate->epqExtra->relsubs_blocked,
+		memcpy(epqstate->relsubs_done, epqstate->relsubs_blocked,
 			   rtsize * sizeof(bool));
 
 		/* Recopy current values of parent parameters */
@@ -2851,11 +2921,12 @@ EvalPlanQualStart(EPQState *epqstate, Plan *planTree)
 	rcestate->es_range_table = parentestate->es_range_table;
 	rcestate->es_range_table_size = parentestate->es_range_table_size;
 	rcestate->es_relations = parentestate->es_relations;
-	rcestate->es_queryEnv = parentestate->es_queryEnv;
 	rcestate->es_rowmarks = parentestate->es_rowmarks;
+	rcestate->es_rteperminfos = parentestate->es_rteperminfos;
 	rcestate->es_plannedstmt = parentestate->es_plannedstmt;
 	rcestate->es_junkFilter = parentestate->es_junkFilter;
 	rcestate->es_output_cid = parentestate->es_output_cid;
+	rcestate->es_queryEnv = parentestate->es_queryEnv;
 
 	/*
 	 * ResultRelInfos needed by subplans are initialized from scratch when the
@@ -2952,17 +3023,17 @@ EvalPlanQualStart(EPQState *epqstate, Plan *planTree)
 	 * get marked as blocked; others as not-fetched.
 	 */
 	epqstate->relsubs_done = palloc_array(bool, rtsize);
-	epqstate->epqExtra->relsubs_blocked = palloc0_array(bool, rtsize);
+	epqstate->relsubs_blocked = palloc0_array(bool, rtsize);
 
-	foreach(l, epqstate->epqExtra->resultRelations)
+	foreach(l, epqstate->resultRelations)
 	{
 		int			rtindex = lfirst_int(l);
 
 		Assert(rtindex > 0 && rtindex <= rtsize);
-		epqstate->epqExtra->relsubs_blocked[rtindex - 1] = true;
+		epqstate->relsubs_blocked[rtindex - 1] = true;
 	}
 
-	memcpy(epqstate->relsubs_done, epqstate->epqExtra->relsubs_blocked,
+	memcpy(epqstate->relsubs_done, epqstate->relsubs_blocked,
 		   rtsize * sizeof(bool));
 
 	/*
@@ -3000,12 +3071,12 @@ EvalPlanQualEnd(EPQState *epqstate)
 	 * We may have a tuple table, even if EPQ wasn't started, because we allow
 	 * use of EvalPlanQualSlot() without calling EvalPlanQualBegin().
 	 */
-	if (epqstate->epqExtra->tuple_table != NIL)
+	if (epqstate->tuple_table != NIL)
 	{
 		memset(epqstate->relsubs_slot, 0,
 			   rtsize * sizeof(TupleTableSlot *));
-		ExecResetTupleTable(epqstate->epqExtra->tuple_table, true);
-		epqstate->epqExtra->tuple_table = NIL;
+		ExecResetTupleTable(epqstate->tuple_table, true);
+		epqstate->tuple_table = NIL;
 	}
 
 	/* EPQ wasn't started, nothing further to do */
@@ -3039,5 +3110,5 @@ EvalPlanQualEnd(EPQState *epqstate)
 	epqstate->recheckplanstate = NULL;
 	epqstate->relsubs_rowmark = NULL;
 	epqstate->relsubs_done = NULL;
-	epqstate->epqExtra->relsubs_blocked = NULL;
+	epqstate->relsubs_blocked = NULL;
 }

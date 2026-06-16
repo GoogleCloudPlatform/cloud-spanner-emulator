@@ -21,10 +21,10 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/analyzer_output.h"
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/property_graph.h"
-#include "zetasql/public/types/type.h"
+#include "googlesql/public/analyzer_output.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/property_graph.h"
+#include "googlesql/public/types/type.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
@@ -51,11 +51,11 @@ class QueryableGraphPropertyDeclaration;
 class QueryableGraphPropertyDefinition;
 
 class QueryableGraphPropertyDeclaration
-    : public zetasql::GraphPropertyDeclaration {
+    : public googlesql::GraphPropertyDeclaration {
  public:
   explicit QueryableGraphPropertyDeclaration(
-      const QueryablePropertyGraph* property_graph, zetasql::Catalog* catalog,
-      zetasql::TypeFactory* type_factory,
+      const QueryablePropertyGraph* property_graph, googlesql::Catalog* catalog,
+      googlesql::TypeFactory* type_factory,
       const google::spanner::emulator::backend::PropertyGraph::
           PropertyDeclaration* wrapped_property_declaration);
 
@@ -63,26 +63,26 @@ class QueryableGraphPropertyDeclaration
   std::string Name() const override {
     return wrapped_property_declaration_->name;
   }
-  const zetasql::Type* Type() const override { return type_; }
+  const googlesql::Type* Type() const override { return type_; }
 
  private:
   const QueryablePropertyGraph* const property_graph_;
   const google::spanner::emulator::backend::PropertyGraph::
       PropertyDeclaration* const wrapped_property_declaration_;
-  const zetasql::Type* type_;
+  const googlesql::Type* type_;
 };
 
 class QueryableGraphPropertyDefinition
-    : public zetasql::GraphPropertyDefinition {
+    : public googlesql::GraphPropertyDefinition {
  public:
   QueryableGraphPropertyDefinition(
-      zetasql::Catalog* catalog, zetasql::TypeFactory* type_factory,
-      const zetasql::Table* data_source_table,
-      const zetasql::GraphPropertyDeclaration* property_declaration,
+      googlesql::Catalog* catalog, googlesql::TypeFactory* type_factory,
+      const googlesql::Table* data_source_table,
+      const googlesql::GraphPropertyDeclaration* property_declaration,
       const google::spanner::emulator::backend::PropertyGraph::
           GraphElementTable::PropertyDefinition* wrapped_property_definition);
 
-  const zetasql::GraphPropertyDeclaration& GetDeclaration() const override {
+  const googlesql::GraphPropertyDeclaration& GetDeclaration() const override {
     return *property_declaration_;
   }
 
@@ -90,19 +90,19 @@ class QueryableGraphPropertyDefinition
     return wrapped_property_definition_->value_expression_string;
   }
 
-  absl::StatusOr<const zetasql::ResolvedExpr*> GetValueExpression()
+  absl::StatusOr<const googlesql::ResolvedExpr*> GetValueExpression()
       const override {
     return analyzer_output_->resolved_expr();
   }
 
  private:
-  const zetasql::GraphPropertyDeclaration* property_declaration_;
+  const googlesql::GraphPropertyDeclaration* property_declaration_;
   const google::spanner::emulator::backend::PropertyGraph::GraphElementTable::
       PropertyDefinition* const wrapped_property_definition_;
-  std::unique_ptr<const zetasql::AnalyzerOutput> analyzer_output_;
+  std::unique_ptr<const googlesql::AnalyzerOutput> analyzer_output_;
 };
 
-class QueryableGraphElementLabel : public zetasql::GraphElementLabel {
+class QueryableGraphElementLabel : public googlesql::GraphElementLabel {
  public:
   QueryableGraphElementLabel(
       const QueryablePropertyGraph* property_graph,
@@ -113,7 +113,7 @@ class QueryableGraphElementLabel : public zetasql::GraphElementLabel {
   std::string Name() const override { return label_->name; }
 
   absl::Status GetPropertyDeclarations(
-      absl::flat_hash_set<const zetasql::GraphPropertyDeclaration*>& output)
+      absl::flat_hash_set<const googlesql::GraphPropertyDeclaration*>& output)
       const override;
 
  private:
@@ -121,31 +121,31 @@ class QueryableGraphElementLabel : public zetasql::GraphElementLabel {
   const google::spanner::emulator::backend::PropertyGraph::Label* const label_;
 };
 
-class QueryableGraphDynamicLabel : public zetasql::GraphDynamicLabel {
+class QueryableGraphDynamicLabel : public googlesql::GraphDynamicLabel {
  public:
   QueryableGraphDynamicLabel(
-      zetasql::Catalog* catalog, zetasql::TypeFactory* type_factory,
+      googlesql::Catalog* catalog, googlesql::TypeFactory* type_factory,
       const QueryablePropertyGraph* property_graph,
       const google::spanner::emulator::backend::PropertyGraph::
           GraphElementTable* element_table);
 
   absl::string_view label_expression() const final { return label_expression_; }
 
-  absl::StatusOr<const zetasql::ResolvedExpr*> GetValueExpression()
+  absl::StatusOr<const googlesql::ResolvedExpr*> GetValueExpression()
       const final {
     return analyzer_output_->resolved_expr();
   }
 
  private:
   std::string label_expression_;
-  std::unique_ptr<const zetasql::AnalyzerOutput> analyzer_output_;
+  std::unique_ptr<const googlesql::AnalyzerOutput> analyzer_output_;
 };
 
 class QueryableGraphDynamicProperties
-    : public zetasql::GraphDynamicProperties {
+    : public googlesql::GraphDynamicProperties {
  public:
   QueryableGraphDynamicProperties(
-      zetasql::Catalog* catalog, zetasql::TypeFactory* type_factory,
+      googlesql::Catalog* catalog, googlesql::TypeFactory* type_factory,
       const QueryablePropertyGraph* property_graph,
       const google::spanner::emulator::backend::PropertyGraph::
           GraphElementTable* element_table);
@@ -154,7 +154,7 @@ class QueryableGraphDynamicProperties
     return properties_expression_;
   }
 
-  absl::StatusOr<const zetasql::ResolvedExpr*> GetValueExpression()
+  absl::StatusOr<const googlesql::ResolvedExpr*> GetValueExpression()
       const final {
     if (analyzer_output_ == nullptr) {
       return absl::InternalError("Analyzer output is null");
@@ -164,13 +164,13 @@ class QueryableGraphDynamicProperties
 
  private:
   std::string properties_expression_;
-  std::unique_ptr<const zetasql::AnalyzerOutput> analyzer_output_;
+  std::unique_ptr<const googlesql::AnalyzerOutput> analyzer_output_;
 };
 
 class QueryableGraphElementTableInternal {
  public:
   QueryableGraphElementTableInternal(
-      zetasql::Catalog* catalog, zetasql::TypeFactory* type_factory,
+      googlesql::Catalog* catalog, googlesql::TypeFactory* type_factory,
       const QueryablePropertyGraph* property_graph,
       const google::spanner::emulator::backend::PropertyGraph::
           GraphElementTable* element_table);
@@ -179,7 +179,7 @@ class QueryableGraphElementTableInternal {
   absl::Span<const std::string> PropertyGraphNamePath() const;
   std::string FullName() const;
 
-  const zetasql::Table* GetTable() const;
+  const googlesql::Table* GetTable() const;
 
   const std::vector<int>& GetKeyColumns() const {
     return ordinal_key_columns_idxs_;
@@ -187,21 +187,21 @@ class QueryableGraphElementTableInternal {
 
   absl::Status FindPropertyDefinitionByName(
       absl::string_view property_name,
-      const zetasql::GraphPropertyDefinition*& property_definition) const;
+      const googlesql::GraphPropertyDefinition*& property_definition) const;
 
   absl::Status GetPropertyDefinitions(
-      absl::flat_hash_set<const zetasql::GraphPropertyDefinition*>& output)
+      absl::flat_hash_set<const googlesql::GraphPropertyDefinition*>& output)
       const;
 
   absl::Status FindLabelByName(
-      absl::string_view name, const zetasql::GraphElementLabel*& label) const;
+      absl::string_view name, const googlesql::GraphElementLabel*& label) const;
 
   absl::Status GetLabels(
-      absl::flat_hash_set<const zetasql::GraphElementLabel*>& output) const;
+      absl::flat_hash_set<const googlesql::GraphElementLabel*>& output) const;
 
   bool HasDynamicLabel() const { return dynamic_label_.has_value(); }
   absl::Status GetDynamicLabel(
-      const zetasql::GraphDynamicLabel*& dynamic_label) const {
+      const googlesql::GraphDynamicLabel*& dynamic_label) const {
     if (!dynamic_label_.has_value()) {
       return absl::NotFoundError(absl::StrCat(
           "Dynamic label is not configured for the element table: ", Name()));
@@ -212,7 +212,7 @@ class QueryableGraphElementTableInternal {
 
   bool HasDynamicProperties() const { return dynamic_properties_.has_value(); }
   absl::Status GetDynamicProperties(
-      const zetasql::GraphDynamicProperties*& dynamic_properties) const {
+      const googlesql::GraphDynamicProperties*& dynamic_properties) const {
     if (!dynamic_properties_.has_value()) {
       return absl::NotFoundError(
           absl::StrCat("Dynamic properties is not configured for the element "
@@ -227,11 +227,11 @@ class QueryableGraphElementTableInternal {
   const QueryablePropertyGraph* const property_graph_;
   const google::spanner::emulator::backend::PropertyGraph::
       GraphElementTable* const wrapped_element_table_;
-  const zetasql::Table* data_source_table_;
+  const googlesql::Table* data_source_table_;
 
   // Pointers to the labels applicable to this element table.
   // Labels are owned by the 'QueryablePropertyGraph'.
-  CaseInsensitiveStringMap<const zetasql::GraphElementLabel*> label_ptrs_;
+  CaseInsensitiveStringMap<const googlesql::GraphElementLabel*> label_ptrs_;
 
   std::vector<int> ordinal_key_columns_idxs_;
   CaseInsensitiveStringMap<
@@ -243,10 +243,10 @@ class QueryableGraphElementTableInternal {
       dynamic_properties_;
 };
 
-class QueryableGraphNodeTable : public zetasql::GraphNodeTable {
+class QueryableGraphNodeTable : public googlesql::GraphNodeTable {
  public:
-  QueryableGraphNodeTable(zetasql::Catalog* catalog,
-                          zetasql::TypeFactory* type_factory,
+  QueryableGraphNodeTable(googlesql::Catalog* catalog,
+                          googlesql::TypeFactory* type_factory,
                           const QueryablePropertyGraph* property_graph,
                           const google::spanner::emulator::backend::
                               PropertyGraph::GraphElementTable* node_table);
@@ -260,7 +260,7 @@ class QueryableGraphNodeTable : public zetasql::GraphNodeTable {
     return element_table_internals_->FullName();
   };
 
-  const zetasql::Table* GetTable() const override {
+  const googlesql::Table* GetTable() const override {
     return element_table_internals_->GetTable();
   }
 
@@ -270,26 +270,26 @@ class QueryableGraphNodeTable : public zetasql::GraphNodeTable {
 
   absl::Status FindPropertyDefinitionByName(
       absl::string_view property_name,
-      const zetasql::GraphPropertyDefinition*& property_definition)
+      const googlesql::GraphPropertyDefinition*& property_definition)
       const override {
     return element_table_internals_->FindPropertyDefinitionByName(
         property_name, property_definition);
   }
 
   absl::Status GetPropertyDefinitions(
-      absl::flat_hash_set<const zetasql::GraphPropertyDefinition*>& output)
+      absl::flat_hash_set<const googlesql::GraphPropertyDefinition*>& output)
       const override {
     return element_table_internals_->GetPropertyDefinitions(output);
   }
 
   absl::Status FindLabelByName(
       absl::string_view name,
-      const zetasql::GraphElementLabel*& label) const override {
+      const googlesql::GraphElementLabel*& label) const override {
     return element_table_internals_->FindLabelByName(name, label);
   }
 
   absl::Status GetLabels(
-      absl::flat_hash_set<const zetasql::GraphElementLabel*>& output)
+      absl::flat_hash_set<const googlesql::GraphElementLabel*>& output)
       const override {
     return element_table_internals_->GetLabels(output);
   }
@@ -298,14 +298,14 @@ class QueryableGraphNodeTable : public zetasql::GraphNodeTable {
     return element_table_internals_->HasDynamicLabel();
   }
   absl::Status GetDynamicLabel(
-      const zetasql::GraphDynamicLabel*& dynamic_label) const override {
+      const googlesql::GraphDynamicLabel*& dynamic_label) const override {
     return element_table_internals_->GetDynamicLabel(dynamic_label);
   }
 
   bool HasDynamicProperties() const override {
     return element_table_internals_->HasDynamicProperties();
   }
-  absl::Status GetDynamicProperties(const zetasql::GraphDynamicProperties*&
+  absl::Status GetDynamicProperties(const googlesql::GraphDynamicProperties*&
                                         dynamic_properties) const override {
     return element_table_internals_->GetDynamicProperties(dynamic_properties);
   }
@@ -315,16 +315,16 @@ class QueryableGraphNodeTable : public zetasql::GraphNodeTable {
 };
 
 class QueryableGraphNodeTableReference
-    : public zetasql::GraphNodeTableReference {
+    : public googlesql::GraphNodeTableReference {
  public:
   QueryableGraphNodeTableReference(
-      zetasql::Catalog* catalog, const QueryablePropertyGraph* property_graph,
+      googlesql::Catalog* catalog, const QueryablePropertyGraph* property_graph,
       const google::spanner::emulator::backend::PropertyGraph::
           GraphElementTable::GraphNodeReference* wrapped_node_reference,
       const google::spanner::emulator::backend::PropertyGraph::
           GraphElementTable* wrapped_edge_table);
 
-  const zetasql::GraphNodeTable* GetReferencedNodeTable() const override;
+  const googlesql::GraphNodeTable* GetReferencedNodeTable() const override;
 
   const std::vector<int>& GetEdgeTableColumns() const override {
     return edge_table_column_idxs_;
@@ -342,10 +342,10 @@ class QueryableGraphNodeTableReference
   std::vector<int> edge_table_column_idxs_;
 };
 
-class QueryableGraphEdgeTable : public zetasql::GraphEdgeTable {
+class QueryableGraphEdgeTable : public googlesql::GraphEdgeTable {
  public:
-  QueryableGraphEdgeTable(zetasql::Catalog* catalog,
-                          zetasql::TypeFactory* type_factory,
+  QueryableGraphEdgeTable(googlesql::Catalog* catalog,
+                          googlesql::TypeFactory* type_factory,
                           const QueryablePropertyGraph* property_graph,
                           const google::spanner::emulator::backend::
                               PropertyGraph::GraphElementTable* edge_table);
@@ -359,7 +359,7 @@ class QueryableGraphEdgeTable : public zetasql::GraphEdgeTable {
     return element_table_internals_->FullName();
   };
 
-  const zetasql::Table* GetTable() const override {
+  const googlesql::Table* GetTable() const override {
     return element_table_internals_->GetTable();
   }
 
@@ -369,35 +369,35 @@ class QueryableGraphEdgeTable : public zetasql::GraphEdgeTable {
 
   absl::Status FindPropertyDefinitionByName(
       absl::string_view property_name,
-      const zetasql::GraphPropertyDefinition*& property_definition)
+      const googlesql::GraphPropertyDefinition*& property_definition)
       const override {
     return element_table_internals_->FindPropertyDefinitionByName(
         property_name, property_definition);
   }
 
   absl::Status GetPropertyDefinitions(
-      absl::flat_hash_set<const zetasql::GraphPropertyDefinition*>& output)
+      absl::flat_hash_set<const googlesql::GraphPropertyDefinition*>& output)
       const override {
     return element_table_internals_->GetPropertyDefinitions(output);
   }
 
   absl::Status FindLabelByName(
       absl::string_view name,
-      const zetasql::GraphElementLabel*& label) const override {
+      const googlesql::GraphElementLabel*& label) const override {
     return element_table_internals_->FindLabelByName(name, label);
   }
 
   absl::Status GetLabels(
-      absl::flat_hash_set<const zetasql::GraphElementLabel*>& output)
+      absl::flat_hash_set<const googlesql::GraphElementLabel*>& output)
       const override {
     return element_table_internals_->GetLabels(output);
   }
-  const zetasql::GraphNodeTableReference* GetSourceNodeTable()
+  const googlesql::GraphNodeTableReference* GetSourceNodeTable()
       const override {
     return source_node_table_reference_.get();
   }
 
-  const zetasql::GraphNodeTableReference* GetDestNodeTable() const override {
+  const googlesql::GraphNodeTableReference* GetDestNodeTable() const override {
     return target_node_table_reference_.get();
   }
 
@@ -405,14 +405,14 @@ class QueryableGraphEdgeTable : public zetasql::GraphEdgeTable {
     return element_table_internals_->HasDynamicLabel();
   }
   absl::Status GetDynamicLabel(
-      const zetasql::GraphDynamicLabel*& dynamic_label) const override {
+      const googlesql::GraphDynamicLabel*& dynamic_label) const override {
     return element_table_internals_->GetDynamicLabel(dynamic_label);
   }
 
   bool HasDynamicProperties() const override {
     return element_table_internals_->HasDynamicProperties();
   }
-  absl::Status GetDynamicProperties(const zetasql::GraphDynamicProperties*&
+  absl::Status GetDynamicProperties(const googlesql::GraphDynamicProperties*&
                                         dynamic_properties) const override {
     return element_table_internals_->GetDynamicProperties(dynamic_properties);
   }
@@ -425,10 +425,10 @@ class QueryableGraphEdgeTable : public zetasql::GraphEdgeTable {
       target_node_table_reference_;
 };
 
-class QueryablePropertyGraph : public zetasql::PropertyGraph {
+class QueryablePropertyGraph : public googlesql::PropertyGraph {
  public:
   QueryablePropertyGraph(
-      zetasql::Catalog* catalog, zetasql::TypeFactory* type_factory,
+      googlesql::Catalog* catalog, googlesql::TypeFactory* type_factory,
       const google::spanner::emulator::backend::PropertyGraph*
           wrapped_property_graph)
       : wrapped_property_graph_(wrapped_property_graph) {
@@ -446,15 +446,21 @@ class QueryablePropertyGraph : public zetasql::PropertyGraph {
       node_tables_[node_table.name()] =
           std::make_unique<QueryableGraphNodeTable>(catalog, type_factory, this,
                                                     &node_table);
+      if (!node_table.alias().empty()) {
+        alias_to_name_map_[node_table.alias()] = node_table.name();
+      }
     }
     for (const auto& edge_table : wrapped_property_graph_->EdgeTables()) {
       edge_tables_[edge_table.name()] =
           std::make_unique<QueryableGraphEdgeTable>(catalog, type_factory, this,
                                                     &edge_table);
+      if (!edge_table.alias().empty()) {
+        alias_to_name_map_[edge_table.alias()] = edge_table.name();
+      }
     }
   }
 
-  zetasql::Catalog* catalog() const { return catalog_; }
+  googlesql::Catalog* catalog() const { return catalog_; }
   std::string Name() const override { return wrapped_property_graph_->Name(); }
 
   absl::Span<const std::string> NamePath() const override {
@@ -466,7 +472,7 @@ class QueryablePropertyGraph : public zetasql::PropertyGraph {
 
   absl::Status FindLabelByName(
       absl::string_view name,
-      const zetasql::GraphElementLabel*& label) const override {
+      const googlesql::GraphElementLabel*& label) const override {
     auto it = labels_.find(std::string(name));
     if (it == labels_.end()) {
       return absl::NotFoundError(absl::StrCat("Label not found: ", name));
@@ -477,7 +483,7 @@ class QueryablePropertyGraph : public zetasql::PropertyGraph {
 
   absl::Status FindPropertyDeclarationByName(
       absl::string_view name,
-      const zetasql::GraphPropertyDeclaration*& property_declaration)
+      const googlesql::GraphPropertyDeclaration*& property_declaration)
       const override {
     auto it = property_declarations_.find(std::string(name));
     if (it == property_declarations_.end()) {
@@ -490,14 +496,20 @@ class QueryablePropertyGraph : public zetasql::PropertyGraph {
 
   absl::Status FindElementTableByName(
       absl::string_view name,
-      const zetasql::GraphElementTable*& element_table) const override {
-    auto node_it = node_tables_.find(std::string(name));
+      const googlesql::GraphElementTable*& element_table) const override {
+    std::string resolved_name(name);
+    auto alias_it = alias_to_name_map_.find(std::string(name));
+    if (alias_it != alias_to_name_map_.end()) {
+      resolved_name = alias_it->second;
+    }
+
+    auto node_it = node_tables_.find(resolved_name);
     if (node_it != node_tables_.end()) {
       element_table = node_it->second.get();
       return absl::OkStatus();
     }
 
-    auto edge_it = edge_tables_.find(std::string(name));
+    auto edge_it = edge_tables_.find(resolved_name);
     if (edge_it != edge_tables_.end()) {
       element_table = edge_it->second.get();
       return absl::OkStatus();
@@ -506,7 +518,7 @@ class QueryablePropertyGraph : public zetasql::PropertyGraph {
   }
 
   absl::Status GetNodeTables(
-      absl::flat_hash_set<const zetasql::GraphNodeTable*>& output)
+      absl::flat_hash_set<const googlesql::GraphNodeTable*>& output)
       const override {
     for (const auto& [_, node_table] : node_tables_) {
       output.insert(node_table.get());
@@ -515,7 +527,7 @@ class QueryablePropertyGraph : public zetasql::PropertyGraph {
   }
 
   absl::Status GetEdgeTables(
-      absl::flat_hash_set<const zetasql::GraphEdgeTable*>& output)
+      absl::flat_hash_set<const googlesql::GraphEdgeTable*>& output)
       const override {
     for (const auto& [_, edge_table] : edge_tables_) {
       output.insert(edge_table.get());
@@ -524,7 +536,7 @@ class QueryablePropertyGraph : public zetasql::PropertyGraph {
   }
 
   absl::Status GetLabels(
-      absl::flat_hash_set<const zetasql::GraphElementLabel*>& output)
+      absl::flat_hash_set<const googlesql::GraphElementLabel*>& output)
       const override {
     for (const auto& [_, label] : labels_) {
       output.insert(label.get());
@@ -533,7 +545,7 @@ class QueryablePropertyGraph : public zetasql::PropertyGraph {
   }
 
   absl::Status GetPropertyDeclarations(
-      absl::flat_hash_set<const zetasql::GraphPropertyDeclaration*>& output)
+      absl::flat_hash_set<const googlesql::GraphPropertyDeclaration*>& output)
       const override {
     for (const auto& [_, property_declaration] : property_declarations_) {
       output.insert(property_declaration.get());
@@ -543,7 +555,7 @@ class QueryablePropertyGraph : public zetasql::PropertyGraph {
 
  private:
   // The catalog to which this property graph belongs. Not owned.
-  zetasql::Catalog* catalog_;
+  googlesql::Catalog* catalog_;
   const google::spanner::emulator::backend::PropertyGraph* const
       wrapped_property_graph_;
 
@@ -557,6 +569,8 @@ class QueryablePropertyGraph : public zetasql::PropertyGraph {
       node_tables_;
   CaseInsensitiveStringMap<std::unique_ptr<const QueryableGraphEdgeTable>>
       edge_tables_;
+  // For looking up node tables by alias.
+  CaseInsensitiveStringMap<std::string> alias_to_name_map_;
 };
 
 }  // namespace backend

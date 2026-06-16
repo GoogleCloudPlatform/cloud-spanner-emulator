@@ -31,9 +31,9 @@
 #include "frontend/entities/session.h"
 #include "frontend/entities/transaction.h"
 #include "frontend/server/handler.h"
+#include "googlesql/base/status_macros.h"
 #include "google/protobuf/repeated_ptr_field.h"
 #include "absl/status/status.h"
-#include "zetasql/base/status_macros.h"
 
 namespace protobuf_api = ::google::protobuf;
 
@@ -48,17 +48,17 @@ absl::Status BeginTransaction(
     spanner_api::Transaction* response) {
   // Get session information.
   SessionManager* session_manager = ctx->env()->session_manager();
-  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Session> session,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::shared_ptr<Session> session,
                    session_manager->GetSession(request->session()));
 
   // Create a new transaction.
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       std::shared_ptr<Transaction> txn,
       session->CreateMultiUseTransaction(
           request->options(), Session::TransactionActivation::kInitializeOnly));
 
   // Populate transaction proto in response.
-  ZETASQL_ASSIGN_OR_RETURN(*response, txn->ToProto());
+  GOOGLESQL_ASSIGN_OR_RETURN(*response, txn->ToProto());
 
   if (txn->IsReadWrite() && session->multiplexed() &&
       request->has_mutation_key()) {
@@ -75,7 +75,7 @@ absl::Status BeginTransaction(
       status =
           absl::Status(absl::StatusCode::kInvalidArgument, status.message());
     }
-    ZETASQL_RETURN_IF_ERROR(status);
+    GOOGLESQL_RETURN_IF_ERROR(status);
     // Set a precommit token in the begin transaction response.
     response->mutable_precommit_token();
   }
@@ -89,7 +89,7 @@ absl::Status Commit(RequestContext* ctx,
                     const spanner_api::CommitRequest* request,
                     spanner_api::CommitResponse* response) {
   // Get session information.
-  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Session> session,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::shared_ptr<Session> session,
                    GetSession(ctx, request->session()));
 
   // Get transaction object to commit.
@@ -108,7 +108,7 @@ absl::Status Commit(RequestContext* ctx,
       return error::MissingRequiredFieldError("CommitRequest.transaction");
   }
 
-  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn, maybe_txn);
+  GOOGLESQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn, maybe_txn);
 
   // Wrap all operations on this transaction so they are atomic .
   return txn->GuardedCall(Transaction::OpType::kCommit, [&]() -> absl::Status {
@@ -128,17 +128,17 @@ absl::Status Commit(RequestContext* ctx,
 
     // Commit should be indempotent.
     if (txn->IsCommitted()) {
-      ZETASQL_ASSIGN_OR_RETURN(absl::Time commit_timestamp, txn->GetCommitTimestamp());
-      ZETASQL_ASSIGN_OR_RETURN(*response->mutable_commit_timestamp(),
+      GOOGLESQL_ASSIGN_OR_RETURN(absl::Time commit_timestamp, txn->GetCommitTimestamp());
+      GOOGLESQL_ASSIGN_OR_RETURN(*response->mutable_commit_timestamp(),
                        TimestampToProto(commit_timestamp));
       return absl::OkStatus();
     }
 
     // Process mutations and write to transaction store.
     backend::Mutation mutation;
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         MutationFromProto(*txn->schema(), request->mutations(), &mutation));
-    ZETASQL_RETURN_IF_ERROR(txn->Write(mutation));
+    GOOGLESQL_RETURN_IF_ERROR(txn->Write(mutation));
 
     if (txn->IsReadWrite() && session->multiplexed() && !is_single_use &&
         !request->has_precommit_token()) {
@@ -148,11 +148,11 @@ absl::Status Commit(RequestContext* ctx,
     }
 
     // Actually commit the request.
-    ZETASQL_RETURN_IF_ERROR(txn->Commit());
+    GOOGLESQL_RETURN_IF_ERROR(txn->Commit());
 
     // Return commit timestamp to user.
-    ZETASQL_ASSIGN_OR_RETURN(absl::Time commit_timestamp, txn->GetCommitTimestamp());
-    ZETASQL_ASSIGN_OR_RETURN(*response->mutable_commit_timestamp(),
+    GOOGLESQL_ASSIGN_OR_RETURN(absl::Time commit_timestamp, txn->GetCommitTimestamp());
+    GOOGLESQL_ASSIGN_OR_RETURN(*response->mutable_commit_timestamp(),
                      TimestampToProto(commit_timestamp));
     return absl::OkStatus();
   });
@@ -164,11 +164,11 @@ absl::Status Rollback(RequestContext* ctx,
                       const spanner_api::RollbackRequest* request,
                       protobuf_api::Empty* response) {
   // Get session information.
-  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Session> session,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::shared_ptr<Session> session,
                    GetSession(ctx, request->session()));
 
   // Get transaction object to rollback.
-  ZETASQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> txn,
                    session->FindAndUseTransaction(request->transaction_id()));
 
   // Wrap all operations on this transaction so they are atomic.

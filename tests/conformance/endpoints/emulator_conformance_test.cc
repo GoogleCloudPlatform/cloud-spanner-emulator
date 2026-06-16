@@ -17,10 +17,10 @@
 #include <memory>
 #include <utility>
 
-#include "zetasql/base/logging.h"
+#include "googlesql/base/logging.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "google/cloud/common_options.h"
 #include "google/cloud/grpc_options.h"
@@ -83,7 +83,7 @@ class EmulatorConformanceTestEnvironment : public testing::Environment {
         std::make_unique<google::cloud::spanner_admin::InstanceAdminClient>(
             google::cloud::spanner_admin::MakeInstanceAdminConnection(
                 *connection_options));
-    ZETASQL_ASSERT_OK(google::spanner::emulator::test::ToUtilStatusOr(
+    GOOGLESQL_ASSERT_OK(google::spanner::emulator::test::ToUtilStatusOr(
         instance_client
             ->CreateInstance(
                 google::cloud::spanner::CreateInstanceRequestBuilder(

@@ -34,8 +34,8 @@
 #include <cstdint>
 #include <string>
 
-#include "zetasql/public/function.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/function.h"
+#include "googlesql/public/value.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -45,7 +45,7 @@
 #include "third_party/spanner_pg/interface/pg_timezone.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator {
 
@@ -57,15 +57,15 @@ void InitializePGTimezoneToDefault() {
   }
 }
 
-zetasql::FunctionEvaluator PGFunctionEvaluator(
-    const zetasql::FunctionEvaluator& function,
+googlesql::FunctionEvaluator PGFunctionEvaluator(
+    const googlesql::FunctionEvaluator& function,
     const std::function<void()>& on_compute_begin,
     const std::function<void()>& on_compute_end) {
   return [function, on_compute_begin,
-          on_compute_end](absl::Span<const zetasql::Value> args)
-             -> absl::StatusOr<zetasql::Value> {
+          on_compute_end](absl::Span<const googlesql::Value> args)
+             -> absl::StatusOr<googlesql::Value> {
     // Binds PG memory context arena to thread local
-    ZETASQL_VLOG(1) << "Creating PG arena and Evaluating PG function";
+    GOOGLESQL_VLOG(1) << "Creating PG arena and Evaluating PG function";
     absl::StatusOr<std::unique_ptr<postgres_translator::interfaces::PGArena>>
         status_or = postgres_translator::interfaces::CreatePGArena(nullptr);
     if (!status_or.ok()) {
@@ -76,7 +76,7 @@ zetasql::FunctionEvaluator PGFunctionEvaluator(
     // Call registered function for starting
     on_compute_begin();
 
-    absl::StatusOr<zetasql::Value> result = function(args);
+    absl::StatusOr<googlesql::Value> result = function(args);
 
     // Call registered function for cleanup
     on_compute_end();
@@ -87,46 +87,46 @@ zetasql::FunctionEvaluator PGFunctionEvaluator(
   };
 }
 
-absl::StatusOr<zetasql::Value> EmulatorJsonbArrayElementText(
+absl::StatusOr<googlesql::Value> EmulatorJsonbArrayElementText(
     absl::string_view jsonb, int32_t element) {
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       Datum jsonb_in_datum,
       postgres_translator::CheckedNullableOidFunctionCall1(
           F_JSONB_IN, CStringGetDatum(std::string(jsonb.data()).c_str())));
   Datum element_in_datum = Int32GetDatum(element);
 
   // Call `jsonb_array_element_text` on `jsonb_in_datum` and `element_in_datum`.
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       Datum result_text_datum,
       postgres_translator::CheckedNullableOidFunctionCall2(
           F_JSONB_ARRAY_ELEMENT_TEXT, jsonb_in_datum, element_in_datum));
   if (result_text_datum == NULL_DATUM) {
-    return zetasql::Value::NullString();
+    return googlesql::Value::NullString();
   }
-  ZETASQL_ASSIGN_OR_RETURN(char* result,
+  GOOGLESQL_ASSIGN_OR_RETURN(char* result,
                    CheckedPgTextDatumGetCString(result_text_datum));
-  return zetasql::Value::String(result);
+  return googlesql::Value::String(result);
 }
 
-absl::StatusOr<zetasql::Value> EmulatorJsonbObjectFieldText(
+absl::StatusOr<googlesql::Value> EmulatorJsonbObjectFieldText(
     absl::string_view jsonb, absl::string_view key) {
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       Datum jsonb_in_datum,
       postgres_translator::CheckedNullableOidFunctionCall1(
           F_JSONB_IN, CStringGetDatum(std::string(jsonb.data()).c_str())));
   Datum key_in_datum = CStringGetTextDatum(std::string(key.data()).c_str());
 
   // Call `jsonb_object_field_text` on `jsonb_in_datum` and `key_in_datum`.
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       Datum result_text_datum,
       postgres_translator::CheckedNullableOidFunctionCall2(
           F_JSONB_OBJECT_FIELD_TEXT, jsonb_in_datum, key_in_datum));
   if (result_text_datum == NULL_DATUM) {
-    return zetasql::Value::NullString();
+    return googlesql::Value::NullString();
   }
-  ZETASQL_ASSIGN_OR_RETURN(char* result,
+  GOOGLESQL_ASSIGN_OR_RETURN(char* result,
                    CheckedPgTextDatumGetCString(result_text_datum));
-  return zetasql::Value::String(result);
+  return googlesql::Value::String(result);
 }
 
 }  // namespace postgres_translator

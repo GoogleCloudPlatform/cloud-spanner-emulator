@@ -21,9 +21,9 @@
 #include <memory>
 #include <string>
 
-#include "zetasql/public/functions/string.h"
-#include "zetasql/public/type.pb.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/functions/string.h"
+#include "googlesql/public/type.pb.h"
+#include "googlesql/public/value.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
@@ -42,8 +42,8 @@
 #include "backend/storage/iterator.h"
 #include "common/errors.h"
 #include "common/limits.h"
+#include "googlesql/base/status_macros.h"
 #include "absl/status/status.h"
-#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -55,16 +55,16 @@ namespace {
 absl::Status VerifyColumnValue(
     const SchemaValidationContext* context, const Table* table,
     const Column* column,
-    const std::function<absl::Status(const zetasql::Value& column_value,
+    const std::function<absl::Status(const googlesql::Value& column_value,
                                      const Key& key)>& verifier) {
   std::unique_ptr<StorageIterator> itr;
-  ZETASQL_RETURN_IF_ERROR(context->storage()->Read(context->pending_commit_timestamp(),
+  GOOGLESQL_RETURN_IF_ERROR(context->storage()->Read(context->pending_commit_timestamp(),
                                            table->id(), KeyRange::All(),
                                            {column->id()}, &itr));
 
   while (itr->Next()) {
     for (int i = 0; i < itr->NumColumns(); ++i) {
-      ZETASQL_RETURN_IF_ERROR(verifier(itr->ColumnValue(i), itr->Key()));
+      GOOGLESQL_RETURN_IF_ERROR(verifier(itr->ColumnValue(i), itr->Key()));
     }
   }
   return absl::OkStatus();
@@ -72,14 +72,14 @@ absl::Status VerifyColumnValue(
 
 absl::Status VerifyStringColumnValue(absl::string_view table_name,
                                      absl::string_view column_name,
-                                     const zetasql::Value& value,
+                                     const googlesql::Value& value,
                                      const Key& key,
-                                     const zetasql::Type* new_column_type,
+                                     const googlesql::Type* new_column_type,
                                      int64_t new_max_length) {
-  ZETASQL_RET_CHECK(value.type()->IsString());
+  GOOGLESQL_RET_CHECK(value.type()->IsString());
   absl::Status error;
   int64_t value_length;
-  if (!zetasql::functions::LengthUtf8(value.string_value(), &value_length,
+  if (!googlesql::functions::LengthUtf8(value.string_value(), &value_length,
                                         &error)) {
     return error::InvalidStringEncoding(table_name, column_name);
   }
@@ -95,11 +95,11 @@ absl::Status VerifyStringColumnValue(absl::string_view table_name,
 
 absl::Status VerifyProtoColumnValue(absl::string_view table_name,
                                     absl::string_view column_name,
-                                    const zetasql::Value& value,
+                                    const googlesql::Value& value,
                                     const Key& key,
-                                    const zetasql::Type* new_column_type,
+                                    const googlesql::Type* new_column_type,
                                     int64_t new_max_length) {
-  ZETASQL_RET_CHECK(value.type()->IsProto());
+  GOOGLESQL_RET_CHECK(value.type()->IsProto());
   absl::Status error;
   int64_t value_length = 0;
   if (new_column_type->IsBytes()) {
@@ -118,10 +118,10 @@ absl::Status VerifyProtoColumnValue(absl::string_view table_name,
 
 absl::Status VerifyInt64ColumnValue(absl::string_view table_name,
                                     absl::string_view column_name,
-                                    const zetasql::Value& value,
+                                    const googlesql::Value& value,
                                     const Key& key,
-                                    const zetasql::Type* new_column_type) {
-  ZETASQL_RET_CHECK(value.type()->IsInt64());
+                                    const googlesql::Type* new_column_type) {
+  GOOGLESQL_RET_CHECK(value.type()->IsInt64());
   absl::Status error;
   if (new_column_type->IsEnum()) {
     // When converting int64_t column to enum column, int64_t should lie within the
@@ -134,7 +134,7 @@ absl::Status VerifyInt64ColumnValue(absl::string_view table_name,
          !new_column_type->AsEnum()->FindName(int_value, &name))) {
       return error::InvalidEnumValue(
           column_name, int_value,
-          new_column_type->TypeName(zetasql::PRODUCT_INTERNAL),
+          new_column_type->TypeName(googlesql::PRODUCT_INTERNAL),
           key.DebugString());
     }
   }
@@ -143,11 +143,11 @@ absl::Status VerifyInt64ColumnValue(absl::string_view table_name,
 
 absl::Status VerifyBytesColumnValue(absl::string_view table_name,
                                     absl::string_view column_name,
-                                    const zetasql::Value& value,
+                                    const googlesql::Value& value,
                                     const Key& key,
-                                    const zetasql::Type* new_column_type,
+                                    const googlesql::Type* new_column_type,
                                     int64_t new_max_length) {
-  ZETASQL_RET_CHECK(value.type()->IsBytes());
+  GOOGLESQL_RET_CHECK(value.type()->IsBytes());
   if (new_column_type->IsBytes()) {
     if (value.bytes_value().size() > new_max_length) {
       return error::InvalidColumnSizeReduction(column_name, new_max_length,
@@ -156,14 +156,14 @@ absl::Status VerifyBytesColumnValue(absl::string_view table_name,
     }
   }
 
-  ZETASQL_RET_CHECK(new_column_type->IsString()
+  GOOGLESQL_RET_CHECK(new_column_type->IsString()
             || new_column_type->IsProto()
   );
 
   // Check that it is valid UTF-8 encoding.
   absl::Status error;
   int64_t encoded_chars;
-  if (!zetasql::functions::LengthUtf8(value.bytes_value(), &encoded_chars,
+  if (!googlesql::functions::LengthUtf8(value.bytes_value(), &encoded_chars,
                                         &error)) {
     return error::UTF8StringColumn(column_name, key.DebugString());
   }
@@ -178,10 +178,10 @@ absl::Status VerifyBytesColumnValue(absl::string_view table_name,
 
 absl::Status VerifyColumnValueOnTypeChange(
     absl::string_view table_name, absl::string_view column_name,
-    const zetasql::Value& value, const Key& key,
-    const zetasql::Type* old_column_type,
-    const zetasql::Type* new_column_type, int64_t new_max_length) {
-  ZETASQL_RET_CHECK(old_column_type != nullptr && new_column_type != nullptr);
+    const googlesql::Value& value, const Key& key,
+    const googlesql::Type* old_column_type,
+    const googlesql::Type* new_column_type, int64_t new_max_length) {
+  GOOGLESQL_RET_CHECK(old_column_type != nullptr && new_column_type != nullptr);
 
   // Check for null-ness before accessing value.
   if (!value.is_valid() || value.is_null()) {
@@ -189,11 +189,11 @@ absl::Status VerifyColumnValueOnTypeChange(
   }
 
   if (old_column_type->IsArray()) {
-    ZETASQL_RET_CHECK(new_column_type->IsArray());
+    GOOGLESQL_RET_CHECK(new_column_type->IsArray());
     const auto* old_elem_type = BaseType(old_column_type);
     const auto* new_elem_type = BaseType(new_column_type);
     for (const auto& element : value.elements()) {
-      ZETASQL_RETURN_IF_ERROR(VerifyColumnValueOnTypeChange(
+      GOOGLESQL_RETURN_IF_ERROR(VerifyColumnValueOnTypeChange(
           table_name, column_name, element, key, old_elem_type, new_elem_type,
           new_max_length));
     }
@@ -204,22 +204,22 @@ absl::Status VerifyColumnValueOnTypeChange(
     // We allow changing STRING to BYTES, but the BYTES column must be large
     // enough to handle the conversion since each UTF8 character could
     // potentially be up to 4 bytes.
-    ZETASQL_RETURN_IF_ERROR(VerifyStringColumnValue(table_name, column_name, value, key,
+    GOOGLESQL_RETURN_IF_ERROR(VerifyStringColumnValue(table_name, column_name, value, key,
                                             new_column_type, new_max_length));
   }
 
   if (old_column_type->IsProto()) {
-    ZETASQL_RETURN_IF_ERROR(VerifyProtoColumnValue(table_name, column_name, value, key,
+    GOOGLESQL_RETURN_IF_ERROR(VerifyProtoColumnValue(table_name, column_name, value, key,
                                            new_column_type, new_max_length));
   }
   if (old_column_type->IsInt64()) {
-    ZETASQL_RETURN_IF_ERROR(VerifyInt64ColumnValue(table_name, column_name, value, key,
+    GOOGLESQL_RETURN_IF_ERROR(VerifyInt64ColumnValue(table_name, column_name, value, key,
                                            new_column_type));
   }
 
   if (old_column_type->IsBytes()) {
     // Bytes must be valid UTF8 to convert to a string.
-    ZETASQL_RETURN_IF_ERROR(VerifyBytesColumnValue(table_name, column_name, value, key,
+    GOOGLESQL_RETURN_IF_ERROR(VerifyBytesColumnValue(table_name, column_name, value, key,
                                            new_column_type, new_max_length));
   }
   return absl::OkStatus();
@@ -227,12 +227,12 @@ absl::Status VerifyColumnValueOnTypeChange(
 
 absl::Status VerifyColumnValuesOnTypeChange(
     const Table* table, const Column* column,
-    const zetasql::Type* old_column_type,
-    const zetasql::Type* new_column_type, int64_t new_max_length,
+    const googlesql::Type* old_column_type,
+    const googlesql::Type* new_column_type, int64_t new_max_length,
     const SchemaValidationContext* context) {
   return VerifyColumnValue(
       context, table, column,
-      [&](const zetasql::Value& value, const Key& key) -> absl::Status {
+      [&](const googlesql::Value& value, const Key& key) -> absl::Status {
         return VerifyColumnValueOnTypeChange(table->Name(), column->Name(),
                                              value, key, old_column_type,
                                              new_column_type, new_max_length);
@@ -245,7 +245,7 @@ absl::Status VerifyColumnNotNull(const Table* table, const Column* column,
                                  const SchemaValidationContext* context) {
   return VerifyColumnValue(
       context, table, column,
-      [&](const zetasql::Value& value, const Key& key) -> absl::Status {
+      [&](const googlesql::Value& value, const Key& key) -> absl::Status {
         if (!value.is_valid() || value.is_null()) {
           return error::NullValueForNotNullColumn(table->Name(), column->Name(),
                                                   key.DebugString());
@@ -276,7 +276,7 @@ absl::Status VerifyColumnCommitTimestamp(
     const SchemaValidationContext* context) {
   return VerifyColumnValue(
       context, table, column,
-      [&](const zetasql::Value& value, const Key& key) -> absl::Status {
+      [&](const googlesql::Value& value, const Key& key) -> absl::Status {
         if (!value.is_valid() || value.is_null()) {
           return absl::OkStatus();
         }

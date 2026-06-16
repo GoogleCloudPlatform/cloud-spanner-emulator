@@ -34,11 +34,11 @@
 #include <cstdint>
 #include <memory>
 
-#include "zetasql/public/function.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/function.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/functional/any_invocable.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -49,56 +49,56 @@
 #include "third_party/spanner_pg/shims/error_shim.h"
 #include "third_party/spanner_pg/shims/memory_context_pg_arena.h"
 #include "third_party/spanner_pg/shims/stub_memory_reservation_manager.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator {
 namespace {
 
 using ::postgres_translator::CheckedPgPalloc;
-using ::zetasql_base::testing::IsOkAndHolds;
+using ::googlesql_base::testing::IsOkAndHolds;
 
-absl::StatusOr<zetasql::Value> EvalPgAlloc(
-    const absl::Span<const zetasql::Value> arguments) {
+absl::StatusOr<googlesql::Value> EvalPgAlloc(
+    const absl::Span<const googlesql::Value> arguments) {
   absl::StatusOr<void*> result = CheckedPgPalloc(sizeof(int));
 
   if (!result.ok()) {
     return result.status();
   }
 
-  return zetasql::values::Int64(123);
+  return googlesql::values::Int64(123);
 }
 
-absl::StatusOr<zetasql::Value> EvalCastToTimestamp(
-  absl::Span<const zetasql::Value> args) {
-ZETASQL_ASSIGN_OR_RETURN(absl::Time time, function_evaluators::PgTimestamptzIn(
+absl::StatusOr<googlesql::Value> EvalCastToTimestamp(
+  absl::Span<const googlesql::Value> args) {
+GOOGLESQL_ASSIGN_OR_RETURN(absl::Time time, function_evaluators::PgTimestamptzIn(
                                       args[0].string_value()));
-return zetasql::Value::Timestamp(time);
+return googlesql::Value::Timestamp(time);
 }
 
 TEST(PGFunctionEvaluators, SetUpPGMemoryArena) {
-  zetasql::FunctionEvaluator evaluator = PGFunctionEvaluator(EvalPgAlloc);
+  googlesql::FunctionEvaluator evaluator = PGFunctionEvaluator(EvalPgAlloc);
 
-  EXPECT_THAT(evaluator({zetasql::values::Int64(1)}),
-              IsOkAndHolds(zetasql::values::Int64(123)));
+  EXPECT_THAT(evaluator({googlesql::values::Int64(1)}),
+              IsOkAndHolds(googlesql::values::Int64(123)));
 }
 
 TEST(PGFunctionEvaluators, CallsGivenCleanupFunction) {
   bool function_called = false;
-  zetasql::FunctionEvaluator evaluator =
+  googlesql::FunctionEvaluator evaluator =
       PGFunctionEvaluator(EvalPgAlloc, InitializePGTimezoneToDefault,
                           [&function_called]() { function_called = true; });
 
-  EXPECT_THAT(evaluator({zetasql::values::Int64(1)}),
-              IsOkAndHolds(zetasql::values::Int64(123)));
+  EXPECT_THAT(evaluator({googlesql::values::Int64(1)}),
+              IsOkAndHolds(googlesql::values::Int64(123)));
   EXPECT_TRUE(function_called);
 }
 
 TEST(PGFunctionEvaluators, TestTimeZoneDefault) {
-  zetasql::FunctionEvaluator evaluator =
+  googlesql::FunctionEvaluator evaluator =
       PGFunctionEvaluator(EvalCastToTimestamp);
 
-  EXPECT_THAT(evaluator({zetasql::values::String("2008-12-25 15:30:00")}),
-              IsOkAndHolds(zetasql::values::Timestamp(
+  EXPECT_THAT(evaluator({googlesql::values::String("2008-12-25 15:30:00")}),
+              IsOkAndHolds(googlesql::values::Timestamp(
                   // 1230247800 is the unix timestamp for 2008-12-25T23:30:00+00
                   absl::FromUnixSeconds(1230247800))));
 }
@@ -107,11 +107,11 @@ TEST(PGFunctionEvaluators, TestTimeZoneUTC) {
   auto initialize_pg_timezone = [&]() {
     absl::Status status = interfaces::InitPGTimezone("UTC");
   };
-  zetasql::FunctionEvaluator evaluator =
+  googlesql::FunctionEvaluator evaluator =
       PGFunctionEvaluator(EvalCastToTimestamp, initialize_pg_timezone, []() {});
 
-  EXPECT_THAT(evaluator({zetasql::values::String("2008-12-25 15:30:00")}),
-              IsOkAndHolds(zetasql::values::Timestamp(
+  EXPECT_THAT(evaluator({googlesql::values::String("2008-12-25 15:30:00")}),
+              IsOkAndHolds(googlesql::values::Timestamp(
                   // 1230219000 is the unix timestamp for 2008-12-25T15:30:00+00
                   absl::FromUnixSeconds(1230219000))));
 }

@@ -33,16 +33,16 @@
 
 #include <string>
 
-#include "zetasql/public/language_options.h"
-#include "zetasql/public/options.pb.h"
-#include "zetasql/public/types/type.h"
-#include "zetasql/public/types/type_factory.h"
-#include "zetasql/public/uuid_value.h"
-#include "zetasql/public/value.h"
-#include "zetasql/resolved_ast/resolved_ast.h"
+#include "googlesql/public/language_options.h"
+#include "googlesql/public/options.pb.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/public/types/type_factory.h"
+#include "googlesql/public/uuid_value.h"
+#include "googlesql/public/value.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
@@ -53,14 +53,14 @@
 #include "third_party/spanner_pg/util/uuid_conversion.h"
 #include "third_party/spanner_pg/util/valid_memory_context_fixture.h"
 #include "third_party/spanner_pg/src/backend/catalog/pg_type_d.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator {
 namespace {
 
 using TypeTest = ::postgres_translator::test::ValidMemoryContext;
-using ::zetasql_base::testing::IsOkAndHolds;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::IsOkAndHolds;
+using ::googlesql_base::testing::StatusIs;
 
 // Helper function to make a PG Array Datum for creating a Const node.
 // array_vals isn't const because PG doesn't understand the word, and it isn't
@@ -81,44 +81,44 @@ Datum MakePgArray(const Oid element_type, std::vector<Datum> array_vals) {
 TEST_F(TypeTest, PgBoolMapping) {
   const PostgresTypeMapping* pg_bool_mapping = types::PgBoolMapping();
   EXPECT_TRUE(pg_bool_mapping->mapped_type()->IsBool());
-  EXPECT_EQ(pg_bool_mapping->TypeName(zetasql::PRODUCT_EXTERNAL), "pg.bool");
+  EXPECT_EQ(pg_bool_mapping->TypeName(googlesql::PRODUCT_EXTERNAL), "pg.bool");
   EXPECT_EQ(pg_bool_mapping->PostgresTypeOid(), BOOLOID);
-  EXPECT_TRUE(pg_bool_mapping->IsSupportedType(zetasql::LanguageOptions()));
+  EXPECT_TRUE(pg_bool_mapping->IsSupportedType(googlesql::LanguageOptions()));
   EXPECT_TRUE(pg_bool_mapping->Equals(types::PgBoolMapping()));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Const * pg_const,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Const * pg_const,
                        postgres_translator::internal::makeScalarConst(
                            BOOLOID, BoolGetDatum(true), /*constisnull=*/false));
   EXPECT_THAT(pg_bool_mapping->MakeGsqlValue(pg_const),
-              IsOkAndHolds(zetasql::Value::Bool(true)));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(pg_const,
+              IsOkAndHolds(googlesql::Value::Bool(true)));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(pg_const,
                        postgres_translator::internal::makeScalarConst(
                            BOOLOID, BoolGetDatum(0), /*constisnull=*/true));
   EXPECT_THAT(pg_bool_mapping->MakeGsqlValue(pg_const),
-              IsOkAndHolds(zetasql::Value::NullBool()));
+              IsOkAndHolds(googlesql::Value::NullBool()));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Const * built_const, pg_bool_mapping->MakePgConst(
-                                                zetasql::Value::Bool(true)));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Const * built_const, pg_bool_mapping->MakePgConst(
+                                                googlesql::Value::Bool(true)));
   EXPECT_NE(built_const, nullptr);
   EXPECT_FALSE(built_const->constisnull);
   EXPECT_THAT(DatumGetBool(built_const->constvalue), true);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      built_const, pg_bool_mapping->MakePgConst(zetasql::Value::NullBool()));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      built_const, pg_bool_mapping->MakePgConst(googlesql::Value::NullBool()));
   EXPECT_NE(built_const, nullptr);
   EXPECT_TRUE(built_const->constisnull);
 
-  zetasql::Value gsql_value;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+  googlesql::Value gsql_value;
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(gsql_value,
                        pg_bool_mapping->MakeGsqlValueFromStringConst(
                            "true"));
   EXPECT_EQ(gsql_value.bool_value(), true);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(gsql_value,
                        pg_bool_mapping->MakeGsqlValueFromStringConst(
                            "false"));
   EXPECT_EQ(gsql_value.bool_value(), false);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(gsql_value,
                        pg_bool_mapping->MakeGsqlValueFromStringConst(
                            "null"));
   EXPECT_TRUE(gsql_value.is_null());
@@ -130,46 +130,46 @@ TEST_F(TypeTest, PgBoolMapping) {
 TEST_F(TypeTest, PgInt8Mapping) {
   const PostgresTypeMapping* pg_int8_mapping = types::PgInt8Mapping();
   EXPECT_TRUE(pg_int8_mapping->mapped_type()->IsInt64());
-  EXPECT_EQ(pg_int8_mapping->TypeName(zetasql::PRODUCT_EXTERNAL), "pg.int8");
+  EXPECT_EQ(pg_int8_mapping->TypeName(googlesql::PRODUCT_EXTERNAL), "pg.int8");
   EXPECT_EQ(pg_int8_mapping->PostgresTypeOid(), INT8OID);
-  EXPECT_TRUE(pg_int8_mapping->IsSupportedType(zetasql::LanguageOptions()));
+  EXPECT_TRUE(pg_int8_mapping->IsSupportedType(googlesql::LanguageOptions()));
   EXPECT_TRUE(pg_int8_mapping->Equals(types::PgInt8Mapping()));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       Const * pg_const,
       postgres_translator::internal::makeScalarConst(
-          INT8OID, Int8GetDatum(3141592653589793), /*constisnull=*/false));
+          INT8OID, Int64GetDatum(3141592653589793), /*constisnull=*/false));
   EXPECT_THAT(pg_int8_mapping->MakeGsqlValue(pg_const),
-              IsOkAndHolds(zetasql::Value::Int64(3141592653589793)));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(pg_const,
+              IsOkAndHolds(googlesql::Value::Int64(3141592653589793)));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(pg_const,
                        postgres_translator::internal::makeScalarConst(
-                           INT8OID, Int8GetDatum(0), /*constisnull=*/true));
+                           INT8OID, Int64GetDatum(0), /*constisnull=*/true));
   EXPECT_THAT(pg_int8_mapping->MakeGsqlValue(pg_const),
-              IsOkAndHolds(zetasql::Value::NullInt64()));
+              IsOkAndHolds(googlesql::Value::NullInt64()));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       Const * built_const,
-      pg_int8_mapping->MakePgConst(zetasql::Value::Int64(3141592653589793)));
+      pg_int8_mapping->MakePgConst(googlesql::Value::Int64(3141592653589793)));
   EXPECT_NE(built_const, nullptr);
   EXPECT_FALSE(built_const->constisnull);
   EXPECT_THAT(DatumGetInt64(built_const->constvalue), 3141592653589793);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      built_const, pg_int8_mapping->MakePgConst(zetasql::Value::NullInt64()));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      built_const, pg_int8_mapping->MakePgConst(googlesql::Value::NullInt64()));
   EXPECT_NE(built_const, nullptr);
   EXPECT_TRUE(built_const->constisnull);
 
-  zetasql::Value gsql_value;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+  googlesql::Value gsql_value;
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(gsql_value,
                        pg_int8_mapping->MakeGsqlValueFromStringConst(
                            "3141592653589793"));
   EXPECT_EQ(gsql_value.int64_value(), 3141592653589793);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(gsql_value,
                        pg_int8_mapping->MakeGsqlValueFromStringConst(
                            "-0"));
   EXPECT_EQ(gsql_value.int64_value(), 0);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(gsql_value,
                        pg_int8_mapping->MakeGsqlValueFromStringConst(
                            "null"));
   EXPECT_TRUE(gsql_value.is_null());
@@ -181,47 +181,47 @@ TEST_F(TypeTest, PgInt8Mapping) {
 TEST_F(TypeTest, PgFloat8Mapping) {
   const PostgresTypeMapping* pg_float8_mapping = types::PgFloat8Mapping();
   EXPECT_TRUE(pg_float8_mapping->mapped_type()->IsDouble());
-  EXPECT_EQ(pg_float8_mapping->TypeName(zetasql::PRODUCT_EXTERNAL),
+  EXPECT_EQ(pg_float8_mapping->TypeName(googlesql::PRODUCT_EXTERNAL),
             "pg.float8");
   EXPECT_EQ(pg_float8_mapping->PostgresTypeOid(), FLOAT8OID);
-  EXPECT_TRUE(pg_float8_mapping->IsSupportedType(zetasql::LanguageOptions()));
+  EXPECT_TRUE(pg_float8_mapping->IsSupportedType(googlesql::LanguageOptions()));
   EXPECT_TRUE(pg_float8_mapping->Equals(types::PgFloat8Mapping()));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       Const * pg_const,
       postgres_translator::internal::makeScalarConst(
           FLOAT8OID, Float8GetDatum(3.141592653589793), /*constisnull=*/false));
   EXPECT_THAT(pg_float8_mapping->MakeGsqlValue(pg_const),
-              IsOkAndHolds(zetasql::Value::Double(3.141592653589793)));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(pg_const,
+              IsOkAndHolds(googlesql::Value::Double(3.141592653589793)));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(pg_const,
                        postgres_translator::internal::makeScalarConst(
                            FLOAT8OID, Float8GetDatum(0), /*constisnull=*/true));
   EXPECT_THAT(pg_float8_mapping->MakeGsqlValue(pg_const),
-              IsOkAndHolds(zetasql::Value::NullDouble()));
+              IsOkAndHolds(googlesql::Value::NullDouble()));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       Const * built_const,
-      pg_float8_mapping->MakePgConst(zetasql::Value::Double(1e-10)));
+      pg_float8_mapping->MakePgConst(googlesql::Value::Double(1e-10)));
   EXPECT_NE(built_const, nullptr);
   EXPECT_FALSE(built_const->constisnull);
   EXPECT_THAT(DatumGetFloat8(built_const->constvalue), 1e-10);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(built_const, pg_float8_mapping->MakePgConst(
-                                        zetasql::Value::NullDouble()));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(built_const, pg_float8_mapping->MakePgConst(
+                                        googlesql::Value::NullDouble()));
   EXPECT_NE(built_const, nullptr);
   EXPECT_TRUE(built_const->constisnull);
 
-  zetasql::Value gsql_value;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+  googlesql::Value gsql_value;
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(gsql_value,
                        pg_float8_mapping->MakeGsqlValueFromStringConst(
                            "3.141592653589793"));
   EXPECT_EQ(gsql_value.double_value(), 3.141592653589793);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(gsql_value,
                        pg_float8_mapping->MakeGsqlValueFromStringConst(
                            "-0"));
   EXPECT_EQ(gsql_value.double_value(), 0);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(gsql_value,
                        pg_float8_mapping->MakeGsqlValueFromStringConst(
                            "null"));
   EXPECT_TRUE(gsql_value.is_null());
@@ -233,49 +233,49 @@ TEST_F(TypeTest, PgFloat8Mapping) {
 TEST_F(TypeTest, PgVarcharMapping) {
   const PostgresTypeMapping* pg_varchar_mapping = types::PgVarcharMapping();
   EXPECT_TRUE(pg_varchar_mapping->mapped_type()->IsString());
-  EXPECT_EQ(pg_varchar_mapping->TypeName(zetasql::PRODUCT_EXTERNAL),
+  EXPECT_EQ(pg_varchar_mapping->TypeName(googlesql::PRODUCT_EXTERNAL),
             "pg.varchar");
   EXPECT_EQ(pg_varchar_mapping->PostgresTypeOid(), VARCHAROID);
   EXPECT_TRUE(
-      pg_varchar_mapping->IsSupportedType(zetasql::LanguageOptions()));
+      pg_varchar_mapping->IsSupportedType(googlesql::LanguageOptions()));
   EXPECT_TRUE(pg_varchar_mapping->Equals(types::PgVarcharMapping()));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Const * pg_const,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Const * pg_const,
                        postgres_translator::internal::makeStringConst(
                            VARCHAROID, "hello world", /*constisnull=*/false));
   EXPECT_THAT(pg_varchar_mapping->MakeGsqlValue(pg_const),
-              IsOkAndHolds(zetasql::Value::String("hello world")));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(pg_const,
+              IsOkAndHolds(googlesql::Value::String("hello world")));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(pg_const,
                        postgres_translator::internal::makeStringConst(
                            VARCHAROID, nullptr, /*constisnull=*/true));
   EXPECT_THAT(pg_varchar_mapping->MakeGsqlValue(pg_const),
-              IsOkAndHolds(zetasql::Value::NullString()));
+              IsOkAndHolds(googlesql::Value::NullString()));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       Const * built_const,
-      pg_varchar_mapping->MakePgConst(zetasql::Value::String("test data")));
+      pg_varchar_mapping->MakePgConst(googlesql::Value::String("test data")));
   EXPECT_NE(built_const, nullptr);
   EXPECT_FALSE(built_const->constisnull);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(char* output,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(char* output,
                        CheckedPgTextDatumGetCString(built_const->constvalue));
   EXPECT_STREQ(output, "test data");
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(built_const, pg_varchar_mapping->MakePgConst(
-                                        zetasql::Value::NullString()));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(built_const, pg_varchar_mapping->MakePgConst(
+                                        googlesql::Value::NullString()));
   EXPECT_NE(built_const, nullptr);
   EXPECT_TRUE(built_const->constisnull);
 
-  zetasql::Value gsql_value;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+  googlesql::Value gsql_value;
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(gsql_value,
                        pg_varchar_mapping->MakeGsqlValueFromStringConst(
                            "'this is a default value'"));
   EXPECT_EQ(gsql_value.string_value(), "this is a default value");
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(gsql_value,
                        pg_varchar_mapping->MakeGsqlValueFromStringConst(
                            "''"));
   EXPECT_EQ(gsql_value.string_value(), "");
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(gsql_value,
                        pg_varchar_mapping->MakeGsqlValueFromStringConst(
                            "null"));
   EXPECT_TRUE(gsql_value.is_null());
@@ -287,45 +287,45 @@ TEST_F(TypeTest, PgVarcharMapping) {
 TEST_F(TypeTest, PgTextMapping) {
   const PostgresTypeMapping* pg_text_mapping = types::PgTextMapping();
   EXPECT_TRUE(pg_text_mapping->mapped_type()->IsString());
-  EXPECT_EQ(pg_text_mapping->TypeName(zetasql::PRODUCT_EXTERNAL), "pg.text");
+  EXPECT_EQ(pg_text_mapping->TypeName(googlesql::PRODUCT_EXTERNAL), "pg.text");
   EXPECT_EQ(pg_text_mapping->PostgresTypeOid(), TEXTOID);
-  EXPECT_TRUE(pg_text_mapping->IsSupportedType(zetasql::LanguageOptions()));
+  EXPECT_TRUE(pg_text_mapping->IsSupportedType(googlesql::LanguageOptions()));
   EXPECT_TRUE(pg_text_mapping->Equals(types::PgTextMapping()));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Const * pg_const,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Const * pg_const,
                        postgres_translator::internal::makeStringConst(
                            TEXTOID, "hello world", /*constisnull=*/false));
   EXPECT_THAT(pg_text_mapping->MakeGsqlValue(pg_const),
-              IsOkAndHolds(zetasql::Value::String("hello world")));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(pg_const, postgres_translator::internal::makeStringConst(
+              IsOkAndHolds(googlesql::Value::String("hello world")));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(pg_const, postgres_translator::internal::makeStringConst(
                                      TEXTOID, nullptr, /*constisnull=*/true));
   EXPECT_THAT(pg_text_mapping->MakeGsqlValue(pg_const),
-              IsOkAndHolds(zetasql::Value::NullString()));
+              IsOkAndHolds(googlesql::Value::NullString()));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       Const * built_const,
-      pg_text_mapping->MakePgConst(zetasql::Value::String("test data")));
+      pg_text_mapping->MakePgConst(googlesql::Value::String("test data")));
   EXPECT_NE(built_const, nullptr);
   EXPECT_FALSE(built_const->constisnull);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(char* output,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(char* output,
                        CheckedPgTextDatumGetCString(built_const->constvalue));
   EXPECT_STREQ(output, "test data");
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(built_const, pg_text_mapping->MakePgConst(
-                                        zetasql::Value::NullString()));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(built_const, pg_text_mapping->MakePgConst(
+                                        googlesql::Value::NullString()));
   EXPECT_NE(built_const, nullptr);
   EXPECT_TRUE(built_const->constisnull);
 
-  zetasql::Value gsql_value;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+  googlesql::Value gsql_value;
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(gsql_value,
                        pg_text_mapping->MakeGsqlValueFromStringConst(
                            "'this is a default value'"));
   EXPECT_EQ(gsql_value.string_value(), "this is a default value");
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(gsql_value,
                        pg_text_mapping->MakeGsqlValueFromStringConst("''"));
   EXPECT_EQ(gsql_value.string_value(), "");
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(gsql_value,
                        pg_text_mapping->MakeGsqlValueFromStringConst("null"));
   EXPECT_TRUE(gsql_value.is_null());
 
@@ -336,47 +336,47 @@ TEST_F(TypeTest, PgTextMapping) {
 TEST_F(TypeTest, PgByteaMapping) {
   const PostgresTypeMapping* pg_bytea_mapping = types::PgByteaMapping();
   EXPECT_TRUE(pg_bytea_mapping->mapped_type()->IsBytes());
-  EXPECT_EQ(pg_bytea_mapping->TypeName(zetasql::PRODUCT_EXTERNAL),
+  EXPECT_EQ(pg_bytea_mapping->TypeName(googlesql::PRODUCT_EXTERNAL),
             "pg.bytea");
   EXPECT_EQ(pg_bytea_mapping->PostgresTypeOid(), BYTEAOID);
-  EXPECT_TRUE(pg_bytea_mapping->IsSupportedType(zetasql::LanguageOptions()));
+  EXPECT_TRUE(pg_bytea_mapping->IsSupportedType(googlesql::LanguageOptions()));
   EXPECT_TRUE(pg_bytea_mapping->Equals(types::PgByteaMapping()));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Const * pg_const,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Const * pg_const,
                        postgres_translator::internal::makeByteConst(
                            "\x01 bytes", /*constisnull=*/false));
   EXPECT_THAT(pg_bytea_mapping->MakeGsqlValue(pg_const),
-              IsOkAndHolds(zetasql::Value::Bytes("\x01 bytes")));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(pg_const, postgres_translator::internal::makeByteConst(
+              IsOkAndHolds(googlesql::Value::Bytes("\x01 bytes")));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(pg_const, postgres_translator::internal::makeByteConst(
                                      "", /*constisnull=*/true));
   EXPECT_THAT(pg_bytea_mapping->MakeGsqlValue(pg_const),
-              IsOkAndHolds(zetasql::Value::NullBytes()));
+              IsOkAndHolds(googlesql::Value::NullBytes()));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       Const * built_const,
-      pg_bytea_mapping->MakePgConst(zetasql::Value::Bytes("\x01 bytes")));
+      pg_bytea_mapping->MakePgConst(googlesql::Value::Bytes("\x01 bytes")));
   EXPECT_NE(built_const, nullptr);
   EXPECT_FALSE(built_const->constisnull);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(char* output,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(char* output,
                        CheckedPgTextDatumGetCString(built_const->constvalue));
   EXPECT_STREQ(output, "\x01 bytes");
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(built_const, pg_bytea_mapping->MakePgConst(
-                                        zetasql::Value::NullBytes()));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(built_const, pg_bytea_mapping->MakePgConst(
+                                        googlesql::Value::NullBytes()));
   EXPECT_NE(built_const, nullptr);
   EXPECT_TRUE(built_const->constisnull);
 
-  zetasql::Value gsql_value;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+  googlesql::Value gsql_value;
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(gsql_value,
                        pg_bytea_mapping->MakeGsqlValueFromStringConst(
                            "'\x01 this is a default value'"));
   EXPECT_EQ(gsql_value.bytes_value(), "\x01 this is a default value");
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(gsql_value,
                        pg_bytea_mapping->MakeGsqlValueFromStringConst(
                            "'\x01'"));
   EXPECT_EQ(gsql_value.bytes_value(), "\x01");
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(gsql_value,
                        pg_bytea_mapping->MakeGsqlValueFromStringConst("null"));
   EXPECT_TRUE(gsql_value.is_null());
 
@@ -388,30 +388,30 @@ TEST_F(TypeTest, PgTimestamptzMapping) {
   const PostgresTypeMapping* pg_timestamp_mapping =
       types::PgTimestamptzMapping();
   EXPECT_TRUE(pg_timestamp_mapping->mapped_type()->IsTimestamp());
-  EXPECT_EQ(pg_timestamp_mapping->TypeName(zetasql::PRODUCT_EXTERNAL),
+  EXPECT_EQ(pg_timestamp_mapping->TypeName(googlesql::PRODUCT_EXTERNAL),
             "pg.timestamptz");
   EXPECT_EQ(pg_timestamp_mapping->PostgresTypeOid(), TIMESTAMPTZOID);
   EXPECT_TRUE(
-      pg_timestamp_mapping->IsSupportedType(zetasql::LanguageOptions()));
+      pg_timestamp_mapping->IsSupportedType(googlesql::LanguageOptions()));
   EXPECT_TRUE(pg_timestamp_mapping->Equals(types::PgTimestamptzMapping()));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       Const * pg_const,
       postgres_translator::internal::makeScalarConst(
           TIMESTAMPTZOID, TimestampTzGetDatum(1640030937311000),
           /*constisnull=*/false));
   EXPECT_THAT(pg_timestamp_mapping->MakeGsqlValue(pg_const),
-              IsOkAndHolds(zetasql::Value::Timestamp(absl::TimeFromTimeval(
+              IsOkAndHolds(googlesql::Value::Timestamp(absl::TimeFromTimeval(
                   {.tv_sec = 2586715737, .tv_usec = 311000}))));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(pg_const, postgres_translator::internal::makeScalarConst(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(pg_const, postgres_translator::internal::makeScalarConst(
                                      TIMESTAMPTZOID, TimestampTzGetDatum(0),
                                      /*constisnull=*/true));
   EXPECT_THAT(pg_timestamp_mapping->MakeGsqlValue(pg_const),
-              IsOkAndHolds(zetasql::Value::NullTimestamp()));
+              IsOkAndHolds(googlesql::Value::NullTimestamp()));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       Const * built_const,
       pg_timestamp_mapping->MakePgConst(
-          zetasql::Value::Timestamp(absl::FromUnixSeconds(1643392995))));
+          googlesql::Value::Timestamp(absl::FromUnixSeconds(1643392995))));
   EXPECT_NE(built_const, nullptr);
   EXPECT_FALSE(built_const->constisnull);
   // constvalue is a TimestampTz Datum, hence need to be converted to unix
@@ -424,8 +424,8 @@ TEST_F(TypeTest, PgTimestamptzMapping) {
 
   EXPECT_THAT(absl::ToUnixSeconds(absl::TimeFromTimeval(tv)), 1643392995);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(built_const, pg_timestamp_mapping->MakePgConst(
-                                        zetasql::Value::NullTimestamp()));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(built_const, pg_timestamp_mapping->MakePgConst(
+                                        googlesql::Value::NullTimestamp()));
   EXPECT_NE(built_const, nullptr);
   EXPECT_TRUE(built_const->constisnull);
 
@@ -437,21 +437,21 @@ TEST_F(TypeTest, PgTimestamptzMapping) {
 TEST_F(TypeTest, PgDateMapping) {
   const PostgresTypeMapping* pg_date_mapping = types::PgDateMapping();
   EXPECT_TRUE(pg_date_mapping->mapped_type()->IsDate());
-  EXPECT_EQ(pg_date_mapping->TypeName(zetasql::PRODUCT_EXTERNAL), "pg.date");
+  EXPECT_EQ(pg_date_mapping->TypeName(googlesql::PRODUCT_EXTERNAL), "pg.date");
   EXPECT_EQ(pg_date_mapping->PostgresTypeOid(), DATEOID);
-  EXPECT_TRUE(pg_date_mapping->IsSupportedType(zetasql::LanguageOptions()));
+  EXPECT_TRUE(pg_date_mapping->IsSupportedType(googlesql::LanguageOptions()));
   EXPECT_TRUE(pg_date_mapping->Equals(types::PgDateMapping()));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Const * pg_const,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Const * pg_const,
                        postgres_translator::internal::makeScalarConst(
                            DATEOID, DateADTGetDatum(10000),
                            /*constisnull=*/false));
   EXPECT_THAT(pg_date_mapping->MakeGsqlValue(pg_const),
-              IsOkAndHolds(zetasql::Value::Date(20957)));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(pg_const, postgres_translator::internal::makeScalarConst(
+              IsOkAndHolds(googlesql::Value::Date(20957)));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(pg_const, postgres_translator::internal::makeScalarConst(
                                      DATEOID, DateADTGetDatum(0),
                                      /*constisnull=*/true));
   EXPECT_THAT(pg_date_mapping->MakeGsqlValue(pg_const),
-              IsOkAndHolds(zetasql::Value::NullDate()));
+              IsOkAndHolds(googlesql::Value::NullDate()));
 
   EXPECT_THAT(pg_date_mapping->MakeGsqlValueFromStringConst("'1970-01-01'"),
               StatusIs(absl::StatusCode::kUnimplemented));
@@ -460,11 +460,11 @@ TEST_F(TypeTest, PgDateMapping) {
 TEST_F(TypeTest, PgIntervalMapping) {
   const PostgresTypeMapping* pg_interval_mapping = types::PgIntervalMapping();
   EXPECT_TRUE(pg_interval_mapping->mapped_type()->IsInterval());
-  EXPECT_EQ(pg_interval_mapping->TypeName(zetasql::PRODUCT_EXTERNAL),
+  EXPECT_EQ(pg_interval_mapping->TypeName(googlesql::PRODUCT_EXTERNAL),
             "pg.interval");
   EXPECT_EQ(pg_interval_mapping->PostgresTypeOid(), INTERVALOID);
   EXPECT_TRUE(
-      pg_interval_mapping->IsSupportedType(zetasql::LanguageOptions()));
+      pg_interval_mapping->IsSupportedType(googlesql::LanguageOptions()));
   EXPECT_TRUE(pg_interval_mapping->Equals(types::PgIntervalMapping()));
 
   Interval interval;
@@ -473,7 +473,7 @@ TEST_F(TypeTest, PgIntervalMapping) {
   interval.day = -50;
   interval.time = 5057089;
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Const * pg_const,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Const * pg_const,
                        CheckedPgMakeConst(
                            /*consttype=*/INTERVALOID,
                            /*consttypmod=*/-1,
@@ -484,9 +484,9 @@ TEST_F(TypeTest, PgIntervalMapping) {
                            /*constbyval=*/false));
   EXPECT_THAT(
       pg_interval_mapping->MakeGsqlValue(pg_const),
-      IsOkAndHolds(zetasql::Value::Interval(
-          *zetasql::IntervalValue::FromMonthsDaysMicros(10, -50, 5057089))));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(pg_const, CheckedPgMakeConst(
+      IsOkAndHolds(googlesql::Value::Interval(
+          *googlesql::IntervalValue::FromMonthsDaysMicros(10, -50, 5057089))));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(pg_const, CheckedPgMakeConst(
                                      /*consttype=*/INTERVALOID,
                                      /*consttypmod=*/-1,
                                      /*constcollid=*/InvalidOid,
@@ -495,7 +495,7 @@ TEST_F(TypeTest, PgIntervalMapping) {
                                      /*constisnull=*/true,
                                      /*constbyval=*/false));
   EXPECT_THAT(pg_interval_mapping->MakeGsqlValue(pg_const),
-              IsOkAndHolds(zetasql::Value::NullInterval()));
+              IsOkAndHolds(googlesql::Value::NullInterval()));
 
   EXPECT_THAT(pg_interval_mapping->MakeGsqlValueFromStringConst("'3d'"),
               StatusIs(absl::StatusCode::kUnimplemented));
@@ -504,16 +504,16 @@ TEST_F(TypeTest, PgIntervalMapping) {
 TEST_F(TypeTest, PgUuidMappingNullConversions) {
   const PostgresTypeMapping* pg_uuid_mapping = types::PgUuidMapping();
   EXPECT_TRUE(pg_uuid_mapping->mapped_type()->IsUuid());
-  EXPECT_THAT(pg_uuid_mapping->TypeName(zetasql::PRODUCT_EXTERNAL),
+  EXPECT_THAT(pg_uuid_mapping->TypeName(googlesql::PRODUCT_EXTERNAL),
               "pg.uuid");
   EXPECT_THAT(pg_uuid_mapping->PostgresTypeOid(), UUIDOID);
-  EXPECT_TRUE(pg_uuid_mapping->IsSupportedType(zetasql::LanguageOptions()));
+  EXPECT_TRUE(pg_uuid_mapping->IsSupportedType(googlesql::LanguageOptions()));
   EXPECT_TRUE(pg_uuid_mapping->Equals(types::PgUuidMapping()));
 
   // Test conversions for null uuid
   // TestMakeGsqlValue
   pg_uuid_t pg_uuid_null;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Const * pg_const_null,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Const * pg_const_null,
                        CheckedPgMakeConst(
                            /*consttype=*/UUIDOID,
                            /*consttypmod=*/-1,
@@ -522,16 +522,16 @@ TEST_F(TypeTest, PgUuidMappingNullConversions) {
                            /*constvalue=*/UUIDPGetDatum(&pg_uuid_null),
                            /*constisnull=*/true,
                            /*constbyval=*/false));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::Value gsql_value_null,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(googlesql::Value gsql_value_null,
                        pg_uuid_mapping->MakeGsqlValue(pg_const_null));
   EXPECT_TRUE(gsql_value_null.is_null());
 
   // Test MakeGsqlValueFromStringConst
   EXPECT_THAT(pg_uuid_mapping->MakeGsqlValueFromStringConst("null"),
-              IsOkAndHolds(zetasql::Value::NullUuid()));
+              IsOkAndHolds(googlesql::Value::NullUuid()));
 
   // Test MakePgConst
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Const * pg_const_null2,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Const * pg_const_null2,
                        pg_uuid_mapping->MakePgConst(gsql_value_null));
   EXPECT_TRUE(pg_const_null2->constisnull);
 }
@@ -545,19 +545,19 @@ TEST_P(UuidTypeTestParameterized, PgUuidMappingNonNullConversions) {
   const absl::string_view uuid_string = GetParam();
 
   // Test MakeGsqlValue
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Const * pg_const, UuidStringToPgConst(uuid_string));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::Value gsql_value,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Const * pg_const, UuidStringToPgConst(uuid_string));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(googlesql::Value gsql_value,
                        pg_uuid_mapping->MakeGsqlValue(pg_const));
   EXPECT_EQ(gsql_value.uuid_value()->ToString(), uuid_string);
 
   // Test MakeGsqlValueFromStringConst
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      zetasql::Value gsql_value2,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      googlesql::Value gsql_value2,
       pg_uuid_mapping->MakeGsqlValueFromStringConst(uuid_string));
   EXPECT_EQ(gsql_value2.uuid_value()->ToString(), uuid_string);
 
   // Test MakePgConst
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Const * pg_const2,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Const * pg_const2,
                        pg_uuid_mapping->MakePgConst(gsql_value));
   EXPECT_NE(pg_const2, nullptr);
   EXPECT_FALSE(pg_const2->constisnull);
@@ -584,21 +584,21 @@ TEST_F(TypeTest, PgUuidArrayMapping) {
                   ->AsArray()
                   ->element_type()
                   ->IsUuid());
-  EXPECT_EQ(pg_uuid_array_mapping->TypeName(zetasql::PRODUCT_EXTERNAL),
+  EXPECT_EQ(pg_uuid_array_mapping->TypeName(googlesql::PRODUCT_EXTERNAL),
             "pg._uuid");
   EXPECT_EQ(pg_uuid_array_mapping->PostgresTypeOid(), UUIDARRAYOID);
   EXPECT_TRUE(
-      pg_uuid_array_mapping->IsSupportedType(zetasql::LanguageOptions()));
+      pg_uuid_array_mapping->IsSupportedType(googlesql::LanguageOptions()));
   EXPECT_TRUE(pg_uuid_array_mapping->Equals(types::PgUuidArrayMapping()));
 
   absl::string_view uuid_string1 = "9a31411b-caca-4ff1-86e9-39fbd2bc3f39";
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Const * pg_const1, UuidStringToPgConst(uuid_string1));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Const * pg_const1, UuidStringToPgConst(uuid_string1));
 
   absl::string_view uuid_string2 = "1111111c-caca-4ff1-86e9-39fbd2bc3f39";
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Const * pg_const2, UuidStringToPgConst(uuid_string2));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Const * pg_const2, UuidStringToPgConst(uuid_string2));
 
   // Test MakeGsqlValue for null array
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const Const* pg_null_arr_const,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const Const* pg_null_arr_const,
                        CheckedPgMakeConst(
                            /*consttype=*/UUIDARRAYOID,
                            /*consttypmod=*/-1,
@@ -608,13 +608,13 @@ TEST_F(TypeTest, PgUuidArrayMapping) {
                            /*constisnull=*/true,
                            /*constbyval=*/false));
   EXPECT_THAT(pg_uuid_array_mapping->MakeGsqlValue(pg_null_arr_const),
-              IsOkAndHolds(zetasql::Value::Null(
+              IsOkAndHolds(googlesql::Value::Null(
                   pg_uuid_array_mapping->mapped_type()->AsArray())));
 
   // Test MakeGsqlValue for empty array
   std::vector<Datum> empty_array_elements;
   Datum empty_array_val = MakePgArray(UUIDOID, std::move(empty_array_elements));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const Const* pg_empty_arr_const,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const Const* pg_empty_arr_const,
                        CheckedPgMakeConst(
                            /*consttype=*/UUIDARRAYOID,
                            /*consttypmod=*/-1,
@@ -625,7 +625,7 @@ TEST_F(TypeTest, PgUuidArrayMapping) {
                            /*constbyval=*/false));
   EXPECT_THAT(
       pg_uuid_array_mapping->MakeGsqlValue(pg_empty_arr_const),
-      IsOkAndHolds(zetasql::Value::MakeArray(
+      IsOkAndHolds(googlesql::Value::MakeArray(
                        pg_uuid_array_mapping->mapped_type()->AsArray(), {})
                        .value()));
 
@@ -639,7 +639,7 @@ TEST_F(TypeTest, PgUuidArrayMapping) {
   std::vector<Datum> array_elements{pg_const1->constvalue,
                                     pg_const2->constvalue};
   Datum array_val = MakePgArray(UUIDOID, std::move(array_elements));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const Const* pg_arr_const,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const Const* pg_arr_const,
                        CheckedPgMakeConst(
                            /*consttype=*/UUIDARRAYOID,
                            /*consttypmod=*/-1,
@@ -649,13 +649,13 @@ TEST_F(TypeTest, PgUuidArrayMapping) {
                            /*constisnull=*/false,
                            /*constbyval=*/false));  // Pass-by-reference
 
-  zetasql::Value gsql_array_value =
-      zetasql::Value::MakeArray(
+  googlesql::Value gsql_array_value =
+      googlesql::Value::MakeArray(
           pg_uuid_array_mapping->mapped_type()->AsArray(),
-          {zetasql::Value::Uuid(
-               *zetasql::UuidValue::FromString(uuid_string1)),
-           zetasql::Value::Uuid(
-               *zetasql::UuidValue::FromString(uuid_string2))})
+          {googlesql::Value::Uuid(
+               *googlesql::UuidValue::FromString(uuid_string1)),
+           googlesql::Value::Uuid(
+               *googlesql::UuidValue::FromString(uuid_string2))})
           .value();
   EXPECT_THAT(pg_uuid_array_mapping->MakeGsqlValue(pg_arr_const),
               IsOkAndHolds(gsql_array_value));
@@ -664,17 +664,17 @@ TEST_F(TypeTest, PgUuidArrayMapping) {
   EXPECT_THAT(
       pg_uuid_array_mapping->MakeGsqlValueFromStringConst(
           "'{9a31411b-caca-4ff1-86e9-39fbd2bc3f39,null}'"),
-      IsOkAndHolds(zetasql::Value::MakeArray(
+      IsOkAndHolds(googlesql::Value::MakeArray(
                        pg_uuid_array_mapping->mapped_type()->AsArray(),
-                       {zetasql::Value::Uuid(
-                            *zetasql::UuidValue::FromString(uuid_string1)),
-                        zetasql::Value::NullUuid()})
+                       {googlesql::Value::Uuid(
+                            *googlesql::UuidValue::FromString(uuid_string1)),
+                        googlesql::Value::NullUuid()})
                        .value()));
 
-  // Test roundtrip conversions (ZetaSQL::Value -> PGConst ->
-  // ZetaSQL::Value)
+  // Test roundtrip conversions (GoogleSQL::Value -> PGConst ->
+  // GoogleSQL::Value)
   // TODO : Compare pg_const individual array elements as well.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const Const* pg_const,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const Const* pg_const,
                        pg_uuid_array_mapping->MakePgConst(gsql_array_value));
   EXPECT_NE(pg_const, nullptr);
   EXPECT_FALSE(pg_const->constisnull);
@@ -692,27 +692,27 @@ TEST_F(TypeTest, PgBoolArrayMapping) {
                   ->AsArray()
                   ->element_type()
                   ->IsBool());
-  EXPECT_EQ(pg_bool_array_mapping->TypeName(zetasql::PRODUCT_EXTERNAL),
+  EXPECT_EQ(pg_bool_array_mapping->TypeName(googlesql::PRODUCT_EXTERNAL),
             "pg._bool");
   EXPECT_EQ(pg_bool_array_mapping->PostgresTypeOid(), BOOLARRAYOID);
   EXPECT_TRUE(
-      pg_bool_array_mapping->IsSupportedType(zetasql::LanguageOptions()));
+      pg_bool_array_mapping->IsSupportedType(googlesql::LanguageOptions()));
   EXPECT_TRUE(pg_bool_array_mapping->Equals(types::PgBoolArrayMapping()));
 
-  zetasql::Value gsql_value;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+  googlesql::Value gsql_value;
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(gsql_value,
                        pg_bool_array_mapping->MakeGsqlValueFromStringConst(
                            "'{true,false}'"));
   EXPECT_EQ(gsql_value.elements().size(), 2);
   EXPECT_EQ(gsql_value.elements()[0].bool_value(), true);
   EXPECT_EQ(gsql_value.elements()[1].bool_value(), false);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(gsql_value,
                        pg_bool_array_mapping->MakeGsqlValueFromStringConst(
                            "'{}'"));
   EXPECT_EQ(gsql_value.elements().size(), 0);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(gsql_value,
                        pg_bool_array_mapping->MakeGsqlValueFromStringConst(
                            "null"));
   EXPECT_TRUE(gsql_value.is_null());
@@ -726,15 +726,15 @@ TEST_F(TypeTest, PgInt8ArrayMapping) {
                   ->AsArray()
                   ->element_type()
                   ->IsInt64());
-  EXPECT_EQ(pg_int8_array_mapping->TypeName(zetasql::PRODUCT_EXTERNAL),
+  EXPECT_EQ(pg_int8_array_mapping->TypeName(googlesql::PRODUCT_EXTERNAL),
             "pg._int8");
   EXPECT_EQ(pg_int8_array_mapping->PostgresTypeOid(), INT8ARRAYOID);
   EXPECT_TRUE(
-      pg_int8_array_mapping->IsSupportedType(zetasql::LanguageOptions()));
+      pg_int8_array_mapping->IsSupportedType(googlesql::LanguageOptions()));
   EXPECT_TRUE(pg_int8_array_mapping->Equals(types::PgInt8ArrayMapping()));
 
-  zetasql::Value gsql_value;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+  googlesql::Value gsql_value;
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(gsql_value,
                        pg_int8_array_mapping->MakeGsqlValueFromStringConst(
                            "'{1,2,3}'"));
   EXPECT_EQ(gsql_value.elements().size(), 3);
@@ -742,12 +742,12 @@ TEST_F(TypeTest, PgInt8ArrayMapping) {
   EXPECT_EQ(gsql_value.elements()[1].int64_value(), 2);
   EXPECT_EQ(gsql_value.elements()[2].int64_value(), 3);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(gsql_value,
                        pg_int8_array_mapping->MakeGsqlValueFromStringConst(
                            "'{}'"));
   EXPECT_EQ(gsql_value.elements().size(), 0);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(gsql_value,
                        pg_int8_array_mapping->MakeGsqlValueFromStringConst(
                            "null"));
   EXPECT_TRUE(gsql_value.is_null());
@@ -761,15 +761,15 @@ TEST_F(TypeTest, PgFloat8ArrayMapping) {
                   ->AsArray()
                   ->element_type()
                   ->IsDouble());
-  EXPECT_EQ(pg_float8_array_mapping->TypeName(zetasql::PRODUCT_EXTERNAL),
+  EXPECT_EQ(pg_float8_array_mapping->TypeName(googlesql::PRODUCT_EXTERNAL),
             "pg._float8");
   EXPECT_EQ(pg_float8_array_mapping->PostgresTypeOid(), FLOAT8ARRAYOID);
   EXPECT_TRUE(
-      pg_float8_array_mapping->IsSupportedType(zetasql::LanguageOptions()));
+      pg_float8_array_mapping->IsSupportedType(googlesql::LanguageOptions()));
   EXPECT_TRUE(pg_float8_array_mapping->Equals(types::PgFloat8ArrayMapping()));
 
-  zetasql::Value gsql_value;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+  googlesql::Value gsql_value;
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(gsql_value,
                        pg_float8_array_mapping->MakeGsqlValueFromStringConst(
                            "'{1.23,4.56,7.89}'"));
   EXPECT_EQ(gsql_value.elements().size(), 3);
@@ -777,12 +777,12 @@ TEST_F(TypeTest, PgFloat8ArrayMapping) {
   EXPECT_EQ(gsql_value.elements()[1].double_value(), 4.56);
   EXPECT_EQ(gsql_value.elements()[2].double_value(), 7.89);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(gsql_value,
                        pg_float8_array_mapping->MakeGsqlValueFromStringConst(
                            "'{}'"));
   EXPECT_EQ(gsql_value.elements().size(), 0);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(gsql_value,
                        pg_float8_array_mapping->MakeGsqlValueFromStringConst(
                            "null"));
   EXPECT_TRUE(gsql_value.is_null());
@@ -796,15 +796,15 @@ TEST_F(TypeTest, PgVarcharArrayMapping) {
                   ->AsArray()
                   ->element_type()
                   ->IsString());
-  EXPECT_EQ(pg_varchar_array_mapping->TypeName(zetasql::PRODUCT_EXTERNAL),
+  EXPECT_EQ(pg_varchar_array_mapping->TypeName(googlesql::PRODUCT_EXTERNAL),
             "pg._varchar");
   EXPECT_EQ(pg_varchar_array_mapping->PostgresTypeOid(), VARCHARARRAYOID);
   EXPECT_TRUE(
-      pg_varchar_array_mapping->IsSupportedType(zetasql::LanguageOptions()));
+      pg_varchar_array_mapping->IsSupportedType(googlesql::LanguageOptions()));
   EXPECT_TRUE(pg_varchar_array_mapping->Equals(types::PgVarcharArrayMapping()));
 
-  zetasql::Value gsql_value;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+  googlesql::Value gsql_value;
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(gsql_value,
                        pg_varchar_array_mapping->MakeGsqlValueFromStringConst(
                            "'{this,is,a,default,value}'"));
   EXPECT_EQ(gsql_value.elements().size(), 5);
@@ -814,12 +814,12 @@ TEST_F(TypeTest, PgVarcharArrayMapping) {
   EXPECT_EQ(gsql_value.elements()[3].string_value(), "default");
   EXPECT_EQ(gsql_value.elements()[4].string_value(), "value");
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(gsql_value,
                        pg_varchar_array_mapping->MakeGsqlValueFromStringConst(
                            "'{}'"));
   EXPECT_EQ(gsql_value.elements().size(), 0);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(gsql_value,
                        pg_varchar_array_mapping->MakeGsqlValueFromStringConst(
                            "null"));
   EXPECT_TRUE(gsql_value.is_null());
@@ -833,15 +833,15 @@ TEST_F(TypeTest, PgTextArrayMapping) {
                   ->AsArray()
                   ->element_type()
                   ->IsString());
-  EXPECT_EQ(pg_text_array_mapping->TypeName(zetasql::PRODUCT_EXTERNAL),
+  EXPECT_EQ(pg_text_array_mapping->TypeName(googlesql::PRODUCT_EXTERNAL),
             "pg._text");
   EXPECT_EQ(pg_text_array_mapping->PostgresTypeOid(), TEXTARRAYOID);
   EXPECT_TRUE(
-      pg_text_array_mapping->IsSupportedType(zetasql::LanguageOptions()));
+      pg_text_array_mapping->IsSupportedType(googlesql::LanguageOptions()));
   EXPECT_TRUE(pg_text_array_mapping->Equals(types::PgTextArrayMapping()));
 
-  zetasql::Value gsql_value;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+  googlesql::Value gsql_value;
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(gsql_value,
                        pg_text_array_mapping->MakeGsqlValueFromStringConst(
                            "'{this,is,a,default,value}'"));
   EXPECT_EQ(gsql_value.elements().size(), 5);
@@ -851,12 +851,12 @@ TEST_F(TypeTest, PgTextArrayMapping) {
   EXPECT_EQ(gsql_value.elements()[3].string_value(), "default");
   EXPECT_EQ(gsql_value.elements()[4].string_value(), "value");
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(gsql_value,
                        pg_text_array_mapping->MakeGsqlValueFromStringConst(
                            "'{}'"));
   EXPECT_EQ(gsql_value.elements().size(), 0);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(gsql_value,
                        pg_text_array_mapping->MakeGsqlValueFromStringConst(
                            "null"));
 }
@@ -869,15 +869,15 @@ TEST_F(TypeTest, PgByteaArrayMapping) {
                   ->AsArray()
                   ->element_type()
                   ->IsBytes());
-  EXPECT_EQ(pg_bytea_array_mapping->TypeName(zetasql::PRODUCT_EXTERNAL),
+  EXPECT_EQ(pg_bytea_array_mapping->TypeName(googlesql::PRODUCT_EXTERNAL),
             "pg._bytea");
   EXPECT_EQ(pg_bytea_array_mapping->PostgresTypeOid(), BYTEAARRAYOID);
   EXPECT_TRUE(
-      pg_bytea_array_mapping->IsSupportedType(zetasql::LanguageOptions()));
+      pg_bytea_array_mapping->IsSupportedType(googlesql::LanguageOptions()));
   EXPECT_TRUE(pg_bytea_array_mapping->Equals(types::PgByteaArrayMapping()));
 
-  zetasql::Value gsql_value;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+  googlesql::Value gsql_value;
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(gsql_value,
                        pg_bytea_array_mapping->MakeGsqlValueFromStringConst(
                            "'{this,is,a,default,value}'"));
   EXPECT_EQ(gsql_value.elements().size(), 5);
@@ -887,12 +887,12 @@ TEST_F(TypeTest, PgByteaArrayMapping) {
   EXPECT_EQ(gsql_value.elements()[3].bytes_value(), "default");
   EXPECT_EQ(gsql_value.elements()[4].bytes_value(), "value");
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(gsql_value,
                        pg_bytea_array_mapping->MakeGsqlValueFromStringConst(
                            "'{}'"));
   EXPECT_EQ(gsql_value.elements().size(), 0);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(gsql_value,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(gsql_value,
                        pg_bytea_array_mapping->MakeGsqlValueFromStringConst(
                            "null"));
 }
@@ -905,12 +905,12 @@ TEST_F(TypeTest, PgTimestamptzArrayMapping) {
                   ->AsArray()
                   ->element_type()
                   ->IsTimestamp());
-  EXPECT_EQ(pg_timestamptz_array_mapping->TypeName(zetasql::PRODUCT_EXTERNAL),
+  EXPECT_EQ(pg_timestamptz_array_mapping->TypeName(googlesql::PRODUCT_EXTERNAL),
             "pg._timestamptz");
   EXPECT_EQ(pg_timestamptz_array_mapping->PostgresTypeOid(),
             TIMESTAMPTZARRAYOID);
   EXPECT_TRUE(pg_timestamptz_array_mapping->IsSupportedType(
-      zetasql::LanguageOptions()));
+      googlesql::LanguageOptions()));
   EXPECT_TRUE(
       pg_timestamptz_array_mapping->Equals(types::PgTimestamptzArrayMapping()));
 
@@ -927,11 +927,11 @@ TEST_F(TypeTest, PgDateArrayMapping) {
                   ->AsArray()
                   ->element_type()
                   ->IsDate());
-  EXPECT_EQ(pg_date_array_mapping->TypeName(zetasql::PRODUCT_EXTERNAL),
+  EXPECT_EQ(pg_date_array_mapping->TypeName(googlesql::PRODUCT_EXTERNAL),
             "pg._date");
   EXPECT_EQ(pg_date_array_mapping->PostgresTypeOid(), DATEARRAYOID);
   EXPECT_TRUE(
-      pg_date_array_mapping->IsSupportedType(zetasql::LanguageOptions()));
+      pg_date_array_mapping->IsSupportedType(googlesql::LanguageOptions()));
   EXPECT_TRUE(pg_date_array_mapping->Equals(types::PgDateArrayMapping()));
 
   EXPECT_THAT(pg_date_array_mapping->MakeGsqlValueFromStringConst(
@@ -943,10 +943,10 @@ TEST_F(TypeTest, PgDateArrayMapping) {
 // logic comes from element type classes, so we'll just use INT8 and test the
 // array-generic logic.
 TEST_F(TypeTest, IntArrayConstantConversions) {
-  std::vector<Datum> array_elements{Int8GetDatum(1), Int8GetDatum(2),
-                                    Int8GetDatum(3)};
+  std::vector<Datum> array_elements{Int64GetDatum(1), Int64GetDatum(2),
+                                    Int64GetDatum(3)};
   Datum array_val = MakePgArray(INT8OID, std::move(array_elements));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const Const* pg_const,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const Const* pg_const,
                        CheckedPgMakeConst(
                            /*consttype=*/INT8ARRAYOID,
                            /*consttypmod=*/-1,
@@ -956,16 +956,16 @@ TEST_F(TypeTest, IntArrayConstantConversions) {
                            /*constisnull=*/false,
                            /*constbyval=*/false));
   Datum empty_array_val = MakePgArray(INT8OID, {});
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const Const* empty_pg_const,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const Const* empty_pg_const,
                        CheckedPgMakeConst(
                            /*consttype=*/INT8ARRAYOID,
                            /*consttypmod=*/-1,
                            /*constcollid=*/InvalidOid,
                            /*constlen=*/-1,  // Pass-by-reference
-                           /*constvalue=*/PointerGetDatum(empty_array_val),
+                           /*constvalue=*/empty_array_val,
                            /*constisnull=*/false,
                            /*constbyval=*/false));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const Const* null_pg_const,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const Const* null_pg_const,
                        CheckedPgMakeConst(
                            /*consttype=*/INT8ARRAYOID,
                            /*consttypmod=*/-1,
@@ -979,19 +979,19 @@ TEST_F(TypeTest, IntArrayConstantConversions) {
 
   EXPECT_THAT(
       pg_int8array_mapping->MakeGsqlValue(pg_const),
-      IsOkAndHolds(zetasql::Value::MakeArray(
+      IsOkAndHolds(googlesql::Value::MakeArray(
                        pg_int8array_mapping->mapped_type()->AsArray(),
-                       {zetasql::Value::Int64(1), zetasql::Value::Int64(2),
-                        zetasql::Value::Int64(3)})
+                       {googlesql::Value::Int64(1), googlesql::Value::Int64(2),
+                        googlesql::Value::Int64(3)})
                        .value()));
   EXPECT_THAT(
       pg_int8array_mapping->MakeGsqlValue(empty_pg_const),
-      IsOkAndHolds(zetasql::Value::MakeArray(
+      IsOkAndHolds(googlesql::Value::MakeArray(
                        pg_int8array_mapping->mapped_type()->AsArray(), {})
                        .value()));
   EXPECT_THAT(pg_int8array_mapping->MakeGsqlValue(null_pg_const),
               IsOkAndHolds(
-                  zetasql::Value::Null(pg_int8array_mapping->mapped_type())));
+                  googlesql::Value::Null(pg_int8array_mapping->mapped_type())));
 }
 
 // Test array constant conversions (GSQL Value -> PG Const). The per-element
@@ -1000,14 +1000,14 @@ TEST_F(TypeTest, IntArrayConstantConversions) {
 TEST_F(TypeTest, IntArrayValueConversions) {
   const PostgresTypeMapping* pg_int8array_mapping = types::PgInt8ArrayMapping();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      zetasql::Value int8_array_value,
-      zetasql::Value::MakeArray(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      googlesql::Value int8_array_value,
+      googlesql::Value::MakeArray(
           pg_int8array_mapping->mapped_type()->AsArray(),
-          {zetasql::Value::Int64(1), zetasql::Value::Int64(2),
-           zetasql::Value::NullInt64()}));
+          {googlesql::Value::Int64(1), googlesql::Value::Int64(2),
+           googlesql::Value::NullInt64()}));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const Const* int8_array_const,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const Const* int8_array_const,
                        pg_int8array_mapping->MakePgConst(int8_array_value));
 
   // Verify array properties.
@@ -1030,7 +1030,7 @@ TEST_F(TypeTest, IntArrayValueConversions) {
     EXPECT_EQ(isnull, int8_array_value.element(i).is_null())
         << "at index " << i;
     if (!int8_array_value.element(i).is_null()) {
-      EXPECT_EQ(DatumGetInt32(element),
+      EXPECT_EQ(DatumGetInt64(element),
                 int8_array_value.element(i).int64_value())
           << "at index " << i;
     }
@@ -1041,10 +1041,10 @@ TEST_F(TypeTest, IntArrayValueConversions) {
 TEST_F(TypeTest, IntArrayValueNullCase) {
   const PostgresTypeMapping* pg_int8array_mapping = types::PgInt8ArrayMapping();
 
-  zetasql::Value int8_array_null =
-      zetasql::Value::Null(pg_int8array_mapping->mapped_type());
+  googlesql::Value int8_array_null =
+      googlesql::Value::Null(pg_int8array_mapping->mapped_type());
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const Const* null_pg_const,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const Const* null_pg_const,
                        pg_int8array_mapping->MakePgConst(int8_array_null));
 
   EXPECT_EQ(null_pg_const->consttype, INT8ARRAYOID);
@@ -1059,13 +1059,13 @@ TEST_F(TypeTest, IntArrayValueNullCase) {
 TEST_F(TypeTest, IntArrayValueEmptyCase) {
   const PostgresTypeMapping* pg_int8array_mapping = types::PgInt8ArrayMapping();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::Value int8_array_empty,
-                       zetasql::Value::MakeArray(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(googlesql::Value int8_array_empty,
+                       googlesql::Value::MakeArray(
                            pg_int8array_mapping->mapped_type()->AsArray(), {}));
-  zetasql::Value int8_array_null =
-      zetasql::Value::Null(pg_int8array_mapping->mapped_type());
+  googlesql::Value int8_array_null =
+      googlesql::Value::Null(pg_int8array_mapping->mapped_type());
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const Const* empty_pg_const,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const Const* empty_pg_const,
                        pg_int8array_mapping->MakePgConst(int8_array_empty));
 
   EXPECT_EQ(empty_pg_const->consttype, INT8ARRAYOID);

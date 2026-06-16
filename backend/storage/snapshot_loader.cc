@@ -46,7 +46,7 @@
 #include "frontend/server/environment.h"
 #include "zetasql/public/type.h"
 #include "zetasql/public/value.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {

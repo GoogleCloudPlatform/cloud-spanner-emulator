@@ -20,7 +20,7 @@
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
@@ -39,7 +39,7 @@ namespace test {
 
 namespace {
 
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 class ColumnDefaultValueReadWriteTest
     : public DatabaseTest,
@@ -75,8 +75,8 @@ INSTANTIATE_TEST_SUITE_P(
            info) { return database_api::DatabaseDialect_Name(info.param); });
 
 TEST_P(ColumnDefaultValueReadWriteTest, TypeCoercion) {
-  ZETASQL_EXPECT_OK(Insert("type_coercion", {"k_i"}, {1}));
-  ZETASQL_EXPECT_OK(Insert("type_coercion", {"k_i", "d_n", "d_f"},
+  GOOGLESQL_EXPECT_OK(Insert("type_coercion", {"k_i"}, {1}));
+  GOOGLESQL_EXPECT_OK(Insert("type_coercion", {"k_i", "d_n", "d_f"},
                    {2, cloud::spanner::MakeNumeric("2").value(), 2.0}));
 
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
@@ -96,7 +96,7 @@ TEST_P(ColumnDefaultValueReadWriteTest, TypeCoercion) {
 
 TEST_P(ColumnDefaultValueReadWriteTest, InsertMutations) {
   // All default values
-  ZETASQL_ASSERT_OK(Insert("t", {"k"}, {1}));
+  GOOGLESQL_ASSERT_OK(Insert("t", {"k"}, {1}));
   EXPECT_THAT(ReadAll("t", {"k", "d1", "g1", "d2"}),
               IsOkAndHoldsRows({{1, 1, 2, 2}}));
 
@@ -111,23 +111,23 @@ TEST_P(ColumnDefaultValueReadWriteTest, InsertMutations) {
   }
 
   // DK has a user value:
-  ZETASQL_ASSERT_OK(Insert("t", {"k", "d2"}, {2, 3}));
+  GOOGLESQL_ASSERT_OK(Insert("t", {"k", "d2"}, {2, 3}));
   EXPECT_THAT(ReadAll("t", {"k", "d1", "g1", "d2"}),
               IsOkAndHoldsRows({{1, 1, 2, 2}, {2, 1, 2, 3}}));
 
   // d1 has a user value:
-  ZETASQL_ASSERT_OK(Insert("t", {"k", "d1", "d2"}, {3, 11, 4}));
+  GOOGLESQL_ASSERT_OK(Insert("t", {"k", "d1", "d2"}, {3, 11, 4}));
   EXPECT_THAT(ReadAll("t", {"k", "d1", "g1", "d2"}),
               IsOkAndHoldsRows({{1, 1, 2, 2}, {2, 1, 2, 3}, {3, 11, 12, 4}}));
 
   // d2 has a user value:
-  ZETASQL_ASSERT_OK(Insert("t", {"k", "d2"}, {4, 22}));
+  GOOGLESQL_ASSERT_OK(Insert("t", {"k", "d2"}, {4, 22}));
   EXPECT_THAT(ReadAll("t", {"k", "d1", "g1", "d2"}),
               IsOkAndHoldsRows(
                   {{1, 1, 2, 2}, {2, 1, 2, 3}, {3, 11, 12, 4}, {4, 1, 2, 22}}));
 
   // All default columns have user values:
-  ZETASQL_ASSERT_OK(Insert("t", {"k", "d1", "d2"}, {5, 2, 5}));
+  GOOGLESQL_ASSERT_OK(Insert("t", {"k", "d1", "d2"}, {5, 2, 5}));
   EXPECT_THAT(ReadAll("t", {"k", "d1", "g1", "d2"}),
               IsOkAndHoldsRows({{1, 1, 2, 2},
                                 {2, 1, 2, 3},
@@ -138,11 +138,11 @@ TEST_P(ColumnDefaultValueReadWriteTest, InsertMutations) {
 
 TEST_P(ColumnDefaultValueReadWriteTest, InserOrUpdateMutations) {
   // All default values
-  ZETASQL_ASSERT_OK(InsertOrUpdate("t", {"k"}, {1}));
+  GOOGLESQL_ASSERT_OK(InsertOrUpdate("t", {"k"}, {1}));
   EXPECT_THAT(ReadAll("t", {"k", "d1", "g1", "d2"}),
               IsOkAndHoldsRows({{1, 1, 2, 2}}));
 
-  ZETASQL_ASSERT_OK(InsertOrUpdate("t", {"k"}, {1}));
+  GOOGLESQL_ASSERT_OK(InsertOrUpdate("t", {"k"}, {1}));
   EXPECT_THAT(ReadAll("t", {"k", "d1", "g1", "d2"}),
               IsOkAndHoldsRows({{1, 1, 2, 2}}));
 
@@ -151,29 +151,29 @@ TEST_P(ColumnDefaultValueReadWriteTest, InserOrUpdateMutations) {
               StatusIs(absl::StatusCode::kAlreadyExists));
 
   // Insert a second row, d2 has a user value:
-  ZETASQL_ASSERT_OK(InsertOrUpdate("t", {"k", "d2"}, {2, 3}));
+  GOOGLESQL_ASSERT_OK(InsertOrUpdate("t", {"k", "d2"}, {2, 3}));
   EXPECT_THAT(ReadAll("t", {"k", "d1", "g1", "d2"}),
               IsOkAndHoldsRows({{1, 1, 2, 2}, {2, 1, 2, 3}}));
 
   // Update first row with user values for d2, d1 should remain the same,
   // which is 1, and g1 should be 2:
-  ZETASQL_ASSERT_OK(InsertOrUpdate("t", {"k", "d2"}, {1, 22}));
+  GOOGLESQL_ASSERT_OK(InsertOrUpdate("t", {"k", "d2"}, {1, 22}));
   EXPECT_THAT(ReadAll("t", {"k", "d1", "g1", "d2"}),
               IsOkAndHoldsRows({{1, 1, 2, 22}, {2, 1, 2, 3}}));
 
   // Update second row with user values for d1, d2 should remain the same,
   // which is 3:
-  ZETASQL_ASSERT_OK(InsertOrUpdate("t", {"k", "d1"}, {2, 11}));
+  GOOGLESQL_ASSERT_OK(InsertOrUpdate("t", {"k", "d1"}, {2, 11}));
   EXPECT_THAT(ReadAll("t", {"k", "d1", "g1", "d2"}),
               IsOkAndHoldsRows({{1, 1, 2, 22}, {2, 11, 12, 3}}));
 
   // Insert a third row, d2 has a user value:
-  ZETASQL_ASSERT_OK(InsertOrUpdate("t", {"k", "d2"}, {3, 33}));
+  GOOGLESQL_ASSERT_OK(InsertOrUpdate("t", {"k", "d2"}, {3, 33}));
   EXPECT_THAT(ReadAll("t", {"k", "d1", "g1", "d2"}),
               IsOkAndHoldsRows({{1, 1, 2, 22}, {2, 11, 12, 3}, {3, 1, 2, 33}}));
 
   // Insert a fourth row, all default columns have user values:
-  ZETASQL_ASSERT_OK(Insert("t", {"k", "d1", "d2"}, {4, 4, 4}));
+  GOOGLESQL_ASSERT_OK(Insert("t", {"k", "d1", "d2"}, {4, 4, 4}));
   EXPECT_THAT(
       ReadAll("t", {"k", "d1", "g1", "d2"}),
       IsOkAndHoldsRows(
@@ -182,7 +182,7 @@ TEST_P(ColumnDefaultValueReadWriteTest, InserOrUpdateMutations) {
 
 TEST_P(ColumnDefaultValueReadWriteTest, UpdateAndDeleteMutations) {
   // All default values
-  ZETASQL_ASSERT_OK(InsertOrUpdate("t", {"k"}, {1}));
+  GOOGLESQL_ASSERT_OK(InsertOrUpdate("t", {"k"}, {1}));
   EXPECT_THAT(ReadAll("t", {"k", "d1", "g1", "d2"}),
               IsOkAndHoldsRows({{1, 1, 2, 2}}));
 
@@ -191,7 +191,7 @@ TEST_P(ColumnDefaultValueReadWriteTest, UpdateAndDeleteMutations) {
               StatusIs(absl::StatusCode::kNotFound));
 
   // Insert a second row, d2 has a user value:
-  ZETASQL_ASSERT_OK(InsertOrUpdate("t", {"k", "d2"}, {2, 3}));
+  GOOGLESQL_ASSERT_OK(InsertOrUpdate("t", {"k", "d2"}, {2, 3}));
   EXPECT_THAT(ReadAll("t", {"k", "d1", "g1", "d2"}),
               IsOkAndHoldsRows({{1, 1, 2, 2}, {2, 1, 2, 3}}));
 
@@ -201,35 +201,35 @@ TEST_P(ColumnDefaultValueReadWriteTest, UpdateAndDeleteMutations) {
 
   // Update first row with user values for d2, d1 should remain the same,
   // which is 1, and g1 should be 2:
-  ZETASQL_ASSERT_OK(Update("t", {"k", "d2"}, {1, 22}));
+  GOOGLESQL_ASSERT_OK(Update("t", {"k", "d2"}, {1, 22}));
   EXPECT_THAT(ReadAll("t", {"k", "d1", "g1", "d2"}),
               IsOkAndHoldsRows({{1, 1, 2, 22}, {2, 1, 2, 3}}));
 
   // Update second row with user values for d1, d2 should remain the same,
   // which is 3:
-  ZETASQL_ASSERT_OK(Update("t", {"k", "d1"}, {2, 11}));
+  GOOGLESQL_ASSERT_OK(Update("t", {"k", "d1"}, {2, 11}));
   EXPECT_THAT(ReadAll("t", {"k", "d1", "g1", "d2"}),
               IsOkAndHoldsRows({{1, 1, 2, 22}, {2, 11, 12, 3}}));
 
   // Delete a row that doesn't exist is a no-op
-  ZETASQL_ASSERT_OK(Delete("t", {Key(3)}));
+  GOOGLESQL_ASSERT_OK(Delete("t", {Key(3)}));
   EXPECT_THAT(ReadAll("t", {"k", "d1", "g1", "d2"}),
               IsOkAndHoldsRows({{1, 1, 2, 22}, {2, 11, 12, 3}}));
 
   // Delete the 2nd row, the first row remains
-  ZETASQL_ASSERT_OK(Delete("t", {Key(2)}));
+  GOOGLESQL_ASSERT_OK(Delete("t", {Key(2)}));
   EXPECT_THAT(ReadAll("t", {"k", "d1", "g1", "d2"}),
               IsOkAndHoldsRows({{1, 1, 2, 22}}));
 }
 
 TEST_P(ColumnDefaultValueReadWriteTest, ReplaceMutations) {
   // All user values
-  ZETASQL_ASSERT_OK(InsertOrUpdate("t", {"k", "d1", "d2"}, {1, 11, 22}));
+  GOOGLESQL_ASSERT_OK(InsertOrUpdate("t", {"k", "d1", "d2"}, {1, 11, 22}));
   EXPECT_THAT(ReadAll("t", {"k", "d1", "g1", "d2"}),
               IsOkAndHoldsRows({{1, 11, 12, 22}}));
 
   // Insert a second row, d2 has a user value:
-  ZETASQL_ASSERT_OK(InsertOrUpdate("t", {"k", "d2"}, {2, 3}));
+  GOOGLESQL_ASSERT_OK(InsertOrUpdate("t", {"k", "d2"}, {2, 3}));
   EXPECT_THAT(ReadAll("t", {"k", "d1", "g1", "d2"}),
               IsOkAndHoldsRows({{1, 11, 12, 22}, {2, 1, 2, 3}}));
 
@@ -239,19 +239,19 @@ TEST_P(ColumnDefaultValueReadWriteTest, ReplaceMutations) {
 
   // Replace first row with user values for d2, d1 and g1 should
   // get computed:
-  ZETASQL_ASSERT_OK(Replace("t", {"k", "d2"}, {1, 22}));
+  GOOGLESQL_ASSERT_OK(Replace("t", {"k", "d2"}, {1, 22}));
   EXPECT_THAT(ReadAll("t", {"k", "d1", "g1", "d2"}),
               IsOkAndHoldsRows({{1, 1, 2, 22}, {2, 1, 2, 3}}));
 
   // Replace second row with user values for d1, g1 and d2 should
   // get computed:
-  ZETASQL_ASSERT_OK(Replace("t", {"k", "d1"}, {2, 111}));
+  GOOGLESQL_ASSERT_OK(Replace("t", {"k", "d1"}, {2, 111}));
   EXPECT_THAT(ReadAll("t", {"k", "d1", "g1", "d2"}),
               IsOkAndHoldsRows({{1, 1, 2, 22}, {2, 111, 112, 2}}));
 }
 
 TEST_P(ColumnDefaultValueReadWriteTest, MultipleMutationsPerRow) {
-  ZETASQL_ASSERT_OK(Commit({
+  GOOGLESQL_ASSERT_OK(Commit({
       MakeInsert("t", {"k", "d1", "d2"}, 1, 1, 1),
       MakeUpdate("t", {"k", "d1", "d2"}, 1, 1, 2),
       MakeUpdate("t", {"k", "d1", "d2"}, 1, 2, 2),
@@ -292,7 +292,7 @@ TEST_P(ColumnDefaultValueReadWriteTest, MultipleMutationsPerRow) {
   if (in_prod_env()) {
     // In production, users can temporary ignore giving a value to a NOT NULL
     // DEFAULT NULL column, as long as it's fixed later.
-    ZETASQL_ASSERT_OK(s);
+    GOOGLESQL_ASSERT_OK(s);
     EXPECT_THAT(ReadAll("t2", {"k", "d1", "d2"}),
                 IsOkAndHoldsRows({{1, 1, 2}}));
   } else {
@@ -310,31 +310,31 @@ TEST_P(ColumnDefaultValueReadWriteTest, MultipleMutationsPerRow) {
 }
 
 TEST_P(ColumnDefaultValueReadWriteTest, Index) {
-  ZETASQL_ASSERT_OK(Insert("t", {"k", "d1", "d2"}, {1, 1, 1}));
+  GOOGLESQL_ASSERT_OK(Insert("t", {"k", "d1", "d2"}, {1, 1, 1}));
   EXPECT_THAT(ReadAllWithIndex("t", "tbyd2", {"k", "d2"}),
               IsOkAndHoldsRows({{1, 1}}));
 
-  ZETASQL_ASSERT_OK(Update("t", {"k", "d1", "d2"}, {1, 2, 2}));
+  GOOGLESQL_ASSERT_OK(Update("t", {"k", "d1", "d2"}, {1, 2, 2}));
   EXPECT_THAT(ReadAllWithIndex("t", "tbyd2", {"k", "d2"}),
               IsOkAndHoldsRows({{1, 2}}));
 
-  ZETASQL_ASSERT_OK(InsertOrUpdate("t", {"k", "d1", "d2"}, {1, 3, 3}));
+  GOOGLESQL_ASSERT_OK(InsertOrUpdate("t", {"k", "d1", "d2"}, {1, 3, 3}));
   EXPECT_THAT(ReadAllWithIndex("t", "tbyd2", {"k", "d2"}),
               IsOkAndHoldsRows({{1, 3}}));
 
-  ZETASQL_ASSERT_OK(InsertOrUpdate("t", {"k", "d1", "d2"}, {2, 2, 2}));
+  GOOGLESQL_ASSERT_OK(InsertOrUpdate("t", {"k", "d1", "d2"}, {2, 2, 2}));
   EXPECT_THAT(ReadAllWithIndex("t", "tbyd2", {"k", "d2"}),
               IsOkAndHoldsRows({{2, 2}, {1, 3}}));
 
-  ZETASQL_ASSERT_OK(Replace("t", {"k", "d1", "d2"}, {1, 5, 5}));
+  GOOGLESQL_ASSERT_OK(Replace("t", {"k", "d1", "d2"}, {1, 5, 5}));
   EXPECT_THAT(ReadAllWithIndex("t", "tbyd2", {"k", "d2"}),
               IsOkAndHoldsRows({{2, 2}, {1, 5}}));
 
-  ZETASQL_ASSERT_OK(Replace("t", {"k", "d1", "d2"}, {2, 6, 6}));
+  GOOGLESQL_ASSERT_OK(Replace("t", {"k", "d1", "d2"}, {2, 6, 6}));
   EXPECT_THAT(ReadAllWithIndex("t", "tbyd2", {"k", "d2"}),
               IsOkAndHoldsRows({{1, 5}, {2, 6}}));
 
-  ZETASQL_ASSERT_OK(Delete("t", {Key(2)}));
+  GOOGLESQL_ASSERT_OK(Delete("t", {Key(2)}));
   EXPECT_THAT(ReadAllWithIndex("t", "tbyd2", {"k", "d2"}),
               IsOkAndHoldsRows({{1, 5}}));
 
@@ -353,34 +353,34 @@ TEST_P(ColumnDefaultValueReadWriteTest, ForeignKey) {
   EXPECT_THAT(Insert("FK", {"k"}, {3}),
               StatusIs(absl::StatusCode::kFailedPrecondition,
                        testing::HasSubstr("Foreign key")));
-  ZETASQL_ASSERT_OK(Insert("t", {"k", "d1", "d2"}, {1, 1, 3}));
-  ZETASQL_EXPECT_OK(Insert("FK", {"k"}, {3}));
+  GOOGLESQL_ASSERT_OK(Insert("t", {"k", "d1", "d2"}, {1, 1, 3}));
+  GOOGLESQL_EXPECT_OK(Insert("FK", {"k"}, {3}));
   EXPECT_THAT(Delete("t", {Key(1)}),
               StatusIs(absl::StatusCode::kFailedPrecondition,
                        testing::HasSubstr("Foreign key")));
 }
 
 TEST_P(ColumnDefaultValueReadWriteTest, DMLsUsingDefaultValues) {
-  ZETASQL_ASSERT_OK(CommitDml(
+  GOOGLESQL_ASSERT_OK(CommitDml(
       {SqlStatement("INSERT INTO t (k, d2) VALUES (1, 1000), (2, 2000)"),
        SqlStatement("UPDATE t SET d1 = 100 WHERE k = 2")}));
   EXPECT_THAT(Query("SELECT k, d1, g1, d2 FROM t ORDER BY k ASC"),
               IsOkAndHoldsRows({{1, 1, 2, 1000}, {2, 100, 101, 2000}}));
 
-  ZETASQL_ASSERT_OK(CommitDml({SqlStatement("UPDATE t SET d1 = DEFAULT WHERE k = 2")}));
+  GOOGLESQL_ASSERT_OK(CommitDml({SqlStatement("UPDATE t SET d1 = DEFAULT WHERE k = 2")}));
   EXPECT_THAT(Query("SELECT k, d1, g1, d2 FROM t ORDER BY k ASC"),
               IsOkAndHoldsRows({{1, 1, 2, 1000}, {2, 1, 2, 2000}}));
 }
 
 TEST_P(ColumnDefaultValueReadWriteTest, DMLsInsertWithDefaultKeyword) {
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       CommitDml({SqlStatement("INSERT INTO t (k, d1, d2) VALUES (3, 300, "
                               "DEFAULT), (4, DEFAULT, 400)")}));
   EXPECT_THAT(Query("SELECT k, d1, g1, d2 FROM t ORDER BY k ASC"),
               IsOkAndHoldsRows({{3, 300, 301, 2}, {4, 1, 2, 400}}));
 
   // Try delete:
-  ZETASQL_ASSERT_OK(CommitDml({SqlStatement("DELETE FROM t WHERE d1=1")}));
+  GOOGLESQL_ASSERT_OK(CommitDml({SqlStatement("DELETE FROM t WHERE d1=1")}));
   EXPECT_THAT(Query("SELECT k, d1, g1, d2 FROM t ORDER BY k ASC"),
               IsOkAndHoldsRows({{3, 300, 301, 2}}));
 }
@@ -390,7 +390,7 @@ TEST_P(ColumnDefaultValueReadWriteTest, InvalidUsesOfDefaultKeyword) {
       GetParam() == database_api::DatabaseDialect::POSTGRESQL
           ? "DEFAULT is not allowed in this context"
           : "Unexpected keyword DEFAULT";
-  ZETASQL_ASSERT_OK(CommitDml(
+  GOOGLESQL_ASSERT_OK(CommitDml(
       {SqlStatement("INSERT INTO t (k, d2) VALUES (1, 1000), (2, 2000)"),
        SqlStatement("UPDATE t SET d1 = 100 WHERE k = 2")}));
   EXPECT_THAT(Query("SELECT k, d1, g1, d2 FROM t ORDER BY k ASC"),
@@ -409,14 +409,14 @@ TEST_P(ColumnDefaultValueReadWriteTest, InvalidUsesOfDefaultKeyword) {
 }
 
 TEST_P(ColumnDefaultValueReadWriteTest, DMLsInsertWithUserInput) {
-  ZETASQL_ASSERT_OK(CommitDml({SqlStatement(
+  GOOGLESQL_ASSERT_OK(CommitDml({SqlStatement(
       "INSERT INTO t2 (k, d1, d2) VALUES (5, 5, 5), (6, 6, 6)")}));
   EXPECT_THAT(Query("SELECT k, d1, d2 FROM t2 ORDER BY k ASC"),
               IsOkAndHoldsRows({{5, 5, 5}, {6, 6, 6}}));
 
   // Insert .. select, d1 doesn't appear in the column list so it gets
   // its default value = 1,  g1 is computed from d1
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       CommitDml({SqlStatement("INSERT INTO t (k, d2) SELECT k,  d2 FROM t2")}));
   EXPECT_THAT(Query("SELECT k, d1, g1, d2 FROM t ORDER BY k ASC"),
               IsOkAndHoldsRows({{5, 1, 2, 5}, {6, 1, 2, 6}}));
@@ -427,42 +427,103 @@ TEST_P(ColumnDefaultValueReadWriteTest, DefaultValueWithUDF) {
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     return;
   }
-  ZETASQL_ASSERT_OK(Insert("udf_table", {"string_col"}, {"abc"}));
-  ZETASQL_ASSERT_OK(InsertOrUpdate("udf_table", {"string_col"}, {"def"}));
+  GOOGLESQL_ASSERT_OK(Insert("udf_table", {"string_col"}, {"abc"}));
+  GOOGLESQL_ASSERT_OK(InsertOrUpdate("udf_table", {"string_col"}, {"def"}));
   EXPECT_THAT(ReadAll("udf_table", {"int64_col", "string_col"}),
               IsOkAndHoldsRows({{42, "abc"}, {42, "def"}}));
 
-  ZETASQL_ASSERT_OK(CommitDml(
+  GOOGLESQL_ASSERT_OK(CommitDml(
       {SqlStatement("INSERT INTO udf_table (string_col) VALUES ('ghi')")}));
-  ZETASQL_ASSERT_OK(CommitDml({SqlStatement(
+  GOOGLESQL_ASSERT_OK(CommitDml({SqlStatement(
       "INSERT OR UPDATE INTO udf_table (string_col) VALUES ('jkl')")}));
   EXPECT_THAT(
       ReadAll("udf_table", {"int64_col", "string_col"}),
       IsOkAndHoldsRows({{42, "abc"}, {42, "def"}, {42, "ghi"}, {42, "jkl"}}));
 }
 
+TEST_P(ColumnDefaultValueReadWriteTest, InsertReturningWithCurrentTimestamp) {
+  std::string returning =
+      GetParam() == database_api::DatabaseDialect::POSTGRESQL ? "RETURNING"
+                                                              : "THEN RETURN";
+  std::vector<ValueRow> result;
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      auto _,
+      CommitDmlReturning(
+          {SqlStatement(absl::Substitute(
+              "INSERT INTO timestamp_table (id) VALUES (1) $0 created_at",
+              returning))},
+          result));
+  ASSERT_EQ(result.size(), 1);
+
+  // Get the timestamp from RETURNING clause
+  auto returning_timestamp = result[0].values()[0];
+
+  // SELECT the same row to get the stored timestamp
+  auto select_result =
+      Query("SELECT created_at FROM timestamp_table WHERE id = 1");
+  GOOGLESQL_ASSERT_OK(select_result);
+  ASSERT_EQ(select_result->size(), 1);
+
+  // Get the timestamp from SELECT
+  auto stored_timestamp = (*select_result)[0].values()[0];
+
+  // They should be identical - no time difference between RETURNING and storage
+  EXPECT_EQ(returning_timestamp, stored_timestamp);
+}
+
+TEST_P(ColumnDefaultValueReadWriteTest,
+       InsertOrUpdateReturningWithCurrentTimestamp) {
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    return;
+  }
+  std::vector<ValueRow> result;
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      auto _,
+      CommitDmlReturning(
+          {SqlStatement(
+              "INSERT OR UPDATE INTO timestamp_table (id) VALUES (1) THEN "
+              "RETURN created_at")},
+          result));
+  ASSERT_EQ(result.size(), 1);
+
+  // Get the timestamp from RETURNING clause
+  auto returning_timestamp = result[0].values()[0];
+
+  // SELECT the same row to get the stored timestamp
+  auto select_result =
+      Query("SELECT created_at FROM timestamp_table WHERE id = 1");
+  GOOGLESQL_ASSERT_OK(select_result);
+  ASSERT_EQ(select_result->size(), 1);
+
+  // Get the timestamp from SELECT
+  auto stored_timestamp = (*select_result)[0].values()[0];
+
+  // They should be identical - no time difference between RETURNING and storage
+  EXPECT_EQ(returning_timestamp, stored_timestamp);
+}
+
 TEST_P(ColumnDefaultValueReadWriteTest, MutationPCT) {
   // Insert two rows. One with a user provided value for ts_default and one
   // that depends on the DEFAULT value.
-  ZETASQL_EXPECT_OK(Insert(
+  GOOGLESQL_EXPECT_OK(Insert(
       "default_pct", {"k", "ts", "ts_default"},
       {1, cloud::spanner::MakeTimestamp(absl::FromUnixMillis(10)).value(),
        cloud::spanner::MakeTimestamp(absl::FromUnixMillis(10)).value()}));
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       Insert("default_pct", {"k", "ts"}, {2, "spanner.commit_timestamp()"}));
   EXPECT_THAT(
       Query("SELECT k from default_pct WHERE ts = ts_default ORDER BY k ASC"),
       IsOkAndHoldsRows({{1}, {2}}));
 
   // Use InsertOrUpdate to insert a new row.
-  ZETASQL_EXPECT_OK(InsertOrUpdate("default_pct", {"k", "ts"},
+  GOOGLESQL_EXPECT_OK(InsertOrUpdate("default_pct", {"k", "ts"},
                            {3, "spanner.commit_timestamp()"}));
   EXPECT_THAT(
       Query("SELECT k from default_pct WHERE ts = ts_default ORDER BY k ASC"),
       IsOkAndHoldsRows({{1}, {2}, {3}}));
 
   // InsertOrUpdate for an existing row should not trigger DEFAULT.
-  ZETASQL_EXPECT_OK(InsertOrUpdate("default_pct", {"k"}, {1}));
+  GOOGLESQL_EXPECT_OK(InsertOrUpdate("default_pct", {"k"}, {1}));
   EXPECT_THAT(
       Query("SELECT k, ts, ts_default FROM default_pct WHERE k = 1"),
       IsOkAndHoldsRows(
@@ -480,12 +541,12 @@ TEST_P(ColumnDefaultValueReadWriteTest, DMLsWithPCT) {
           ? "TO_TIMESTAMP"
           : "TIMESTAMP_SECONDS";
 
-  ZETASQL_ASSERT_OK(CommitDml({SqlStatement(
+  GOOGLESQL_ASSERT_OK(CommitDml({SqlStatement(
       absl::Substitute("INSERT INTO default_pct(k, ts, ts_default) VALUES (1, "
                        "$0(10), $0(10))",
                        timestamp_function))}));
 
-  ZETASQL_ASSERT_OK(CommitDml({SqlStatement(absl::Substitute(
+  GOOGLESQL_ASSERT_OK(CommitDml({SqlStatement(absl::Substitute(
       "INSERT INTO default_pct(k, ts) VALUES (2, $0())", pct_function))}));
 
   std::string sql = "INSERT $0 INTO default_pct(k, ts) VALUES (3, $1()) $2";
@@ -496,7 +557,7 @@ TEST_P(ColumnDefaultValueReadWriteTest, DMLsWithPCT) {
   } else {
     sql = absl::Substitute(sql, "OR UPDATE", pct_function, "");
   }
-  ZETASQL_ASSERT_OK(CommitDml({SqlStatement(sql)}));
+  GOOGLESQL_ASSERT_OK(CommitDml({SqlStatement(sql)}));
 
   sql =
       "INSERT $0 INTO default_pct(k, ts, ts_default) "
@@ -508,7 +569,7 @@ TEST_P(ColumnDefaultValueReadWriteTest, DMLsWithPCT) {
   } else {
     sql = absl::Substitute(sql, "OR UPDATE", pct_function, "");
   }
-  ZETASQL_ASSERT_OK(CommitDml({SqlStatement(sql)}));
+  GOOGLESQL_ASSERT_OK(CommitDml({SqlStatement(sql)}));
   EXPECT_THAT(
       Query("SELECT k from default_pct WHERE ts = ts_default ORDER BY k ASC"),
       IsOkAndHoldsRows({{1}, {2}, {3}, {4}}));
@@ -521,7 +582,7 @@ TEST_P(ColumnDefaultValueReadWriteTest, DMLsWithPCT) {
   } else {
     sql = absl::Substitute(sql, "OR UPDATE", "");
   }
-  ZETASQL_ASSERT_OK(CommitDml({SqlStatement(sql)}));
+  GOOGLESQL_ASSERT_OK(CommitDml({SqlStatement(sql)}));
   EXPECT_THAT(
       Query("SELECT k, ts, ts_default FROM default_pct WHERE k = 1"),
       IsOkAndHoldsRows(
@@ -530,7 +591,7 @@ TEST_P(ColumnDefaultValueReadWriteTest, DMLsWithPCT) {
                 .value()}}));
 
   // Explicitly set row 1 to have different ts and ts_default values.
-  ZETASQL_ASSERT_OK(CommitDml(
+  GOOGLESQL_ASSERT_OK(CommitDml(
       {SqlStatement(absl::Substitute("UPDATE default_pct SET ts=$0(0), "
                                      "ts_default=$0(100) WHERE k=1",
                                      timestamp_function))}));
@@ -539,7 +600,7 @@ TEST_P(ColumnDefaultValueReadWriteTest, DMLsWithPCT) {
       IsOkAndHoldsRows({{2}, {3}, {4}}));
 
   // Use the DEFAULT keyword to set them to the same value again.
-  ZETASQL_ASSERT_OK(CommitDml(
+  GOOGLESQL_ASSERT_OK(CommitDml(
       {SqlStatement(absl::Substitute("UPDATE default_pct SET ts=$0(), "
                                      "ts_default = DEFAULT WHERE k=1",
                                      pct_function))}));
@@ -594,7 +655,7 @@ INSTANTIATE_TEST_SUITE_P(
 
 TEST_P(DefaultPrimaryKeyReadWriteTest, InsertMutations) {
   // A few inserts with default values:
-  ZETASQL_ASSERT_OK(Commit({
+  GOOGLESQL_ASSERT_OK(Commit({
       MakeInsert("t1", {"k1", "a"}, 1, 1),
       MakeInsert("t1", {"a"}, 1),
       MakeInsert("t1", {"k2", "a"}, 1, 1),
@@ -605,7 +666,7 @@ TEST_P(DefaultPrimaryKeyReadWriteTest, InsertMutations) {
                                 {1, 2, 1}}));
 
   // All columns are present:
-  ZETASQL_ASSERT_OK(Insert("t1", {"k1", "k2", "a"}, {2, 200, 2}));
+  GOOGLESQL_ASSERT_OK(Insert("t1", {"k1", "k2", "a"}, {2, 200, 2}));
   EXPECT_THAT(ReadAll("t1", {"k1", "k2", "a"}),
               IsOkAndHoldsRows({{Null<std::int64_t>(), 1, 1},
                                 {Null<std::int64_t>(), 2, 1},
@@ -624,7 +685,7 @@ TEST_P(DefaultPrimaryKeyReadWriteTest, InsertMutations) {
 
 TEST_P(DefaultPrimaryKeyReadWriteTest, InsertOrUpdateMutations) {
   // All 3 inserts
-  ZETASQL_ASSERT_OK(Commit({
+  GOOGLESQL_ASSERT_OK(Commit({
       MakeInsertOrUpdate("t1", {"k1", "a"}, 1, 1),
       MakeInsertOrUpdate("t1", {"a"}, 1),
       MakeInsertOrUpdate("t1", {"k2", "a"}, 1, 1),
@@ -635,7 +696,7 @@ TEST_P(DefaultPrimaryKeyReadWriteTest, InsertOrUpdateMutations) {
                                 {1, 2, 1}}));
 
   // An insert and an update
-  ZETASQL_ASSERT_OK(Commit({
+  GOOGLESQL_ASSERT_OK(Commit({
       MakeInsertOrUpdate("t1", {"k1", "a"}, 3, 3),
       MakeInsertOrUpdate("t1", {"k1", "a"}, 3, 300),
   }));
@@ -646,7 +707,7 @@ TEST_P(DefaultPrimaryKeyReadWriteTest, InsertOrUpdateMutations) {
                                 {3, 2, 300}}));
 
   // All columns are present:
-  ZETASQL_ASSERT_OK(InsertOrUpdate("t1", {"k1", "k2", "a"}, {2, 200, 2}));
+  GOOGLESQL_ASSERT_OK(InsertOrUpdate("t1", {"k1", "k2", "a"}, {2, 200, 2}));
   EXPECT_THAT(ReadAll("t1", {"k1", "k2", "a"}),
               IsOkAndHoldsRows({{Null<std::int64_t>(), 1, 1},
                                 {Null<std::int64_t>(), 2, 1},
@@ -657,7 +718,7 @@ TEST_P(DefaultPrimaryKeyReadWriteTest, InsertOrUpdateMutations) {
 
 TEST_P(DefaultPrimaryKeyReadWriteTest, UpdateMutations) {
   // Insert a fw rows and update one
-  ZETASQL_ASSERT_OK(Commit({
+  GOOGLESQL_ASSERT_OK(Commit({
       MakeInsertOrUpdate("t1", {"k1", "a"}, 1, 1),
       MakeInsertOrUpdate("t1", {"k2", "a"}, 1, 1),
       MakeInsertOrUpdate("t1", {"k1", "k2", "a"}, 1, 1, 1),
@@ -675,7 +736,7 @@ TEST_P(DefaultPrimaryKeyReadWriteTest, UpdateMutations) {
       ReadAll("t1", {"k1", "k2", "a"}),
       IsOkAndHoldsRows({{Null<std::int64_t>(), 1, 1}, {1, 1, 1}, {1, 2, 100}}));
 
-  ZETASQL_ASSERT_OK(Update("t1", {"k1", "k2", "a"}, {1, 1, 200}));
+  GOOGLESQL_ASSERT_OK(Update("t1", {"k1", "k2", "a"}, {1, 1, 200}));
   EXPECT_THAT(ReadAll("t1", {"k1", "k2", "a"}),
               IsOkAndHoldsRows(
                   {{Null<std::int64_t>(), 1, 1}, {1, 1, 200}, {1, 2, 100}}));
@@ -683,7 +744,7 @@ TEST_P(DefaultPrimaryKeyReadWriteTest, UpdateMutations) {
 
 TEST_P(DefaultPrimaryKeyReadWriteTest, DeleteMutations) {
   // Insert a few rows and delete one
-  ZETASQL_ASSERT_OK(Commit({
+  GOOGLESQL_ASSERT_OK(Commit({
       MakeInsertOrUpdate("t1", {"k1", "a"}, 1, 1),
       MakeInsertOrUpdate("t1", {"k2", "a"}, 1, 1),
       MakeInsertOrUpdate("t1", {"k1", "k2", "a"}, 1, 1, 1),
@@ -694,14 +755,14 @@ TEST_P(DefaultPrimaryKeyReadWriteTest, DeleteMutations) {
 
   // This delete fails because all PK columns must be present:
   EXPECT_THAT(Delete("t1", Key(1)),
-              StatusIs(absl::StatusCode::kFailedPrecondition));
+              StatusIs(absl::StatusCode::kInvalidArgument));
   EXPECT_THAT(ReadAll("t1", {"k1", "k2", "a"}),
               IsOkAndHoldsRows({{Null<std::int64_t>(), 1, 1}, {1, 2, 1}}));
 }
 
 TEST_P(DefaultPrimaryKeyReadWriteTest, ReplaceMutations) {
   // Insert a few rows and replace one
-  ZETASQL_ASSERT_OK(Commit({
+  GOOGLESQL_ASSERT_OK(Commit({
       MakeInsertOrUpdate("t1", {"k1", "a"}, 1, 1),
       MakeInsertOrUpdate("t1", {"k2", "a"}, 1, 1),
       MakeInsertOrUpdate("t1", {"k1", "k2", "a"}, 1, 1, 1),
@@ -714,7 +775,7 @@ TEST_P(DefaultPrimaryKeyReadWriteTest, ReplaceMutations) {
   // The following replace should trigger the default value of k2 to be
   // generated, hence replacing the row (1, 2, 100) with (1, 2, 200).
   // The row (1, 1, 1) should remain the same.
-  ZETASQL_ASSERT_OK(Replace("t1", {"k1", "a"}, {1, 200}));
+  GOOGLESQL_ASSERT_OK(Replace("t1", {"k1", "a"}, {1, 200}));
   EXPECT_THAT(
       ReadAll("t1", {"k1", "k2", "a"}),
       IsOkAndHoldsRows({{Null<std::int64_t>(), 1, 1}, {1, 1, 1}, {1, 2, 200}}));
@@ -722,7 +783,7 @@ TEST_P(DefaultPrimaryKeyReadWriteTest, ReplaceMutations) {
 
 TEST_P(DefaultPrimaryKeyReadWriteTest, WithDependentGeneratedColumn) {
   // All 3 inserts
-  ZETASQL_ASSERT_OK(Commit({
+  GOOGLESQL_ASSERT_OK(Commit({
       MakeInsert("t2", {"id1", "a"}, 1, 1),
       MakeInsertOrUpdate("t2", {"a"}, 1),
       MakeInsertOrUpdate("t2", {"id2", "a"}, 1, 1),
@@ -733,7 +794,7 @@ TEST_P(DefaultPrimaryKeyReadWriteTest, WithDependentGeneratedColumn) {
                                 {100, 1, 200, 1}}));
 
   // An insert and an update
-  ZETASQL_ASSERT_OK(Commit({
+  GOOGLESQL_ASSERT_OK(Commit({
       MakeInsertOrUpdate("t2", {"id2", "a"}, 3, 3),
       MakeInsertOrUpdate("t2", {"id2", "a"}, 3, 300),
   }));
@@ -745,11 +806,11 @@ TEST_P(DefaultPrimaryKeyReadWriteTest, WithDependentGeneratedColumn) {
 }
 
 TEST_P(DefaultPrimaryKeyReadWriteTest, DMLs) {
-  ZETASQL_ASSERT_OK(CommitDml({SqlStatement("INSERT INTO t2 (id2, a) VALUES (1, 1)")}));
+  GOOGLESQL_ASSERT_OK(CommitDml({SqlStatement("INSERT INTO t2 (id2, a) VALUES (1, 1)")}));
   EXPECT_THAT(Query("SELECT id1, id2, g1, a FROM t2 ORDER BY id2 ASC"),
               IsOkAndHoldsRows({{100, 1, 200, 1}}));
 
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       CommitDml({SqlStatement("INSERT INTO t2 (id1, id2, a) VALUES "
                               "(DEFAULT, 2, 2), (3, 3, 3)")}));
   EXPECT_THAT(

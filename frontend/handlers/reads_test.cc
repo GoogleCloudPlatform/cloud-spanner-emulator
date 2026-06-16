@@ -24,7 +24,7 @@
 #include "google/spanner/v1/transaction.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
@@ -34,7 +34,7 @@
 #include "tests/common/test_env.h"
 #include "grpcpp/server_context.h"
 #include "absl/status/status.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -42,18 +42,18 @@ namespace emulator {
 namespace frontend {
 namespace {
 
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 
 namespace spanner_api = ::google::spanner::v1;
 
 class ReadApiTest : public test::ServerTest {
  protected:
   void SetUp() override {
-    ZETASQL_ASSERT_OK(CreateTestInstance());
-    ZETASQL_ASSERT_OK(CreateTestDatabase());
-    ZETASQL_ASSERT_OK_AND_ASSIGN(test_session_uri_,
+    GOOGLESQL_ASSERT_OK(CreateTestInstance());
+    GOOGLESQL_ASSERT_OK(CreateTestDatabase());
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(test_session_uri_,
                          CreateTestSession(/*multiplexed=*/true));
-    ZETASQL_ASSERT_OK(PopulateTestDatabase());
+    GOOGLESQL_ASSERT_OK(PopulateTestDatabase());
   }
 
   absl::Status PopulateTestDatabase() {
@@ -114,7 +114,7 @@ TEST_F(ReadApiTest, CanReadUsingAnAlreadyStartedTransaction) {
   txn_request.set_session(test_session_uri_);
 
   spanner_api::Transaction txn_response;
-  ZETASQL_ASSERT_OK(BeginTransaction(txn_request, &txn_response));
+  GOOGLESQL_ASSERT_OK(BeginTransaction(txn_request, &txn_response));
 
   // Perform read using the transaction that was started above.
   spanner_api::TransactionSelector selector;
@@ -134,7 +134,7 @@ TEST_F(ReadApiTest, CanReadUsingAnAlreadyStartedTransaction) {
 
   // Read.
   spanner_api::ResultSet read_response;
-  ZETASQL_EXPECT_OK(Read(read_request, &read_response));
+  GOOGLESQL_EXPECT_OK(Read(read_request, &read_response));
   EXPECT_THAT(read_response, test::EqualsProto(
                                  R"pb(metadata {
                                         row_type {
@@ -160,7 +160,7 @@ TEST_F(ReadApiTest, CanReadUsingAnAlreadyStartedTransaction) {
 
   // StreamingRead
   std::vector<spanner_api::PartialResultSet> streaming_read_response;
-  ZETASQL_EXPECT_OK(StreamingRead(read_request, &streaming_read_response));
+  GOOGLESQL_EXPECT_OK(StreamingRead(read_request, &streaming_read_response));
   EXPECT_THAT(streaming_read_response,
               testing::ElementsAre(test::EqualsProto(
                   R"pb(metadata {
@@ -192,7 +192,7 @@ TEST_F(ReadApiTest, ReadWriteTransactionReturnsPrecommitToken) {
   txn_request.set_session(test_session_uri_);
 
   spanner_api::Transaction txn_response;
-  ZETASQL_ASSERT_OK(BeginTransaction(txn_request, &txn_response));
+  GOOGLESQL_ASSERT_OK(BeginTransaction(txn_request, &txn_response));
 
   // Perform read using the transaction that was started above.
   spanner_api::TransactionSelector selector;
@@ -212,7 +212,7 @@ TEST_F(ReadApiTest, ReadWriteTransactionReturnsPrecommitToken) {
 
   // Read.
   spanner_api::ResultSet read_response;
-  ZETASQL_EXPECT_OK(Read(read_request, &read_response));
+  GOOGLESQL_EXPECT_OK(Read(read_request, &read_response));
   EXPECT_THAT(read_response, test::EqualsProto(
                                  R"pb(metadata {
                                         row_type {
@@ -239,7 +239,7 @@ TEST_F(ReadApiTest, ReadWriteTransactionReturnsPrecommitToken) {
 
   // StreamingRead
   std::vector<spanner_api::PartialResultSet> streaming_read_response;
-  ZETASQL_EXPECT_OK(StreamingRead(read_request, &streaming_read_response));
+  GOOGLESQL_EXPECT_OK(StreamingRead(read_request, &streaming_read_response));
   EXPECT_THAT(streaming_read_response,
               testing::ElementsAre(test::EqualsProto(
                   R"pb(metadata {
@@ -283,7 +283,7 @@ TEST_F(ReadApiTest, CanPerformStrongReadUsingSingleUseTransaction) {
   read_request.set_session(test_session_uri_);
 
   spanner_api::ResultSet read_response;
-  ZETASQL_EXPECT_OK(Read(read_request, &read_response));
+  GOOGLESQL_EXPECT_OK(Read(read_request, &read_response));
   EXPECT_THAT(read_response, test::EqualsProto(
                                  R"pb(metadata {
                                         row_type {
@@ -326,7 +326,7 @@ TEST_F(ReadApiTest, CanPerformDefaultStrongReadUsingTemporaryTransaction) {
   read_request.set_session(test_session_uri_);
 
   spanner_api::ResultSet read_response;
-  ZETASQL_EXPECT_OK(Read(read_request, &read_response));
+  GOOGLESQL_EXPECT_OK(Read(read_request, &read_response));
   EXPECT_THAT(read_response, test::EqualsProto(
                                  R"pb(metadata {
                                         row_type {
@@ -367,13 +367,13 @@ TEST_F(ReadApiTest, DirectedReadsWithROTxnSucceeds) {
   // Directed Reads accepted in non-streaming case.
   {
     spanner_api::ResultSet unused_read_response;
-    ZETASQL_EXPECT_OK(Read(read_request, &unused_read_response));
+    GOOGLESQL_EXPECT_OK(Read(read_request, &unused_read_response));
   }
 
   // Directed Reads accepted in streaming case.
   {
     std::vector<spanner_api::PartialResultSet> unused_read_response;
-    ZETASQL_EXPECT_OK(StreamingRead(read_request, &unused_read_response));
+    GOOGLESQL_EXPECT_OK(StreamingRead(read_request, &unused_read_response));
   }
 }
 
@@ -434,7 +434,7 @@ TEST_F(ReadApiTest, CanBeginNewReadWriteTransactionAndPerformRead) {
   read_request.set_session(test_session_uri_);
 
   spanner_api::ResultSet read_response;
-  ZETASQL_EXPECT_OK(Read(read_request, &read_response));
+  GOOGLESQL_EXPECT_OK(Read(read_request, &read_response));
   EXPECT_THAT(read_response, test::EqualsProto(absl::Substitute(
                                  R"pb(metadata {
                                         row_type {
@@ -480,7 +480,7 @@ TEST_F(ReadApiTest, CannotReadUsingInvalidTransaction) {
   txn_request.set_session(test_session_uri_);
 
   spanner_api::Transaction txn_response;
-  ZETASQL_EXPECT_OK(BeginTransaction(txn_request, &txn_response));
+  GOOGLESQL_EXPECT_OK(BeginTransaction(txn_request, &txn_response));
 
   backend::TransactionID id = TransactionIDFromProto(txn_response.id());
   spanner_api::TransactionSelector selector;
@@ -499,6 +499,163 @@ TEST_F(ReadApiTest, CannotReadUsingInvalidTransaction) {
   spanner_api::ResultSet read_response;
   EXPECT_THAT(Read(read_request, &read_response),
               StatusIs(absl::StatusCode::kNotFound));
+}
+
+TEST_F(ReadApiTest, ReadDataBoostEnabledMissingPartitionTokenFails) {
+  spanner_api::ReadRequest request = PARSE_TEXT_PROTO(R"pb(
+    transaction { single_use { read_only { strong: true } } }
+    table: "test_table"
+    columns: "int64_col"
+    key_set { all: true }
+    data_boost_enabled: true
+  )pb");
+  request.set_session(test_session_uri_);
+
+  spanner_api::ResultSet response;
+  EXPECT_THAT(Read(request, &response),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       "Data Boost is only valid for partitioned queries or "
+                       "reads, and requires a partition token."));
+}
+
+TEST_F(ReadApiTest, StreamingReadDataBoostEnabledMissingPartitionTokenFails) {
+  spanner_api::ReadRequest request = PARSE_TEXT_PROTO(R"pb(
+    transaction { single_use { read_only { strong: true } } }
+    table: "test_table"
+    columns: "int64_col"
+    key_set { all: true }
+    data_boost_enabled: true
+  )pb");
+  request.set_session(test_session_uri_);
+
+  std::vector<spanner_api::PartialResultSet> response;
+  EXPECT_THAT(StreamingRead(request, &response),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       "Data Boost is only valid for partitioned queries or "
+                       "reads, and requires a partition token."));
+}
+
+TEST_F(ReadApiTest, ReadDataBoostEnabledWithPartitionTokenSucceeds) {
+  spanner_api::PartitionReadRequest partition_request;
+  partition_request.set_session(test_session_uri_);
+  partition_request.mutable_transaction()
+      ->mutable_begin()
+      ->mutable_read_only()
+      ->set_strong(true);
+  partition_request.set_table("test_table");
+  partition_request.add_columns("int64_col");
+  partition_request.mutable_key_set()->set_all(true);
+
+  spanner_api::PartitionResponse partition_response;
+  GOOGLESQL_ASSERT_OK(PartitionRead(partition_request, &partition_response));
+  ASSERT_GT(partition_response.partitions().size(), 0);
+
+  // The emulator returns an empty partition and a full partition. To be robust
+  // against future changes in the number or order of partitions, we iterate
+  // over all partitions and use the first one that returns rows when executed.
+  std::string valid_token;
+  for (const auto& partition : partition_response.partitions()) {
+    spanner_api::ReadRequest test_request;
+    test_request.set_session(test_session_uri_);
+    test_request.mutable_transaction()->set_id(
+        partition_response.transaction().id());
+    test_request.set_table("test_table");
+    test_request.add_columns("int64_col");
+    test_request.mutable_key_set()->set_all(true);
+    test_request.set_partition_token(partition.partition_token());
+
+    spanner_api::ResultSet test_response;
+    if (Read(test_request, &test_response).ok() &&
+        test_response.rows_size() > 0) {
+      valid_token = partition.partition_token();
+      break;
+    }
+  }
+  ASSERT_FALSE(valid_token.empty()) << "No non-empty partition found";
+
+  spanner_api::ReadRequest request;
+  request.set_session(test_session_uri_);
+  request.mutable_transaction()->set_id(partition_response.transaction().id());
+  request.set_table("test_table");
+  request.add_columns("int64_col");
+  request.mutable_key_set()->set_all(true);
+  request.set_partition_token(valid_token);
+  request.set_data_boost_enabled(true);
+
+  spanner_api::ResultSet response;
+  GOOGLESQL_EXPECT_OK(Read(request, &response));
+  EXPECT_THAT(response, test::proto::Partially(test::EqualsProto(
+                            R"pb(
+                              rows { values { string_value: "1" } }
+                              rows { values { string_value: "2" } }
+                              rows { values { string_value: "3" } }
+                            )pb")));
+}
+
+TEST_F(ReadApiTest, StreamingReadDataBoostEnabledWithPartitionTokenSucceeds) {
+  spanner_api::PartitionReadRequest partition_request;
+  partition_request.set_session(test_session_uri_);
+  partition_request.mutable_transaction()
+      ->mutable_begin()
+      ->mutable_read_only()
+      ->set_strong(true);
+  partition_request.set_table("test_table");
+  partition_request.add_columns("int64_col");
+  partition_request.mutable_key_set()->set_all(true);
+
+  spanner_api::PartitionResponse partition_response;
+  GOOGLESQL_ASSERT_OK(PartitionRead(partition_request, &partition_response));
+  ASSERT_GT(partition_response.partitions().size(), 0);
+
+  // The emulator returns an empty partition and a full partition. To be robust
+  // against future changes in the number or order of partitions, we iterate
+  // over all partitions and use the first one that returns rows when executed.
+  std::string valid_token;
+  for (const auto& partition : partition_response.partitions()) {
+    spanner_api::ReadRequest test_request;
+    test_request.set_session(test_session_uri_);
+    test_request.mutable_transaction()->set_id(
+        partition_response.transaction().id());
+    test_request.set_table("test_table");
+    test_request.add_columns("int64_col");
+    test_request.mutable_key_set()->set_all(true);
+    test_request.set_partition_token(partition.partition_token());
+
+    std::vector<spanner_api::PartialResultSet> test_response;
+    if (StreamingRead(test_request, &test_response).ok()) {
+      bool has_rows = false;
+      for (const auto& r : test_response) {
+        if (r.values_size() > 0) {
+          has_rows = true;
+          break;
+        }
+      }
+      if (has_rows) {
+        valid_token = partition.partition_token();
+        break;
+      }
+    }
+  }
+  ASSERT_FALSE(valid_token.empty()) << "No non-empty partition found";
+
+  spanner_api::ReadRequest request;
+  request.set_session(test_session_uri_);
+  request.mutable_transaction()->set_id(partition_response.transaction().id());
+  request.set_table("test_table");
+  request.add_columns("int64_col");
+  request.mutable_key_set()->set_all(true);
+  request.set_partition_token(valid_token);
+  request.set_data_boost_enabled(true);
+
+  std::vector<spanner_api::PartialResultSet> response;
+  GOOGLESQL_EXPECT_OK(StreamingRead(request, &response));
+  EXPECT_THAT(response,
+              ElementsAre(test::proto::Partially(test::EqualsProto(
+                  R"pb(
+                    values { string_value: "1" }
+                    values { string_value: "2" }
+                    values { string_value: "3" }
+                  )pb"))));
 }
 
 }  // namespace

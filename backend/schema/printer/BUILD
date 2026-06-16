@@ -47,9 +47,9 @@ cc_library(
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:span",
-        "@com_google_zetasql//zetasql/public:function",
-        "@com_google_zetasql//zetasql/public:options_cc_proto",
-        "@com_google_zetasql//zetasql/public:strings",
-        "@com_google_zetasql//zetasql/public:type",
+        "@com_google_googlesql//googlesql/public:function",
+        "@com_google_googlesql//googlesql/public:options_cc_proto",
+        "@com_google_googlesql//googlesql/public:strings",
+        "@com_google_googlesql//googlesql/public:type",
     ],
 )

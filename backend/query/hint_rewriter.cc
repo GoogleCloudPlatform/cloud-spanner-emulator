@@ -16,9 +16,9 @@
 
 #include "backend/query/hint_rewriter.h"
 
-#include "zetasql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
 #include "absl/status/status.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -26,10 +26,10 @@ namespace emulator {
 namespace backend {
 
 absl::Status HintRewriter::VisitResolvedOption(
-    const zetasql::ResolvedOption* node) {
-  ZETASQL_RETURN_IF_ERROR(CopyVisitResolvedOption(node));
-  zetasql::ResolvedOption* option =
-      GetUnownedTopOfStack<zetasql::ResolvedOption>();
+    const googlesql::ResolvedOption* node) {
+  GOOGLESQL_RETURN_IF_ERROR(CopyVisitResolvedOption(node));
+  googlesql::ResolvedOption* option =
+      GetUnownedTopOfStack<googlesql::ResolvedOption>();
   if (option->qualifier().empty()) {
     option->set_qualifier("spanner");
   }

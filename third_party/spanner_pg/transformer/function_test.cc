@@ -32,11 +32,11 @@
 #include <memory>
 #include <vector>
 
-#include "zetasql/public/analyzer_options.h"
-#include "zetasql/resolved_ast/resolved_ast.h"
+#include "googlesql/public/analyzer_options.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "third_party/spanner_pg/catalog/catalog_adapter.h"
@@ -50,18 +50,18 @@
 namespace postgres_translator::spangres::test {
 namespace {
 
-using ::zetasql::types::DoubleType;
-using ::zetasql::types::Int64Type;
-using ::zetasql::types::StringType;
+using ::googlesql::types::DoubleType;
+using ::googlesql::types::Int64Type;
+using ::googlesql::types::StringType;
 using ::postgres_translator::internal::PostgresCastNodeTemplate;
 using ::postgres_translator::internal::PostgresCastToExpr;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 
 using FunctionPair =
-    std::pair<FuncExpr*, std::unique_ptr<zetasql::ResolvedFunctionCall>>;
+    std::pair<FuncExpr*, std::unique_ptr<googlesql::ResolvedFunctionCall>>;
 using FunctionPairVector = std::vector<FunctionPair>;
 using OperatorPair =
-    std::pair<OpExpr*, std::unique_ptr<zetasql::ResolvedFunctionCall>>;
+    std::pair<OpExpr*, std::unique_ptr<googlesql::ResolvedFunctionCall>>;
 using OperatorPairVector = std::vector<OperatorPair>;
 
 Expr* MakeIntConst(Oid int_type) {
@@ -71,46 +71,46 @@ Expr* MakeIntConst(Oid int_type) {
   return PostgresCastToExpr(*const_status);
 }
 
-std::vector<std::unique_ptr<const zetasql::ResolvedExpr>>
+std::vector<std::unique_ptr<const googlesql::ResolvedExpr>>
 MakeInt64LiteralArgument() {
-  std::unique_ptr<const zetasql::ResolvedExpr> literal =
-      zetasql::MakeResolvedLiteral(
-          zetasql::types::Int64Type(),
-          zetasql::Value::Int64(17'000'000'000'000));
-  std::vector<std::unique_ptr<const zetasql::ResolvedExpr>> arguments;
+  std::unique_ptr<const googlesql::ResolvedExpr> literal =
+      googlesql::MakeResolvedLiteral(
+          googlesql::types::Int64Type(),
+          googlesql::Value::Int64(17'000'000'000'000));
+  std::vector<std::unique_ptr<const googlesql::ResolvedExpr>> arguments;
   arguments.emplace_back(std::move(literal));
   return arguments;
 }
 
-std::vector<std::unique_ptr<const zetasql::ResolvedExpr>>
+std::vector<std::unique_ptr<const googlesql::ResolvedExpr>>
 MakeDoubleLiteralArgument() {
-  std::unique_ptr<const zetasql::ResolvedExpr> literal =
-      zetasql::MakeResolvedLiteral(
-          zetasql::types::DoubleType(),
-          zetasql::Value::Double(3.141592653589793));
-  std::vector<std::unique_ptr<const zetasql::ResolvedExpr>> arguments;
+  std::unique_ptr<const googlesql::ResolvedExpr> literal =
+      googlesql::MakeResolvedLiteral(
+          googlesql::types::DoubleType(),
+          googlesql::Value::Double(3.141592653589793));
+  std::vector<std::unique_ptr<const googlesql::ResolvedExpr>> arguments;
   arguments.emplace_back(std::move(literal));
   return arguments;
 }
 
-std::vector<std::unique_ptr<const zetasql::ResolvedExpr>>
+std::vector<std::unique_ptr<const googlesql::ResolvedExpr>>
 MakeStringLiteralList(std::vector<absl::string_view> arguments) {
-  std::vector<std::unique_ptr<const zetasql::ResolvedExpr>> literal_list;
+  std::vector<std::unique_ptr<const googlesql::ResolvedExpr>> literal_list;
   for (absl::string_view arg : arguments) {
-    literal_list.emplace_back(zetasql::MakeResolvedLiteral(
-        zetasql::types::StringType(), zetasql::Value::String(arg)));
+    literal_list.emplace_back(googlesql::MakeResolvedLiteral(
+        googlesql::types::StringType(), googlesql::Value::String(arg)));
   }
   return literal_list;
 }
 
-std::unique_ptr<zetasql::ResolvedFunctionCall> MakeResolvedFunctionCall(
-    const zetasql::Function* function,
-    const zetasql::FunctionSignature* signature,
-    std::vector<std::unique_ptr<const zetasql::ResolvedExpr>> arguments) {
-  return zetasql::MakeResolvedFunctionCall(
+std::unique_ptr<googlesql::ResolvedFunctionCall> MakeResolvedFunctionCall(
+    const googlesql::Function* function,
+    const googlesql::FunctionSignature* signature,
+    std::vector<std::unique_ptr<const googlesql::ResolvedExpr>> arguments) {
+  return googlesql::MakeResolvedFunctionCall(
       signature->result_type().type(), function, *signature,
       std::move(arguments),
-      zetasql::ResolvedFunctionCallBase::DEFAULT_ERROR_MODE);
+      googlesql::ResolvedFunctionCallBase::DEFAULT_ERROR_MODE);
 }
 
 class FunctionTransformerTest : public TransformerTest {
@@ -120,26 +120,26 @@ class FunctionTransformerTest : public TransformerTest {
   void SetUp() override {
     TransformerTest::SetUp();
 
-    // The function pairs do not take ownership of the zetasql::Function*
+    // The function pairs do not take ownership of the googlesql::Function*
     // so they must be initialized separately and live until the test ends.
-    std::vector<zetasql::FunctionSignature> sign_signature = {
+    std::vector<googlesql::FunctionSignature> sign_signature = {
         {DoubleType(), {DoubleType()}, /*context_ptr=*/nullptr}};
-    sign_function_ = std::make_unique<zetasql::Function>(
-        "sign", "ZetaSQL", zetasql::Function::SCALAR, sign_signature);
-    std::vector<zetasql::FunctionSignature> floor_signature = {
+    sign_function_ = std::make_unique<googlesql::Function>(
+        "sign", "GoogleSQL", googlesql::Function::SCALAR, sign_signature);
+    std::vector<googlesql::FunctionSignature> floor_signature = {
         {DoubleType(), {DoubleType()}, /*context_ptr=*/nullptr}};
-    floor_function_ = std::make_unique<zetasql::Function>(
-        "floor", "ZetaSQL", zetasql::Function::SCALAR, floor_signature);
+    floor_function_ = std::make_unique<googlesql::Function>(
+        "floor", "GoogleSQL", googlesql::Function::SCALAR, floor_signature);
     PopulateFunctionPairs();
 
-    std::vector<zetasql::FunctionSignature> concat_signatures = {
+    std::vector<googlesql::FunctionSignature> concat_signatures = {
         {StringType(),    // Return type.
          {StringType(),   // Input type #1. Required.
           {StringType(),  // Input type #2. Repeated with one occurence
-           zetasql::FunctionArgumentType::REPEATED, 1}},
+           googlesql::FunctionArgumentType::REPEATED, 1}},
          /*context_ptr=*/nullptr}};
-    concat_function_ = std::make_unique<zetasql::Function>(
-        "concat", "ZetaSQL", zetasql::Function::SCALAR, concat_signatures);
+    concat_function_ = std::make_unique<googlesql::Function>(
+        "concat", "GoogleSQL", googlesql::Function::SCALAR, concat_signatures);
     ABSL_CHECK_OK(PopulateOperatorPairs());
   }
 
@@ -151,9 +151,9 @@ class FunctionTransformerTest : public TransformerTest {
   }
 
  protected:
-  std::unique_ptr<zetasql::Function> sign_function_ = nullptr;
-  std::unique_ptr<zetasql::Function> floor_function_ = nullptr;
-  std::unique_ptr<zetasql::Function> concat_function_ = nullptr;
+  std::unique_ptr<googlesql::Function> sign_function_ = nullptr;
+  std::unique_ptr<googlesql::Function> floor_function_ = nullptr;
+  std::unique_ptr<googlesql::Function> concat_function_ = nullptr;
   FunctionPairVector function_pairs_;
   OperatorPairVector operator_pairs_;
 
@@ -161,12 +161,12 @@ class FunctionTransformerTest : public TransformerTest {
   void PopulateFunctionPairs() {
     // sign(double) <-> sign(double)
     Const* pi_const;
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         pi_const,
         internal::makeScalarConst(FLOAT8OID, Float8GetDatum(3.141592653589793),
                                   /*constisnull=*/false));
     FuncExpr* sign_func;
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         sign_func,
         internal::makeFuncExpr(2310, FLOAT8OID,
                                list_make1(PostgresCastToExpr(pi_const)),
@@ -177,12 +177,12 @@ class FunctionTransformerTest : public TransformerTest {
                                             MakeDoubleLiteralArgument()));
     // floor(double) <-> floor(double)
     Const* pi_const2;
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         pi_const2,
         internal::makeScalarConst(FLOAT8OID, Float8GetDatum(3.141592653589793),
                                   /*constisnull=*/false));
     FuncExpr* floor_func;
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         floor_func,
         internal::makeFuncExpr(2309, FLOAT8OID,
                                list_make1(PostgresCastToExpr(pi_const2)),
@@ -195,13 +195,13 @@ class FunctionTransformerTest : public TransformerTest {
 
   absl::Status PopulateOperatorPairs() {
     // textcat(text) <-> concat(string)
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         auto hello_const,
         internal::makeStringConst(TEXTOID, "hello ", /*constisnull=*/false));
-    ZETASQL_ASSIGN_OR_RETURN(auto world_const,
+    GOOGLESQL_ASSIGN_OR_RETURN(auto world_const,
                      internal::makeStringConst(TEXTOID, "world",
                                                /*constisnull=*/false));
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         auto expr,
         internal::makeOpExpr(654, 1258, TEXTOID,
                              list_make2(PostgresCastToExpr(hello_const),
@@ -222,8 +222,8 @@ TEST_F(FunctionTransformerTest, PgToGsqlFunctions) {
 
   for (const auto& [pg_func, gsql_func] : function_pairs_) {
     ASSERT_NE(gsql_func, nullptr);
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
-        std::unique_ptr<zetasql::ResolvedFunctionCall> result,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+        std::unique_ptr<googlesql::ResolvedFunctionCall> result,
         forward_transformer_->BuildGsqlResolvedFunctionCall(
             *pg_func, &expr_transformer_info));
     ASSERT_NE(result, nullptr);
@@ -239,8 +239,8 @@ TEST_F(FunctionTransformerTest, PgToGsqlOperators) {
 
   for (const auto& [pg_op, gsql_func] : operator_pairs_) {
     ASSERT_NE(gsql_func, nullptr);
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
-        std::unique_ptr<zetasql::ResolvedFunctionCall> result,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+        std::unique_ptr<googlesql::ResolvedFunctionCall> result,
         forward_transformer_->BuildGsqlResolvedFunctionCall(
             *pg_op, &expr_transformer_info));
     ASSERT_NE(result, nullptr);
@@ -256,7 +256,7 @@ TEST_F(FunctionTransformerTest, PgToGsqlFunctionNotFound) {
 
   // pg_stat_get_bgwriter_timed_checkpoints is not a function Spangres will
   // ever support because the PostgreSQL backend is not run.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       const FuncExpr* pg_stat_get_bgwriter_timed_checkpoints,
       internal::makeFuncExpr(2769, INT8OID,
                              /*args=*/nullptr, COERCE_EXPLICIT_CALL));
@@ -275,7 +275,7 @@ TEST_F(FunctionTransformerTest, PgToGsqlFunctionSignatureNotFound) {
 
   // Abs is a supported function, but the signature with int2 types will not be
   // supported in Spangres.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       const FuncExpr* abs_int2,
       internal::makeFuncExpr(1398, INT2OID, list_make1(MakeIntConst(INT2OID)),
                              COERCE_EXPLICIT_CALL));

@@ -20,11 +20,11 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/simple_catalog.h"
-#include "zetasql/public/types/type_factory.h"
-#include "zetasql/public/value.h"
-#include "zetasql/base/no_destructor.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/simple_catalog.h"
+#include "googlesql/public/types/type_factory.h"
+#include "googlesql/public/value.h"
+#include "googlesql/base/no_destructor.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/strings/str_cat.h"
 #include "backend/query/info_schema_columns_metadata_values.h"
@@ -38,6 +38,7 @@
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/table.h"
+#include "backend/schema/catalog/udf.h"
 #include "backend/schema/catalog/view.h"
 #include "third_party/spanner_pg/bootstrap_catalog/bootstrap_catalog.h"
 #include "third_party/spanner_pg/catalog/type.h"
@@ -101,19 +102,20 @@ using google::spanner::emulator::backend::SDLObjectName;
 using google::spanner::emulator::backend::Sequence;
 using google::spanner::emulator::backend::SpannerSysColumnsMetadata;
 using google::spanner::emulator::backend::Table;
+using google::spanner::emulator::backend::Udf;
 using google::spanner::emulator::backend::View;
-using ::zetasql::types::Int64ArrayType;
-using ::zetasql::types::StringArrayType;
-using ::zetasql::values::Bool;
-using ::zetasql::values::Int64;
-using ::zetasql::values::Int64Array;
-using ::zetasql::values::Null;
-using ::zetasql::values::NullBool;
-using ::zetasql::values::NullDouble;
-using ::zetasql::values::NullInt64;
-using ::zetasql::values::NullString;
-using ::zetasql::values::String;
-using ::zetasql::values::StringArray;
+using ::googlesql::types::Int64ArrayType;
+using ::googlesql::types::StringArrayType;
+using ::googlesql::values::Bool;
+using ::googlesql::values::Int64;
+using ::googlesql::values::Int64Array;
+using ::googlesql::values::Null;
+using ::googlesql::values::NullBool;
+using ::googlesql::values::NullDouble;
+using ::googlesql::values::NullInt64;
+using ::googlesql::values::NullString;
+using ::googlesql::values::String;
+using ::googlesql::values::StringArray;
 using postgres_translator::spangres::datatypes::CreatePgOidValue;
 using postgres_translator::spangres::datatypes::GetPgOidArrayType;
 using spangres::datatypes::NullPgOid;
@@ -127,7 +129,7 @@ struct PgClassSystemTableMetadata {
 };
 using spangres::datatypes::GetPgOidArrayType;
 
-static const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
+static const googlesql_base::NoDestructor<absl::flat_hash_set<std::string>>
     kSupportedTables{{
         kPGAm,
         kPGAttrdef,
@@ -378,7 +380,7 @@ std::string PrimaryKeyName(const T* table) {
 
 PGCatalog::PGCatalog(const EnumerableCatalog* root_catalog,
                      const Schema* default_schema)
-    : zetasql::SimpleCatalog(kName),
+    : googlesql::SimpleCatalog(kName),
       root_catalog_(root_catalog),
       default_schema_(default_schema) {
   tables_by_name_ = AddTablesFromMetadata(
@@ -428,7 +430,7 @@ void PGCatalog::FillPGAmTable() {
       {75002, "i"},
   };
 
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
   rows.reserve(am_mappings.size());
   for (const auto& [oid, amtype] : am_mappings) {
     rows.push_back({
@@ -446,10 +448,10 @@ void PGCatalog::FillPGAmTable() {
 void PGCatalog::FillPGAttrdefTable() {
   auto pg_attrdef = tables_by_name_.at(kPGAttrdef).get();
 
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
   for (const Table* table : default_schema_->tables()) {
     if (!table->postgresql_oid().has_value()) {
-      ZETASQL_VLOG(1) << "Table " << table->Name()
+      GOOGLESQL_VLOG(1) << "Table " << table->Name()
               << " does not have a PostgreSQL OID.";
       continue;
     }
@@ -457,7 +459,7 @@ void PGCatalog::FillPGAttrdefTable() {
     for (const Column* column : table->columns()) {
       ++ordinal_position;
       if (!column->postgresql_oid().has_value()) {
-        ZETASQL_VLOG(1) << "Column " << column->Name()
+        GOOGLESQL_VLOG(1) << "Column " << column->Name()
                 << " does not have a PostgreSQL OID.";
         continue;
       }
@@ -483,15 +485,15 @@ void PGCatalog::FillPGAttrdefTable() {
 void PGCatalog::FillPGAttributeTable() {
   auto pg_attribute = tables_by_name_.at(kPGAttribute).get();
 
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
   for (const Table* table : default_schema_->tables()) {
     if (!table->postgresql_oid().has_value()) {
-      ZETASQL_VLOG(1) << "Table " << table->Name()
+      GOOGLESQL_VLOG(1) << "Table " << table->Name()
               << " does not have a PostgreSQL OID.";
       continue;
     }
     if (!table->primary_key_index_postgresql_oid().has_value()) {
-      ZETASQL_VLOG(1) << "PK for " << table->Name()
+      GOOGLESQL_VLOG(1) << "PK for " << table->Name()
               << " does not have a PostgreSQL OID.";
       continue;
     }
@@ -619,7 +621,7 @@ void PGCatalog::FillPGAttributeTable() {
     }
     for (const Index* index : table->indexes()) {
       if (!index->postgresql_oid().has_value()) {
-        ZETASQL_VLOG(1) << "Index " << index->Name()
+        GOOGLESQL_VLOG(1) << "Index " << index->Name()
                 << " does not have a PostgreSQL OID.";
         continue;
       }
@@ -746,7 +748,7 @@ void PGCatalog::FillPGAttributeTable() {
 
   for (const View* view : default_schema_->views()) {
     if (!view->postgresql_oid().has_value()) {
-      ZETASQL_VLOG(1) << "View " << view->Name() << " does not have a PostgreSQL OID.";
+      GOOGLESQL_VLOG(1) << "View " << view->Name() << " does not have a PostgreSQL OID.";
       continue;
     }
     int ordinal_position = 1;
@@ -814,7 +816,7 @@ void PGCatalog::FillPGAttributeTable() {
 
 void PGCatalog::FillPGClassTable() {
   auto pg_class = tables_by_name_.at(kPGClass).get();
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
   // Add tables.
   for (const Table* table : default_schema_->tables()) {
     const auto& [table_schema_part, table_name_part] =
@@ -826,19 +828,19 @@ void PGCatalog::FillPGClassTable() {
       const NamedSchema* named_schema =
           default_schema_->FindNamedSchema(table_schema_part);
       if (!named_schema->postgresql_oid().has_value()) {
-        ZETASQL_VLOG(1) << "Named schema " << table_schema_part
+        GOOGLESQL_VLOG(1) << "Named schema " << table_schema_part
                 << " does not have a PostgreSQL OID.";
         continue;
       }
       namespace_oid = named_schema->postgresql_oid().value();
     }
     if (!table->postgresql_oid().has_value()) {
-      ZETASQL_VLOG(1) << "Table " << table->Name()
+      GOOGLESQL_VLOG(1) << "Table " << table->Name()
               << " does not have a PostgreSQL OID.";
       continue;
     }
     if (!table->primary_key_index_postgresql_oid().has_value()) {
-      ZETASQL_VLOG(1) << "PK for " << table->Name()
+      GOOGLESQL_VLOG(1) << "PK for " << table->Name()
               << " does not have a PostgreSQL OID.";
       continue;
     }
@@ -983,7 +985,7 @@ void PGCatalog::FillPGClassTable() {
       const auto& [index_schema_part, index_name_part] =
           GetSchemaAndNameForPGCatalog(index->Name());
       if (!index->postgresql_oid().has_value()) {
-        ZETASQL_VLOG(1) << "Index " << index->Name()
+        GOOGLESQL_VLOG(1) << "Index " << index->Name()
                 << " does not have a PostgreSQL OID.";
         continue;
       }
@@ -1070,14 +1072,14 @@ void PGCatalog::FillPGClassTable() {
       const NamedSchema* named_schema =
           default_schema_->FindNamedSchema(sequence_schema_part);
       if (!named_schema->postgresql_oid().has_value()) {
-        ZETASQL_VLOG(1) << "Named schema " << sequence_schema_part
+        GOOGLESQL_VLOG(1) << "Named schema " << sequence_schema_part
                 << " does not have a PostgreSQL OID.";
         continue;
       }
       namespace_oid = named_schema->postgresql_oid().value();
     }
     if (!sequence->postgresql_oid().has_value()) {
-      ZETASQL_VLOG(1) << "Sequence " << sequence->Name()
+      GOOGLESQL_VLOG(1) << "Sequence " << sequence->Name()
               << " does not have a PostgreSQL OID.";
       continue;
     }
@@ -1159,14 +1161,14 @@ void PGCatalog::FillPGClassTable() {
       const NamedSchema* named_schema =
           default_schema_->FindNamedSchema(view_schema_part);
       if (!named_schema->postgresql_oid().has_value()) {
-        ZETASQL_VLOG(1) << "Named schema " << view_schema_part
+        GOOGLESQL_VLOG(1) << "Named schema " << view_schema_part
                 << " does not have a PostgreSQL OID.";
         continue;
       }
       namespace_oid = named_schema->postgresql_oid().value();
     }
     if (!view->postgresql_oid().has_value()) {
-      ZETASQL_VLOG(1) << "View " << view->Name() << " does not have a PostgreSQL OID.";
+      GOOGLESQL_VLOG(1) << "View " << view->Name() << " does not have a PostgreSQL OID.";
       continue;
     }
     rows.push_back({
@@ -1242,7 +1244,7 @@ void PGCatalog::FillPGClassTable() {
        info_schema_table_name_to_column_metadata_) {
     auto full_table_name = absl::StrCat("information_schema.", table_name);
     if (!kHardCodedSystemViewOid.contains(full_table_name)) {
-      ZETASQL_VLOG(1) << "Missing oid for " << full_table_name;
+      GOOGLESQL_VLOG(1) << "Missing oid for " << full_table_name;
       continue;
     }
     int table_oid = kHardCodedSystemViewOid.at(full_table_name);
@@ -1275,7 +1277,7 @@ void PGCatalog::FillPGClassTable() {
     auto table_name = absl::AsciiStrToLower(uppercase_table_name);
     auto full_table_name = absl::StrCat("spanner_sys.", table_name);
     if (!kHardCodedSystemViewOid.contains(full_table_name)) {
-      ZETASQL_VLOG(1) << "Missing oid for " << full_table_name;
+      GOOGLESQL_VLOG(1) << "Missing oid for " << full_table_name;
       continue;
     }
     int table_oid = kHardCodedSystemViewOid.at(full_table_name);
@@ -1366,7 +1368,7 @@ void PGCatalog::FillPGClassTable() {
 
 void PGCatalog::FillPGCollationTable() {
   auto pg_collation = tables_by_name_.at(kPGCollation).get();
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
   for (auto collname : kSupportedCollations) {
     auto collation_metadata = GetPgCollationDataFromBootstrap(
         PgBootstrapCatalog::Default(), collname);
@@ -1402,10 +1404,10 @@ void PGCatalog::FillPGCollationTable() {
 void PGCatalog::FillPGConstraintTable() {
   auto pg_constraint = tables_by_name_.at(kPGConstraint).get();
 
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
   for (const Table* table : default_schema_->tables()) {
     if (!table->postgresql_oid().has_value()) {
-      ZETASQL_VLOG(1) << "Table " << table->Name()
+      GOOGLESQL_VLOG(1) << "Table " << table->Name()
               << " does not have a PostgreSQL OID.";
       continue;
     }
@@ -1417,7 +1419,7 @@ void PGCatalog::FillPGConstraintTable() {
       const NamedSchema* named_schema =
           default_schema_->FindNamedSchema(table_schema);
       if (!named_schema->postgresql_oid().has_value()) {
-        ZETASQL_VLOG(1) << "Named schema " << table_schema
+        GOOGLESQL_VLOG(1) << "Named schema " << table_schema
                 << " does not have a PostgreSQL OID.";
         continue;
       }
@@ -1430,7 +1432,7 @@ void PGCatalog::FillPGConstraintTable() {
     }
     for (const CheckConstraint* check_constraint : table->check_constraints()) {
       if (!check_constraint->postgresql_oid().has_value()) {
-        ZETASQL_VLOG(1) << "Check constraint " << check_constraint->Name()
+        GOOGLESQL_VLOG(1) << "Check constraint " << check_constraint->Name()
                 << " does not have a PostgreSQL OID.";
         continue;
       }
@@ -1493,12 +1495,12 @@ void PGCatalog::FillPGConstraintTable() {
     }
     for (const ForeignKey* foreign_key : table->foreign_keys()) {
       if (!foreign_key->postgresql_oid().has_value()) {
-        ZETASQL_VLOG(1) << "Foreign key " << foreign_key->Name()
+        GOOGLESQL_VLOG(1) << "Foreign key " << foreign_key->Name()
                 << " does not have a PostgreSQL OID.";
         continue;
       }
       if (!foreign_key->referencing_table()->postgresql_oid().has_value()) {
-        ZETASQL_VLOG(1) << "Referencing table " <<
+        GOOGLESQL_VLOG(1) << "Referencing table " <<
             foreign_key->referencing_table()->Name() << "of foreign key "
             << foreign_key->Name() << " does not have a PostgreSQL OID.";
         continue;
@@ -1585,7 +1587,7 @@ void PGCatalog::FillPGConstraintTable() {
       });
     }
     if (!table->primary_key()[0]->postgresql_oid().has_value()) {
-      ZETASQL_VLOG(1) << "Primary key constraint for table " << table->Name()
+      GOOGLESQL_VLOG(1) << "Primary key constraint for table " << table->Name()
               << " does not have a PostgreSQL OID.";
       continue;
     }
@@ -1654,7 +1656,7 @@ void PGCatalog::FillPGConstraintTable() {
 void PGCatalog::FillPGIndexTable() {
   auto pg_index = tables_by_name_.at(kPGIndex).get();
 
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
   for (const Table* table : default_schema_->tables()) {
     // Columns don't track their index in the table, so we need to build a map
     // to get the index.
@@ -1722,7 +1724,7 @@ void PGCatalog::FillPGIndexTable() {
       key_columns.push_back(column_name_to_index[key_column->column()->Name()]);
     }
     if (!table->primary_key_index_postgresql_oid().has_value()) {
-      ZETASQL_VLOG(1) << "Primary key index for table " << table->Name()
+      GOOGLESQL_VLOG(1) << "Primary key index for table " << table->Name()
               << " does not have a PostgreSQL OID.";
       continue;
     }
@@ -1776,7 +1778,7 @@ void PGCatalog::FillPGIndexTable() {
 void PGCatalog::FillPGIndexesTable() {
   auto pg_indexes = tables_by_name_.at(kPGIndexes).get();
 
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
   for (const Table* table : default_schema_->tables()) {
     const auto& [table_schema, table_name] =
         GetSchemaAndNameForPGCatalog(table->Name());
@@ -1819,11 +1821,11 @@ void PGCatalog::FillPGIndexesTable() {
 void PGCatalog::FillPGNamespaceTable() {
   auto pg_namespace = tables_by_name_.at(kPGNamespace).get();
 
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
   // Add named schemas.
   for (const NamedSchema* named_schema : default_schema_->named_schemas()) {
     if (!named_schema->postgresql_oid().has_value()) {
-      ZETASQL_VLOG(1) << "Named schema " << named_schema->Name()
+      GOOGLESQL_VLOG(1) << "Named schema " << named_schema->Name()
               << " does not have a PostgreSQL OID.";
       continue;
     }
@@ -1852,18 +1854,18 @@ void PGCatalog::FillPGNamespaceTable() {
 void PGCatalog::FillPGProcTable() {
   auto pg_proc = tables_by_name_.at(kPGProc).get();
 
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
   absl::flat_hash_set<const PostgresExtendedFunction*> functions;
   auto status = system_catalog_->GetPostgreSQLFunctions(&functions);
   if (!status.ok()) {
-    ZETASQL_VLOG(1) << "Failed to get table-valued functions: " << status;
+    GOOGLESQL_VLOG(1) << "Failed to get PostgreSQL functions: " << status;
     return;
   }
   for (const PostgresExtendedFunction* function : functions) {
     for (const auto& signature : function->GetPostgresSignatures()) {
       auto proc_metadata = GetPgProcDataFromBootstrap(
           PgBootstrapCatalog::Default(), signature->postgres_proc_oid());
-      std::vector<zetasql::Value> proargtypes;
+      std::vector<googlesql::Value> proargtypes;
       for (const auto& argtype : proc_metadata->proargtypes()) {
         proargtypes.push_back(CreatePgOidValue(argtype).value());
       }
@@ -1905,7 +1907,7 @@ void PGCatalog::FillPGProcTable() {
           // prorettype
           CreatePgOidValue(proc_metadata->prorettype()).value(),
           // proargtypes
-          zetasql::Value::MakeArray(GetPgOidArrayType(), proargtypes).value(),
+          googlesql::Value::MakeArray(GetPgOidArrayType(), proargtypes).value(),
           // proallargtypes
           Null(GetPgOidArrayType()),
           // proargmodes
@@ -1928,31 +1930,157 @@ void PGCatalog::FillPGProcTable() {
     }
   }
 
-  absl::flat_hash_map<Oid, const zetasql::TableValuedFunction*> tvfs;
+  for (const Udf* udf : default_schema_->udfs()) {
+    if (!udf->postgresql_oid().has_value()) {
+      GOOGLESQL_VLOG(1) << "UDF " << udf->Name() << " does not have a PostgreSQL OID.";
+      continue;
+    }
+    if (!udf->body_origin().has_value()) {
+      GOOGLESQL_VLOG(1) << "UDF " << udf->Name() << " does not have a body origin.";
+      continue;
+    }
+    const auto& [udf_schema, udf_name] =
+        GetSchemaAndNameForPGCatalog(udf->Name());
+    int namespace_oid = 0;
+    if (kHardCodedNamedSchemaOid.contains(udf_schema)) {
+      namespace_oid = kHardCodedNamedSchemaOid.at(udf_schema);
+    } else {
+      const NamedSchema* named_schema =
+          default_schema_->FindNamedSchema(udf_schema);
+      if (!named_schema->postgresql_oid().has_value()) {
+        GOOGLESQL_VLOG(1) << "Named schema " << udf_schema
+                << " does not have a PostgreSQL OID.";
+        continue;
+      }
+      namespace_oid = named_schema->postgresql_oid().value();
+    }
+    auto rettype_mapping = system_catalog_->GetTypeFromReverseMapping(
+        udf->signature()->result_type().type());
+    if (rettype_mapping == nullptr) {
+      GOOGLESQL_VLOG(1) << "Failed to get result type mapping for "
+              << udf->signature()->result_type().type()->DebugString();
+      continue;
+    }
+    int rettype_oid = rettype_mapping->PostgresTypeOid();
+    std::vector<googlesql::Value> proargtypes;
+    int variadic_type_oid = 0;
+    int arg_default_count = 0;
+    for (const auto& arg : udf->signature()->arguments()) {
+      auto type_mapping =
+          system_catalog_->GetTypeFromReverseMapping(arg.type());
+      if (type_mapping == nullptr) {
+        GOOGLESQL_VLOG(1) << "Failed to get arg type mapping for "
+                << arg.type()->DebugString();
+        continue;
+      }
+      if (arg.repeated()) {
+        variadic_type_oid = type_mapping->PostgresTypeOid();
+      }
+      if (arg.HasDefault()) {
+        ++arg_default_count;
+      }
+      proargtypes.push_back(
+          CreatePgOidValue(type_mapping->PostgresTypeOid()).value());
+    }
+    googlesql::Value provolatile;
+    switch (udf->determinism_level()) {
+      case Udf::Determinism::DETERMINISTIC:
+        provolatile = String("i");
+        break;
+      case Udf::Determinism::NOT_DETERMINISTIC_STABLE:
+        provolatile = String("s");
+        break;
+      case Udf::Determinism::NOT_DETERMINISTIC_VOLATILE:
+        provolatile = String("v");
+        break;
+      default:
+        provolatile = NullString();
+    }
+    rows.push_back({
+        // oid
+        CreatePgOidValue(udf->postgresql_oid().value()).value(),
+        // proname
+        String(udf->Name()),
+        // pronamespace
+        CreatePgOidValue(namespace_oid).value(),
+        // proowner
+        NullPgOid(),
+        // prolang
+        NullPgOid(),
+        // procost
+        NullDouble(),
+        // prorows
+        NullDouble(),
+        // provariadic
+        CreatePgOidValue(variadic_type_oid).value(),
+        // prokind
+        String("f"),
+        // prosecdef
+        NullBool(),
+        // proleakproof
+        NullBool(),
+        // proisstrict
+        NullBool(),
+        // proretset
+        Bool(false),
+        // provolatile
+        provolatile,
+        // proparallel
+        NullString(),
+        // pronargs
+        Int64(udf->signature()->arguments().size()),
+        // pronargdefaults
+        Int64(arg_default_count),
+        // prorettype
+        CreatePgOidValue(rettype_oid).value(),
+        // proargtypes
+        googlesql::Value::MakeArray(GetPgOidArrayType(), proargtypes).value(),
+        // proallargtypes
+        Null(GetPgOidArrayType()),
+        // proargmodes
+        Null(StringArrayType()),
+        // proargnames
+        Null(StringArrayType()),
+        // proargdefaults
+        NullString(),
+        // protrftypes
+        Null(GetPgOidArrayType()),
+        // prosrc
+        NullString(),
+        // probin
+        NullString(),
+        // prosqlbody
+        String(udf->body_origin().value()),
+        // proconfig
+        Null(StringArrayType()),
+    });
+  }
+
+  absl::flat_hash_map<Oid, const googlesql::TableValuedFunction*> tvfs;
   status = system_catalog_->GetTableValuedFunctions(&tvfs);
   if (!status.ok()) {
-    ZETASQL_VLOG(1) << "Failed to get table-valued functions: " << status;
+    GOOGLESQL_VLOG(1) << "Failed to get table-valued functions: " << status;
     return;
   }
   for (const auto& [tvf_oid, tvf] : tvfs) {
     auto signature = tvf->GetSignature(0);
-    std::vector<zetasql::Value> proargtypes;
+    std::vector<googlesql::Value> proargtypes;
     int variadic_type_oid = 0;
     if (!signature->result_type().IsRelation()) {
-      ZETASQL_VLOG(1) << "Table-valued functions must return a relation type.";
+      GOOGLESQL_VLOG(1) << "Table-valued functions must return a relation type.";
       continue;
     }
     auto& rettype_options = signature->result_type().options();
     if (rettype_options.has_relation_input_schema() &&
         rettype_options.relation_input_schema().num_columns() != 1) {
-      ZETASQL_VLOG(1) << "Table-valued functions must return a relation type "
+      GOOGLESQL_VLOG(1) << "Table-valued functions must return a relation type "
                  << "with exactly one column.";
       continue;
     }
     auto rettype_mapping = system_catalog_->GetTypeFromReverseMapping(
         rettype_options.relation_input_schema().column(0).type);
     if (rettype_mapping == nullptr) {
-      ZETASQL_VLOG(1) << "Failed to get type mapping for "
+      GOOGLESQL_VLOG(1) << "Failed to get type mapping for "
                  << signature->result_type().DebugString();
       continue;
     }
@@ -1961,7 +2089,7 @@ void PGCatalog::FillPGProcTable() {
       auto type_mapping =
           system_catalog_->GetTypeFromReverseMapping(arg.type());
       if (type_mapping == nullptr) {
-        ZETASQL_VLOG(1) << "Failed to get type mapping for "
+        GOOGLESQL_VLOG(1) << "Failed to get type mapping for "
                    << arg.type()->DebugString();
         continue;
       }
@@ -2009,7 +2137,7 @@ void PGCatalog::FillPGProcTable() {
         // prorettype
         CreatePgOidValue(rettype_oid).value(),
         // proargtypes
-        zetasql::Value::MakeArray(GetPgOidArrayType(), proargtypes).value(),
+        googlesql::Value::MakeArray(GetPgOidArrayType(), proargtypes).value(),
         // proallargtypes
         Null(GetPgOidArrayType()),
         // proargmodes
@@ -2031,26 +2159,26 @@ void PGCatalog::FillPGProcTable() {
     });
   }
 
-  absl::flat_hash_set<const zetasql::TableValuedFunction*> changestream_tvfs;
+  absl::flat_hash_set<const googlesql::TableValuedFunction*> changestream_tvfs;
   status = root_catalog_->GetTableValuedFunctions(&changestream_tvfs);
   if (!status.ok()) {
-    ZETASQL_VLOG(1) << "Failed to get table-valued functions from root catalog: "
+    GOOGLESQL_VLOG(1) << "Failed to get table-valued functions from root catalog: "
                << status;
     return;
   }
-  absl::flat_hash_map<std::string, const zetasql::TableValuedFunction*>
+  absl::flat_hash_map<std::string, const googlesql::TableValuedFunction*>
       changestream_tvfs_map;
-  for (const zetasql::TableValuedFunction* tvf : changestream_tvfs) {
+  for (const googlesql::TableValuedFunction* tvf : changestream_tvfs) {
     changestream_tvfs_map[tvf->Name()] = tvf;
   }
   for (const ChangeStream* change_stream : default_schema_->change_streams()) {
     if (!changestream_tvfs_map.contains(change_stream->tvf_name())) {
-      ZETASQL_VLOG(1) << "Change stream " << change_stream->Name()
+      GOOGLESQL_VLOG(1) << "Change stream " << change_stream->Name()
                  << " does not have a table-valued function.";
       continue;
     }
     if (!change_stream->tvf_postgresql_oid().has_value()) {
-        ZETASQL_VLOG(1) << "Change stream TVF " << change_stream->Name()
+        GOOGLESQL_VLOG(1) << "Change stream TVF " << change_stream->Name()
                 << " does not have a PostgreSQL OID.";
         continue;
     }
@@ -2063,7 +2191,7 @@ void PGCatalog::FillPGProcTable() {
       const NamedSchema* named_schema =
           default_schema_->FindNamedSchema(change_stream_schema);
       if (!named_schema->postgresql_oid().has_value()) {
-        ZETASQL_VLOG(1) << "Named schema " << change_stream_schema
+        GOOGLESQL_VLOG(1) << "Named schema " << change_stream_schema
                 << " does not have a PostgreSQL OID.";
         continue;
       }
@@ -2071,23 +2199,23 @@ void PGCatalog::FillPGProcTable() {
     }
     auto signature =
         changestream_tvfs_map[change_stream->tvf_name()]->GetSignature(0);
-    std::vector<zetasql::Value> proargtypes;
+    std::vector<googlesql::Value> proargtypes;
     int variadic_type_oid = 0;
     if (!signature->result_type().IsRelation()) {
-      ZETASQL_VLOG(1) << "Table-valued functions must return a relation type.";
+      GOOGLESQL_VLOG(1) << "Table-valued functions must return a relation type.";
       continue;
     }
     auto& rettype_options = signature->result_type().options();
     if (rettype_options.has_relation_input_schema() &&
         rettype_options.relation_input_schema().num_columns() != 1) {
-      ZETASQL_VLOG(1) << "Table-valued functions must return a relation type "
+      GOOGLESQL_VLOG(1) << "Table-valued functions must return a relation type "
                  << "with exactly one column.";
       continue;
     }
     auto rettype_mapping = system_catalog_->GetTypeFromReverseMapping(
         rettype_options.relation_input_schema().column(0).type);
     if (rettype_mapping == nullptr) {
-      ZETASQL_VLOG(1) << "Failed to get type mapping for "
+      GOOGLESQL_VLOG(1) << "Failed to get type mapping for "
                  << signature->result_type().DebugString();
       continue;
     }
@@ -2096,7 +2224,7 @@ void PGCatalog::FillPGProcTable() {
       auto type_mapping =
           system_catalog_->GetTypeFromReverseMapping(arg.type());
       if (type_mapping == nullptr) {
-        ZETASQL_VLOG(1) << "Failed to get type mapping for "
+        GOOGLESQL_VLOG(1) << "Failed to get type mapping for "
                    << arg.type()->DebugString();
         continue;
       }
@@ -2144,7 +2272,7 @@ void PGCatalog::FillPGProcTable() {
         // prorettype
         CreatePgOidValue(rettype_oid).value(),
         // proargtypes
-        zetasql::Value::MakeArray(GetPgOidArrayType(), proargtypes).value(),
+        googlesql::Value::MakeArray(GetPgOidArrayType(), proargtypes).value(),
         // proallargtypes
         Null(GetPgOidArrayType()),
         // proargmodes
@@ -2172,14 +2300,14 @@ void PGCatalog::FillPGProcTable() {
 void PGCatalog::FillPGSequenceTable() {
   auto pg_sequence = tables_by_name_.at(kPGSequence).get();
 
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
   for (const Sequence* sequence : default_schema_->sequences()) {
     if (sequence->is_internal_use()) {
       // Skip internal sequences.
       continue;
     }
     if (!sequence->postgresql_oid().has_value()) {
-      ZETASQL_VLOG(1) << "Sequence " << sequence->Name()
+      GOOGLESQL_VLOG(1) << "Sequence " << sequence->Name()
               << " does not have a PostgreSQL OID.";
       continue;
     }
@@ -2208,7 +2336,7 @@ void PGCatalog::FillPGSequenceTable() {
 void PGCatalog::FillPGSequencesTable() {
   auto pg_sequences = tables_by_name_.at(kPGSequences).get();
 
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
   for (const Sequence* sequence : default_schema_->sequences()) {
     if (sequence->is_internal_use()) {
       // Skip internal sequences.
@@ -2245,7 +2373,7 @@ void PGCatalog::FillPGSequencesTable() {
 void PGCatalog::FillPGSettingsTable() {
   auto pg_settings = tables_by_name_.at(kPGSettings).get();
 
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
   std::vector<std::string> enumvals;
   rows.push_back({
       // name
@@ -2290,7 +2418,7 @@ void PGCatalog::FillPGSettingsTable() {
 void PGCatalog::FillPGTablesTable() {
   auto pg_tables = tables_by_name_.at(kPGTables).get();
 
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
   for (const Table* table : default_schema_->tables()) {
     const auto& [table_schema, table_name] =
       GetSchemaAndNameForPGCatalog(table->Name());
@@ -2320,7 +2448,7 @@ void PGCatalog::FillPGTablesTable() {
 void PGCatalog::FillPGTypeTable() {
   auto pg_type = tables_by_name_.at(kPGType).get();
 
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
   absl::flat_hash_set<const PostgresTypeMapping*> postgres_types;
   auto status = system_catalog_->GetPostgreSQLTypes(&postgres_types);
   for (const PostgresTypeMapping* postgres_type : postgres_types) {
@@ -2441,7 +2569,7 @@ void PGCatalog::FillPGTypeTable() {
 void PGCatalog::FillPGViewsTable() {
   auto pg_views = tables_by_name_.at(kPGViews).get();
 
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<std::vector<googlesql::Value>> rows;
   for (const View* view : default_schema_->views()) {
     const auto& [view_schema, view_name] =
       GetSchemaAndNameForPGCatalog(view->Name());

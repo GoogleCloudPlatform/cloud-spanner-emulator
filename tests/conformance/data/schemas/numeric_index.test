@@ -1,0 +1,8 @@
+@Dialect=GOOGLE_STANDARD_SQL
+CREATE TABLE Accounts(
+  ID   INT64 NOT NULL,
+  Name STRING(MAX),
+  Money NUMERIC
+) PRIMARY KEY (ID);
+CREATE INDEX AccountsByNameStoringMoney ON Accounts(Name) STORING (Money);
+CREATE INDEX AccountsByMoney ON Accounts(Money);

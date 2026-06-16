@@ -34,12 +34,12 @@
 #include <memory>
 #include <type_traits>
 
-#include "zetasql/public/language_options.h"
-#include "zetasql/public/types/type.h"
-#include "zetasql/public/types/type_factory.h"
+#include "googlesql/public/language_options.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/public/types/type_factory.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
@@ -49,44 +49,44 @@
 #include "third_party/spanner_pg/catalog/type.h"
 #include "third_party/spanner_pg/interface/stub_builtin_function_catalog.h"
 #include "third_party/spanner_pg/util/valid_memory_context_fixture.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator {
 namespace {
 
 using ::testing::HasSubstr;
 using ::testing::UnorderedElementsAre;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 
 using EngineSystemCatalogTest = ::postgres_translator::test::ValidMemoryContext;
 
-const zetasql::Type* gsql_bool = zetasql::types::BoolType();
-const zetasql::Type* gsql_bytes = zetasql::types::BytesType();
-const zetasql::Type* gsql_int32 = zetasql::types::Int32Type();
-const zetasql::Type* gsql_int64 = zetasql::types::Int64Type();
-const zetasql::Type* gsql_double = zetasql::types::DoubleType();
-const zetasql::Type* gsql_string = zetasql::types::StringType();
-const zetasql::Type* gsql_timestamp = zetasql::types::TimestampType();
-const zetasql::Type* gsql_date = zetasql::types::DateType();
-const zetasql::Type* gsql_interval = zetasql::types::IntervalType();
+const googlesql::Type* gsql_bool = googlesql::types::BoolType();
+const googlesql::Type* gsql_bytes = googlesql::types::BytesType();
+const googlesql::Type* gsql_int32 = googlesql::types::Int32Type();
+const googlesql::Type* gsql_int64 = googlesql::types::Int64Type();
+const googlesql::Type* gsql_double = googlesql::types::DoubleType();
+const googlesql::Type* gsql_string = googlesql::types::StringType();
+const googlesql::Type* gsql_timestamp = googlesql::types::TimestampType();
+const googlesql::Type* gsql_date = googlesql::types::DateType();
+const googlesql::Type* gsql_interval = googlesql::types::IntervalType();
 
-const zetasql::Type* gsql_uuid = zetasql::types::UuidType();
+const googlesql::Type* gsql_uuid = googlesql::types::UuidType();
 
-const zetasql::Type* gsql_bool_array = zetasql::types::BoolArrayType();
-const zetasql::Type* gsql_bytes_array = zetasql::types::BytesArrayType();
-const zetasql::Type* gsql_int64_array = zetasql::types::Int64ArrayType();
-const zetasql::Type* gsql_double_array = zetasql::types::DoubleArrayType();
-const zetasql::Type* gsql_string_array = zetasql::types::StringArrayType();
-const zetasql::Type* gsql_timestamp_array =
-    zetasql::types::TimestampArrayType();
-const zetasql::Type* gsql_date_array = zetasql::types::DateArrayType();
-const zetasql::Type* gsql_interval_array =
-    zetasql::types::IntervalArrayType();
+const googlesql::Type* gsql_bool_array = googlesql::types::BoolArrayType();
+const googlesql::Type* gsql_bytes_array = googlesql::types::BytesArrayType();
+const googlesql::Type* gsql_int64_array = googlesql::types::Int64ArrayType();
+const googlesql::Type* gsql_double_array = googlesql::types::DoubleArrayType();
+const googlesql::Type* gsql_string_array = googlesql::types::StringArrayType();
+const googlesql::Type* gsql_timestamp_array =
+    googlesql::types::TimestampArrayType();
+const googlesql::Type* gsql_date_array = googlesql::types::DateArrayType();
+const googlesql::Type* gsql_interval_array =
+    googlesql::types::IntervalArrayType();
 
-const zetasql::Type* gsql_uuid_array = zetasql::types::UuidArrayType();
+const googlesql::Type* gsql_uuid_array = googlesql::types::UuidArrayType();
 
-static zetasql::LanguageOptions GetLanguageOptions() {
-  return zetasql::LanguageOptions();
+static googlesql::LanguageOptions GetLanguageOptions() {
+  return googlesql::LanguageOptions();
 }
 
 // A test catalog that starts out empty.
@@ -98,15 +98,15 @@ class TestSystemCatalog : public EngineSystemCatalog {
 
   // Group the constructor and SetUp.
   static absl::StatusOr<std::unique_ptr<TestSystemCatalog>> GetTestCatalog(
-      absl::flat_hash_set<zetasql::LanguageFeature> language_features = {}) {
-    zetasql::LanguageOptions language_options;
+      absl::flat_hash_set<googlesql::LanguageFeature> language_features = {}) {
+    googlesql::LanguageOptions language_options;
     language_options.SetEnabledLanguageFeatures(language_features);
 
     // We have to use WrapUnique because absl::make_unique cannot access
     // private constructors.
     std::unique_ptr<TestSystemCatalog> catalog =
         absl::WrapUnique(new TestSystemCatalog(language_options));
-    ZETASQL_RETURN_IF_ERROR(catalog->SetUp(language_options));
+    GOOGLESQL_RETURN_IF_ERROR(catalog->SetUp(language_options));
     return catalog;
   }
 
@@ -134,57 +134,57 @@ class TestSystemCatalog : public EngineSystemCatalog {
   // A function with signatures that aren't used by operators.
   absl::Status AddAbsFunction(
       absl::string_view postgres_namespace = "pg_catalog") {
-    ZETASQL_RETURN_IF_ERROR(AddTypeIfNotPresent(types::PgInt8Mapping()));
-    ZETASQL_RETURN_IF_ERROR(AddTypeIfNotPresent(types::PgFloat8Mapping()));
+    GOOGLESQL_RETURN_IF_ERROR(AddTypeIfNotPresent(types::PgInt8Mapping()));
+    GOOGLESQL_RETURN_IF_ERROR(AddTypeIfNotPresent(types::PgFloat8Mapping()));
 
     PostgresFunctionArguments arguments(
         "abs", "abs",
         {{{gsql_int64, {gsql_int64}, /*context_ptr=*/nullptr}},
          {{gsql_double, {gsql_double}, /*context_ptr=*/nullptr}}},
-        /*mode=*/zetasql::Function::SCALAR, postgres_namespace);
-    ZETASQL_RETURN_IF_ERROR(AddFunction(arguments, GetLanguageOptions()));
+        /*mode=*/googlesql::Function::SCALAR, postgres_namespace);
+    GOOGLESQL_RETURN_IF_ERROR(AddFunction(arguments, GetLanguageOptions()));
     return absl::OkStatus();
   }
 
   // A function which is used by the '@' operator.
   absl::Status AddFloat8AbsFunction() {
-    ZETASQL_RETURN_IF_ERROR(AddTypeIfNotPresent(types::PgFloat8Mapping()));
+    GOOGLESQL_RETURN_IF_ERROR(AddTypeIfNotPresent(types::PgFloat8Mapping()));
 
     PostgresFunctionArguments arguments(
         "float8abs", "abs",
         {{{gsql_double, {gsql_double}, /*context_ptr=*/nullptr}}});
-    ZETASQL_RETURN_IF_ERROR(AddFunction(arguments, GetLanguageOptions()));
+    GOOGLESQL_RETURN_IF_ERROR(AddFunction(arguments, GetLanguageOptions()));
     return absl::OkStatus();
   }
 
-  // A function with fixed args in PG and variable args in ZetaSQL.
+  // A function with fixed args in PG and variable args in GoogleSQL.
   absl::Status AddConcatFunction() {
-    ZETASQL_RETURN_IF_ERROR(AddTypeIfNotPresent(types::PgTextMapping()));
+    GOOGLESQL_RETURN_IF_ERROR(AddTypeIfNotPresent(types::PgTextMapping()));
 
     PostgresFunctionArguments arguments(
         "textcat", "concat",
         {{{gsql_string, {gsql_string, gsql_string}, /*context_ptr=*/nullptr}}});
-    ZETASQL_RETURN_IF_ERROR(AddFunction(arguments, GetLanguageOptions()));
+    GOOGLESQL_RETURN_IF_ERROR(AddFunction(arguments, GetLanguageOptions()));
     return absl::OkStatus();
   }
 
   // An aggregate function.
   absl::Status AddBoolAndFunction() {
-    ZETASQL_RETURN_IF_ERROR(AddTypeIfNotPresent(types::PgBoolMapping()));
+    GOOGLESQL_RETURN_IF_ERROR(AddTypeIfNotPresent(types::PgBoolMapping()));
 
     PostgresFunctionArguments arguments(
         {"bool_and",
          "logical_and",
          {{{gsql_bool, {gsql_bool}, /*context_ptr=*/nullptr}}},
-         zetasql::Function::AGGREGATE});
-    ZETASQL_RETURN_IF_ERROR(AddFunction(arguments, GetLanguageOptions()));
+         googlesql::Function::AGGREGATE});
+    GOOGLESQL_RETURN_IF_ERROR(AddFunction(arguments, GetLanguageOptions()));
     return absl::OkStatus();
   }
 
   // A set returning function.
   absl::Status AddGenerateSeriesFunction(bool set_oid) {
-    ZETASQL_RETURN_IF_ERROR(AddTypeIfNotPresent(types::PgInt8Mapping()));
-    ZETASQL_RETURN_IF_ERROR(AddTypeIfNotPresent(types::PgInt8ArrayMapping()));
+    GOOGLESQL_RETURN_IF_ERROR(AddTypeIfNotPresent(types::PgInt8Mapping()));
+    GOOGLESQL_RETURN_IF_ERROR(AddTypeIfNotPresent(types::PgInt8ArrayMapping()));
 
     PostgresFunctionArguments arguments(
         {"generate_series",
@@ -195,40 +195,40 @@ class TestSystemCatalog : public EngineSystemCatalog {
            /*has_mapped_function=*/true,
            /*explicit_mapped_function_name=*/"",
            set_oid ? F_GENERATE_SERIES_INT8_INT8 : InvalidOid}}});
-    ZETASQL_RETURN_IF_ERROR(AddFunction(arguments, GetLanguageOptions()));
+    GOOGLESQL_RETURN_IF_ERROR(AddFunction(arguments, GetLanguageOptions()));
     return absl::OkStatus();
   }
 
   absl::StatusOr<FunctionAndSignature> GetPgNumericCastFunction(
-      const zetasql::Type* source_type, const zetasql::Type* target_type,
-      const zetasql::LanguageOptions& language_options) override {
+      const googlesql::Type* source_type, const googlesql::Type* target_type,
+      const googlesql::LanguageOptions& language_options) override {
     return absl::UnimplementedError(
         "PgNumeric casts not present in TestSystemCatalog");
   }
 
  private:
-  TestSystemCatalog(zetasql::LanguageOptions language_options)
+  TestSystemCatalog(googlesql::LanguageOptions language_options)
       : EngineSystemCatalog(
             "test",
             std::make_unique<StubBuiltinFunctionCatalog>(language_options)) {}
 
   absl::Status AddTypes(
-      const zetasql::LanguageOptions& language_options) override {
+      const googlesql::LanguageOptions& language_options) override {
     return absl::OkStatus();
   }
 
   absl::Status AddFunctions(
-      const zetasql::LanguageOptions& language_options) override {
+      const googlesql::LanguageOptions& language_options) override {
     return absl::OkStatus();
   }
 };
 
 void CheckType(const PostgresTypeMapping* pg_mapping,
                const std::string& pg_type_name, Oid pg_type_oid,
-               const zetasql::Type* mapped_type) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
+               const googlesql::Type* mapped_type) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
                        TestSystemCatalog::GetTestCatalog());
-  ZETASQL_ASSERT_OK(catalog->AddTestType(pg_mapping));
+  GOOGLESQL_ASSERT_OK(catalog->AddTestType(pg_mapping));
 
   const PostgresTypeMapping* catalog_type;
   // Look up the type by PG name.
@@ -239,7 +239,7 @@ void CheckType(const PostgresTypeMapping* pg_mapping,
   catalog_type = catalog->GetType(pg_type_oid);
   EXPECT_EQ(catalog_type, pg_mapping);
 
-  // If there is a mapped ZetaSQL type, reverse look up the type.
+  // If there is a mapped GoogleSQL type, reverse look up the type.
   // Otherwise, the type is not supported.
   if (mapped_type != nullptr) {
     catalog_type = catalog->GetTypeFromReverseMapping(mapped_type);
@@ -255,7 +255,7 @@ TEST_F(EngineSystemCatalogTest, BoolTest) {
   CheckType(types::PgInt8Mapping(), "int8", INT8OID, gsql_int64);
   CheckType(types::PgFloat8Mapping(), "float8", FLOAT8OID, gsql_double);
   // No reverse lookup for varchar because text and varchar are both mapped to
-  // ZetaSQL STRING and the reverse mapping defaults to text.
+  // GoogleSQL STRING and the reverse mapping defaults to text.
   CheckType(types::PgVarcharMapping(), "varchar", VARCHAROID,
             /*mapped_type=*/nullptr);
   CheckType(types::PgTextMapping(), "text", TEXTOID, gsql_string);
@@ -275,7 +275,7 @@ TEST_F(EngineSystemCatalogTest, BoolTest) {
   CheckType(types::PgFloat8ArrayMapping(), "_float8", FLOAT8ARRAYOID,
             gsql_double_array);
   // No reverse lookup for varchar array because text array and varchar array
-  // are both mapped to ZetaSQL STRING array and the reverse mapping defaults
+  // are both mapped to GoogleSQL STRING array and the reverse mapping defaults
   // to text array.
   CheckType(types::PgVarcharArrayMapping(), "_varchar", VARCHARARRAYOID,
             /*mapped_type=*/nullptr);
@@ -294,48 +294,48 @@ TEST_F(EngineSystemCatalogTest, BoolTest) {
             gsql_uuid_array);
 }
 
-// GetTypes is only used by the RQG and will return the mapped ZetaSQL types.
+// GetTypes is only used by the RQG and will return the mapped GoogleSQL types.
 TEST_F(EngineSystemCatalogTest, GetTypes) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
                        TestSystemCatalog::GetTestCatalog());
   // Supported Scalar Types.
-  ZETASQL_ASSERT_OK(catalog->AddTestType(types::PgBoolMapping()));
-  ZETASQL_ASSERT_OK(catalog->AddTestType(types::PgInt8Mapping()));
-  ZETASQL_ASSERT_OK(catalog->AddTestType(types::PgFloat8Mapping()));
-  ZETASQL_ASSERT_OK(catalog->AddTestType(types::PgVarcharMapping()));
-  ZETASQL_ASSERT_OK(catalog->AddTestType(types::PgTextMapping()));
-  ZETASQL_ASSERT_OK(catalog->AddTestType(types::PgByteaMapping()));
-  ZETASQL_ASSERT_OK(catalog->AddTestType(types::PgTimestamptzMapping()));
-  ZETASQL_ASSERT_OK(catalog->AddTestType(types::PgDateMapping()));
+  GOOGLESQL_ASSERT_OK(catalog->AddTestType(types::PgBoolMapping()));
+  GOOGLESQL_ASSERT_OK(catalog->AddTestType(types::PgInt8Mapping()));
+  GOOGLESQL_ASSERT_OK(catalog->AddTestType(types::PgFloat8Mapping()));
+  GOOGLESQL_ASSERT_OK(catalog->AddTestType(types::PgVarcharMapping()));
+  GOOGLESQL_ASSERT_OK(catalog->AddTestType(types::PgTextMapping()));
+  GOOGLESQL_ASSERT_OK(catalog->AddTestType(types::PgByteaMapping()));
+  GOOGLESQL_ASSERT_OK(catalog->AddTestType(types::PgTimestamptzMapping()));
+  GOOGLESQL_ASSERT_OK(catalog->AddTestType(types::PgDateMapping()));
 
   // Supported Array Types.
-  ZETASQL_ASSERT_OK(catalog->AddTestType(types::PgBoolArrayMapping()));
-  ZETASQL_ASSERT_OK(catalog->AddTestType(types::PgInt8ArrayMapping()));
-  ZETASQL_ASSERT_OK(catalog->AddTestType(types::PgFloat8ArrayMapping()));
-  ZETASQL_ASSERT_OK(catalog->AddTestType(types::PgVarcharArrayMapping()));
-  ZETASQL_ASSERT_OK(catalog->AddTestType(types::PgTextArrayMapping()));
-  ZETASQL_ASSERT_OK(catalog->AddTestType(types::PgByteaArrayMapping()));
-  ZETASQL_ASSERT_OK(catalog->AddTestType(types::PgTimestamptzArrayMapping()));
-  ZETASQL_ASSERT_OK(catalog->AddTestType(types::PgDateArrayMapping()));
+  GOOGLESQL_ASSERT_OK(catalog->AddTestType(types::PgBoolArrayMapping()));
+  GOOGLESQL_ASSERT_OK(catalog->AddTestType(types::PgInt8ArrayMapping()));
+  GOOGLESQL_ASSERT_OK(catalog->AddTestType(types::PgFloat8ArrayMapping()));
+  GOOGLESQL_ASSERT_OK(catalog->AddTestType(types::PgVarcharArrayMapping()));
+  GOOGLESQL_ASSERT_OK(catalog->AddTestType(types::PgTextArrayMapping()));
+  GOOGLESQL_ASSERT_OK(catalog->AddTestType(types::PgByteaArrayMapping()));
+  GOOGLESQL_ASSERT_OK(catalog->AddTestType(types::PgTimestamptzArrayMapping()));
+  GOOGLESQL_ASSERT_OK(catalog->AddTestType(types::PgDateArrayMapping()));
 
-  absl::flat_hash_set<const zetasql::Type*> types;
-  ZETASQL_ASSERT_OK(catalog->GetTypes(&types));
+  absl::flat_hash_set<const googlesql::Type*> types;
+  GOOGLESQL_ASSERT_OK(catalog->GetTypes(&types));
   EXPECT_THAT(
       types,
       UnorderedElementsAre(
-          zetasql::types::BoolType(), zetasql::types::Int64Type(),
-          zetasql::types::DoubleType(), zetasql::types::StringType(),
-          zetasql::types::BytesType(), zetasql::types::TimestampType(),
-          zetasql::types::DateType(), zetasql::types::BoolArrayType(),
-          zetasql::types::Int64ArrayType(),
-          zetasql::types::DoubleArrayType(),
-          zetasql::types::StringArrayType(),
-          zetasql::types::BytesArrayType(),
-          zetasql::types::TimestampArrayType(),
-          zetasql::types::DateArrayType()));
+          googlesql::types::BoolType(), googlesql::types::Int64Type(),
+          googlesql::types::DoubleType(), googlesql::types::StringType(),
+          googlesql::types::BytesType(), googlesql::types::TimestampType(),
+          googlesql::types::DateType(), googlesql::types::BoolArrayType(),
+          googlesql::types::Int64ArrayType(),
+          googlesql::types::DoubleArrayType(),
+          googlesql::types::StringArrayType(),
+          googlesql::types::BytesArrayType(),
+          googlesql::types::TimestampArrayType(),
+          googlesql::types::DateArrayType()));
 
   absl::flat_hash_set<const PostgresTypeMapping*> type_mappings;
-  ZETASQL_ASSERT_OK(catalog->GetPostgreSQLTypes(&type_mappings));
+  GOOGLESQL_ASSERT_OK(catalog->GetPostgreSQLTypes(&type_mappings));
   EXPECT_THAT(
       type_mappings,
       UnorderedElementsAre(
@@ -353,31 +353,31 @@ TEST_F(EngineSystemCatalogTest, GetTypes) {
 }
 
 TEST_F(EngineSystemCatalogTest, TypeNotFound) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
                        TestSystemCatalog::GetTestCatalog());
-  const zetasql::Type* type;
-  ZETASQL_ASSERT_OK(catalog->GetType("nonexistent_type", &type));
+  const googlesql::Type* type;
+  GOOGLESQL_ASSERT_OK(catalog->GetType("nonexistent_type", &type));
   EXPECT_EQ(type, nullptr);
 }
 
 TEST_F(EngineSystemCatalogTest, TypeReverseNotFound) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
                        TestSystemCatalog::GetTestCatalog());
   const PostgresTypeMapping* type =
-      catalog->GetTypeFromReverseMapping(zetasql::types::Uint32Type());
+      catalog->GetTypeFromReverseMapping(googlesql::types::Uint32Type());
   EXPECT_EQ(type, nullptr);
 }
 
 TEST_F(EngineSystemCatalogTest, FunctionSignaturesByIdx) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
                        TestSystemCatalog::GetTestCatalog());
-  ZETASQL_ASSERT_OK(catalog->AddAbsFunction());
+  GOOGLESQL_ASSERT_OK(catalog->AddAbsFunction());
 
   const PostgresExtendedFunction* function = nullptr;
   // Look at abs, which has mapped googlesql functions.
   function = catalog->GetFunction("pg_catalog", "abs");
   ASSERT_NE(function, nullptr);
-  ASSERT_EQ(function->mode(), zetasql::Function::SCALAR);
+  ASSERT_EQ(function->mode(), googlesql::Function::SCALAR);
   ASSERT_EQ(function->NumSignatures(), 2);
   const PostgresExtendedFunctionSignature* signature =
       function->GetPostgresSignature(0);
@@ -385,67 +385,67 @@ TEST_F(EngineSystemCatalogTest, FunctionSignaturesByIdx) {
   EXPECT_NE(signature->mapped_function(), nullptr);
   EXPECT_EQ(signature->postgres_proc_oid(), 1396);
   ASSERT_EQ(signature->arguments().size(), 1);
-  EXPECT_EQ(signature->argument(0).type(), zetasql::types::Int64Type());
+  EXPECT_EQ(signature->argument(0).type(), googlesql::types::Int64Type());
 
   signature = function->GetPostgresSignature(1);
   ASSERT_NE(signature, nullptr);
   EXPECT_NE(signature->mapped_function(), nullptr);
   EXPECT_EQ(signature->postgres_proc_oid(), 1395);
   ASSERT_EQ(signature->arguments().size(), 1);
-  EXPECT_EQ(signature->argument(0).type(), zetasql::types::DoubleType());
+  EXPECT_EQ(signature->argument(0).type(), googlesql::types::DoubleType());
 }
 
 TEST_F(EngineSystemCatalogTest, FunctionSignaturesByOid) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
                        TestSystemCatalog::GetTestCatalog());
-  ZETASQL_ASSERT_OK(catalog->AddAbsFunction());
+  GOOGLESQL_ASSERT_OK(catalog->AddAbsFunction());
 
-  std::vector<zetasql::InputArgumentType> input_argument_types;
-  input_argument_types.emplace_back(zetasql::types::Int64Type());
+  std::vector<googlesql::InputArgumentType> input_argument_types;
+  input_argument_types.emplace_back(googlesql::types::Int64Type());
 
   // Get the function and signature for PG proc abs(int8_t) -> int8_t.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       FunctionAndSignature function_and_signature,
       catalog->GetFunctionAndSignature(F_ABS_INT8, input_argument_types,
                                        GetLanguageOptions()));
   ASSERT_EQ(function_and_signature.signature().arguments().size(), 1);
   EXPECT_EQ(function_and_signature.signature().argument(0).type(),
-            zetasql::types::Int64Type());
+            googlesql::types::Int64Type());
 
   input_argument_types.clear();
-  input_argument_types.emplace_back(zetasql::types::DoubleType());
+  input_argument_types.emplace_back(googlesql::types::DoubleType());
 
   // Get the function and signature for PG proc abs(float8) -> float8.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       FunctionAndSignature double_function_and_signature,
       catalog->GetFunctionAndSignature(F_ABS_FLOAT8, input_argument_types,
                                        GetLanguageOptions()));
   ASSERT_EQ(double_function_and_signature.signature().arguments().size(), 1);
   EXPECT_EQ(double_function_and_signature.signature().argument(0).type(),
-            zetasql::types::DoubleType());
+            googlesql::types::DoubleType());
 }
 
 // GetFunctions is only used by the RQG and will return the mapped functions.
 TEST_F(EngineSystemCatalogTest, GetFunctions) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
                        TestSystemCatalog::GetTestCatalog());
   // Add a function.
-  ZETASQL_ASSERT_OK(catalog->AddAbsFunction());
+  GOOGLESQL_ASSERT_OK(catalog->AddAbsFunction());
   // Add an ExprType.
-  ZETASQL_ASSERT_OK(catalog->AddTestExprFunction(
+  GOOGLESQL_ASSERT_OK(catalog->AddTestExprFunction(
       PostgresExprIdentifier::Expr(T_CoalesceExpr), "coalesce"));
   // Add a Bool ExprType.
-  ZETASQL_ASSERT_OK(catalog->AddTestExprFunction(
+  GOOGLESQL_ASSERT_OK(catalog->AddTestExprFunction(
       PostgresExprIdentifier::BoolExpr(OR_EXPR), "$or"));
 
-  absl::flat_hash_set<const zetasql::Function*> functions;
-  ZETASQL_ASSERT_OK(catalog->GetFunctions(&functions));
+  absl::flat_hash_set<const googlesql::Function*> functions;
+  GOOGLESQL_ASSERT_OK(catalog->GetFunctions(&functions));
 
   // Collect all the function names and also the set of return types for
   // functions named "abs".
   absl::flat_hash_set<absl::string_view> function_names;
-  absl::flat_hash_set<const zetasql::Type*> abs_result_types;
-  for (const zetasql::Function* function : functions) {
+  absl::flat_hash_set<const googlesql::Type*> abs_result_types;
+  for (const googlesql::Function* function : functions) {
     function_names.insert(function->Name());
     if (function->Name() == "abs") {
       abs_result_types.insert(function->GetSignature(0)->result_type().type());
@@ -457,22 +457,22 @@ TEST_F(EngineSystemCatalogTest, GetFunctions) {
 
   // Check that the signatures are included.
   EXPECT_THAT(abs_result_types,
-              UnorderedElementsAre(zetasql::types::Int64Type(),
-                                   zetasql::types::DoubleType()));
+              UnorderedElementsAre(googlesql::types::Int64Type(),
+                                   googlesql::types::DoubleType()));
 }
 
 TEST_F(EngineSystemCatalogTest, GetSetReturningFunctions) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
                        TestSystemCatalog::GetTestCatalog());
   // Add a function.
-  ZETASQL_ASSERT_OK(catalog->AddGenerateSeriesFunction(/*set_oid=*/true));
+  GOOGLESQL_ASSERT_OK(catalog->AddGenerateSeriesFunction(/*set_oid=*/true));
 
-  absl::flat_hash_set<const zetasql::Function*> functions;
-  ZETASQL_ASSERT_OK(catalog->GetSetReturningFunctions(&functions));
+  absl::flat_hash_set<const googlesql::Function*> functions;
+  GOOGLESQL_ASSERT_OK(catalog->GetSetReturningFunctions(&functions));
 
   // Collect all the function names.
   absl::flat_hash_set<absl::string_view> function_names;
-  for (const zetasql::Function* function : functions) {
+  for (const googlesql::Function* function : functions) {
     function_names.insert(function->Name());
   }
 
@@ -481,18 +481,18 @@ TEST_F(EngineSystemCatalogTest, GetSetReturningFunctions) {
 }
 
 TEST_F(EngineSystemCatalogTest, GetSetReturningFunctionsWithoutSetOid) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
                        TestSystemCatalog::GetTestCatalog());
   // Add a function.
   absl::Status actual_status =
       catalog->AddGenerateSeriesFunction(/*set_oid=*/false);
 
-  absl::flat_hash_set<const zetasql::Function*> functions;
-  ZETASQL_ASSERT_OK(catalog->GetSetReturningFunctions(&functions));
+  absl::flat_hash_set<const googlesql::Function*> functions;
+  GOOGLESQL_ASSERT_OK(catalog->GetSetReturningFunctions(&functions));
 
   // Collect all the function names.
   absl::flat_hash_set<absl::string_view> function_names;
-  for (const zetasql::Function* function : functions) {
+  for (const googlesql::Function* function : functions) {
     function_names.insert(function->Name());
   }
 
@@ -501,21 +501,21 @@ TEST_F(EngineSystemCatalogTest, GetSetReturningFunctionsWithoutSetOid) {
 }
 
 TEST_F(EngineSystemCatalogTest, ReverseFunctionSignatureLookup) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
                        TestSystemCatalog::GetTestCatalog());
-  ZETASQL_ASSERT_OK(catalog->AddAbsFunction());
+  GOOGLESQL_ASSERT_OK(catalog->AddAbsFunction());
 
-  std::vector<zetasql::InputArgumentType> input_argument_types;
-  input_argument_types.emplace_back(zetasql::types::Int64Type());
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Oid proc_oid,
+  std::vector<googlesql::InputArgumentType> input_argument_types;
+  input_argument_types.emplace_back(googlesql::types::Int64Type());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Oid proc_oid,
                        catalog->GetPgProcOidFromReverseMapping(
                            "abs", input_argument_types, GetLanguageOptions()));
   // Expect PG proc abs(int8_t) -> int8_t.
   EXPECT_EQ(proc_oid, F_ABS_INT8);
 
   input_argument_types.clear();
-  input_argument_types.emplace_back(zetasql::types::DoubleType());
-  ZETASQL_ASSERT_OK_AND_ASSIGN(proc_oid,
+  input_argument_types.emplace_back(googlesql::types::DoubleType());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(proc_oid,
                        catalog->GetPgProcOidFromReverseMapping(
                            "abs", input_argument_types, GetLanguageOptions()));
   // Expect PG proc abs(float8) -> float8.
@@ -523,24 +523,24 @@ TEST_F(EngineSystemCatalogTest, ReverseFunctionSignatureLookup) {
 }
 
 TEST_F(EngineSystemCatalogTest, AnyArgTypeMatch) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
                        TestSystemCatalog::GetTestCatalog());
-  ZETASQL_ASSERT_OK(catalog->AddTestType(types::PgBoolMapping()));
+  GOOGLESQL_ASSERT_OK(catalog->AddTestType(types::PgBoolMapping()));
 
-  // The ZetaSQL $equals function accepts two ARG_TYPE_ANY_1 input parameters
+  // The GoogleSQL $equals function accepts two ARG_TYPE_ANY_1 input parameters
   // of the same type.
   PostgresFunctionArguments function_arguments{
       "booleq",
       "$equal",
       {{{gsql_bool, {gsql_bool, gsql_bool}, /*context_ptr=*/nullptr}}}};
-  ZETASQL_ASSERT_OK(catalog->AddTestFunction(function_arguments));
+  GOOGLESQL_ASSERT_OK(catalog->AddTestFunction(function_arguments));
 }
 
 TEST_F(EngineSystemCatalogTest, ArrayTypeMatch) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
                        TestSystemCatalog::GetTestCatalog());
-  ZETASQL_ASSERT_OK(catalog->AddTestType(types::PgInt8ArrayMapping()));
-  ZETASQL_ASSERT_OK(catalog->AddTestType(types::PgFloat8ArrayMapping()));
+  GOOGLESQL_ASSERT_OK(catalog->AddTestType(types::PgInt8ArrayMapping()));
+  GOOGLESQL_ASSERT_OK(catalog->AddTestType(types::PgFloat8ArrayMapping()));
 
   // The correct signature is float8_combine(float8_array, float8_array).
   // Attempting to register the mapping as (float8_array, int8_array) will fail.
@@ -556,15 +556,15 @@ TEST_F(EngineSystemCatalogTest, ArrayTypeMatch) {
 }
 
 TEST_F(EngineSystemCatalogTest, ReverseFunctionOperatorOverride) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
                        TestSystemCatalog::GetTestCatalog());
-  ZETASQL_ASSERT_OK(catalog->AddAbsFunction());
+  GOOGLESQL_ASSERT_OK(catalog->AddAbsFunction());
 
-  std::vector<zetasql::InputArgumentType> input_argument_types;
-  input_argument_types.emplace_back(zetasql::types::DoubleType());
+  std::vector<googlesql::InputArgumentType> input_argument_types;
+  input_argument_types.emplace_back(googlesql::types::DoubleType());
 
   // Only the non-operator version of abs has been added,
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Oid proc_oid,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Oid proc_oid,
                        catalog->GetPgProcOidFromReverseMapping(
                            "abs", input_argument_types, GetLanguageOptions()));
   // Expect PG proc abs(float8) -> float8.
@@ -572,8 +572,8 @@ TEST_F(EngineSystemCatalogTest, ReverseFunctionOperatorOverride) {
 
   // Add the operator version of abs. The reverse lookup should choose the
   // operator function over the non-operator function
-  ZETASQL_ASSERT_OK(catalog->AddFloat8AbsFunction());
-  ZETASQL_ASSERT_OK_AND_ASSIGN(proc_oid,
+  GOOGLESQL_ASSERT_OK(catalog->AddFloat8AbsFunction());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(proc_oid,
                        catalog->GetPgProcOidFromReverseMapping(
                            "abs", input_argument_types, GetLanguageOptions()));
   // Expect PG proc float8abs(float8) -> float8.
@@ -583,23 +583,23 @@ TEST_F(EngineSystemCatalogTest, ReverseFunctionOperatorOverride) {
 TEST_F(EngineSystemCatalogTest, VariableArgFunction) {
   // The PG textcat 2-arg function is mapped to the GSQL concat variable-arg
   // function.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
                        TestSystemCatalog::GetTestCatalog());
-  ZETASQL_ASSERT_OK(catalog->AddConcatFunction());
+  GOOGLESQL_ASSERT_OK(catalog->AddConcatFunction());
 
   // Two string inputs.
-  std::vector<zetasql::InputArgumentType> input_argument_types;
-  input_argument_types.emplace_back(zetasql::types::StringType());
-  input_argument_types.emplace_back(zetasql::types::StringType());
+  std::vector<googlesql::InputArgumentType> input_argument_types;
+  input_argument_types.emplace_back(googlesql::types::StringType());
+  input_argument_types.emplace_back(googlesql::types::StringType());
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       Oid proc_oid, catalog->GetPgProcOidFromReverseMapping(
                         "concat", input_argument_types, GetLanguageOptions()));
   // Expect PG proc textcat(text, text) -> text.
   EXPECT_EQ(proc_oid, F_TEXTCAT);
 
   // However, more than 2 inputs will fail in the reverse transformer.
-  input_argument_types.emplace_back(zetasql::types::StringType());
+  input_argument_types.emplace_back(googlesql::types::StringType());
   EXPECT_THAT(catalog->GetPgProcOidFromReverseMapping(
                   "concat", input_argument_types, GetLanguageOptions()),
               StatusIs(absl::StatusCode::kUnimplemented,
@@ -607,21 +607,21 @@ TEST_F(EngineSystemCatalogTest, VariableArgFunction) {
 }
 
 TEST_F(EngineSystemCatalogTest, NoMappedFunction) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
                        TestSystemCatalog::GetTestCatalog());
 
-  ZETASQL_ASSERT_OK(catalog->AddTypeIfNotPresent(types::PgInt8Mapping()));
-  ZETASQL_ASSERT_OK(catalog->AddTypeIfNotPresent(types::PgFloat8Mapping()));
+  GOOGLESQL_ASSERT_OK(catalog->AddTypeIfNotPresent(types::PgInt8Mapping()));
+  GOOGLESQL_ASSERT_OK(catalog->AddTypeIfNotPresent(types::PgFloat8Mapping()));
 
   // Add a PostgreSQL function without a mapped function.
   PostgresFunctionArguments arguments(
       "float8", /*mapped_function_name=*/"",
       {{{gsql_double, {gsql_int64}, /*context_ptr=*/nullptr},
         /*has_mapped_function=*/false}});
-  ZETASQL_ASSERT_OK(catalog->AddTestFunction(arguments));
+  GOOGLESQL_ASSERT_OK(catalog->AddTestFunction(arguments));
 
-  std::vector<zetasql::InputArgumentType> input_argument_types;
-  input_argument_types.emplace_back(zetasql::types::Int64Type());
+  std::vector<googlesql::InputArgumentType> input_argument_types;
+  input_argument_types.emplace_back(googlesql::types::Int64Type());
 
   // Get the function and signature for casting function PG proc
   // float8(bigint) -> float8.
@@ -632,10 +632,10 @@ TEST_F(EngineSystemCatalogTest, NoMappedFunction) {
 }
 
 TEST_F(EngineSystemCatalogTest, MismatchedFunction) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
                        TestSystemCatalog::GetTestCatalog());
 
-  ZETASQL_ASSERT_OK(catalog->AddTypeIfNotPresent(types::PgInt8Mapping()));
+  GOOGLESQL_ASSERT_OK(catalog->AddTypeIfNotPresent(types::PgInt8Mapping()));
 
   // Try to map two functions with completely different sigantures.
   // abs has one input and $equal has two.
@@ -647,11 +647,11 @@ TEST_F(EngineSystemCatalogTest, MismatchedFunction) {
 }
 
 TEST_F(EngineSystemCatalogTest, UnvalidatedFunctionSignature) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
                        TestSystemCatalog::GetTestCatalog());
 
-  zetasql::FunctionArgumentTypeOptions repeated(
-      zetasql::FunctionArgumentType::REPEATED);
+  googlesql::FunctionArgumentTypeOptions repeated(
+      googlesql::FunctionArgumentType::REPEATED);
   PostgresFunctionArguments arguments("concat", "concat",
                                       {{{gsql_string,
                                          {gsql_string, {gsql_string, repeated}},
@@ -659,14 +659,14 @@ TEST_F(EngineSystemCatalogTest, UnvalidatedFunctionSignature) {
                                         /*has_mapped_function=*/true,
                                         /*explicit_mapped_function_name=*/"",
                                         F_CONCAT}});
-  ZETASQL_ASSERT_OK(catalog->AddTestFunction(arguments));
+  GOOGLESQL_ASSERT_OK(catalog->AddTestFunction(arguments));
 
-  std::vector<zetasql::InputArgumentType> input_argument_types;
+  std::vector<googlesql::InputArgumentType> input_argument_types;
 
   // Function calls with one or more arguments are supported.
   for (int i = 0; i < 20; ++i) {
-    input_argument_types.emplace_back(zetasql::types::StringType());
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    input_argument_types.emplace_back(googlesql::types::StringType());
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         FunctionAndSignature concat,
         catalog->GetFunctionAndSignature(F_CONCAT, input_argument_types,
                                          GetLanguageOptions()));
@@ -674,26 +674,26 @@ TEST_F(EngineSystemCatalogTest, UnvalidatedFunctionSignature) {
 }
 
 TEST_F(EngineSystemCatalogTest, AnyOidAggregateFunction) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
                        TestSystemCatalog::GetTestCatalog());
 
-  ZETASQL_ASSERT_OK(catalog->AddBoolAndFunction());
+  GOOGLESQL_ASSERT_OK(catalog->AddBoolAndFunction());
   const PostgresExtendedFunction* function =
       catalog->GetFunction("pg_catalog", "bool_and");
   ASSERT_NE(function, nullptr);
-  ASSERT_EQ(function->mode(), zetasql::Function::AGGREGATE);
+  ASSERT_EQ(function->mode(), googlesql::Function::AGGREGATE);
   ASSERT_EQ(function->NumSignatures(), 1);
 }
 
 TEST_F(EngineSystemCatalogTest, UnsupportedExpr) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
                        TestSystemCatalog::GetTestCatalog());
-  ZETASQL_ASSERT_OK(catalog->AddTypeIfNotPresent(types::PgBoolMapping()));
+  GOOGLESQL_ASSERT_OK(catalog->AddTypeIfNotPresent(types::PgBoolMapping()));
 
   PostgresExprIdentifier identifier =
       PostgresExprIdentifier::Expr(T_AlternativeSubPlan);
-  std::vector<zetasql::InputArgumentType> input_argument_types;
-  input_argument_types.emplace_back(zetasql::types::BoolType());
+  std::vector<googlesql::InputArgumentType> input_argument_types;
+  input_argument_types.emplace_back(googlesql::types::BoolType());
 
   EXPECT_THAT(catalog->GetFunctionAndSignature(identifier, input_argument_types,
                                                GetLanguageOptions()),
@@ -702,7 +702,7 @@ TEST_F(EngineSystemCatalogTest, UnsupportedExpr) {
 }
 
 TEST_F(EngineSystemCatalogTest, BoolExpr) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
                        TestSystemCatalog::GetTestCatalog());
 
   absl::flat_hash_map<BoolExprType, std::string> bool_exprs = {
@@ -714,22 +714,22 @@ TEST_F(EngineSystemCatalogTest, BoolExpr) {
   absl::flat_hash_map<BoolExprType, int> num_arguments = {
       {AND_EXPR, 5}, {NOT_EXPR, 1}, {OR_EXPR, 20}};
 
-  std::vector<zetasql::InputArgumentType> input_argument_types;
+  std::vector<googlesql::InputArgumentType> input_argument_types;
   for (const auto& [bool_type, builtin_function_name] : bool_exprs) {
     PostgresExprIdentifier identifier =
         PostgresExprIdentifier::BoolExpr(bool_type);
 
     // Add the bool expr -> builtin function mapping.
-    ZETASQL_ASSERT_OK(catalog->AddTestExprFunction(identifier, builtin_function_name));
+    GOOGLESQL_ASSERT_OK(catalog->AddTestExprFunction(identifier, builtin_function_name));
 
     // Construct the input arguments.
     input_argument_types.clear();
     for (int i = 0; i < num_arguments[bool_type]; ++i) {
-      input_argument_types.emplace_back(zetasql::types::BoolType());
+      input_argument_types.emplace_back(googlesql::types::BoolType());
     }
 
     // Get the function and signature in the forward direction.
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         FunctionAndSignature function_and_signature,
         catalog->GetFunctionAndSignature(identifier, input_argument_types,
                                          GetLanguageOptions()));
@@ -745,7 +745,7 @@ TEST_F(EngineSystemCatalogTest, BoolExpr) {
     }
 
     // Get the BoolExprType in the reverse direction.
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         PostgresExprIdentifier reverse_expr,
         catalog->GetPostgresExprIdentifier(builtin_function_name));
     EXPECT_EQ(reverse_expr, identifier);
@@ -753,22 +753,22 @@ TEST_F(EngineSystemCatalogTest, BoolExpr) {
 }
 
 TEST_F(EngineSystemCatalogTest, CoalesceExpr) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
                        TestSystemCatalog::GetTestCatalog());
 
-  ZETASQL_ASSERT_OK(catalog->AddTestExprFunction(
+  GOOGLESQL_ASSERT_OK(catalog->AddTestExprFunction(
       PostgresExprIdentifier::Expr(T_CoalesceExpr), "coalesce"));
 
   // Coalesce is variadic and can have an unlimited number of inputs.
   // Use 6 as a random example of a long list of inputs.
   int num_inputs = 6;
-  std::vector<zetasql::InputArgumentType> input_argument_types;
+  std::vector<googlesql::InputArgumentType> input_argument_types;
   for (int i = 0; i < num_inputs; ++i) {
-    input_argument_types.emplace_back(zetasql::types::Int64Type());
+    input_argument_types.emplace_back(googlesql::types::Int64Type());
   }
 
   // Get the function and signature in the forward direction.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(FunctionAndSignature function_and_signature,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(FunctionAndSignature function_and_signature,
                        catalog->GetFunctionAndSignature(
                            PostgresExprIdentifier::Expr(T_CoalesceExpr),
                            input_argument_types, GetLanguageOptions()));
@@ -784,20 +784,20 @@ TEST_F(EngineSystemCatalogTest, CoalesceExpr) {
   }
 
   // Get the ExprType in the reverse direction.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const PostgresExprIdentifier reverse_expr_node_tag,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const PostgresExprIdentifier reverse_expr_node_tag,
                        catalog->GetPostgresExprIdentifier("coalesce"));
   EXPECT_EQ(reverse_expr_node_tag,
             PostgresExprIdentifier::Expr(T_CoalesceExpr));
 }
 
 TEST_F(EngineSystemCatalogTest, DuplicateFunction) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
                        TestSystemCatalog::GetTestCatalog());
-  ZETASQL_ASSERT_OK(catalog->AddTypeIfNotPresent(types::PgInt8Mapping()));
+  GOOGLESQL_ASSERT_OK(catalog->AddTypeIfNotPresent(types::PgInt8Mapping()));
 
   PostgresFunctionArguments arguments(
       "abs", "abs", {{{gsql_int64, {gsql_int64}, /*context_ptr=*/nullptr}}});
-  ZETASQL_ASSERT_OK(catalog->AddTestFunction(arguments));
+  GOOGLESQL_ASSERT_OK(catalog->AddTestFunction(arguments));
 
   // Catalog should return an error if the function is added twice.
   EXPECT_THAT(catalog->AddTestFunction(arguments),
@@ -806,13 +806,13 @@ TEST_F(EngineSystemCatalogTest, DuplicateFunction) {
 }
 
 TEST_F(EngineSystemCatalogTest, ExplicitMappedFunction) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
                        TestSystemCatalog::GetTestCatalog());
-  ZETASQL_ASSERT_OK(catalog->AddTestType(types::PgBoolMapping()));
-  ZETASQL_ASSERT_OK(catalog->AddTestType(types::PgByteaMapping()));
-  ZETASQL_ASSERT_OK(catalog->AddTestType(types::PgInt8Mapping()));
-  ZETASQL_ASSERT_OK(catalog->AddTestType(types::PgFloat8Mapping()));
-  ZETASQL_ASSERT_OK(catalog->AddTestType(types::PgTextMapping()));
+  GOOGLESQL_ASSERT_OK(catalog->AddTestType(types::PgBoolMapping()));
+  GOOGLESQL_ASSERT_OK(catalog->AddTestType(types::PgByteaMapping()));
+  GOOGLESQL_ASSERT_OK(catalog->AddTestType(types::PgInt8Mapping()));
+  GOOGLESQL_ASSERT_OK(catalog->AddTestType(types::PgFloat8Mapping()));
+  GOOGLESQL_ASSERT_OK(catalog->AddTestType(types::PgTextMapping()));
 
   // The count(bool/bytes/int64_t/double/string/date) function calls should match
   // to the "count" builtin function, but count(*) should match to the
@@ -829,14 +829,14 @@ TEST_F(EngineSystemCatalogTest, ExplicitMappedFunction) {
        {{gsql_int64, {}, /*context_ptr=*/nullptr},
         /*has_mapped_function=*/true,
         /*explicit_mapped_function_name=*/"$count_star"}},
-      zetasql::Function::AGGREGATE};
+      googlesql::Function::AGGREGATE};
 
-  ZETASQL_ASSERT_OK(catalog->AddTestFunction(function_arguments));
+  GOOGLESQL_ASSERT_OK(catalog->AddTestFunction(function_arguments));
 
   // select count(int8_t) should map to the "count" builtin function.
-  std::vector<zetasql::InputArgumentType> input_argument_types;
-  input_argument_types.emplace_back(zetasql::types::Int64Type());
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  std::vector<googlesql::InputArgumentType> input_argument_types;
+  input_argument_types.emplace_back(googlesql::types::Int64Type());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       FunctionAndSignature count_int8,
       catalog->GetFunctionAndSignature(F_COUNT_ANY, input_argument_types,
                                        GetLanguageOptions()));
@@ -844,11 +844,11 @@ TEST_F(EngineSystemCatalogTest, ExplicitMappedFunction) {
   EXPECT_EQ(count_int8.function()->Name(), "count");
   ASSERT_EQ(count_int8.signature().arguments().size(), 1);
   EXPECT_EQ(count_int8.signature().argument(0).type(),
-            zetasql::types::Int64Type());
+            googlesql::types::Int64Type());
 
   // select count(*) should map to the $count_star builtin function.
   input_argument_types.clear();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       FunctionAndSignature count_star,
       catalog->GetFunctionAndSignature(F_COUNT_, input_argument_types,
                                        GetLanguageOptions()));
@@ -858,9 +858,9 @@ TEST_F(EngineSystemCatalogTest, ExplicitMappedFunction) {
 }
 
 TEST_F(EngineSystemCatalogTest, AnyoidFunction) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
                        TestSystemCatalog::GetTestCatalog());
-  ZETASQL_ASSERT_OK(catalog->AddTestType(types::PgTextMapping()));
+  GOOGLESQL_ASSERT_OK(catalog->AddTestType(types::PgTextMapping()));
 
   PostgresFunctionArguments function_arguments{
       "concat",
@@ -870,26 +870,26 @@ TEST_F(EngineSystemCatalogTest, AnyoidFunction) {
   // Concat is a variadic  function in postgres that accepts any types. Confirm
   // that Spangres is able to match a signature with two inputs to the concat
   // function.
-  ZETASQL_ASSERT_OK(catalog->AddTestFunction(function_arguments));
+  GOOGLESQL_ASSERT_OK(catalog->AddTestFunction(function_arguments));
 
-  std::vector<zetasql::InputArgumentType> input_argument_types;
+  std::vector<googlesql::InputArgumentType> input_argument_types;
 
   // Function calls with one argument are unsupported.
-  input_argument_types.emplace_back(zetasql::types::StringType());
+  input_argument_types.emplace_back(googlesql::types::StringType());
   EXPECT_THAT(catalog->GetFunctionAndSignature(F_CONCAT, input_argument_types,
                                                GetLanguageOptions()),
               StatusIs(absl::StatusCode::kUnimplemented,
                        HasSubstr("(text) is not supported")));
 
   // Function calls with two arguments are supported.
-  input_argument_types.emplace_back(zetasql::types::StringType());
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  input_argument_types.emplace_back(googlesql::types::StringType());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       FunctionAndSignature concat,
       catalog->GetFunctionAndSignature(F_CONCAT, input_argument_types,
                                        GetLanguageOptions()));
 
   // Function calls with three arguments are unsupported.
-  input_argument_types.emplace_back(zetasql::types::StringType());
+  input_argument_types.emplace_back(googlesql::types::StringType());
   EXPECT_THAT(catalog->GetFunctionAndSignature(F_CONCAT, input_argument_types,
                                                GetLanguageOptions()),
               StatusIs(absl::StatusCode::kUnimplemented,
@@ -897,13 +897,13 @@ TEST_F(EngineSystemCatalogTest, AnyoidFunction) {
 }
 
 TEST_F(EngineSystemCatalogTest, InvalidReturnType) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
                        TestSystemCatalog::GetTestCatalog());
 
-  ZETASQL_ASSERT_OK(catalog->AddTypeIfNotPresent(types::PgByteaMapping()));
-  ZETASQL_ASSERT_OK(catalog->AddTypeIfNotPresent(types::PgTextMapping()));
+  GOOGLESQL_ASSERT_OK(catalog->AddTypeIfNotPresent(types::PgByteaMapping()));
+  GOOGLESQL_ASSERT_OK(catalog->AddTypeIfNotPresent(types::PgTextMapping()));
 
-  // The PG md5 signature returns text and the ZetaSQL signature returns
+  // The PG md5 signature returns text and the GoogleSQL signature returns
   // bytes.
   PostgresFunctionArguments pg_arguments(
       "md5", "md5", {{{gsql_string, {gsql_string}, /*context_ptr=*/nullptr}}});
@@ -919,7 +919,7 @@ TEST_F(EngineSystemCatalogTest, InvalidReturnType) {
 }
 
 TEST_F(EngineSystemCatalogTest, InvalidNamespace) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
                        TestSystemCatalog::GetTestCatalog());
   EXPECT_THAT(catalog->AddAbsFunction("public"),
               StatusIs(absl::StatusCode::kUnimplemented,
@@ -932,14 +932,14 @@ TEST_F(EngineSystemCatalogTest, InvalidNamespace) {
 }
 
 TEST_F(EngineSystemCatalogTest, CastOverrideFunction) {
-  // The default ZetaSQL catalog doesn't include date constructors.
+  // The default GoogleSQL catalog doesn't include date constructors.
   // Enable the feature so we have something to test  with.
-  absl::flat_hash_set<zetasql::LanguageFeature> language_features = {
-      zetasql::FEATURE_CIVIL_TIME,
-      zetasql::FEATURE_DATE_TIME_CONSTRUCTORS};
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
+  absl::flat_hash_set<googlesql::LanguageFeature> language_features = {
+      googlesql::FEATURE_CIVIL_TIME,
+      googlesql::FEATURE_DATE_TIME_CONSTRUCTORS};
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
                        TestSystemCatalog::GetTestCatalog(language_features));
-  zetasql::LanguageOptions language_options;
+  googlesql::LanguageOptions language_options;
   language_options.SetEnabledLanguageFeatures(language_features);
 
   EXPECT_FALSE(catalog->HasCastOverrideFunction(gsql_string, gsql_date));
@@ -956,10 +956,10 @@ TEST_F(EngineSystemCatalogTest, CastOverrideFunction) {
           HasSubstr(
               "function named \"substr\" for casting <STRING> to <DATE>")));
 
-  ZETASQL_ASSERT_OK(catalog->AddCastOverrideFunction(gsql_string, gsql_date, "date",
+  GOOGLESQL_ASSERT_OK(catalog->AddCastOverrideFunction(gsql_string, gsql_date, "date",
                                              language_options));
   EXPECT_TRUE(catalog->HasCastOverrideFunction(gsql_string, gsql_date));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(FunctionAndSignature function_and_signature,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(FunctionAndSignature function_and_signature,
                        catalog->GetCastOverrideFunctionAndSignature(
                            gsql_string, gsql_date, language_options));
   ASSERT_NE(function_and_signature.function(), nullptr);
@@ -971,10 +971,10 @@ TEST_F(EngineSystemCatalogTest, CastOverrideFunction) {
 }
 
 TEST_F(EngineSystemCatalogTest, SqlRewriteFunctionWithNamedArgs) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
                        TestSystemCatalog::GetTestCatalog());
-  ZETASQL_ASSERT_OK(catalog->AddTestType(types::PgBoolMapping()));
-  ZETASQL_ASSERT_OK(catalog->AddTestType(types::PgInt8ArrayMapping()));
+  GOOGLESQL_ASSERT_OK(catalog->AddTestType(types::PgBoolMapping()));
+  GOOGLESQL_ASSERT_OK(catalog->AddTestType(types::PgInt8ArrayMapping()));
 
   // Add a PostgreSQL function that maps to a googlesql function that is
   // implemented as a rewrite with named args.
@@ -983,14 +983,14 @@ TEST_F(EngineSystemCatalogTest, SqlRewriteFunctionWithNamedArgs) {
                                       {{{gsql_bool,
                                          {gsql_int64_array, gsql_int64_array},
                                          /*context_ptr=*/nullptr}}}};
-  ZETASQL_ASSERT_OK(catalog->AddTestFunction(arguments));
+  GOOGLESQL_ASSERT_OK(catalog->AddTestFunction(arguments));
 
-  std::vector<zetasql::InputArgumentType> input_argument_types;
-  input_argument_types.emplace_back(zetasql::types::Int64ArrayType());
-  input_argument_types.emplace_back(zetasql::types::Int64ArrayType());
+  std::vector<googlesql::InputArgumentType> input_argument_types;
+  input_argument_types.emplace_back(googlesql::types::Int64ArrayType());
+  input_argument_types.emplace_back(googlesql::types::Int64ArrayType());
 
   // Get the function and signature for checking whether two arrays overlap.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       FunctionAndSignature function_and_signature,
       catalog->GetFunctionAndSignature(F_ARRAYOVERLAP, input_argument_types,
                                        GetLanguageOptions()));

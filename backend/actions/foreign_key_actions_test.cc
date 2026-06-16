@@ -21,11 +21,11 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/types/type_factory.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/types/type_factory.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/types/span.h"
 #include "backend/actions/action.h"
@@ -46,7 +46,7 @@ namespace backend {
 namespace {
 
 using ::google::spanner::emulator::test::ScopedEmulatorFeatureFlagsSetter;
-using ::zetasql::values::Int64;
+using ::googlesql::values::Int64;
 
 // How to read the acronyms in this file:
 // FK - Foreign Key.
@@ -64,7 +64,7 @@ class ForeignKeyActionTest : public test::ActionsTest {
 
  protected:
   void Init(const absl::Span<const std::string> schema) {
-    zetasql::TypeFactory type_factory_;
+    googlesql::TypeFactory type_factory_;
     schema_ =
         emulator::test::CreateSchemaFromDDL(schema, &type_factory_).value();
     referenced_table_ = schema_->FindTable("Referenced");
@@ -104,13 +104,13 @@ TEST_F(ForeignKeyActionTest, ReferencedPK_ReferencingPK) {
         )"};
   Init(schema);
   // Add row in base table.
-  ZETASQL_ASSERT_OK(store()->Insert(referenced_table_, Key({Int64(1)}),
+  GOOGLESQL_ASSERT_OK(store()->Insert(referenced_table_, Key({Int64(1)}),
                             referenced_columns_, {Int64(1), Int64(10)}));
-  ZETASQL_ASSERT_OK(store()->Insert(referencing_table_, Key({Int64(1)}),
+  GOOGLESQL_ASSERT_OK(store()->Insert(referencing_table_, Key({Int64(1)}),
                             referencing_columns_, {Int64(1), Int64(20)}));
 
   // Delete base table entry.
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       effector_->Effect(ctx(), Delete(referenced_table_, Key({Int64(1)}))));
   // Verify foreign key delete cascade to referencing table is added to the
   // transaction buffer.
@@ -141,14 +141,14 @@ TEST_F(ForeignKeyActionTest, ReferencedPKP_ReferencingPK) {
   Init(schema);
 
   // Add row in base table.
-  ZETASQL_ASSERT_OK(store()->Insert(referenced_table_, Key({Int64(1), Int64(2)}),
+  GOOGLESQL_ASSERT_OK(store()->Insert(referenced_table_, Key({Int64(1), Int64(2)}),
                             referenced_columns_,
                             {Int64(1), Int64(2), Int64(30)}));
-  ZETASQL_ASSERT_OK(store()->Insert(referencing_table_, Key({Int64(1)}),
+  GOOGLESQL_ASSERT_OK(store()->Insert(referencing_table_, Key({Int64(1)}),
                             referencing_columns_, {Int64(1), Int64(40)}));
 
   // Delete base table entry.
-  ZETASQL_EXPECT_OK(effector_->Effect(
+  GOOGLESQL_EXPECT_OK(effector_->Effect(
       ctx(), Delete(referenced_table_, Key({Int64(1), Int64(2)}))));
   // Verify foreign key delete cascade to referencing table is added to the
   // transaction buffer.
@@ -180,15 +180,15 @@ TEST_F(ForeignKeyActionTest, ReferencedPKOutOfOrder_ReferencingPK) {
   Init(schema);
 
   // Add row in base table.
-  ZETASQL_ASSERT_OK(store()->Insert(referenced_table_, Key({Int64(1), Int64(2)}),
+  GOOGLESQL_ASSERT_OK(store()->Insert(referenced_table_, Key({Int64(1), Int64(2)}),
                             referenced_columns_,
                             {Int64(1), Int64(2), Int64(30)}));
-  ZETASQL_ASSERT_OK(store()->Insert(referencing_table_, Key({Int64(2), Int64(1)}),
+  GOOGLESQL_ASSERT_OK(store()->Insert(referencing_table_, Key({Int64(2), Int64(1)}),
                             referencing_columns_,
                             {Int64(2), Int64(1), Int64(40)}));
 
   // Delete base table entry.
-  ZETASQL_EXPECT_OK(effector_->Effect(
+  GOOGLESQL_EXPECT_OK(effector_->Effect(
       ctx(), Delete(referenced_table_, Key({Int64(1), Int64(2)}))));
   // Verify foreign key delete cascade to referencing table is added to the
   // transaction buffer.
@@ -218,13 +218,13 @@ TEST_F(ForeignKeyActionTest, ReferencedNonPK_ReferencingPK) {
   Init(schema);
 
   // Add row in base table.
-  ZETASQL_ASSERT_OK(store()->Insert(referenced_table_, Key({Int64(1)}),
+  GOOGLESQL_ASSERT_OK(store()->Insert(referenced_table_, Key({Int64(1)}),
                             referenced_columns_, {Int64(1), Int64(10)}));
-  ZETASQL_ASSERT_OK(store()->Insert(referencing_table_, Key({Int64(10)}),
+  GOOGLESQL_ASSERT_OK(store()->Insert(referencing_table_, Key({Int64(10)}),
                             referencing_columns_, {Int64(10), Int64(20)}));
 
   // Delete base table entry.
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       effector_->Effect(ctx(), Delete(referenced_table_, Key({Int64(1)}))));
   // Verify foreign key delete cascade to referencing table is added to the
   // transaction buffer.
@@ -256,14 +256,14 @@ TEST_F(ForeignKeyActionTest, ReferencedPK_ReferencingPKP) {
   Init(schema);
 
   // Add row in base table.
-  ZETASQL_ASSERT_OK(store()->Insert(referenced_table_, Key({Int64(1)}),
+  GOOGLESQL_ASSERT_OK(store()->Insert(referenced_table_, Key({Int64(1)}),
                             referenced_columns_, {Int64(1), Int64(10)}));
-  ZETASQL_ASSERT_OK(store()->Insert(referencing_table_, Key({Int64(1), Int64(20)}),
+  GOOGLESQL_ASSERT_OK(store()->Insert(referencing_table_, Key({Int64(1), Int64(20)}),
                             referencing_columns_,
                             {Int64(1), Int64(20), Int64(100)}));
 
   // Delete base table entry.
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       effector_->Effect(ctx(), Delete(referenced_table_, Key({Int64(1)}))));
   // Verify foreign key delete cascade to referencing table is added to the
   // transaction buffer.
@@ -296,15 +296,15 @@ TEST_F(ForeignKeyActionTest, ReferencedPK_ReferencingPKOutOfOrder) {
   Init(schema);
 
   // Add row in base table.
-  ZETASQL_ASSERT_OK(store()->Insert(referenced_table_, Key({Int64(1), Int64(20)}),
+  GOOGLESQL_ASSERT_OK(store()->Insert(referenced_table_, Key({Int64(1), Int64(20)}),
                             referenced_columns_,
                             {Int64(1), Int64(20), Int64(30)}));
-  ZETASQL_ASSERT_OK(store()->Insert(referencing_table_, Key({Int64(20), Int64(1)}),
+  GOOGLESQL_ASSERT_OK(store()->Insert(referencing_table_, Key({Int64(20), Int64(1)}),
                             referencing_columns_,
                             {Int64(20), Int64(1), Int64(400)}));
 
   // Delete base table entry.
-  ZETASQL_EXPECT_OK(effector_->Effect(
+  GOOGLESQL_EXPECT_OK(effector_->Effect(
       ctx(), Delete(referenced_table_, Key({Int64(1), Int64(20)}))));
   // Verify foreign key delete cascade to referencing table is added to the
   // transaction buffer.
@@ -335,17 +335,17 @@ TEST_F(ForeignKeyActionTest, ReferencedPK_ReferencingNonPK) {
   Init(schema);
 
   // Add row in base table & index.
-  ZETASQL_ASSERT_OK(store()->Insert(referenced_table_, Key({Int64(1)}),
+  GOOGLESQL_ASSERT_OK(store()->Insert(referenced_table_, Key({Int64(1)}),
                             referenced_columns_, {Int64(1), Int64(10)}));
-  ZETASQL_ASSERT_OK(store()->Insert(referencing_table_, Key({Int64(50)}),
+  GOOGLESQL_ASSERT_OK(store()->Insert(referencing_table_, Key({Int64(50)}),
                             referencing_columns_, {Int64(50), Int64(1)}));
-  ZETASQL_ASSERT_OK(store()->Insert(foreign_key_->referencing_data_table(),
+  GOOGLESQL_ASSERT_OK(store()->Insert(foreign_key_->referencing_data_table(),
                             Key({Int64(1), Int64(50)}),
                             foreign_key_->referencing_data_table()->columns(),
                             {Int64(1), Int64(50)}));
 
   // Delete base table entry.
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       effector_->Effect(ctx(), Delete(referenced_table_, Key({Int64(1)}))));
   // Verify foreign key delete cascade to referencing table is added to the
   // transaction buffer.
@@ -375,17 +375,17 @@ TEST_F(ForeignKeyActionTest, ReferencedNonPK_ReferencingNonPK) {
   Init(schema);
 
   // Add row in base table & index.
-  ZETASQL_ASSERT_OK(store()->Insert(referenced_table_, Key({Int64(1)}),
+  GOOGLESQL_ASSERT_OK(store()->Insert(referenced_table_, Key({Int64(1)}),
                             referenced_columns_, {Int64(1), Int64(10)}));
-  ZETASQL_ASSERT_OK(store()->Insert(referencing_table_, Key({Int64(20)}),
+  GOOGLESQL_ASSERT_OK(store()->Insert(referencing_table_, Key({Int64(20)}),
                             referencing_columns_, {Int64(20), Int64(10)}));
-  ZETASQL_ASSERT_OK(store()->Insert(foreign_key_->referencing_data_table(),
+  GOOGLESQL_ASSERT_OK(store()->Insert(foreign_key_->referencing_data_table(),
                             Key({Int64(10), Int64(20)}),
                             foreign_key_->referencing_data_table()->columns(),
                             {Int64(10), Int64(20)}));
 
   // Delete base table entry.
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       effector_->Effect(ctx(), Delete(referenced_table_, Key({Int64(1)}))));
   // Verify foreign key delete cascade to referencing table is added to the
   // transaction buffer.
@@ -417,17 +417,17 @@ TEST_F(ForeignKeyActionTest, ReferencedPKNonPK_ReferencingPKNonPK) {
   Init(schema);
 
   // Add row in base table & index.
-  ZETASQL_ASSERT_OK(store()->Insert(referenced_table_, Key({Int64(1)}),
+  GOOGLESQL_ASSERT_OK(store()->Insert(referenced_table_, Key({Int64(1)}),
                             referenced_columns_, {Int64(1), Int64(10)}));
-  ZETASQL_ASSERT_OK(store()->Insert(referencing_table_, Key({Int64(1)}),
+  GOOGLESQL_ASSERT_OK(store()->Insert(referencing_table_, Key({Int64(1)}),
                             referencing_columns_, {Int64(1), Int64(10)}));
-  ZETASQL_ASSERT_OK(store()->Insert(foreign_key_->referencing_data_table(),
+  GOOGLESQL_ASSERT_OK(store()->Insert(foreign_key_->referencing_data_table(),
                             Key({Int64(1), Int64(10)}),
                             foreign_key_->referencing_data_table()->columns(),
                             {Int64(1), Int64(10)}));
 
   // Delete base table entry.
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       effector_->Effect(ctx(), Delete(referenced_table_, Key({Int64(1)}))));
   // Verify foreign key delete cascade to referencing table is added to the
   // transaction buffer.
@@ -460,15 +460,15 @@ TEST_F(ForeignKeyActionTest, ReferencedPKPOutOfOrder_ReferencingPK) {
   Init(schema);
 
   // Add row in base table.
-  ZETASQL_ASSERT_OK(store()->Insert(
+  GOOGLESQL_ASSERT_OK(store()->Insert(
       referenced_table_, Key({Int64(1), Int64(2), Int64(3)}),
       referenced_columns_, {Int64(1), Int64(2), Int64(3), Int64(10)}));
-  ZETASQL_ASSERT_OK(store()->Insert(referencing_table_, Key({Int64(2), Int64(1)}),
+  GOOGLESQL_ASSERT_OK(store()->Insert(referencing_table_, Key({Int64(2), Int64(1)}),
                             referencing_columns_,
                             {Int64(2), Int64(1), Int64(10)}));
 
   // Delete base table entry.
-  ZETASQL_EXPECT_OK(effector_->Effect(
+  GOOGLESQL_EXPECT_OK(effector_->Effect(
       ctx(), Delete(referenced_table_, Key({Int64(1), Int64(2), Int64(3)}))));
   // Verify foreign key delete cascade to referencing table is added to the
   // transaction buffer.
@@ -501,15 +501,15 @@ TEST_F(ForeignKeyActionTest, ReferencedPKPOutOfOrder_ReferencingPKOutOfOrder) {
   Init(schema);
 
   // Add row in base table.
-  ZETASQL_ASSERT_OK(store()->Insert(
+  GOOGLESQL_ASSERT_OK(store()->Insert(
       referenced_table_, Key({Int64(1), Int64(2), Int64(3)}),
       referenced_columns_, {Int64(1), Int64(2), Int64(3), Int64(10)}));
-  ZETASQL_ASSERT_OK(store()->Insert(referencing_table_, Key({Int64(1), Int64(2)}),
+  GOOGLESQL_ASSERT_OK(store()->Insert(referencing_table_, Key({Int64(1), Int64(2)}),
                             referencing_columns_,
                             {Int64(1), Int64(2), Int64(50)}));
 
   // Delete base table entry.
-  ZETASQL_EXPECT_OK(effector_->Effect(
+  GOOGLESQL_EXPECT_OK(effector_->Effect(
       ctx(), Delete(referenced_table_, Key({Int64(1), Int64(2), Int64(3)}))));
   // Verify foreign key delete cascade to referencing table is added to the
   // transaction buffer.
@@ -543,15 +543,15 @@ TEST_F(ForeignKeyActionTest, ReferencedPKPOutOfOrder_ReferencingPKPOutOfOrder) {
   Init(schema);
 
   // Add row in base table.
-  ZETASQL_ASSERT_OK(store()->Insert(
+  GOOGLESQL_ASSERT_OK(store()->Insert(
       referenced_table_, Key({Int64(1), Int64(2), Int64(3)}),
       referenced_columns_, {Int64(1), Int64(2), Int64(3), Int64(10)}));
-  ZETASQL_ASSERT_OK(store()->Insert(
+  GOOGLESQL_ASSERT_OK(store()->Insert(
       referencing_table_, Key({Int64(1), Int64(2), Int64(4)}),
       referencing_columns_, {Int64(1), Int64(2), Int64(4), Int64(50)}));
 
   // Delete base table entry.
-  ZETASQL_EXPECT_OK(effector_->Effect(
+  GOOGLESQL_EXPECT_OK(effector_->Effect(
       ctx(), Delete(referenced_table_, Key({Int64(1), Int64(2), Int64(3)}))));
   // Verify foreign key delete cascade to referencing table is added to the
   // transaction buffer.
@@ -585,19 +585,19 @@ TEST_F(ForeignKeyActionTest, ReferencedPKPOutOfOrder_ReferencingNone) {
   Init(schema);
 
   // Add row in base table & index.
-  ZETASQL_ASSERT_OK(store()->Insert(
+  GOOGLESQL_ASSERT_OK(store()->Insert(
       referenced_table_, Key({Int64(1), Int64(2), Int64(3)}),
       referenced_columns_, {Int64(1), Int64(2), Int64(3), Int64(10)}));
-  ZETASQL_ASSERT_OK(store()->Insert(
+  GOOGLESQL_ASSERT_OK(store()->Insert(
       referencing_table_, Key({Int64(10), Int64(1), Int64(2)}),
       referencing_columns_, {Int64(10), Int64(1), Int64(2), Int64(50)}));
-  ZETASQL_ASSERT_OK(store()->Insert(foreign_key_->referencing_data_table(),
+  GOOGLESQL_ASSERT_OK(store()->Insert(foreign_key_->referencing_data_table(),
                             Key({Int64(1), Int64(2), Int64(10)}),
                             foreign_key_->referencing_data_table()->columns(),
                             {Int64(1), Int64(2), Int64(10)}));
 
   // Delete base table entry.
-  ZETASQL_EXPECT_OK(effector_->Effect(
+  GOOGLESQL_EXPECT_OK(effector_->Effect(
       ctx(), Delete(referenced_table_, Key({Int64(1), Int64(2), Int64(3)}))));
   // Verify foreign key delete cascade to referencing table is added to the
   // transaction buffer.

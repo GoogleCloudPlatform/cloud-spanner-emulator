@@ -45,18 +45,18 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/function.h"
-#include "zetasql/public/function_signature.h"
-#include "zetasql/public/functions/date_time_util.h"
-#include "zetasql/public/interval_value.h"
-#include "zetasql/public/types/timestamp_util.h"
-#include "zetasql/public/types/type.h"
-#include "zetasql/public/types/type_factory.h"
-#include "zetasql/public/uuid_value.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/function.h"
+#include "googlesql/public/function_signature.h"
+#include "googlesql/public/functions/date_time_util.h"
+#include "googlesql/public/interval_value.h"
+#include "googlesql/public/types/timestamp_util.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/public/types/type_factory.h"
+#include "googlesql/public/uuid_value.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/log/check.h"
@@ -79,38 +79,43 @@ namespace postgres_translator {
 namespace {
 using spangres::datatypes::CreatePgJsonbValueWithMemoryContext;
 using spangres::datatypes::CreatePgNumericValueWithMemoryContext;
+
+googlesql::Value UnwrapValue(absl::StatusOr<googlesql::Value> status_or) {
+  ABSL_CHECK(status_or.ok()) << status_or.status();
+  return status_or.value();
+}
 using spangres::datatypes::CreatePgOidValue;
 using spangres::datatypes::common::kMaxPGNumericFractionalDigits;
 using spangres::datatypes::common::kMaxPGNumericWholeDigits;
 using spangres::datatypes::common::MaxNumericString;
 using spangres::datatypes::common::MinNumericString;
 using testing::HasSubstr;
-using zetasql_base::testing::IsOkAndHolds;
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::IsOkAndHolds;
+using googlesql_base::testing::StatusIs;
 
-static zetasql::Value CreatePgJsonbNullValue() {
-  static const zetasql::Type* gsql_pg_jsonb =
+static googlesql::Value CreatePgJsonbNullValue() {
+  static const googlesql::Type* gsql_pg_jsonb =
       spangres::datatypes::GetPgJsonbType();
-  return zetasql::values::Null(gsql_pg_jsonb);
+  return googlesql::values::Null(gsql_pg_jsonb);
 }
 
-static zetasql::Value CreatePgNumericNullValue() {
-  static const zetasql::Type* gsql_pg_numeric =
+static googlesql::Value CreatePgNumericNullValue() {
+  static const googlesql::Type* gsql_pg_numeric =
       spangres::datatypes::GetPgNumericType();
-  return zetasql::values::Null(gsql_pg_numeric);
+  return googlesql::values::Null(gsql_pg_numeric);
 }
 
-static zetasql::Value CreateIntervalValue(absl::string_view interval_string) {
-  return zetasql::values::Interval(
-      *zetasql::IntervalValue::ParseFromString(interval_string,
+static googlesql::Value CreateIntervalValue(absl::string_view interval_string) {
+  return googlesql::values::Interval(
+      *googlesql::IntervalValue::ParseFromString(interval_string,
                                                  /*allow_nanos=*/true));
 }
 
-static zetasql::Value CreateUuidValue(absl::string_view uuid_string) {
-  absl::StatusOr<zetasql::UuidValue> uuid_value =
-      zetasql::UuidValue::FromString(uuid_string);
+static googlesql::Value CreateUuidValue(absl::string_view uuid_string) {
+  absl::StatusOr<googlesql::UuidValue> uuid_value =
+      googlesql::UuidValue::FromString(uuid_string);
   ABSL_CHECK_OK(uuid_value) << "Failed to parse UUID string: " << uuid_string;
-  return zetasql::values::Uuid(*uuid_value);
+  return googlesql::values::Uuid(*uuid_value);
 }
 
 class EmulatorFunctionsTest : public ::testing::Test {
@@ -122,7 +127,7 @@ class EmulatorFunctionsTest : public ::testing::Test {
     for (auto& function : spanner_pg_functions) {
       // Add entry for function alias.
       if (!function->alias_name().empty()) {
-        auto alias_function = std::make_unique<zetasql::Function>(
+        auto alias_function = std::make_unique<googlesql::Function>(
             function->Name(), function->GetGroup(), function->mode(),
             function->signatures(), function->function_options());
         functions_[function->alias_name()] = std::move(alias_function);
@@ -131,9 +136,9 @@ class EmulatorFunctionsTest : public ::testing::Test {
     }
   }
 
-  std::unordered_map<std::string, std::unique_ptr<zetasql::Function>>
+  std::unordered_map<std::string, std::unique_ptr<googlesql::Function>>
       functions_;
-  zetasql::FunctionEvaluator evaluator_;
+  googlesql::FunctionEvaluator evaluator_;
 };
 
 // Performs equality with the memory arena initialized. This is necessary for pg
@@ -152,8 +157,8 @@ MATCHER_P(EqPG, result,
 
 struct PGScalarFunctionTestCase {
   std::string function_name;
-  std::vector<zetasql::Value> function_arguments;
-  zetasql::Value expected_result;
+  std::vector<googlesql::Value> function_arguments;
+  googlesql::Value expected_result;
   absl::StatusCode expected_status_code = absl::StatusCode::kOk;
   std::string expected_error_message = "";
 };
@@ -165,13 +170,13 @@ TEST_P(PGScalarFunctionsTest, ExecutesFunctionsSuccessfully) {
   const PGScalarFunctionTestCase& param = GetParam();
   std::vector<std::string> arg_strings;
   arg_strings.reserve(param.function_arguments.size());
-  for (const zetasql::Value& value : param.function_arguments) {
+  for (const googlesql::Value& value : param.function_arguments) {
     arg_strings.push_back(value.DebugString());
   }
 
   SCOPED_TRACE(absl::StrCat("Function: ", param.function_name,
                             "\n Args: ", absl::StrJoin(arg_strings, ", ")));
-  std::unordered_map<std::string, std::unique_ptr<zetasql::Function>>
+  std::unordered_map<std::string, std::unique_ptr<googlesql::Function>>
       functions;
   SpannerPGFunctions spanner_pg_functions =
       GetSpannerPGFunctions("TestCatalog");
@@ -179,7 +184,7 @@ TEST_P(PGScalarFunctionsTest, ExecutesFunctionsSuccessfully) {
   for (auto& function : spanner_pg_functions) {
     // Add entry for function alias.
     if (!function->alias_name().empty()) {
-      auto alias_function = std::make_unique<zetasql::Function>(
+      auto alias_function = std::make_unique<googlesql::Function>(
           function->Name(), function->GetGroup(), function->mode(),
           function->signatures(), function->function_options());
       functions[function->alias_name()] = std::move(alias_function);
@@ -187,17 +192,17 @@ TEST_P(PGScalarFunctionsTest, ExecutesFunctionsSuccessfully) {
     functions[function->Name()] = std::move(function);
   }
 
-  const zetasql::Function* function = functions[param.function_name].get();
+  const googlesql::Function* function = functions[param.function_name].get();
   ASSERT_NE(function, nullptr) << "Function not found: " << param.function_name;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      zetasql::FunctionEvaluator evaluator,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      googlesql::FunctionEvaluator evaluator,
       (function->GetFunctionEvaluatorFactory())(
           // This test case ExecutesFunctionsSuccessfully assumes that a
           // function can be found, so we do not check if c_find_if cannot find
           // any function.
           *absl::c_find_if(
               function->signatures(),
-              [&param](const zetasql::FunctionSignature& signature) {
+              [&param](const googlesql::FunctionSignature& signature) {
                 return signature.result_type().type() ==
                        param.expected_result.type();
               })));
@@ -211,97 +216,97 @@ TEST_P(PGScalarFunctionsTest, ExecutesFunctionsSuccessfully) {
   }
 }
 
-const zetasql::Value kNullDoubleValue = zetasql::values::NullDouble();
-const zetasql::Value kDoubleValue = zetasql::values::Double(1.0);
-const zetasql::Value kPosInfDoubleValue =
-    zetasql::values::Double(std::numeric_limits<double>::infinity());
-const zetasql::Value kNegInfDoubleValue =
-    zetasql::values::Double(-1 * std::numeric_limits<double>::infinity());
-const zetasql::Value kDoubleNaNValue =
-    zetasql::values::Double(std::numeric_limits<double>::quiet_NaN());
-const zetasql::Value kDoubleMaxValue =
-    zetasql::values::Double(std::numeric_limits<double>::max());
-const zetasql::Value kDoubleMinValue =
-    zetasql::values::Double(std::numeric_limits<double>::min());
-const zetasql::Value kDoubleLowestValue =
-    zetasql::values::Double(std::numeric_limits<double>::lowest());
+const googlesql::Value kNullDoubleValue = googlesql::values::NullDouble();
+const googlesql::Value kDoubleValue = googlesql::values::Double(1.0);
+const googlesql::Value kPosInfDoubleValue =
+    googlesql::values::Double(std::numeric_limits<double>::infinity());
+const googlesql::Value kNegInfDoubleValue =
+    googlesql::values::Double(-1 * std::numeric_limits<double>::infinity());
+const googlesql::Value kDoubleNaNValue =
+    googlesql::values::Double(std::numeric_limits<double>::quiet_NaN());
+const googlesql::Value kDoubleMaxValue =
+    googlesql::values::Double(std::numeric_limits<double>::max());
+const googlesql::Value kDoubleMinValue =
+    googlesql::values::Double(std::numeric_limits<double>::min());
+const googlesql::Value kDoubleLowestValue =
+    googlesql::values::Double(std::numeric_limits<double>::lowest());
 
-const zetasql::Value kNullFloatValue = zetasql::values::NullFloat();
-const zetasql::Value kFloatValue = zetasql::values::Float(1.0);
-const zetasql::Value kPosInfFloatValue =
-    zetasql::values::Float(std::numeric_limits<float>::infinity());
-const zetasql::Value kNegInfFloatValue =
-    zetasql::values::Float(-1 * std::numeric_limits<float>::infinity());
-const zetasql::Value kFloatNaNValue =
-    zetasql::values::Float(std::numeric_limits<float>::quiet_NaN());
-const zetasql::Value kFloatMaxValue =
-    zetasql::values::Float(std::numeric_limits<float>::max());
-const zetasql::Value kFloatMinValue =
-    zetasql::values::Float(std::numeric_limits<float>::min());
-const zetasql::Value kFloatLowestValue =
-    zetasql::values::Float(std::numeric_limits<float>::lowest());
+const googlesql::Value kNullFloatValue = googlesql::values::NullFloat();
+const googlesql::Value kFloatValue = googlesql::values::Float(1.0);
+const googlesql::Value kPosInfFloatValue =
+    googlesql::values::Float(std::numeric_limits<float>::infinity());
+const googlesql::Value kNegInfFloatValue =
+    googlesql::values::Float(-1 * std::numeric_limits<float>::infinity());
+const googlesql::Value kFloatNaNValue =
+    googlesql::values::Float(std::numeric_limits<float>::quiet_NaN());
+const googlesql::Value kFloatMaxValue =
+    googlesql::values::Float(std::numeric_limits<float>::max());
+const googlesql::Value kFloatMinValue =
+    googlesql::values::Float(std::numeric_limits<float>::min());
+const googlesql::Value kFloatLowestValue =
+    googlesql::values::Float(std::numeric_limits<float>::lowest());
 
-const zetasql::Value kNullInt64Value = zetasql::values::NullInt64();
-const zetasql::Value kInt64Value = zetasql::values::Int64(1);
-const zetasql::Value kInt64MaxValue =
-    zetasql::values::Int64(std::numeric_limits<int64_t>::max());
-const zetasql::Value kInt64MinValue =
-    zetasql::values::Int64(std::numeric_limits<int64_t>::min());
+const googlesql::Value kNullInt64Value = googlesql::values::NullInt64();
+const googlesql::Value kInt64Value = googlesql::values::Int64(1);
+const googlesql::Value kInt64MaxValue =
+    googlesql::values::Int64(std::numeric_limits<int64_t>::max());
+const googlesql::Value kInt64MinValue =
+    googlesql::values::Int64(std::numeric_limits<int64_t>::min());
 
-const zetasql::Value kNullPGNumericValue =
-    zetasql::values::Null(spangres::datatypes::GetPgNumericType());
-const zetasql::Value kPGNumericValue =
+const googlesql::Value kNullPGNumericValue =
+    googlesql::values::Null(spangres::datatypes::GetPgNumericType());
+const googlesql::Value kPGNumericValue =
     *CreatePgNumericValueWithMemoryContext("1.0");
-const zetasql::Value kPGNumericNaNValue =
+const googlesql::Value kPGNumericNaNValue =
     *CreatePgNumericValueWithMemoryContext("NaN");
-const zetasql::Value kPGNumericMaxValue =
+const googlesql::Value kPGNumericMaxValue =
     *CreatePgNumericValueWithMemoryContext(MaxNumericString());
-const zetasql::Value kPGNumericMinValue =
+const googlesql::Value kPGNumericMinValue =
     *CreatePgNumericValueWithMemoryContext(MinNumericString());
-const zetasql::Value kPGNumericMaxDoubleValueRetainingFirst15Digits =
+const googlesql::Value kPGNumericMaxDoubleValueRetainingFirst15Digits =
     *CreatePgNumericValueWithMemoryContext(
         absl::StrCat("179769313486232", std::string(294, '0')));
-const zetasql::Value kPGNumericLowestDoubleValueRetainingFirst15Digits =
+const googlesql::Value kPGNumericLowestDoubleValueRetainingFirst15Digits =
     *CreatePgNumericValueWithMemoryContext(
         absl::StrCat("-179769313486232", std::string(294, '0')));
-const zetasql::Value kPGNumericMinDoubleValueRetainingLast15Digits =
+const googlesql::Value kPGNumericMinDoubleValueRetainingLast15Digits =
     *CreatePgNumericValueWithMemoryContext(
         absl::StrCat("0.", std::string(307, '0'), "22250738585072"));
 
-const zetasql::Value kNullPGOidValue =
-    zetasql::values::Null(spangres::datatypes::GetPgOidType());
-const zetasql::Value kPGOidValue = *CreatePgOidValue(1);
-const zetasql::Value kPGOidMaxValue =
+const googlesql::Value kNullPGOidValue =
+    googlesql::values::Null(spangres::datatypes::GetPgOidType());
+const googlesql::Value kPGOidValue = *CreatePgOidValue(1);
+const googlesql::Value kPGOidMaxValue =
     *CreatePgOidValue(std::numeric_limits<uint32_t>::max());
-const zetasql::Value kPGOidMinValue =
+const googlesql::Value kPGOidMinValue =
     *CreatePgOidValue(std::numeric_limits<uint32_t>::min());
 
-const zetasql::Value kNullIntervalValue = zetasql::Value::NullInterval();
-const zetasql::Value kIntervalValue =
-    zetasql::values::Interval(*zetasql::IntervalValue::FromDays(1));
-const zetasql::Value kIntervalMaxValue =
-    zetasql::values::Interval(zetasql::IntervalValue::MaxValue());
-const zetasql::Value kIntervalMinValue =
-    zetasql::values::Interval(zetasql::IntervalValue::MinValue());
+const googlesql::Value kNullIntervalValue = googlesql::Value::NullInterval();
+const googlesql::Value kIntervalValue =
+    googlesql::values::Interval(*googlesql::IntervalValue::FromDays(1));
+const googlesql::Value kIntervalMaxValue =
+    googlesql::values::Interval(googlesql::IntervalValue::MaxValue());
+const googlesql::Value kIntervalMinValue =
+    googlesql::values::Interval(googlesql::IntervalValue::MinValue());
 
-const zetasql::Value kNullUuidValue = zetasql::Value::NullUuid();
-const zetasql::Value kUuidValue = zetasql::values::Uuid(
-    *zetasql::UuidValue::FromString("11111111-1111-1111-1111-111111111111"));
-const zetasql::Value kUuidMaxValue =
-    zetasql::values::Uuid(zetasql::UuidValue::MaxValue());
-const zetasql::Value kUuidMinValue =
-    zetasql::values::Uuid(zetasql::UuidValue::MinValue());
-const zetasql::Value kNullUuidArrayValue =
-    zetasql::values::Null(zetasql::types::UuidArrayType());
-const zetasql::Value kUuidArrayValue = zetasql::values::Array(
-    zetasql::types::UuidArrayType(), {kUuidValue, kUuidMaxValue});
+const googlesql::Value kNullUuidValue = googlesql::Value::NullUuid();
+const googlesql::Value kUuidValue = googlesql::values::Uuid(
+    *googlesql::UuidValue::FromString("11111111-1111-1111-1111-111111111111"));
+const googlesql::Value kUuidMaxValue =
+    googlesql::values::Uuid(googlesql::UuidValue::MaxValue());
+const googlesql::Value kUuidMinValue =
+    googlesql::values::Uuid(googlesql::UuidValue::MinValue());
+const googlesql::Value kNullUuidArrayValue =
+    googlesql::values::Null(googlesql::types::UuidArrayType());
+const googlesql::Value kUuidArrayValue = googlesql::values::Array(
+    googlesql::types::UuidArrayType(), {kUuidValue, kUuidMaxValue});
 
-const zetasql::Value kMaxTimestampValue =
-    zetasql::values::Timestamp(zetasql::types::TimestampMaxBaseTime());
-const zetasql::Value kMinTimestampValue =
-    zetasql::values::Timestamp(zetasql::types::TimestampMinBaseTime());
+const googlesql::Value kMaxTimestampValue =
+    googlesql::values::Timestamp(googlesql::types::TimestampMaxBaseTime());
+const googlesql::Value kMinTimestampValue =
+    googlesql::values::Timestamp(googlesql::types::TimestampMinBaseTime());
 
-const zetasql::Value kNullStringValue = zetasql::values::NullString();
+const googlesql::Value kNullStringValue = googlesql::values::NullString();
 absl::TimeZone default_timezone() {
   absl::TimeZone timezone;
   ABSL_CHECK(absl::LoadTimeZone("America/Los_Angeles", &timezone));
@@ -314,359 +319,359 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::Values(
         PGScalarFunctionTestCase{
             kPGTimestamptzAddFunctionName,
-            {zetasql::values::Timestamp(absl::FromCivil(
+            {googlesql::values::Timestamp(absl::FromCivil(
                  absl::CivilSecond(2005, 1, 2, 3, 4, 5), timezone)),
-             zetasql::values::String("3 months 8 days 20 seconds")},
-            zetasql::values::Timestamp(absl::FromCivil(
+             googlesql::values::String("3 months 8 days 20 seconds")},
+            googlesql::values::Timestamp(absl::FromCivil(
                 absl::CivilSecond(2005, 4, 10, 3, 4, 25), timezone)),
         },
         PGScalarFunctionTestCase{
             kPGTimestamptzAddFunctionName,
-            {zetasql::values::NullTimestamp(),
-             zetasql::values::String("3 months 8 days 20 seconds")},
-            zetasql::values::NullTimestamp(),
+            {googlesql::values::NullTimestamp(),
+             googlesql::values::String("3 months 8 days 20 seconds")},
+            googlesql::values::NullTimestamp(),
         },
         PGScalarFunctionTestCase{
             kPGTimestamptzAddFunctionName,
-            {zetasql::values::Timestamp(absl::FromCivil(
+            {googlesql::values::Timestamp(absl::FromCivil(
                  absl::CivilSecond(2005, 1, 2, 3, 4, 5), timezone)),
-             zetasql::values::NullString()},
-            zetasql::values::NullTimestamp(),
+             googlesql::values::NullString()},
+            googlesql::values::NullTimestamp(),
         },
         PGScalarFunctionTestCase{
             kPGTimestamptzAddFunctionName,
-            {zetasql::values::Timestamp(absl::FromCivil(
+            {googlesql::values::Timestamp(absl::FromCivil(
                  absl::CivilSecond(2005, 1, 2, 3, 4, 5), timezone)),
              CreateIntervalValue("0-3 8 0:0:20")},
-            zetasql::values::Timestamp(absl::FromCivil(
+            googlesql::values::Timestamp(absl::FromCivil(
                 absl::CivilSecond(2005, 4, 10, 3, 4, 25), timezone)),
         },
         PGScalarFunctionTestCase{
             kPGTimestamptzAddFunctionName,
-            {zetasql::values::NullTimestamp(),
+            {googlesql::values::NullTimestamp(),
              CreateIntervalValue("0-3 8 0:0:20")},
-            zetasql::values::NullTimestamp(),
+            googlesql::values::NullTimestamp(),
         },
         PGScalarFunctionTestCase{
             kPGTimestamptzAddFunctionName,
-            {zetasql::values::Timestamp(absl::FromCivil(
+            {googlesql::values::Timestamp(absl::FromCivil(
                  absl::CivilSecond(2005, 1, 2, 3, 4, 5), timezone)),
-             zetasql::values::NullInterval()},
-            zetasql::values::NullTimestamp(),
+             googlesql::values::NullInterval()},
+            googlesql::values::NullTimestamp(),
         },
         PGScalarFunctionTestCase{
             kPGTimestamptzSubtractFunctionName,
-            {zetasql::values::Timestamp(absl::FromCivil(
+            {googlesql::values::Timestamp(absl::FromCivil(
                  absl::CivilSecond(2005, 1, 2, 3, 4, 5), timezone)),
-             zetasql::values::String("2 years 1 hour")},
-            zetasql::values::Timestamp(absl::FromCivil(
+             googlesql::values::String("2 years 1 hour")},
+            googlesql::values::Timestamp(absl::FromCivil(
                 absl::CivilSecond(2003, 1, 2, 2, 4, 5), timezone)),
         },
         PGScalarFunctionTestCase{
             kPGTimestamptzSubtractFunctionName,
-            {zetasql::values::NullTimestamp(),
-             zetasql::values::String("2 years 1 hour")},
-            zetasql::values::NullTimestamp(),
+            {googlesql::values::NullTimestamp(),
+             googlesql::values::String("2 years 1 hour")},
+            googlesql::values::NullTimestamp(),
         },
         PGScalarFunctionTestCase{
             kPGTimestamptzSubtractFunctionName,
-            {zetasql::values::Timestamp(absl::FromCivil(
+            {googlesql::values::Timestamp(absl::FromCivil(
                  absl::CivilSecond(2005, 1, 2, 3, 4, 5), timezone)),
-             zetasql::values::NullString()},
-            zetasql::values::NullTimestamp(),
+             googlesql::values::NullString()},
+            googlesql::values::NullTimestamp(),
         },
         PGScalarFunctionTestCase{
             kPGTimestamptzSubtractFunctionName,
-            {zetasql::values::Timestamp(absl::FromCivil(
+            {googlesql::values::Timestamp(absl::FromCivil(
                  absl::CivilSecond(2005, 1, 2, 3, 4, 5), timezone)),
              CreateIntervalValue("2-0 0 1:0:0")},
-            zetasql::values::Timestamp(absl::FromCivil(
+            googlesql::values::Timestamp(absl::FromCivil(
                 absl::CivilSecond(2003, 1, 2, 2, 4, 5), timezone)),
         },
         PGScalarFunctionTestCase{
             kPGTimestamptzSubtractFunctionName,
-            {zetasql::values::NullTimestamp(),
+            {googlesql::values::NullTimestamp(),
              CreateIntervalValue("2-0 0 1:0:0")},
-            zetasql::values::NullTimestamp(),
+            googlesql::values::NullTimestamp(),
         },
         PGScalarFunctionTestCase{
             kPGTimestamptzSubtractFunctionName,
-            {zetasql::values::Timestamp(absl::FromCivil(
+            {googlesql::values::Timestamp(absl::FromCivil(
                  absl::CivilSecond(2005, 1, 2, 3, 4, 5), timezone)),
-             zetasql::values::NullInterval()},
-            zetasql::values::NullTimestamp(),
+             googlesql::values::NullInterval()},
+            googlesql::values::NullTimestamp(),
         },
         PGScalarFunctionTestCase{
             kPGTimestamptzBinFunctionName,
-            {zetasql::values::String("10 seconds"),
-             zetasql::values::Timestamp(absl::FromCivil(
+            {googlesql::values::String("10 seconds"),
+             googlesql::values::Timestamp(absl::FromCivil(
                  absl::CivilSecond(2020, 2, 11, 15, 44, 17), timezone)),
-             zetasql::values::Timestamp(absl::FromCivil(
+             googlesql::values::Timestamp(absl::FromCivil(
                  absl::CivilSecond(2001, 1, 1, 0, 0, 0), timezone))},
-            zetasql::values::Timestamp(absl::FromCivil(
+            googlesql::values::Timestamp(absl::FromCivil(
                 absl::CivilSecond(2020, 2, 11, 15, 44, 10), timezone)),
         },
         PGScalarFunctionTestCase{
             kPGTimestamptzBinFunctionName,
-            {zetasql::values::NullString(),
-             zetasql::values::Timestamp(absl::FromCivil(
+            {googlesql::values::NullString(),
+             googlesql::values::Timestamp(absl::FromCivil(
                  absl::CivilSecond(2020, 2, 11, 15, 44, 17), timezone)),
-             zetasql::values::Timestamp(absl::FromCivil(
+             googlesql::values::Timestamp(absl::FromCivil(
                  absl::CivilSecond(2001, 1, 1, 0, 0, 0), timezone))},
-            zetasql::values::NullTimestamp(),
+            googlesql::values::NullTimestamp(),
         },
         PGScalarFunctionTestCase{
             kPGTimestamptzBinFunctionName,
-            {zetasql::values::String("10 seconds"),
-             zetasql::values::NullTimestamp(),
-             zetasql::values::Timestamp(absl::FromCivil(
+            {googlesql::values::String("10 seconds"),
+             googlesql::values::NullTimestamp(),
+             googlesql::values::Timestamp(absl::FromCivil(
                  absl::CivilSecond(2001, 1, 1, 0, 0, 0), timezone))},
-            zetasql::values::NullTimestamp(),
+            googlesql::values::NullTimestamp(),
         },
         PGScalarFunctionTestCase{
             kPGTimestamptzBinFunctionName,
-            {zetasql::values::String("10 seconds"),
-             zetasql::values::Timestamp(absl::FromCivil(
+            {googlesql::values::String("10 seconds"),
+             googlesql::values::Timestamp(absl::FromCivil(
                  absl::CivilSecond(2020, 2, 11, 15, 44, 17), timezone)),
-             zetasql::values::NullTimestamp()},
-            zetasql::values::NullTimestamp(),
+             googlesql::values::NullTimestamp()},
+            googlesql::values::NullTimestamp(),
         },
         PGScalarFunctionTestCase{
             kPGTimestamptzTruncFunctionName,
-            {zetasql::values::String("day"),
-             zetasql::values::Timestamp(absl::FromCivil(
+            {googlesql::values::String("day"),
+             googlesql::values::Timestamp(absl::FromCivil(
                  absl::CivilSecond(2020, 2, 11, 15, 44, 17), timezone))},
-            zetasql::values::Timestamp(absl::FromCivil(
+            googlesql::values::Timestamp(absl::FromCivil(
                 absl::CivilSecond(2020, 2, 11, 0, 0, 0), timezone)),
         },
         PGScalarFunctionTestCase{
             kPGTimestamptzTruncFunctionName,
-            {zetasql::values::NullString(),
-             zetasql::values::Timestamp(absl::FromCivil(
+            {googlesql::values::NullString(),
+             googlesql::values::Timestamp(absl::FromCivil(
                  absl::CivilSecond(2020, 2, 11, 15, 44, 17), timezone))},
-            zetasql::values::NullTimestamp(),
+            googlesql::values::NullTimestamp(),
         },
         PGScalarFunctionTestCase{
             kPGTimestamptzTruncFunctionName,
-            {zetasql::values::String("day"),
-             zetasql::values::NullTimestamp()},
-            zetasql::values::NullTimestamp(),
+            {googlesql::values::String("day"),
+             googlesql::values::NullTimestamp()},
+            googlesql::values::NullTimestamp(),
         },
         PGScalarFunctionTestCase{
             kPGTimestamptzTruncFunctionName,
-            {zetasql::values::String("day"),
-             zetasql::values::Timestamp(absl::FromCivil(
+            {googlesql::values::String("day"),
+             googlesql::values::Timestamp(absl::FromCivil(
                  absl::CivilSecond(2020, 2, 11, 15, 44, 17), timezone)),
-             zetasql::values::String("Australia/Sydney")},
-            zetasql::values::Timestamp(absl::FromCivil(
+             googlesql::values::String("Australia/Sydney")},
+            googlesql::values::Timestamp(absl::FromCivil(
                 absl::CivilSecond(2020, 2, 11, 5, 0, 0), timezone)),
         },
         PGScalarFunctionTestCase{
             kPGTimestamptzTruncFunctionName,
-            {zetasql::values::NullString(),
-             zetasql::values::Timestamp(absl::FromCivil(
+            {googlesql::values::NullString(),
+             googlesql::values::Timestamp(absl::FromCivil(
                  absl::CivilSecond(2020, 2, 11, 15, 44, 17), timezone)),
-             zetasql::values::String("Australia/Sydney")},
-            zetasql::values::NullTimestamp(),
+             googlesql::values::String("Australia/Sydney")},
+            googlesql::values::NullTimestamp(),
         },
         PGScalarFunctionTestCase{
             kPGTimestamptzTruncFunctionName,
-            {zetasql::values::String("day"),
-             zetasql::values::NullTimestamp(),
-             zetasql::values::String("Australia/Sydney")},
-            zetasql::values::NullTimestamp(),
+            {googlesql::values::String("day"),
+             googlesql::values::NullTimestamp(),
+             googlesql::values::String("Australia/Sydney")},
+            googlesql::values::NullTimestamp(),
         },
         PGScalarFunctionTestCase{
             kPGTimestamptzTruncFunctionName,
-            {zetasql::values::String("day"),
-             zetasql::values::Timestamp(absl::FromCivil(
+            {googlesql::values::String("day"),
+             googlesql::values::Timestamp(absl::FromCivil(
                  absl::CivilSecond(2020, 2, 11, 15, 44, 17), timezone)),
-             zetasql::values::NullString()},
-            zetasql::values::NullTimestamp(),
+             googlesql::values::NullString()},
+            googlesql::values::NullTimestamp(),
         },
         PGScalarFunctionTestCase{
             kPGExtractFunctionName,
-            {zetasql::values::String("second"),
-             zetasql::values::Timestamp(absl::FromCivil(
+            {googlesql::values::String("second"),
+             googlesql::values::Timestamp(absl::FromCivil(
                  absl::CivilSecond(2020, 2, 11, 15, 44, 17), timezone))},
             *CreatePgNumericValueWithMemoryContext("17"),
         },
         PGScalarFunctionTestCase{
             kPGExtractFunctionName,
-            {zetasql::values::NullString(),
-             zetasql::values::Timestamp(absl::FromCivil(
+            {googlesql::values::NullString(),
+             googlesql::values::Timestamp(absl::FromCivil(
                  absl::CivilSecond(2020, 2, 11, 15, 44, 17), timezone))},
             CreatePgNumericNullValue(),
         },
         PGScalarFunctionTestCase{
             kPGExtractFunctionName,
-            {zetasql::values::String("second"),
-             zetasql::values::NullTimestamp()},
+            {googlesql::values::String("second"),
+             googlesql::values::NullTimestamp()},
             CreatePgNumericNullValue(),
         },
         PGScalarFunctionTestCase{
             kPGExtractFunctionName,
-            {zetasql::values::String("month"), zetasql::values::NullDate()},
+            {googlesql::values::String("month"), googlesql::values::NullDate()},
             CreatePgNumericNullValue(),
         },
         PGScalarFunctionTestCase{
             kPGExtractFunctionName,
-            {zetasql::values::NullString(), zetasql::values::Date(45)},
+            {googlesql::values::NullString(), googlesql::values::Date(45)},
             CreatePgNumericNullValue(),
         },
         PGScalarFunctionTestCase{
             kPGExtractFunctionName,
-            {zetasql::values::String("month"), zetasql::values::Date(45)},
+            {googlesql::values::String("month"), googlesql::values::Date(45)},
             *CreatePgNumericValueWithMemoryContext("2"),
         },
         // pg.jsonb_array_element
         PGScalarFunctionTestCase{
-            kZetaSQLSubscriptFunctionName,
+            kGoogleSQLSubscriptFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(R"([null, "string val"])"),
-             zetasql::Value::Int64(0)},
+             googlesql::Value::Int64(0)},
             *CreatePgJsonbValueWithMemoryContext("null")},
         PGScalarFunctionTestCase{
-            kZetaSQLSubscriptFunctionName,
+            kGoogleSQLSubscriptFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(R"([1.00, "string val"])"),
-             zetasql::Value::Int64(1)},
+             googlesql::Value::Int64(1)},
             *CreatePgJsonbValueWithMemoryContext(R"("string val")")},
         PGScalarFunctionTestCase{
-            kZetaSQLSubscriptFunctionName,
+            kGoogleSQLSubscriptFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(R"([null, "string val"])"),
-             zetasql::Value::Int64(2)},
+             googlesql::Value::Int64(2)},
             CreatePgJsonbNullValue()},
         PGScalarFunctionTestCase{
-            kZetaSQLSubscriptFunctionName,
+            kGoogleSQLSubscriptFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(R"([null, "string val"])"),
-             zetasql::Value::Int64(-1)},
+             googlesql::Value::Int64(-1)},
             *CreatePgJsonbValueWithMemoryContext(R"("string val")")},
         PGScalarFunctionTestCase{
-            kZetaSQLSubscriptFunctionName,
-            {CreatePgJsonbNullValue(), zetasql::Value::Int64(0)},
+            kGoogleSQLSubscriptFunctionName,
+            {CreatePgJsonbNullValue(), googlesql::Value::Int64(0)},
             CreatePgJsonbNullValue()},
         PGScalarFunctionTestCase{
-            kZetaSQLSubscriptFunctionName,
+            kGoogleSQLSubscriptFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(R"([null, "string val"])"),
-             zetasql::Value::NullInt64()},
+             googlesql::Value::NullInt64()},
             CreatePgJsonbNullValue()},
         PGScalarFunctionTestCase{
-            kZetaSQLSubscriptFunctionName,
-            {CreatePgJsonbNullValue(), zetasql::Value::NullInt64()},
+            kGoogleSQLSubscriptFunctionName,
+            {CreatePgJsonbNullValue(), googlesql::Value::NullInt64()},
             CreatePgJsonbNullValue()},
 
         // pg.jsonb_object_field
         PGScalarFunctionTestCase{
-            kZetaSQLSubscriptFunctionName,
+            kGoogleSQLSubscriptFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(R"({"a": "string val"})"),
-             zetasql::Value::String("a")},
+             googlesql::Value::String("a")},
             *CreatePgJsonbValueWithMemoryContext(R"("string val")")},
         PGScalarFunctionTestCase{
-            kZetaSQLSubscriptFunctionName,
+            kGoogleSQLSubscriptFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(
                  R"({"a": {"b": "string_val"}})"),
-             zetasql::Value::String("a")},
+             googlesql::Value::String("a")},
             *CreatePgJsonbValueWithMemoryContext(R"({"b": "string_val"})")},
-        PGScalarFunctionTestCase{kZetaSQLSubscriptFunctionName,
+        PGScalarFunctionTestCase{kGoogleSQLSubscriptFunctionName,
                                  {*CreatePgJsonbValueWithMemoryContext(
                                       R"({"a": {"b": "string_val"}})"),
-                                  zetasql::Value::String("c")},
+                                  googlesql::Value::String("c")},
                                  CreatePgJsonbNullValue()},
-        PGScalarFunctionTestCase{kZetaSQLSubscriptFunctionName,
+        PGScalarFunctionTestCase{kGoogleSQLSubscriptFunctionName,
                                  {*CreatePgJsonbValueWithMemoryContext(
                                       R"({"a": {"b": "string_val"}})"),
-                                  zetasql::Value::String("no match")},
+                                  googlesql::Value::String("no match")},
                                  CreatePgJsonbNullValue()},
         PGScalarFunctionTestCase{
-            kZetaSQLSubscriptFunctionName,
+            kGoogleSQLSubscriptFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(R"({"a": ""})"),
-             zetasql::Value::String("a")},
+             googlesql::Value::String("a")},
             *CreatePgJsonbValueWithMemoryContext(R"("")")},
         PGScalarFunctionTestCase{
-            kZetaSQLSubscriptFunctionName,
+            kGoogleSQLSubscriptFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(R"({"a": ""})"),
              kNullStringValue},
             CreatePgJsonbNullValue()},
-        PGScalarFunctionTestCase{kZetaSQLSubscriptFunctionName,
+        PGScalarFunctionTestCase{kGoogleSQLSubscriptFunctionName,
                                  {CreatePgJsonbNullValue(), kNullStringValue},
                                  CreatePgJsonbNullValue()},
         PGScalarFunctionTestCase{
-            kZetaSQLSubscriptFunctionName,
-            {CreatePgJsonbNullValue(), zetasql::Value::String("a")},
+            kGoogleSQLSubscriptFunctionName,
+            {CreatePgJsonbNullValue(), googlesql::Value::String("a")},
             CreatePgJsonbNullValue()},
 
         // pg.jsonb_typeof
-        PGScalarFunctionTestCase{kZetaSQLJsonTypeFunctionName,
+        PGScalarFunctionTestCase{kGoogleSQLJsonTypeFunctionName,
                                  {*CreatePgJsonbValueWithMemoryContext("null")},
-                                 zetasql::Value::String("null")},
+                                 googlesql::Value::String("null")},
         PGScalarFunctionTestCase{
-            kZetaSQLJsonTypeFunctionName,
+            kGoogleSQLJsonTypeFunctionName,
             {*CreatePgJsonbValueWithMemoryContext("[1,2,3.56]")},
-            zetasql::Value::String("array")},
+            googlesql::Value::String("array")},
         PGScalarFunctionTestCase{
-            kZetaSQLJsonTypeFunctionName,
+            kGoogleSQLJsonTypeFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(R"("hello")")},
-            zetasql::Value::String("string")},
+            googlesql::Value::String("string")},
         PGScalarFunctionTestCase{
-            kZetaSQLJsonTypeFunctionName,
+            kGoogleSQLJsonTypeFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(
                 R"({ "a" : { "b" : [null, 3.5, -214215, true] } })")},
-            zetasql::Value::String("object")},
-        PGScalarFunctionTestCase{kZetaSQLJsonTypeFunctionName,
+            googlesql::Value::String("object")},
+        PGScalarFunctionTestCase{kGoogleSQLJsonTypeFunctionName,
                                  {*CreatePgJsonbValueWithMemoryContext(
                                      "-18446744073709551615124125")},
-                                 zetasql::Value::String("number")},
-        PGScalarFunctionTestCase{kZetaSQLJsonTypeFunctionName,
+                                 googlesql::Value::String("number")},
+        PGScalarFunctionTestCase{kGoogleSQLJsonTypeFunctionName,
                                  {*CreatePgJsonbValueWithMemoryContext(
                                      "18446744073709551615124125")},
-                                 zetasql::Value::String("number")},
+                                 googlesql::Value::String("number")},
         PGScalarFunctionTestCase{
-            kZetaSQLJsonTypeFunctionName,
+            kGoogleSQLJsonTypeFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(
                 spangres::datatypes::common::MaxJsonbNumericString())},
-            zetasql::Value::String("number")},
+            googlesql::Value::String("number")},
         PGScalarFunctionTestCase{
-            kZetaSQLJsonTypeFunctionName,
+            kGoogleSQLJsonTypeFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(
                 spangres::datatypes::common::MinJsonbNumericString())},
-            zetasql::Value::String("number")},
-        PGScalarFunctionTestCase{kZetaSQLJsonTypeFunctionName,
+            googlesql::Value::String("number")},
+        PGScalarFunctionTestCase{kGoogleSQLJsonTypeFunctionName,
                                  {*CreatePgJsonbValueWithMemoryContext("true")},
-                                 zetasql::Value::String("boolean")},
+                                 googlesql::Value::String("boolean")},
         PGScalarFunctionTestCase{
-            kZetaSQLJsonTypeFunctionName,
+            kGoogleSQLJsonTypeFunctionName,
             {*CreatePgJsonbValueWithMemoryContext("false")},
-            zetasql::Value::String("boolean")},
+            googlesql::Value::String("boolean")},
         // pg.jsonb_query_array
         PGScalarFunctionTestCase{
-            kZetaSQLJsonQueryArrayFunctionName,
+            kGoogleSQLJsonQueryArrayFunctionName,
             {*CreatePgJsonbValueWithMemoryContext("[1, 2, 3]")},
-            *zetasql::Value::MakeArray(
+            *googlesql::Value::MakeArray(
                 spangres::datatypes::GetPgJsonbArrayType(),
                 {*CreatePgJsonbValueWithMemoryContext("1"),
                  *CreatePgJsonbValueWithMemoryContext("2"),
                  *CreatePgJsonbValueWithMemoryContext("3")})},
         PGScalarFunctionTestCase{
-            kZetaSQLJsonQueryArrayFunctionName,
+            kGoogleSQLJsonQueryArrayFunctionName,
             {*CreatePgJsonbValueWithMemoryContext("[\"abc\", \"def\"]")},
-            *zetasql::Value::MakeArray(
+            *googlesql::Value::MakeArray(
                 spangres::datatypes::GetPgJsonbArrayType(),
                 {*CreatePgJsonbValueWithMemoryContext("\"abc\""),
                  *CreatePgJsonbValueWithMemoryContext("\"def\"")})},
         PGScalarFunctionTestCase{
-            kZetaSQLJsonQueryArrayFunctionName,
+            kGoogleSQLJsonQueryArrayFunctionName,
             {CreatePgJsonbNullValue()},
-            zetasql::values::Null(
+            googlesql::values::Null(
                 spangres::datatypes::GetPgJsonbArrayType())},
         // pg.jsonb_build_array
         PGScalarFunctionTestCase{kPGJsonbBuildArrayFunctionName,
                                  {},
                                  *CreatePgJsonbValueWithMemoryContext("[]")},
         PGScalarFunctionTestCase{kPGJsonbBuildArrayFunctionName,
-                                 {zetasql::Value::Int64(1)},
+                                 {googlesql::Value::Int64(1)},
                                  *CreatePgJsonbValueWithMemoryContext("[1]")},
         PGScalarFunctionTestCase{
             kPGJsonbBuildArrayFunctionName,
-            {zetasql::Value::Int64(1), zetasql::Value::Int64(2)},
+            {googlesql::Value::Int64(1), googlesql::Value::Int64(2)},
             *CreatePgJsonbValueWithMemoryContext("[1, 2]")},
         PGScalarFunctionTestCase{
             kPGJsonbBuildArrayFunctionName,
@@ -679,16 +684,16 @@ INSTANTIATE_TEST_SUITE_P(
                                  *CreatePgJsonbValueWithMemoryContext("{}")},
         PGScalarFunctionTestCase{
             kPGJsonbBuildObjectFunctionName,
-            {zetasql::Value::String("a"), zetasql::Value::Int64(1)},
+            {googlesql::Value::String("a"), googlesql::Value::Int64(1)},
             *CreatePgJsonbValueWithMemoryContext("{\"a\": 1}")},
         PGScalarFunctionTestCase{
             kPGJsonbBuildObjectFunctionName,
-            {zetasql::Value::String("a"), zetasql::Value::Int64(1),
-             zetasql::Value::String("b"), zetasql::Value::Int64(2)},
+            {googlesql::Value::String("a"), googlesql::Value::Int64(1),
+             googlesql::Value::String("b"), googlesql::Value::Int64(2)},
             *CreatePgJsonbValueWithMemoryContext("{\"a\": 1, \"b\": 2}")},
         PGScalarFunctionTestCase{
             kPGJsonbBuildObjectFunctionName,
-            {zetasql::Value::String("key"), kNullStringValue},
+            {googlesql::Value::String("key"), kNullStringValue},
             *CreatePgJsonbValueWithMemoryContext("{\"key\": null}")},
 
         // pg.jsonb_contains
@@ -696,467 +701,544 @@ INSTANTIATE_TEST_SUITE_P(
             kPGJsonbContainsFunctionName,
             {*CreatePgJsonbValueWithMemoryContext("{\"a\": 1, \"b\": -2.0}"),
              *CreatePgJsonbValueWithMemoryContext("{\"b\": -2}")},
-            zetasql::Value::Bool(true)},
+            googlesql::Value::Bool(true)},
 
         PGScalarFunctionTestCase{
             kPGJsonbContainsFunctionName,
             {*CreatePgJsonbValueWithMemoryContext("{\"a\": 1, \"b\": true}"),
              *CreatePgJsonbValueWithMemoryContext("{\"a\": true}")},
-            zetasql::Value::Bool(false)},
+            googlesql::Value::Bool(false)},
 
         PGScalarFunctionTestCase{
             kPGJsonbContainsFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(
                  "[{\"a\": true, \"b\": [2, 3.3]}]"),
              *CreatePgJsonbValueWithMemoryContext("{\"b\": [2]}")},
-            zetasql::Value::Bool(false)},
+            googlesql::Value::Bool(false)},
 
         PGScalarFunctionTestCase{
             kPGJsonbContainsFunctionName,
             {*CreatePgJsonbValueWithMemoryContext(
                  "[{\"a\": true, \"b\": [2, 3.3]}]"),
              *CreatePgJsonbValueWithMemoryContext("[{\"b\": [3.30]}]")},
-            zetasql::Value::Bool(true)},
+            googlesql::Value::Bool(true)},
 
         PGScalarFunctionTestCase{
             kPGJsonbContainedFunctionName,
             {*CreatePgJsonbValueWithMemoryContext("[1, 1.340, 3]"),
              *CreatePgJsonbValueWithMemoryContext("2")},
-            zetasql::Value::Bool(false)},
+            googlesql::Value::Bool(false)},
 
         PGScalarFunctionTestCase{
             kPGJsonbContainsFunctionName,
             {*CreatePgJsonbValueWithMemoryContext("[1, 1.340, 3]"),
              *CreatePgJsonbValueWithMemoryContext("3.0")},
-            zetasql::Value::Bool(true)},
+            googlesql::Value::Bool(true)},
 
         PGScalarFunctionTestCase{
             kPGJsonbContainsFunctionName,
             {*CreatePgJsonbValueWithMemoryContext("[1, 1.340, 3]"),
              *CreatePgJsonbValueWithMemoryContext("[3.0]")},
-            zetasql::Value::Bool(true)},
+            googlesql::Value::Bool(true)},
 
         PGScalarFunctionTestCase{
             kPGJsonbContainsFunctionName,
             {*CreatePgJsonbValueWithMemoryContext("[1, 1.340, [3, 4]]"),
              *CreatePgJsonbValueWithMemoryContext("[3.0]")},
-            zetasql::Value::Bool(false)},
+            googlesql::Value::Bool(false)},
 
         PGScalarFunctionTestCase{
             kPGJsonbContainsFunctionName,
             {*CreatePgJsonbValueWithMemoryContext("[1, 1.340, [3, 4]]"),
              *CreatePgJsonbValueWithMemoryContext("[[3.0]]")},
-            zetasql::Value::Bool(true)},
+            googlesql::Value::Bool(true)},
 
         PGScalarFunctionTestCase{
             kPGJsonbContainsFunctionName,
             {*CreatePgJsonbValueWithMemoryContext("{\"a\": 1, \"b\": [2, 3]}"),
              *CreatePgJsonbValueWithMemoryContext("{\"b\": 2}")},
-            zetasql::Value::Bool(false)},
+            googlesql::Value::Bool(false)},
 
         PGScalarFunctionTestCase{
             kPGJsonbContainsFunctionName,
             {*CreatePgJsonbValueWithMemoryContext("{\"a\": 1, \"b\": [2, 3]}"),
              *CreatePgJsonbValueWithMemoryContext("{\"b\": [2]}")},
-            zetasql::Value::Bool(true)},
+            googlesql::Value::Bool(true)},
 
         // pg.jsonb_contained
         PGScalarFunctionTestCase{
             kPGJsonbContainedFunctionName,
             {*CreatePgJsonbValueWithMemoryContext("1.340000"),
              *CreatePgJsonbValueWithMemoryContext("[1, 1.340, 3]")},
-            zetasql::Value::Bool(true)},
+            googlesql::Value::Bool(true)},
 
         // pg.jsonb_exists
         PGScalarFunctionTestCase{
             kPGJsonbExistsFunctionName,
             {*CreatePgJsonbValueWithMemoryContext("{\"a\": 1, \"b\": -2.0}"),
-             zetasql::Value::String("a")},
-            zetasql::Value::Bool(true)},
+             googlesql::Value::String("a")},
+            googlesql::Value::Bool(true)},
 
         PGScalarFunctionTestCase{
             kPGJsonbExistsFunctionName,
             {*CreatePgJsonbValueWithMemoryContext("[\"a\", 1, \"b\"]"),
-             zetasql::Value::String("b")},
-            zetasql::Value::Bool(true)},
+             googlesql::Value::String("b")},
+            googlesql::Value::Bool(true)},
 
         PGScalarFunctionTestCase{
             kPGJsonbExistsFunctionName,
             {*CreatePgJsonbValueWithMemoryContext("{\"a\": 1, \"b\": -2.0}"),
-             zetasql::Value::String("c")},
-            zetasql::Value::Bool(false)},
+             googlesql::Value::String("c")},
+            googlesql::Value::Bool(false)},
 
         PGScalarFunctionTestCase{
             kPGJsonbExistsFunctionName,
             {*CreatePgJsonbValueWithMemoryContext("[\"a\", 1, \"b\"]"),
-             zetasql::Value::String("c")},
-            zetasql::Value::Bool(false)},
+             googlesql::Value::String("c")},
+            googlesql::Value::Bool(false)},
 
         // pg.jsonb_exists_any
         PGScalarFunctionTestCase{
             kPGJsonbExistsAnyFunctionName,
             {*CreatePgJsonbValueWithMemoryContext("[\"a\", 1, \"b\"]"),
-             zetasql::Value::Array(zetasql::types::StringArrayType(),
-                                     {zetasql::Value::String("c"),
-                                      zetasql::Value::NullString(),
-                                      zetasql::Value::String("b")})},
-            zetasql::Value::Bool(true)},
+             googlesql::Value::Array(googlesql::types::StringArrayType(),
+                                     {googlesql::Value::String("c"),
+                                      googlesql::Value::NullString(),
+                                      googlesql::Value::String("b")})},
+            googlesql::Value::Bool(true)},
 
         PGScalarFunctionTestCase{
             kPGJsonbExistsAnyFunctionName,
             {*CreatePgJsonbValueWithMemoryContext("[\"a\", 1, \"b\"]"),
-             zetasql::Value::Array(zetasql::types::StringArrayType(),
-                                     {zetasql::Value::String("c"),
-                                      zetasql::Value::NullString(),
-                                      zetasql::Value::String("d")})},
-            zetasql::Value::Bool(false)},
+             googlesql::Value::Array(googlesql::types::StringArrayType(),
+                                     {googlesql::Value::String("c"),
+                                      googlesql::Value::NullString(),
+                                      googlesql::Value::String("d")})},
+            googlesql::Value::Bool(false)},
 
         // pg.jsonb_exists_all
         PGScalarFunctionTestCase{
             kPGJsonbExistsAllFunctionName,
             {*CreatePgJsonbValueWithMemoryContext("[\"a\", 1, \"b\"]"),
-             zetasql::Value::Array(zetasql::types::StringArrayType(),
-                                     {zetasql::Value::String("a"),
-                                      zetasql::Value::NullString(),
-                                      zetasql::Value::String("b")})},
-            zetasql::Value::Bool(true)},
+             googlesql::Value::Array(googlesql::types::StringArrayType(),
+                                     {googlesql::Value::String("a"),
+                                      googlesql::Value::NullString(),
+                                      googlesql::Value::String("b")})},
+            googlesql::Value::Bool(true)},
 
         PGScalarFunctionTestCase{
             kPGJsonbExistsAllFunctionName,
             {*CreatePgJsonbValueWithMemoryContext("[\"a\", 1, \"b\"]"),
-             zetasql::Value::Array(zetasql::types::StringArrayType(),
-                                     {zetasql::Value::String("a"),
-                                      zetasql::Value::NullString(),
-                                      zetasql::Value::String("c")})},
-            zetasql::Value::Bool(false)},
+             googlesql::Value::Array(googlesql::types::StringArrayType(),
+                                     {googlesql::Value::String("a"),
+                                      googlesql::Value::NullString(),
+                                      googlesql::Value::String("c")})},
+            googlesql::Value::Bool(false)},
+
+        // pg.generate_array (generate_series)
+        PGScalarFunctionTestCase{
+            kPGGenerateArrayFunctionName,
+            {googlesql::values::Int64(1), googlesql::values::Int64(3)},
+            googlesql::values::Int64Array({1, 2, 3})},
+        PGScalarFunctionTestCase{
+            kPGGenerateArrayFunctionName,
+            {googlesql::values::Int64(1), googlesql::values::Int64(5),
+             googlesql::values::Int64(2)},
+            googlesql::values::Int64Array({1, 3, 5})},
+        PGScalarFunctionTestCase{
+            kPGGenerateArrayFunctionName,
+            {UnwrapValue(CreatePgNumericValueWithMemoryContext("1.0")),
+             UnwrapValue(CreatePgNumericValueWithMemoryContext("3.0")),
+             UnwrapValue(CreatePgNumericValueWithMemoryContext("1.0"))},
+            googlesql::values::Array(
+                spangres::datatypes::GetPgNumericArrayType(),
+                {UnwrapValue(CreatePgNumericValueWithMemoryContext("1")),
+                 UnwrapValue(CreatePgNumericValueWithMemoryContext("2")),
+                 UnwrapValue(CreatePgNumericValueWithMemoryContext("3"))})},
+        PGScalarFunctionTestCase{
+            kPGGenerateArrayFunctionName,
+            {googlesql::values::NullInt64(), googlesql::values::Int64(3)},
+            googlesql::values::Null(googlesql::types::Int64ArrayType())},
+        PGScalarFunctionTestCase{
+            kPGGenerateArrayFunctionName,
+            {googlesql::values::Int64(1), googlesql::values::NullInt64()},
+            googlesql::values::Null(googlesql::types::Int64ArrayType())},
+        PGScalarFunctionTestCase{
+            kPGGenerateArrayFunctionName,
+            {googlesql::values::Int64(1), googlesql::values::Int64(3),
+             googlesql::values::NullInt64()},
+            googlesql::values::Null(googlesql::types::Int64ArrayType())},
+        PGScalarFunctionTestCase{
+            kPGGenerateArrayFunctionName,
+            {CreatePgNumericNullValue(),
+             UnwrapValue(CreatePgNumericValueWithMemoryContext("3.0"))},
+            googlesql::values::Null(
+                spangres::datatypes::GetPgNumericArrayType())},
+        PGScalarFunctionTestCase{
+            kPGGenerateArrayFunctionName,
+            {UnwrapValue(CreatePgNumericValueWithMemoryContext("1.0")),
+             CreatePgNumericNullValue()},
+            googlesql::values::Null(
+                spangres::datatypes::GetPgNumericArrayType())},
+        PGScalarFunctionTestCase{
+            kPGGenerateArrayFunctionName,
+            {UnwrapValue(CreatePgNumericValueWithMemoryContext("1.0")),
+             UnwrapValue(CreatePgNumericValueWithMemoryContext("3.0")),
+             CreatePgNumericNullValue()},
+            googlesql::values::Null(
+                spangres::datatypes::GetPgNumericArrayType())},
+
+        // Failure cases for generate_series
+        PGScalarFunctionTestCase{
+            kPGGenerateArrayFunctionName,
+            {googlesql::values::Int64(1), googlesql::values::Int64(3),
+             googlesql::values::Int64(0)},
+            googlesql::values::Null(googlesql::types::Int64ArrayType()),
+            absl::StatusCode::kOutOfRange},
+        PGScalarFunctionTestCase{
+            kPGGenerateArrayFunctionName,
+            {UnwrapValue(CreatePgNumericValueWithMemoryContext("1.0")),
+             UnwrapValue(CreatePgNumericValueWithMemoryContext("3.0")),
+             UnwrapValue(CreatePgNumericValueWithMemoryContext("0.0"))},
+            googlesql::values::Null(
+                spangres::datatypes::GetPgNumericArrayType()),
+            absl::StatusCode::kOutOfRange},
+        PGScalarFunctionTestCase{
+            kPGGenerateArrayFunctionName,
+            {UnwrapValue(CreatePgNumericValueWithMemoryContext("NaN")),
+             UnwrapValue(CreatePgNumericValueWithMemoryContext("3.0")),
+             UnwrapValue(CreatePgNumericValueWithMemoryContext("1.0"))},
+            googlesql::values::Null(
+                spangres::datatypes::GetPgNumericArrayType()),
+            absl::StatusCode::kOutOfRange},
 
         PGScalarFunctionTestCase{
-            kZetaSQLAddFunctionName,
+            kGoogleSQLAddFunctionName,
             {CreatePgNumericNullValue(),
              *CreatePgNumericValueWithMemoryContext("3.45")},
             CreatePgNumericNullValue()},
         PGScalarFunctionTestCase{
-            kZetaSQLAddFunctionName,
+            kGoogleSQLAddFunctionName,
             {*CreatePgNumericValueWithMemoryContext("3.45"),
              CreatePgNumericNullValue()},
             CreatePgNumericNullValue()},
         PGScalarFunctionTestCase{
-            kZetaSQLAddFunctionName,
+            kGoogleSQLAddFunctionName,
             {*CreatePgNumericValueWithMemoryContext("NaN"),
              *CreatePgNumericValueWithMemoryContext("3.45")},
             *CreatePgNumericValueWithMemoryContext("NaN")},
         PGScalarFunctionTestCase{
-            kZetaSQLAddFunctionName,
+            kGoogleSQLAddFunctionName,
             {*CreatePgNumericValueWithMemoryContext("123.45"),
              *CreatePgNumericValueWithMemoryContext("3.45")},
             *CreatePgNumericValueWithMemoryContext("126.90")},
         PGScalarFunctionTestCase{
-            kZetaSQLAddFunctionName,
+            kGoogleSQLAddFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-123.45"),
              *CreatePgNumericValueWithMemoryContext("3.45")},
             *CreatePgNumericValueWithMemoryContext("-120")},
         PGScalarFunctionTestCase{
             kPGArrayLengthFunctionName,
-            {zetasql::values::BoolArray({true}), zetasql::values::Int64(1)},
-            zetasql::values::Int64(1)},
+            {googlesql::values::BoolArray({true}), googlesql::values::Int64(1)},
+            googlesql::values::Int64(1)},
         PGScalarFunctionTestCase{kPGArrayLengthFunctionName,
-                                 {zetasql::values::BytesArray({"1", "2"}),
-                                  zetasql::values::Int64(1)},
-                                 zetasql::values::Int64(2)},
+                                 {googlesql::values::BytesArray({"1", "2"}),
+                                  googlesql::values::Int64(1)},
+                                 googlesql::values::Int64(2)},
         PGScalarFunctionTestCase{
             kPGArrayLengthFunctionName,
-            {zetasql::values::Array(zetasql::types::DateArrayType(),
-                                      {zetasql::values::Date(0),
-                                       zetasql::values::Date(1)}),
-             zetasql::values::Int64(1)},
-            zetasql::Value::Int64(2)},
+            {googlesql::values::Array(googlesql::types::DateArrayType(),
+                                      {googlesql::values::Date(0),
+                                       googlesql::values::Date(1)}),
+             googlesql::values::Int64(1)},
+            googlesql::Value::Int64(2)},
         PGScalarFunctionTestCase{kPGArrayLengthFunctionName,
-                                 {zetasql::values::DoubleArray({1.0}),
-                                  zetasql::values::Int64(1)},
-                                 zetasql::values::Int64(1)},
+                                 {googlesql::values::DoubleArray({1.0}),
+                                  googlesql::values::Int64(1)},
+                                 googlesql::values::Int64(1)},
         PGScalarFunctionTestCase{kPGArrayLengthFunctionName,
-                                 {zetasql::values::Int64Array({1, 2}),
-                                  zetasql::values::Int64(1)},
-                                 zetasql::values::Int64(2)},
+                                 {googlesql::values::Int64Array({1, 2}),
+                                  googlesql::values::Int64(1)},
+                                 googlesql::values::Int64(2)},
         PGScalarFunctionTestCase{kPGArrayLengthFunctionName,
-                                 {zetasql::values::StringArray({"a", "b"}),
-                                  zetasql::values::Int64(1)},
-                                 zetasql::values::Int64(2)},
+                                 {googlesql::values::StringArray({"a", "b"}),
+                                  googlesql::values::Int64(1)},
+                                 googlesql::values::Int64(2)},
         PGScalarFunctionTestCase{
             kPGArrayLengthFunctionName,
-            {zetasql::values::TimestampArray({absl::Now()}),
-             zetasql::values::Int64(1)},
-            zetasql::values::Int64(1)},
+            {googlesql::values::TimestampArray({absl::Now()}),
+             googlesql::values::Int64(1)},
+            googlesql::values::Int64(1)},
         PGScalarFunctionTestCase{
             kPGArrayLengthFunctionName,
-            {zetasql::values::Int64Array({1}), zetasql::values::Int64(0)},
-            zetasql::values::NullInt64()},
+            {googlesql::values::Int64Array({1}), googlesql::values::Int64(0)},
+            googlesql::values::NullInt64()},
         PGScalarFunctionTestCase{
             kPGArrayLengthFunctionName,
-            {zetasql::values::Int64Array({1}), zetasql::values::Int64(-1)},
-            zetasql::values::NullInt64()},
+            {googlesql::values::Int64Array({1}), googlesql::values::Int64(-1)},
+            googlesql::values::NullInt64()},
         PGScalarFunctionTestCase{
             kPGArrayLengthFunctionName,
-            {zetasql::values::Int64Array({}), zetasql::values::Int64(1)},
-            zetasql::values::NullInt64()},
+            {googlesql::values::Int64Array({}), googlesql::values::Int64(1)},
+            googlesql::values::NullInt64()},
         PGScalarFunctionTestCase{kPGArrayLengthFunctionName,
-                                 {zetasql::values::Int64Array({1}),
-                                  zetasql::values::NullInt64()},
-                                 zetasql::values::NullInt64()},
+                                 {googlesql::values::Int64Array({1}),
+                                  googlesql::values::NullInt64()},
+                                 googlesql::values::NullInt64()},
         PGScalarFunctionTestCase{
             kPGArrayLengthFunctionName,
-            {zetasql::values::Null(zetasql::types::Int64ArrayType()),
-             zetasql::values::Int64(1)},
-            zetasql::values::NullInt64()},
+            {googlesql::values::Null(googlesql::types::Int64ArrayType()),
+             googlesql::values::Int64(1)},
+            googlesql::values::NullInt64()},
         PGScalarFunctionTestCase{
             kPGArrayLengthFunctionName,
-            {zetasql::values::Array(
-                 zetasql::types::IntervalArrayType(),
+            {googlesql::values::Array(
+                 googlesql::types::IntervalArrayType(),
                  {kNullIntervalValue,
-                  zetasql::values::Interval(
-                      zetasql::IntervalValue::MaxValue())}),
-             zetasql::values::Int64(1)},
-            zetasql::values::Int64(2)},
+                  googlesql::values::Interval(
+                      googlesql::IntervalValue::MaxValue())}),
+             googlesql::values::Int64(1)},
+            googlesql::values::Int64(2)},
         PGScalarFunctionTestCase{kPGArrayLengthFunctionName,
-                                 {kUuidArrayValue, zetasql::values::Int64(1)},
-                                 zetasql::values::Int64(2)},
+                                 {kUuidArrayValue, googlesql::values::Int64(1)},
+                                 googlesql::values::Int64(2)},
         PGScalarFunctionTestCase{
-            kZetaSQLSubtractFunctionName,
+            kGoogleSQLSubtractFunctionName,
             {CreatePgNumericNullValue(),
              *CreatePgNumericValueWithMemoryContext("3.45")},
             CreatePgNumericNullValue()},
         PGScalarFunctionTestCase{
-            kZetaSQLSubtractFunctionName,
+            kGoogleSQLSubtractFunctionName,
             {*CreatePgNumericValueWithMemoryContext("3.45"),
              CreatePgNumericNullValue()},
             CreatePgNumericNullValue()},
         PGScalarFunctionTestCase{
-            kZetaSQLSubtractFunctionName,
+            kGoogleSQLSubtractFunctionName,
             {*CreatePgNumericValueWithMemoryContext("NaN"),
              *CreatePgNumericValueWithMemoryContext("3.45")},
             *CreatePgNumericValueWithMemoryContext("NaN")},
         PGScalarFunctionTestCase{
-            kZetaSQLSubtractFunctionName,
+            kGoogleSQLSubtractFunctionName,
             {*CreatePgNumericValueWithMemoryContext("123.45"),
              *CreatePgNumericValueWithMemoryContext("3.45")},
             *CreatePgNumericValueWithMemoryContext("120.00")},
         PGScalarFunctionTestCase{
-            kZetaSQLSubtractFunctionName,
+            kGoogleSQLSubtractFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-123.45"),
              *CreatePgNumericValueWithMemoryContext("3.45")},
             *CreatePgNumericValueWithMemoryContext("-126.90")},
 
         PGScalarFunctionTestCase{
-            kZetaSQLMultiplyFunctionName,
+            kGoogleSQLMultiplyFunctionName,
             {CreatePgNumericNullValue(),
              *CreatePgNumericValueWithMemoryContext("3.45")},
             CreatePgNumericNullValue()},
         PGScalarFunctionTestCase{
-            kZetaSQLMultiplyFunctionName,
+            kGoogleSQLMultiplyFunctionName,
             {*CreatePgNumericValueWithMemoryContext("3.45"),
              CreatePgNumericNullValue()},
             CreatePgNumericNullValue()},
         PGScalarFunctionTestCase{
-            kZetaSQLMultiplyFunctionName,
+            kGoogleSQLMultiplyFunctionName,
             {*CreatePgNumericValueWithMemoryContext("NaN"),
              *CreatePgNumericValueWithMemoryContext("3.45")},
             *CreatePgNumericValueWithMemoryContext("NaN")},
         PGScalarFunctionTestCase{
-            kZetaSQLMultiplyFunctionName,
+            kGoogleSQLMultiplyFunctionName,
             {*CreatePgNumericValueWithMemoryContext("123.45"),
              *CreatePgNumericValueWithMemoryContext("2.0")},
             *CreatePgNumericValueWithMemoryContext("246.90")},
         PGScalarFunctionTestCase{
-            kZetaSQLMultiplyFunctionName,
+            kGoogleSQLMultiplyFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-123.45"),
              *CreatePgNumericValueWithMemoryContext("2.0")},
             *CreatePgNumericValueWithMemoryContext("-246.90")},
 
         PGScalarFunctionTestCase{
-            kZetaSQLDivideFunctionName,
+            kGoogleSQLDivideFunctionName,
             {CreatePgNumericNullValue(),
              *CreatePgNumericValueWithMemoryContext("3.45")},
             CreatePgNumericNullValue()},
         PGScalarFunctionTestCase{
-            kZetaSQLDivideFunctionName,
+            kGoogleSQLDivideFunctionName,
             {*CreatePgNumericValueWithMemoryContext("3.45"),
              CreatePgNumericNullValue()},
             CreatePgNumericNullValue()},
         PGScalarFunctionTestCase{
-            kZetaSQLDivideFunctionName,
+            kGoogleSQLDivideFunctionName,
             {*CreatePgNumericValueWithMemoryContext("NaN"),
              *CreatePgNumericValueWithMemoryContext("3.45")},
             *CreatePgNumericValueWithMemoryContext("NaN")},
         PGScalarFunctionTestCase{
-            kZetaSQLDivideFunctionName,
+            kGoogleSQLDivideFunctionName,
             {*CreatePgNumericValueWithMemoryContext("123.45"),
              *CreatePgNumericValueWithMemoryContext("2.0")},
             *CreatePgNumericValueWithMemoryContext("61.725")},
         PGScalarFunctionTestCase{
-            kZetaSQLDivideFunctionName,
+            kGoogleSQLDivideFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-123.45"),
              *CreatePgNumericValueWithMemoryContext("2.0")},
             *CreatePgNumericValueWithMemoryContext("-61.725")},
 
         PGScalarFunctionTestCase{
-            kZetaSQLDivTruncFunctionName,
+            kGoogleSQLDivTruncFunctionName,
             {CreatePgNumericNullValue(),
              *CreatePgNumericValueWithMemoryContext("3.45")},
             CreatePgNumericNullValue()},
         PGScalarFunctionTestCase{
-            kZetaSQLDivTruncFunctionName,
+            kGoogleSQLDivTruncFunctionName,
             {*CreatePgNumericValueWithMemoryContext("3.45"),
              CreatePgNumericNullValue()},
             CreatePgNumericNullValue()},
         PGScalarFunctionTestCase{
-            kZetaSQLDivTruncFunctionName,
+            kGoogleSQLDivTruncFunctionName,
             {*CreatePgNumericValueWithMemoryContext("NaN"),
              *CreatePgNumericValueWithMemoryContext("3.45")},
             *CreatePgNumericValueWithMemoryContext("NaN")},
         PGScalarFunctionTestCase{
-            kZetaSQLDivTruncFunctionName,
+            kGoogleSQLDivTruncFunctionName,
             {*CreatePgNumericValueWithMemoryContext("123.45"),
              *CreatePgNumericValueWithMemoryContext("2.0")},
             *CreatePgNumericValueWithMemoryContext("61")},
         PGScalarFunctionTestCase{
-            kZetaSQLDivTruncFunctionName,
+            kGoogleSQLDivTruncFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-123.45"),
              *CreatePgNumericValueWithMemoryContext("2.0")},
             *CreatePgNumericValueWithMemoryContext("-61")},
 
         PGScalarFunctionTestCase{
-            kZetaSQLAbsFunctionName,
+            kGoogleSQLAbsFunctionName,
             {*CreatePgNumericValueWithMemoryContext("123.45")},
             *CreatePgNumericValueWithMemoryContext("123.45")},
         PGScalarFunctionTestCase{
-            kZetaSQLAbsFunctionName,
+            kGoogleSQLAbsFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-123.45")},
             *CreatePgNumericValueWithMemoryContext("123.45")},
-        PGScalarFunctionTestCase{kZetaSQLAbsFunctionName,
+        PGScalarFunctionTestCase{kGoogleSQLAbsFunctionName,
                                  {CreatePgNumericNullValue()},
                                  CreatePgNumericNullValue()},
 
         PGScalarFunctionTestCase{
-            kZetaSQLCeilFunctionName,
+            kGoogleSQLCeilFunctionName,
             {*CreatePgNumericValueWithMemoryContext("123.45")},
             *CreatePgNumericValueWithMemoryContext("124")},
         PGScalarFunctionTestCase{
-            kZetaSQLCeilFunctionName,
+            kGoogleSQLCeilFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-123.45")},
             *CreatePgNumericValueWithMemoryContext("-123")},
-        PGScalarFunctionTestCase{kZetaSQLCeilFunctionName,
+        PGScalarFunctionTestCase{kGoogleSQLCeilFunctionName,
                                  {CreatePgNumericNullValue()},
                                  CreatePgNumericNullValue()},
 
         PGScalarFunctionTestCase{
-            kZetaSQLCeilingFunctionName,
+            kGoogleSQLCeilingFunctionName,
             {*CreatePgNumericValueWithMemoryContext("123.45")},
             *CreatePgNumericValueWithMemoryContext("124")},
         PGScalarFunctionTestCase{
-            kZetaSQLCeilingFunctionName,
+            kGoogleSQLCeilingFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-123.45")},
             *CreatePgNumericValueWithMemoryContext("-123")},
-        PGScalarFunctionTestCase{kZetaSQLCeilingFunctionName,
+        PGScalarFunctionTestCase{kGoogleSQLCeilingFunctionName,
                                  {CreatePgNumericNullValue()},
                                  CreatePgNumericNullValue()},
 
         PGScalarFunctionTestCase{
-            kZetaSQLFloorFunctionName,
+            kGoogleSQLFloorFunctionName,
             {*CreatePgNumericValueWithMemoryContext("123.45")},
             *CreatePgNumericValueWithMemoryContext("123")},
         PGScalarFunctionTestCase{
-            kZetaSQLFloorFunctionName,
+            kGoogleSQLFloorFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-123.45")},
             *CreatePgNumericValueWithMemoryContext("-124")},
-        PGScalarFunctionTestCase{kZetaSQLFloorFunctionName,
+        PGScalarFunctionTestCase{kGoogleSQLFloorFunctionName,
                                  {CreatePgNumericNullValue()},
                                  CreatePgNumericNullValue()},
 
         PGScalarFunctionTestCase{
-            kZetaSQLModFunctionName,
+            kGoogleSQLModFunctionName,
             {*CreatePgNumericValueWithMemoryContext("123.45"),
              *CreatePgNumericValueWithMemoryContext("10")},
             *CreatePgNumericValueWithMemoryContext("3.45")},
         PGScalarFunctionTestCase{
-            kZetaSQLModFunctionName,
+            kGoogleSQLModFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-123.45"),
              *CreatePgNumericValueWithMemoryContext("10")},
             *CreatePgNumericValueWithMemoryContext("-3.45")},
-        PGScalarFunctionTestCase{kZetaSQLModFunctionName,
+        PGScalarFunctionTestCase{kGoogleSQLModFunctionName,
                                  {CreatePgNumericNullValue(),
                                   *CreatePgNumericValueWithMemoryContext("10")},
                                  CreatePgNumericNullValue()},
         PGScalarFunctionTestCase{
-            kZetaSQLModFunctionName,
+            kGoogleSQLModFunctionName,
             {*CreatePgNumericValueWithMemoryContext("123.45"),
              CreatePgNumericNullValue()},
             CreatePgNumericNullValue()},
 
         PGScalarFunctionTestCase{
-            kZetaSQLTruncFunctionName,
+            kGoogleSQLTruncFunctionName,
             {*CreatePgNumericValueWithMemoryContext("123.45"),
-             zetasql::values::Int64(1)},
+             googlesql::values::Int64(1)},
             *CreatePgNumericValueWithMemoryContext("123.4")},
         PGScalarFunctionTestCase{
-            kZetaSQLTruncFunctionName,
+            kGoogleSQLTruncFunctionName,
             {*CreatePgNumericValueWithMemoryContext("123.45"),
-             zetasql::values::Int64(-1)},
+             googlesql::values::Int64(-1)},
             *CreatePgNumericValueWithMemoryContext("120")},
         PGScalarFunctionTestCase{
-            kZetaSQLTruncFunctionName,
-            {CreatePgNumericNullValue(), zetasql::values::Int64(-1)},
+            kGoogleSQLTruncFunctionName,
+            {CreatePgNumericNullValue(), googlesql::values::Int64(-1)},
             CreatePgNumericNullValue()},
         PGScalarFunctionTestCase{
-            kZetaSQLTruncFunctionName,
+            kGoogleSQLTruncFunctionName,
             {*CreatePgNumericValueWithMemoryContext("123.45"),
-             zetasql::values::NullInt64()},
+             googlesql::values::NullInt64()},
             CreatePgNumericNullValue()},
 
         PGScalarFunctionTestCase{
-            kZetaSQLUminusFunctionName,
+            kGoogleSQLUminusFunctionName,
             {*CreatePgNumericValueWithMemoryContext("123.45")},
             *CreatePgNumericValueWithMemoryContext("-123.45")},
         PGScalarFunctionTestCase{
-            kZetaSQLUminusFunctionName,
+            kGoogleSQLUminusFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-123.45")},
             *CreatePgNumericValueWithMemoryContext("123.45")},
-        PGScalarFunctionTestCase{kZetaSQLUminusFunctionName,
+        PGScalarFunctionTestCase{kGoogleSQLUminusFunctionName,
                                  {CreatePgNumericNullValue()},
                                  CreatePgNumericNullValue()},
 
         PGScalarFunctionTestCase{kPGCastNumericToInt64FunctionName,
                                  {*CreatePgNumericValueWithMemoryContext("0")},
-                                 zetasql::Value::Int64(0)},
+                                 googlesql::Value::Int64(0)},
         PGScalarFunctionTestCase{
             kPGCastNumericToInt64FunctionName,
             {*CreatePgNumericValueWithMemoryContext("0.00000001")},
-            zetasql::Value::Int64(0)},
+            googlesql::Value::Int64(0)},
         PGScalarFunctionTestCase{
             kPGCastNumericToInt64FunctionName,
             {*CreatePgNumericValueWithMemoryContext("0.49999999")},
-            zetasql::Value::Int64(0)},
+            googlesql::Value::Int64(0)},
         PGScalarFunctionTestCase{
             kPGCastNumericToInt64FunctionName,
             {*CreatePgNumericValueWithMemoryContext("0.5")},
-            zetasql::Value::Int64(1)},
+            googlesql::Value::Int64(1)},
         PGScalarFunctionTestCase{
             kPGCastNumericToInt64FunctionName,
             {*CreatePgNumericValueWithMemoryContext("-1.49999999")},
-            zetasql::Value::Int64(-1)},
+            googlesql::Value::Int64(-1)},
         PGScalarFunctionTestCase{
             kPGCastNumericToInt64FunctionName,
             {*CreatePgNumericValueWithMemoryContext("-1.5")},
-            zetasql::Value::Int64(-2)},
+            googlesql::Value::Int64(-2)},
         PGScalarFunctionTestCase{
             kPGCastNumericToInt64FunctionName,
             {*CreatePgNumericValueWithMemoryContext(
                 absl::StrCat(std::numeric_limits<int64_t>::max()))},
-            zetasql::Value::Int64(std::numeric_limits<int64_t>::max())},
+            googlesql::Value::Int64(std::numeric_limits<int64_t>::max())},
         PGScalarFunctionTestCase{
             kPGCastNumericToInt64FunctionName,
             {*CreatePgNumericValueWithMemoryContext(
                 absl::StrCat(std::numeric_limits<int64_t>::lowest()))},
-            zetasql::Value::Int64(std::numeric_limits<int64_t>::lowest())},
+            googlesql::Value::Int64(std::numeric_limits<int64_t>::lowest())},
         PGScalarFunctionTestCase{kPGCastNumericToInt64FunctionName,
                                  {CreatePgNumericNullValue()},
                                  kNullInt64Value},
@@ -1164,39 +1246,39 @@ INSTANTIATE_TEST_SUITE_P(
         PGScalarFunctionTestCase{
             kPGCastNumericToDoubleFunctionName,
             {*CreatePgNumericValueWithMemoryContext("1.000001")},
-            zetasql::Value::Double(1.000001)},
+            googlesql::Value::Double(1.000001)},
         PGScalarFunctionTestCase{
             kPGCastNumericToDoubleFunctionName,
             {*CreatePgNumericValueWithMemoryContext("0.299999999999997")},
-            zetasql::Value::Double(0.299999999999997)},
+            googlesql::Value::Double(0.299999999999997)},
         PGScalarFunctionTestCase{
             kPGCastNumericToDoubleFunctionName,
             {*CreatePgNumericValueWithMemoryContext("0.2999999999999997")},
-            zetasql::Value::Double(0.2999999999999997)},
+            googlesql::Value::Double(0.2999999999999997)},
         PGScalarFunctionTestCase{
             kPGCastNumericToDoubleFunctionName,
             {*CreatePgNumericValueWithMemoryContext("299999999999997")},
-            zetasql::Value::Double(299999999999997)},
+            googlesql::Value::Double(299999999999997)},
         PGScalarFunctionTestCase{
             kPGCastNumericToDoubleFunctionName,
             {*CreatePgNumericValueWithMemoryContext("2999999999999997")},
-            zetasql::Value::Double(2999999999999997)},
+            googlesql::Value::Double(2999999999999997)},
         PGScalarFunctionTestCase{
             kPGCastNumericToDoubleFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-0.299999999999997")},
-            zetasql::Value::Double(-0.299999999999997)},
+            googlesql::Value::Double(-0.299999999999997)},
         PGScalarFunctionTestCase{
             kPGCastNumericToDoubleFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-0.2999999999999997")},
-            zetasql::Value::Double(-0.2999999999999997)},
+            googlesql::Value::Double(-0.2999999999999997)},
         PGScalarFunctionTestCase{
             kPGCastNumericToDoubleFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-299999999999997")},
-            zetasql::Value::Double(-299999999999997)},
+            googlesql::Value::Double(-299999999999997)},
         PGScalarFunctionTestCase{
             kPGCastNumericToDoubleFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-2999999999999997")},
-            zetasql::Value::Double(-2999999999999997)},
+            googlesql::Value::Double(-2999999999999997)},
         PGScalarFunctionTestCase{
             kPGCastNumericToDoubleFunctionName,
             {*CreatePgNumericValueWithMemoryContext("NaN")},
@@ -1208,39 +1290,39 @@ INSTANTIATE_TEST_SUITE_P(
         PGScalarFunctionTestCase{
             kPGCastNumericToFloatFunctionName,
             {*CreatePgNumericValueWithMemoryContext("1.00001")},
-            zetasql::Value::Float(1.00001f)},
+            googlesql::Value::Float(1.00001f)},
         PGScalarFunctionTestCase{
             kPGCastNumericToFloatFunctionName,
             {*CreatePgNumericValueWithMemoryContext("0.299997")},
-            zetasql::Value::Float(0.299997f)},
+            googlesql::Value::Float(0.299997f)},
         PGScalarFunctionTestCase{
             kPGCastNumericToFloatFunctionName,
             {*CreatePgNumericValueWithMemoryContext("0.2999997")},
-            zetasql::Value::Float(0.2999997f)},
+            googlesql::Value::Float(0.2999997f)},
         PGScalarFunctionTestCase{
             kPGCastNumericToFloatFunctionName,
             {*CreatePgNumericValueWithMemoryContext("299997")},
-            zetasql::Value::Float(299997)},
+            googlesql::Value::Float(299997)},
         PGScalarFunctionTestCase{
             kPGCastNumericToFloatFunctionName,
             {*CreatePgNumericValueWithMemoryContext("2999997")},
-            zetasql::Value::Float(2999997)},
+            googlesql::Value::Float(2999997)},
         PGScalarFunctionTestCase{
             kPGCastNumericToFloatFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-0.2999997")},
-            zetasql::Value::Float(-0.2999997f)},
+            googlesql::Value::Float(-0.2999997f)},
         PGScalarFunctionTestCase{
             kPGCastNumericToFloatFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-0.29999997")},
-            zetasql::Value::Float(-0.29999997f)},
+            googlesql::Value::Float(-0.29999997f)},
         PGScalarFunctionTestCase{
             kPGCastNumericToFloatFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-2999997")},
-            zetasql::Value::Float(-2999997)},
+            googlesql::Value::Float(-2999997)},
         PGScalarFunctionTestCase{
             kPGCastNumericToFloatFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-29999997")},
-            zetasql::Value::Float(-29999997)},
+            googlesql::Value::Float(-29999997)},
         PGScalarFunctionTestCase{
             kPGCastNumericToFloatFunctionName,
             {*CreatePgNumericValueWithMemoryContext("NaN")},
@@ -1251,20 +1333,20 @@ INSTANTIATE_TEST_SUITE_P(
 
         PGScalarFunctionTestCase{kPGCastToStringFunctionName,
                                  {kPGNumericNaNValue},
-                                 zetasql::Value::String("NaN")},
+                                 googlesql::Value::String("NaN")},
         PGScalarFunctionTestCase{kPGCastToStringFunctionName,
                                  {CreatePgNumericNullValue()},
                                  kNullStringValue},
         PGScalarFunctionTestCase{kPGCastToStringFunctionName,
                                  {kPGNumericMinValue},
-                                 zetasql::Value::String(MinNumericString())},
+                                 googlesql::Value::String(MinNumericString())},
         PGScalarFunctionTestCase{kPGCastToStringFunctionName,
                                  {kPGNumericMaxValue},
-                                 zetasql::Value::String(MaxNumericString())},
+                                 googlesql::Value::String(MaxNumericString())},
         PGScalarFunctionTestCase{
             kPGCastToStringFunctionName,
             {*CreatePgNumericValueWithMemoryContext("0.1")},
-            zetasql::Value::String("0.1")},
+            googlesql::Value::String("0.1")},
 
         // CAST_TO_NUMERIC for INT64
         PGScalarFunctionTestCase{
@@ -1298,7 +1380,7 @@ INSTANTIATE_TEST_SUITE_P(
                                  kPGNumericMinDoubleValueRetainingLast15Digits},
         PGScalarFunctionTestCase{
             kPGCastToNumericFunctionName,
-            {zetasql::Value::Double(-123.123), zetasql::Value::Int64(4),
+            {googlesql::Value::Double(-123.123), googlesql::Value::Int64(4),
              kInt64Value},
             *CreatePgNumericValueWithMemoryContext("-123.1")},
         PGScalarFunctionTestCase{kPGCastToNumericFunctionName,
@@ -1311,18 +1393,18 @@ INSTANTIATE_TEST_SUITE_P(
         // CAST_TO_NUMERIC for STRING
         PGScalarFunctionTestCase{
             kPGCastToNumericFunctionName,
-            {zetasql::Value::String("123.123"), zetasql::Value::Int64(5),
-             zetasql::Value::Int64(2)},
+            {googlesql::Value::String("123.123"), googlesql::Value::Int64(5),
+             googlesql::Value::Int64(2)},
             *CreatePgNumericValueWithMemoryContext("123.12")},
         PGScalarFunctionTestCase{
             kPGCastToNumericFunctionName,
-            {zetasql::Value::String("294"), zetasql::Value::Int64(2),
-             zetasql::Value::Int64(-1)},
+            {googlesql::Value::String("294"), googlesql::Value::Int64(2),
+             googlesql::Value::Int64(-1)},
             *CreatePgNumericValueWithMemoryContext("290")},
         PGScalarFunctionTestCase{
             kPGCastToNumericFunctionName,
-            {zetasql::Value::String("NaN"), zetasql::Value::Int64(5),
-             zetasql::Value::Int64(2)},
+            {googlesql::Value::String("NaN"), googlesql::Value::Int64(5),
+             googlesql::Value::Int64(2)},
             kPGNumericNaNValue},
         PGScalarFunctionTestCase{kPGCastToNumericFunctionName,
                                  {kNullStringValue, kInt64Value, kInt64Value},
@@ -1332,451 +1414,451 @@ INSTANTIATE_TEST_SUITE_P(
         PGScalarFunctionTestCase{
             kPGCastToNumericFunctionName,
             {*CreatePgNumericValueWithMemoryContext("12.345"),
-             zetasql::Value::Int64(4), zetasql::Value::Int64(2)},
+             googlesql::Value::Int64(4), googlesql::Value::Int64(2)},
             *CreatePgNumericValueWithMemoryContext("12.35")},
         PGScalarFunctionTestCase{
             kPGCastToNumericFunctionName,
             {*CreatePgNumericValueWithMemoryContext("12.345"),
-             zetasql::Value::Int64(4), kInt64Value},
+             googlesql::Value::Int64(4), kInt64Value},
             *CreatePgNumericValueWithMemoryContext("12.3")},
         PGScalarFunctionTestCase{
             kPGCastToNumericFunctionName,
             {*CreatePgNumericValueWithMemoryContext("12.345"),
-             zetasql::Value::Int64(4)},
+             googlesql::Value::Int64(4)},
             *CreatePgNumericValueWithMemoryContext("12")},
         PGScalarFunctionTestCase{
             kPGCastToNumericFunctionName,
             {*CreatePgNumericValueWithMemoryContext("123.45"),
-             zetasql::Value::Int64(10)},
+             googlesql::Value::Int64(10)},
             *CreatePgNumericValueWithMemoryContext("123")},
         PGScalarFunctionTestCase{
             kPGCastToNumericFunctionName,
             {*CreatePgNumericValueWithMemoryContext("123.0000000001"),
-             zetasql::Value::Int64(13), zetasql::Value::Int64(10)},
+             googlesql::Value::Int64(13), googlesql::Value::Int64(10)},
             *CreatePgNumericValueWithMemoryContext("123.0000000001")},
         PGScalarFunctionTestCase{
             kPGCastToNumericFunctionName,
             {*CreatePgNumericValueWithMemoryContext("123.0000000001"),
-             zetasql::Value::Int64(13), zetasql::Value::Int64(9)},
+             googlesql::Value::Int64(13), googlesql::Value::Int64(9)},
             *CreatePgNumericValueWithMemoryContext("123.0000000000")},
         PGScalarFunctionTestCase{
             kPGCastToNumericFunctionName,
             {*CreatePgNumericValueWithMemoryContext("123.0000000001"),
-             zetasql::Value::Int64(15), zetasql::Value::Int64(12)},
+             googlesql::Value::Int64(15), googlesql::Value::Int64(12)},
             *CreatePgNumericValueWithMemoryContext("123.000000000100")},
         PGScalarFunctionTestCase{
             kPGCastToNumericFunctionName,
             {*CreatePgNumericValueWithMemoryContext("123.0000000009"),
-             zetasql::Value::Int64(13), zetasql::Value::Int64(9)},
+             googlesql::Value::Int64(13), googlesql::Value::Int64(9)},
             *CreatePgNumericValueWithMemoryContext("123.000000001")},
         PGScalarFunctionTestCase{
             kPGCastToNumericFunctionName,
             {*CreatePgNumericValueWithMemoryContext("1"),
-             zetasql::Value::Int64(1000), zetasql::Value::Int64(999)},
+             googlesql::Value::Int64(1000), googlesql::Value::Int64(999)},
             *CreatePgNumericValueWithMemoryContext(
                 absl::StrCat("1.", std::string(999, '0')))},
         PGScalarFunctionTestCase{
             kPGCastToNumericFunctionName,
             {*CreatePgNumericValueWithMemoryContext(
                  absl::StrCat("1", std::string(999, '0'))),
-             zetasql::Value::Int64(1000), zetasql::Value::Int64(0)},
+             googlesql::Value::Int64(1000), googlesql::Value::Int64(0)},
             *CreatePgNumericValueWithMemoryContext(
                 absl::StrCat("1", std::string(999, '0')))},
         PGScalarFunctionTestCase{
             kPGCastToNumericFunctionName,
             {*CreatePgNumericValueWithMemoryContext("1.5"),
-             zetasql::Value::Int64(10), zetasql::Value::Int64(0)},
+             googlesql::Value::Int64(10), googlesql::Value::Int64(0)},
             *CreatePgNumericValueWithMemoryContext("2")},
         PGScalarFunctionTestCase{
             kPGCastToNumericFunctionName,
             {*CreatePgNumericValueWithMemoryContext("1.499999999"),
-             zetasql::Value::Int64(10), zetasql::Value::Int64(0)},
+             googlesql::Value::Int64(10), googlesql::Value::Int64(0)},
             *CreatePgNumericValueWithMemoryContext("1")},
         PGScalarFunctionTestCase{
             kPGCastToNumericFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-1.5"), kInt64Value,
-             zetasql::Value::Int64(0)},
+             googlesql::Value::Int64(0)},
             *CreatePgNumericValueWithMemoryContext("-2")},
         PGScalarFunctionTestCase{
             kPGCastToNumericFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-1.499999999"),
-             kInt64Value, zetasql::Value::Int64(0)},
+             kInt64Value, googlesql::Value::Int64(0)},
             *CreatePgNumericValueWithMemoryContext("-1")},
         PGScalarFunctionTestCase{
             kPGCastToNumericFunctionName,
             {*CreatePgNumericValueWithMemoryContext("1.5"),
-             zetasql::Value::Int64(10), zetasql::Value::Int64(0)},
+             googlesql::Value::Int64(10), googlesql::Value::Int64(0)},
             *CreatePgNumericValueWithMemoryContext("2")},
         PGScalarFunctionTestCase{
             kPGCastToNumericFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-0.0000000009"),
-             zetasql::Value::Int64(10), zetasql::Value::Int64(10)},
+             googlesql::Value::Int64(10), googlesql::Value::Int64(10)},
             *CreatePgNumericValueWithMemoryContext("-0.0000000009")},
         PGScalarFunctionTestCase{
             kPGCastToNumericFunctionName,
             {*CreatePgNumericValueWithMemoryContext("-0.0000000009"),
-             zetasql::Value::Int64(10), zetasql::Value::Int64(9)},
+             googlesql::Value::Int64(10), googlesql::Value::Int64(9)},
             *CreatePgNumericValueWithMemoryContext("-0.000000001")},
         PGScalarFunctionTestCase{
             kPGCastToNumericFunctionName,
             {*CreatePgNumericValueWithMemoryContext("0.000"),
-             zetasql::Value::Int64(10), zetasql::Value::Int64(0)},
+             googlesql::Value::Int64(10), googlesql::Value::Int64(0)},
             *CreatePgNumericValueWithMemoryContext("0")},
         PGScalarFunctionTestCase{
             kPGCastToNumericFunctionName,
             {*CreatePgNumericValueWithMemoryContext("0"),
-             zetasql::Value::Int64(10), zetasql::Value::Int64(10)},
+             googlesql::Value::Int64(10), googlesql::Value::Int64(10)},
             *CreatePgNumericValueWithMemoryContext("0.0000000000")},
         PGScalarFunctionTestCase{
             kPGCastToNumericFunctionName,
             {*CreatePgNumericValueWithMemoryContext("9.99"),
-             zetasql::Value::Int64(3), kInt64Value},
+             googlesql::Value::Int64(3), kInt64Value},
             *CreatePgNumericValueWithMemoryContext("10.0")},
         PGScalarFunctionTestCase{
             kPGCastToNumericFunctionName,
             {*CreatePgNumericValueWithMemoryContext("0.99"), kInt64Value,
-             zetasql::Value::Int64(0)},
+             googlesql::Value::Int64(0)},
             *CreatePgNumericValueWithMemoryContext("1")},
         PGScalarFunctionTestCase{
             kPGCastToNumericFunctionName,
             {*CreatePgNumericValueWithMemoryContext("0.3"),
-             zetasql::Value::Int64(3), zetasql::Value::Int64(3)},
+             googlesql::Value::Int64(3), googlesql::Value::Int64(3)},
             *CreatePgNumericValueWithMemoryContext("0.300")},
         PGScalarFunctionTestCase{
             kPGCastToNumericFunctionName,
-            {kPGNumericNaNValue, zetasql::Value::Int64(5),
-             zetasql::Value::Int64(3)},
+            {kPGNumericNaNValue, googlesql::Value::Int64(5),
+             googlesql::Value::Int64(3)},
             kPGNumericNaNValue},
         PGScalarFunctionTestCase{
             kPGCastToNumericFunctionName,
-            {kNullPGNumericValue, zetasql::Value::Int64(5),
-             zetasql::Value::Int64(3)},
+            {kNullPGNumericValue, googlesql::Value::Int64(5),
+             googlesql::Value::Int64(3)},
             kNullPGNumericValue},
 
         PGScalarFunctionTestCase{
             kPGArrayUpperFunctionName,
-            {zetasql::values::BoolArray({true}), zetasql::values::Int64(1)},
-            zetasql::values::Int64(1)},
+            {googlesql::values::BoolArray({true}), googlesql::values::Int64(1)},
+            googlesql::values::Int64(1)},
         PGScalarFunctionTestCase{kPGArrayUpperFunctionName,
-                                 {zetasql::values::BytesArray({"1", "2"}),
-                                  zetasql::values::Int64(1)},
-                                 zetasql::values::Int64(2)},
+                                 {googlesql::values::BytesArray({"1", "2"}),
+                                  googlesql::values::Int64(1)},
+                                 googlesql::values::Int64(2)},
         PGScalarFunctionTestCase{
             kPGArrayUpperFunctionName,
-            {zetasql::values::Array(zetasql::types::DateArrayType(),
-                                      {zetasql::values::Date(0),
-                                       zetasql::values::Date(1)}),
-             zetasql::values::Int64(1)},
-            zetasql::Value::Int64(2)},
+            {googlesql::values::Array(googlesql::types::DateArrayType(),
+                                      {googlesql::values::Date(0),
+                                       googlesql::values::Date(1)}),
+             googlesql::values::Int64(1)},
+            googlesql::Value::Int64(2)},
         PGScalarFunctionTestCase{kPGArrayUpperFunctionName,
-                                 {zetasql::values::DoubleArray({1.0}),
-                                  zetasql::values::Int64(1)},
-                                 zetasql::values::Int64(1)},
+                                 {googlesql::values::DoubleArray({1.0}),
+                                  googlesql::values::Int64(1)},
+                                 googlesql::values::Int64(1)},
         PGScalarFunctionTestCase{kPGArrayUpperFunctionName,
-                                 {zetasql::values::Int64Array({1, 2}),
-                                  zetasql::values::Int64(1)},
-                                 zetasql::values::Int64(2)},
+                                 {googlesql::values::Int64Array({1, 2}),
+                                  googlesql::values::Int64(1)},
+                                 googlesql::values::Int64(2)},
         PGScalarFunctionTestCase{kPGArrayUpperFunctionName,
-                                 {zetasql::values::StringArray({"a", "b"}),
-                                  zetasql::values::Int64(1)},
-                                 zetasql::values::Int64(2)},
+                                 {googlesql::values::StringArray({"a", "b"}),
+                                  googlesql::values::Int64(1)},
+                                 googlesql::values::Int64(2)},
         PGScalarFunctionTestCase{
             kPGArrayUpperFunctionName,
-            {zetasql::values::TimestampArray({absl::Now()}),
-             zetasql::values::Int64(1)},
-            zetasql::values::Int64(1)},
+            {googlesql::values::TimestampArray({absl::Now()}),
+             googlesql::values::Int64(1)},
+            googlesql::values::Int64(1)},
         PGScalarFunctionTestCase{
             kPGArrayUpperFunctionName,
-            {zetasql::values::Int64Array({1}), zetasql::values::Int64(0)},
-            zetasql::values::NullInt64()},
+            {googlesql::values::Int64Array({1}), googlesql::values::Int64(0)},
+            googlesql::values::NullInt64()},
         PGScalarFunctionTestCase{
             kPGArrayUpperFunctionName,
-            {zetasql::values::Int64Array({1}), zetasql::values::Int64(-1)},
-            zetasql::values::NullInt64()},
+            {googlesql::values::Int64Array({1}), googlesql::values::Int64(-1)},
+            googlesql::values::NullInt64()},
         PGScalarFunctionTestCase{
             kPGArrayUpperFunctionName,
-            {zetasql::values::Int64Array({}), zetasql::values::Int64(1)},
-            zetasql::values::NullInt64()},
+            {googlesql::values::Int64Array({}), googlesql::values::Int64(1)},
+            googlesql::values::NullInt64()},
         PGScalarFunctionTestCase{kPGArrayUpperFunctionName,
-                                 {zetasql::values::Int64Array({1}),
-                                  zetasql::values::NullInt64()},
-                                 zetasql::values::NullInt64()},
+                                 {googlesql::values::Int64Array({1}),
+                                  googlesql::values::NullInt64()},
+                                 googlesql::values::NullInt64()},
         PGScalarFunctionTestCase{
             kPGArrayUpperFunctionName,
-            {zetasql::values::Null(zetasql::types::Int64ArrayType()),
-             zetasql::values::Int64(1)},
-            zetasql::values::NullInt64()},
+            {googlesql::values::Null(googlesql::types::Int64ArrayType()),
+             googlesql::values::Int64(1)},
+            googlesql::values::NullInt64()},
         PGScalarFunctionTestCase{
             kPGArrayUpperFunctionName,
-            {zetasql::values::Array(
-                 zetasql::types::IntervalArrayType(),
+            {googlesql::values::Array(
+                 googlesql::types::IntervalArrayType(),
                  {kNullIntervalValue,
-                  zetasql::values::Interval(
-                      zetasql::IntervalValue::MaxValue())}),
-             zetasql::values::Int64(1)},
-            zetasql::values::Int64(2)},
+                  googlesql::values::Interval(
+                      googlesql::IntervalValue::MaxValue())}),
+             googlesql::values::Int64(1)},
+            googlesql::values::Int64(2)},
         PGScalarFunctionTestCase{kPGArrayUpperFunctionName,
-                                 {kUuidArrayValue, zetasql::values::Int64(1)},
-                                 zetasql::values::Int64(2)},
+                                 {kUuidArrayValue, googlesql::values::Int64(1)},
+                                 googlesql::values::Int64(2)},
 
         PGScalarFunctionTestCase{kPGTextregexneFunctionName,
-                                 {zetasql::values::String("abcdefg"),
-                                  zetasql::values::String("bb.*")},
-                                 zetasql::values::Bool(true)},
+                                 {googlesql::values::String("abcdefg"),
+                                  googlesql::values::String("bb.*")},
+                                 googlesql::values::Bool(true)},
         PGScalarFunctionTestCase{kPGTextregexneFunctionName,
-                                 {zetasql::values::String("abcdefg"),
-                                  zetasql::values::String("ab.*")},
-                                 zetasql::values::Bool(false)},
+                                 {googlesql::values::String("abcdefg"),
+                                  googlesql::values::String("ab.*")},
+                                 googlesql::values::Bool(false)},
         PGScalarFunctionTestCase{
             kPGTextregexneFunctionName,
-            {kNullStringValue, zetasql::values::String("ab.*")},
-            zetasql::values::NullBool()},
+            {kNullStringValue, googlesql::values::String("ab.*")},
+            googlesql::values::NullBool()},
         PGScalarFunctionTestCase{
             kPGTextregexneFunctionName,
-            {zetasql::values::String("abcdefg"), kNullStringValue},
-            zetasql::values::NullBool()},
+            {googlesql::values::String("abcdefg"), kNullStringValue},
+            googlesql::values::NullBool()},
 
         PGScalarFunctionTestCase{
             kPGDateMiFunctionName,
-            {zetasql::values::Date(0), zetasql::values::Date(1)},
-            zetasql::values::Int64(-1)},
+            {googlesql::values::Date(0), googlesql::values::Date(1)},
+            googlesql::values::Int64(-1)},
         PGScalarFunctionTestCase{
             kPGDateMiFunctionName,
-            {zetasql::values::NullDate(), zetasql::values::Date(1)},
-            zetasql::values::NullInt64()},
+            {googlesql::values::NullDate(), googlesql::values::Date(1)},
+            googlesql::values::NullInt64()},
         PGScalarFunctionTestCase{
             kPGDateMiFunctionName,
-            {zetasql::values::Date(0), zetasql::values::NullDate()},
-            zetasql::values::NullInt64()},
+            {googlesql::values::Date(0), googlesql::values::NullDate()},
+            googlesql::values::NullInt64()},
 
         PGScalarFunctionTestCase{
             kPGDateMiiFunctionName,
-            {zetasql::values::Date(0), zetasql::values::Int64(1)},
-            zetasql::values::Date(-1)},
+            {googlesql::values::Date(0), googlesql::values::Int64(1)},
+            googlesql::values::Date(-1)},
         PGScalarFunctionTestCase{
             kPGDateMiiFunctionName,
-            {zetasql::values::NullDate(), zetasql::values::Int64(1)},
-            zetasql::values::NullDate()},
+            {googlesql::values::NullDate(), googlesql::values::Int64(1)},
+            googlesql::values::NullDate()},
         PGScalarFunctionTestCase{
             kPGDateMiiFunctionName,
-            {zetasql::values::Date(0), zetasql::values::NullInt64()},
-            zetasql::values::NullDate()},
+            {googlesql::values::Date(0), googlesql::values::NullInt64()},
+            googlesql::values::NullDate()},
 
         PGScalarFunctionTestCase{
             kPGDatePliFunctionName,
-            {zetasql::values::Date(0), zetasql::values::Int64(1)},
-            zetasql::values::Date(1)},
+            {googlesql::values::Date(0), googlesql::values::Int64(1)},
+            googlesql::values::Date(1)},
         PGScalarFunctionTestCase{
             kPGDatePliFunctionName,
-            {zetasql::values::NullDate(), zetasql::values::Int64(1)},
-            zetasql::values::NullDate()},
+            {googlesql::values::NullDate(), googlesql::values::Int64(1)},
+            googlesql::values::NullDate()},
         PGScalarFunctionTestCase{
             kPGDatePliFunctionName,
-            {zetasql::values::Date(0), zetasql::values::NullInt64()},
-            zetasql::values::NullDate()},
+            {googlesql::values::Date(0), googlesql::values::NullInt64()},
+            googlesql::values::NullDate()},
 
         PGScalarFunctionTestCase{kPGToDateFunctionName,
-                                 {zetasql::values::String("01 Jan 1970"),
-                                  zetasql::values::String("DD Mon YYYY")},
-                                 zetasql::values::Date(0)},
+                                 {googlesql::values::String("01 Jan 1970"),
+                                  googlesql::values::String("DD Mon YYYY")},
+                                 googlesql::values::Date(0)},
         PGScalarFunctionTestCase{
             kPGToDateFunctionName,
-            {kNullStringValue, zetasql::values::String("DD Mon YYYY")},
-            zetasql::values::NullDate()},
+            {kNullStringValue, googlesql::values::String("DD Mon YYYY")},
+            googlesql::values::NullDate()},
         PGScalarFunctionTestCase{
             kPGToDateFunctionName,
-            {zetasql::values::String("01 Jan 1970"), kNullStringValue},
-            zetasql::values::NullDate()},
+            {googlesql::values::String("01 Jan 1970"), kNullStringValue},
+            googlesql::values::NullDate()},
 
         PGScalarFunctionTestCase{
             kPGToTimestampFunctionName,
-            {zetasql::values::String("01 Jan 1970 00:00:00+00"),
-             zetasql::values::String("DD Mon YYYY HH24:MI:SSTZH")},
-            zetasql::values::Timestamp(absl::UnixEpoch())},
+            {googlesql::values::String("01 Jan 1970 00:00:00+00"),
+             googlesql::values::String("DD Mon YYYY HH24:MI:SSTZH")},
+            googlesql::values::Timestamp(absl::UnixEpoch())},
         PGScalarFunctionTestCase{
             kPGToTimestampFunctionName,
             {kNullStringValue,
-             zetasql::values::String("DD Mon YYYY HH24:MI:SSTZH")},
-            zetasql::values::NullTimestamp()},
+             googlesql::values::String("DD Mon YYYY HH24:MI:SSTZH")},
+            googlesql::values::NullTimestamp()},
         PGScalarFunctionTestCase{
             kPGToTimestampFunctionName,
-            {zetasql::values::String("01 Jan 1970 00:00:00+00"),
+            {googlesql::values::String("01 Jan 1970 00:00:00+00"),
              kNullStringValue},
-            zetasql::values::NullTimestamp()},
+            googlesql::values::NullTimestamp()},
 
         PGScalarFunctionTestCase{kPGToCharFunctionName,
-                                 {zetasql::values::Int64(-123),
-                                  zetasql::values::String("999PR")},
-                                 zetasql::values::String("<123>")},
+                                 {googlesql::values::Int64(-123),
+                                  googlesql::values::String("999PR")},
+                                 googlesql::values::String("<123>")},
         PGScalarFunctionTestCase{
             kPGToCharFunctionName,
-            {zetasql::values::Timestamp(absl::UnixEpoch()),
-             zetasql::values::String("YYYY-MM-DD HH24:MI:SSTZH")},
-            zetasql::values::String("1969-12-31 16:00:00-08")},
+            {googlesql::values::Timestamp(absl::UnixEpoch()),
+             googlesql::values::String("YYYY-MM-DD HH24:MI:SSTZH")},
+            googlesql::values::String("1969-12-31 16:00:00-08")},
         PGScalarFunctionTestCase{
             kPGToCharFunctionName,
-            {zetasql::values::Timestamp(absl::UnixEpoch()),
-             zetasql::values::String("")},
+            {googlesql::values::Timestamp(absl::UnixEpoch()),
+             googlesql::values::String("")},
             kNullStringValue},
         PGScalarFunctionTestCase{kPGToCharFunctionName,
-                                 {zetasql::values::Double(-123.45),
-                                  zetasql::values::String("999.999PR")},
-                                 zetasql::values::String("<123.450>")},
+                                 {googlesql::values::Double(-123.45),
+                                  googlesql::values::String("999.999PR")},
+                                 googlesql::values::String("<123.450>")},
         PGScalarFunctionTestCase{
             kPGToCharFunctionName,
             {CreatePgNumericValueWithMemoryContext("123.45").value(),
-             zetasql::values::String("999")},
-            zetasql::values::String(" 123")},
+             googlesql::values::String("999")},
+            googlesql::values::String(" 123")},
         PGScalarFunctionTestCase{kPGToCharFunctionName,
-                                 {zetasql::values::NullDouble(),
-                                  zetasql::values::String("999.999PR")},
+                                 {googlesql::values::NullDouble(),
+                                  googlesql::values::String("999.999PR")},
                                  kNullStringValue},
         PGScalarFunctionTestCase{
             kPGToCharFunctionName,
-            {zetasql::values::Double(-123.45), kNullStringValue},
+            {googlesql::values::Double(-123.45), kNullStringValue},
             kNullStringValue},
 
         PGScalarFunctionTestCase{
             kPGToNumberFunctionName,
-            {zetasql::values::String("-12,345,678"),
-             zetasql::values::String("99G999G999")},
+            {googlesql::values::String("-12,345,678"),
+             googlesql::values::String("99G999G999")},
             *CreatePgNumericValueWithMemoryContext("-12345678")},
         PGScalarFunctionTestCase{
             kPGToNumberFunctionName,
-            {zetasql::values::String("<123.456>"),
-             zetasql::values::String("999.999PR")},
+            {googlesql::values::String("<123.456>"),
+             googlesql::values::String("999.999PR")},
             *CreatePgNumericValueWithMemoryContext("-123.456")},
         PGScalarFunctionTestCase{
             kPGToNumberFunctionName,
-            {zetasql::values::String("$123.45-"),
-             zetasql::values::String("L999.99S")},
+            {googlesql::values::String("$123.45-"),
+             googlesql::values::String("L999.99S")},
             *CreatePgNumericValueWithMemoryContext("-123.45")},
         PGScalarFunctionTestCase{kPGToNumberFunctionName,
-                                 {zetasql::values::String("42nd"),
-                                  zetasql::values::String("99th")},
+                                 {googlesql::values::String("42nd"),
+                                  googlesql::values::String("99th")},
                                  *CreatePgNumericValueWithMemoryContext("42")},
         PGScalarFunctionTestCase{
             kPGToNumberFunctionName,
-            {kNullStringValue, zetasql::values::String("999")},
-            zetasql::values::Null(spangres::datatypes::GetPgNumericType())},
+            {kNullStringValue, googlesql::values::String("999")},
+            googlesql::values::Null(spangres::datatypes::GetPgNumericType())},
         PGScalarFunctionTestCase{
             kPGToNumberFunctionName,
-            {zetasql::values::String("123"), kNullStringValue},
-            zetasql::values::Null(spangres::datatypes::GetPgNumericType())},
+            {googlesql::values::String("123"), kNullStringValue},
+            googlesql::values::Null(spangres::datatypes::GetPgNumericType())},
 
         PGScalarFunctionTestCase{kPGQuoteIdentFunctionName,
-                                 {zetasql::values::String("test")},
-                                 zetasql::values::String("\"test\"")},
+                                 {googlesql::values::String("test")},
+                                 googlesql::values::String("\"test\"")},
         PGScalarFunctionTestCase{
             kPGQuoteIdentFunctionName, {kNullStringValue}, kNullStringValue},
 
         PGScalarFunctionTestCase{kPGSubstringFunctionName,
-                                 {zetasql::values::String("abcdefg"),
-                                  zetasql::values::String("a(b.)")},
-                                 zetasql::values::String("bc")},
+                                 {googlesql::values::String("abcdefg"),
+                                  googlesql::values::String("a(b.)")},
+                                 googlesql::values::String("bc")},
         PGScalarFunctionTestCase{kPGSubstringFunctionName,
-                                 {zetasql::values::String("abcdefg"),
-                                  zetasql::values::String("(h.)?")},
+                                 {googlesql::values::String("abcdefg"),
+                                  googlesql::values::String("(h.)?")},
                                  kNullStringValue},
 
         PGScalarFunctionTestCase{kPGRegexpMatchFunctionName,
-                                 {zetasql::values::String("abcdefg"),
-                                  zetasql::values::String("b.")},
-                                 zetasql::values::StringArray({"bc"})},
+                                 {googlesql::values::String("abcdefg"),
+                                  googlesql::values::String("b.")},
+                                 googlesql::values::StringArray({"bc"})},
         PGScalarFunctionTestCase{
             kPGRegexpMatchFunctionName,
-            {kNullStringValue, zetasql::values::String("b.")},
-            zetasql::values::Null(zetasql::types::StringArrayType())},
+            {kNullStringValue, googlesql::values::String("b.")},
+            googlesql::values::Null(googlesql::types::StringArrayType())},
         PGScalarFunctionTestCase{
             kPGRegexpMatchFunctionName,
-            {zetasql::values::String("abcdefg"), kNullStringValue},
-            zetasql::values::Null(zetasql::types::StringArrayType())},
+            {googlesql::values::String("abcdefg"), kNullStringValue},
+            googlesql::values::Null(googlesql::types::StringArrayType())},
         PGScalarFunctionTestCase{
             kPGRegexpMatchFunctionName,
-            {zetasql::values::String("abcdefg"),
-             zetasql::values::String("h.")},
-            zetasql::values::Null(zetasql::types::StringArrayType())},
+            {googlesql::values::String("abcdefg"),
+             googlesql::values::String("h.")},
+            googlesql::values::Null(googlesql::types::StringArrayType())},
         PGScalarFunctionTestCase{
             kPGRegexpMatchFunctionName,
-            {zetasql::values::String("abcDefg"),
-             zetasql::values::String("b.*"), zetasql::values::String("i")},
-            zetasql::values::StringArray({"bcDefg"})},
+            {googlesql::values::String("abcDefg"),
+             googlesql::values::String("b.*"), googlesql::values::String("i")},
+            googlesql::values::StringArray({"bcDefg"})},
         PGScalarFunctionTestCase{
             kPGRegexpMatchFunctionName,
-            {kNullStringValue, zetasql::values::String("b.*"),
-             zetasql::values::String("i")},
-            zetasql::values::Null(zetasql::types::StringArrayType())},
+            {kNullStringValue, googlesql::values::String("b.*"),
+             googlesql::values::String("i")},
+            googlesql::values::Null(googlesql::types::StringArrayType())},
         PGScalarFunctionTestCase{
             kPGRegexpMatchFunctionName,
-            {zetasql::values::String("abcDefg"), kNullStringValue,
-             zetasql::values::String("i")},
-            zetasql::values::Null(zetasql::types::StringArrayType())},
+            {googlesql::values::String("abcDefg"), kNullStringValue,
+             googlesql::values::String("i")},
+            googlesql::values::Null(googlesql::types::StringArrayType())},
         PGScalarFunctionTestCase{
             kPGRegexpMatchFunctionName,
-            {zetasql::values::String("abcDefg"),
-             zetasql::values::String("b.*"), kNullStringValue},
-            zetasql::values::Null(zetasql::types::StringArrayType())},
+            {googlesql::values::String("abcDefg"),
+             googlesql::values::String("b.*"), kNullStringValue},
+            googlesql::values::Null(googlesql::types::StringArrayType())},
 
         PGScalarFunctionTestCase{
             kPGRegexpSplitToArrayFunctionName,
-            {zetasql::values::String("a1b2c3d"),
-             zetasql::values::String("[0-9]")},
-            zetasql::values::StringArray({"a", "b", "c", "d"})},
+            {googlesql::values::String("a1b2c3d"),
+             googlesql::values::String("[0-9]")},
+            googlesql::values::StringArray({"a", "b", "c", "d"})},
         PGScalarFunctionTestCase{
             kPGRegexpSplitToArrayFunctionName,
-            {kNullStringValue, zetasql::values::String("[0-9]")},
-            zetasql::values::Null(zetasql::types::StringArrayType())},
+            {kNullStringValue, googlesql::values::String("[0-9]")},
+            googlesql::values::Null(googlesql::types::StringArrayType())},
         PGScalarFunctionTestCase{
             kPGRegexpSplitToArrayFunctionName,
-            {zetasql::values::String("a1b2c3d"), kNullStringValue},
-            zetasql::values::Null(zetasql::types::StringArrayType())},
+            {googlesql::values::String("a1b2c3d"), kNullStringValue},
+            googlesql::values::Null(googlesql::types::StringArrayType())},
         PGScalarFunctionTestCase{
             kPGRegexpSplitToArrayFunctionName,
-            {zetasql::values::String("1A2b3C4"),
-             zetasql::values::String("[a-z]"),
-             zetasql::values::String("i")},
-            zetasql::values::StringArray({"1", "2", "3", "4"})},
+            {googlesql::values::String("1A2b3C4"),
+             googlesql::values::String("[a-z]"),
+             googlesql::values::String("i")},
+            googlesql::values::StringArray({"1", "2", "3", "4"})},
         PGScalarFunctionTestCase{
             kPGRegexpSplitToArrayFunctionName,
-            {kNullStringValue, zetasql::values::String("[a-z]"),
-             zetasql::values::String("i")},
-            zetasql::values::Null(zetasql::types::StringArrayType())},
+            {kNullStringValue, googlesql::values::String("[a-z]"),
+             googlesql::values::String("i")},
+            googlesql::values::Null(googlesql::types::StringArrayType())},
         PGScalarFunctionTestCase{
             kPGRegexpSplitToArrayFunctionName,
-            {zetasql::values::String("1A2b3C4"), kNullStringValue,
-             zetasql::values::String("i")},
-            zetasql::values::Null(zetasql::types::StringArrayType())},
+            {googlesql::values::String("1A2b3C4"), kNullStringValue,
+             googlesql::values::String("i")},
+            googlesql::values::Null(googlesql::types::StringArrayType())},
         PGScalarFunctionTestCase{
             kPGRegexpSplitToArrayFunctionName,
-            {zetasql::values::String("1A2b3C4"),
-             zetasql::values::String("[a-z]"), kNullStringValue},
-            zetasql::values::Null(zetasql::types::StringArrayType())},
+            {googlesql::values::String("1A2b3C4"),
+             googlesql::values::String("[a-z]"), kNullStringValue},
+            googlesql::values::Null(googlesql::types::StringArrayType())},
 
         // Cast to PG.OID
         PGScalarFunctionTestCase{
             kPGCastToOidFunctionName, {kInt64Value}, kPGOidValue},
         PGScalarFunctionTestCase{
             kPGCastToOidFunctionName,
-            {zetasql::Value::Int64(std::numeric_limits<uint32_t>::min())},
+            {googlesql::Value::Int64(std::numeric_limits<uint32_t>::min())},
             kPGOidMinValue},
         PGScalarFunctionTestCase{
             kPGCastToOidFunctionName,
-            {zetasql::Value::Int64(std::numeric_limits<uint32_t>::max())},
+            {googlesql::Value::Int64(std::numeric_limits<uint32_t>::max())},
             kPGOidMaxValue},
         PGScalarFunctionTestCase{
             kPGCastToOidFunctionName, {kNullInt64Value}, kNullPGOidValue},
 
         PGScalarFunctionTestCase{kPGCastToOidFunctionName,
-                                 {zetasql::Value::String("1")},
+                                 {googlesql::Value::String("1")},
                                  kPGOidValue},
         PGScalarFunctionTestCase{
             kPGCastToOidFunctionName,
-            {zetasql::Value::String(
+            {googlesql::Value::String(
                 absl::StrCat(std::numeric_limits<int32_t>::min()))},
             *CreatePgOidValue(
                 static_cast<int64_t>(std::numeric_limits<int32_t>::max()) + 1)},
         PGScalarFunctionTestCase{kPGCastToOidFunctionName,
-                                 {zetasql::Value::String(absl::StrCat(
+                                 {googlesql::Value::String(absl::StrCat(
                                      std::numeric_limits<uint32_t>::max()))},
                                  kPGOidMaxValue},
         PGScalarFunctionTestCase{
@@ -1788,24 +1870,24 @@ INSTANTIATE_TEST_SUITE_P(
         PGScalarFunctionTestCase{
             kPGCastFromOidFunctionName,
             {kPGOidMinValue},
-            zetasql::Value::Int64(std::numeric_limits<uint32_t>::min())},
+            googlesql::Value::Int64(std::numeric_limits<uint32_t>::min())},
         PGScalarFunctionTestCase{
             kPGCastFromOidFunctionName,
             {kPGOidMaxValue},
-            zetasql::Value::Int64(std::numeric_limits<uint32_t>::max())},
+            googlesql::Value::Int64(std::numeric_limits<uint32_t>::max())},
         PGScalarFunctionTestCase{
             kPGCastFromOidFunctionName, {kNullPGOidValue}, kNullInt64Value},
 
         PGScalarFunctionTestCase{kPGCastFromOidFunctionName,
                                  {kPGOidValue},
-                                 zetasql::Value::String("1")},
+                                 googlesql::Value::String("1")},
         PGScalarFunctionTestCase{kPGCastFromOidFunctionName,
                                  {kPGOidMinValue},
-                                 zetasql::Value::String(absl::StrCat(
+                                 googlesql::Value::String(absl::StrCat(
                                      std::numeric_limits<uint32_t>::min()))},
         PGScalarFunctionTestCase{kPGCastFromOidFunctionName,
                                  {kPGOidMaxValue},
-                                 zetasql::Value::String(absl::StrCat(
+                                 googlesql::Value::String(absl::StrCat(
                                      std::numeric_limits<uint32_t>::max()))},
         PGScalarFunctionTestCase{
             kPGCastFromOidFunctionName, {kNullPGOidValue}, kNullStringValue},
@@ -1813,76 +1895,76 @@ INSTANTIATE_TEST_SUITE_P(
         // PG.FLOAT_ADD
         PGScalarFunctionTestCase{kPGFloatAddFunctionName,
                                  {kNullFloatValue, kNullFloatValue},
-                                 zetasql::values::NullFloat()},
+                                 googlesql::values::NullFloat()},
         PGScalarFunctionTestCase{kPGFloatAddFunctionName,
                                  {kNullFloatValue, kFloatValue},
-                                 zetasql::values::NullFloat()},
+                                 googlesql::values::NullFloat()},
         PGScalarFunctionTestCase{kPGFloatAddFunctionName,
                                  {kFloatValue, kNullFloatValue},
-                                 zetasql::values::NullFloat()},
+                                 googlesql::values::NullFloat()},
         PGScalarFunctionTestCase{kPGFloatAddFunctionName,
                                  {kFloatValue, kFloatValue},
-                                 zetasql::values::Float(2.0f)},
+                                 googlesql::values::Float(2.0f)},
 
         // PG.FLOAT_SUBTRACT
         PGScalarFunctionTestCase{kPGFloatSubtractFunctionName,
                                  {kNullFloatValue, kNullFloatValue},
-                                 zetasql::values::NullFloat()},
+                                 googlesql::values::NullFloat()},
         PGScalarFunctionTestCase{kPGFloatSubtractFunctionName,
                                  {kNullFloatValue, kFloatValue},
-                                 zetasql::values::NullFloat()},
+                                 googlesql::values::NullFloat()},
         PGScalarFunctionTestCase{kPGFloatSubtractFunctionName,
                                  {kFloatValue, kNullFloatValue},
-                                 zetasql::values::NullFloat()},
+                                 googlesql::values::NullFloat()},
         PGScalarFunctionTestCase{kPGFloatSubtractFunctionName,
                                  {kFloatValue, kFloatValue},
-                                 zetasql::values::Float(0)},
+                                 googlesql::values::Float(0)},
         PGScalarFunctionTestCase{kPGFloatSubtractFunctionName,
-                                 {kFloatValue, zetasql::values::Float(2.0)},
-                                 zetasql::values::Float(-1.0f)},
+                                 {kFloatValue, googlesql::values::Float(2.0)},
+                                 googlesql::values::Float(-1.0f)},
         PGScalarFunctionTestCase{kPGFloatSubtractFunctionName,
-                                 {zetasql::values::Float(2.0), kFloatValue},
-                                 zetasql::values::Float(1.0f)},
+                                 {googlesql::values::Float(2.0), kFloatValue},
+                                 googlesql::values::Float(1.0f)},
 
         // PG.FLOAT_MULTIPLY
         PGScalarFunctionTestCase{kPGFloatMultiplyFunctionName,
                                  {kNullFloatValue, kNullFloatValue},
-                                 zetasql::values::NullFloat()},
+                                 googlesql::values::NullFloat()},
         PGScalarFunctionTestCase{kPGFloatMultiplyFunctionName,
                                  {kNullFloatValue, kFloatValue},
-                                 zetasql::values::NullFloat()},
+                                 googlesql::values::NullFloat()},
         PGScalarFunctionTestCase{kPGFloatMultiplyFunctionName,
                                  {kFloatValue, kNullFloatValue},
-                                 zetasql::values::NullFloat()},
+                                 googlesql::values::NullFloat()},
         PGScalarFunctionTestCase{kPGFloatMultiplyFunctionName,
                                  {kFloatValue, kFloatValue},
-                                 zetasql::values::Float(1.0f)},
+                                 googlesql::values::Float(1.0f)},
         PGScalarFunctionTestCase{kPGFloatMultiplyFunctionName,
-                                 {kFloatValue, zetasql::values::Float(-2.0f)},
-                                 zetasql::values::Float(-2.0f)},
+                                 {kFloatValue, googlesql::values::Float(-2.0f)},
+                                 googlesql::values::Float(-2.0f)},
         PGScalarFunctionTestCase{kPGFloatMultiplyFunctionName,
-                                 {kFloatValue, zetasql::values::Float(0)},
-                                 zetasql::values::Float(0)},
+                                 {kFloatValue, googlesql::values::Float(0)},
+                                 googlesql::values::Float(0)},
 
         // PG.FLOAT_DIVIDE
         PGScalarFunctionTestCase{kPGFloatDivideFunctionName,
                                  {kNullFloatValue, kNullFloatValue},
-                                 zetasql::values::NullFloat()},
+                                 googlesql::values::NullFloat()},
         PGScalarFunctionTestCase{kPGFloatDivideFunctionName,
                                  {kNullFloatValue, kFloatValue},
-                                 zetasql::values::NullFloat()},
+                                 googlesql::values::NullFloat()},
         PGScalarFunctionTestCase{kPGFloatDivideFunctionName,
                                  {kFloatValue, kNullFloatValue},
-                                 zetasql::values::NullFloat()},
+                                 googlesql::values::NullFloat()},
         PGScalarFunctionTestCase{kPGFloatDivideFunctionName,
                                  {kFloatValue, kFloatValue},
-                                 zetasql::values::Float(1.0f)},
+                                 googlesql::values::Float(1.0f)},
         PGScalarFunctionTestCase{kPGFloatDivideFunctionName,
-                                 {kFloatValue, zetasql::values::Float(2.0)},
-                                 zetasql::values::Float(0.5f)},
+                                 {kFloatValue, googlesql::values::Float(2.0)},
+                                 googlesql::values::Float(0.5f)},
         PGScalarFunctionTestCase{kPGFloatDivideFunctionName,
-                                 {zetasql::values::Float(2.0), kFloatValue},
-                                 zetasql::values::Float(2.0f)},
+                                 {googlesql::values::Float(2.0), kFloatValue},
+                                 googlesql::values::Float(2.0f)},
         // Interval Unary minus
         PGScalarFunctionTestCase{kPGIntervalUnaryMinusFunctionName,
                                  {kNullIntervalValue},
@@ -1962,16 +2044,16 @@ INSTANTIATE_TEST_SUITE_P(
                                  kNullIntervalValue},
         PGScalarFunctionTestCase{kPGIntervalMultiplyFunctionName,
                                  {CreateIntervalValue("1-1 8 1:1:1.123456"),
-                                  zetasql::values::Double(1.0)},
+                                  googlesql::values::Double(1.0)},
                                  CreateIntervalValue("1-1 8 1:1:1.123456")},
         PGScalarFunctionTestCase{
             kPGIntervalMultiplyFunctionName,
             {CreateIntervalValue("1-1 8 1:1:1.123456"),
-             zetasql::values::Double(-2.5)},
+             googlesql::values::Double(-2.5)},
             CreateIntervalValue("-2-8 -35 -2:32:32.808640")},
         PGScalarFunctionTestCase{kPGIntervalMultiplyFunctionName,
                                  {CreateIntervalValue("1-1 8 1:1:1.123456"),
-                                  zetasql::values::Double(0)},
+                                  googlesql::values::Double(0)},
                                  CreateIntervalValue("0-0 0 0:0:0")},
         PGScalarFunctionTestCase{kPGIntervalMultiplyFunctionName,
                                  {kIntervalMaxValue, kDoubleMaxValue},
@@ -1989,25 +2071,25 @@ INSTANTIATE_TEST_SUITE_P(
                                  CreateIntervalValue("0-0 0 0:0:0")},
         PGScalarFunctionTestCase{
             kPGIntervalMultiplyFunctionName,
-            {kIntervalMinValue, zetasql::values::Double(
+            {kIntervalMinValue, googlesql::values::Double(
                                     std::numeric_limits<double>::infinity())},
             kNullIntervalValue,
             absl::StatusCode::kInvalidArgument},
         PGScalarFunctionTestCase{
             kPGIntervalMultiplyFunctionName,
-            {kIntervalMaxValue, zetasql::values::Double(
+            {kIntervalMaxValue, googlesql::values::Double(
                                     std::numeric_limits<double>::infinity())},
             kNullIntervalValue,
             absl::StatusCode::kInvalidArgument},
         PGScalarFunctionTestCase{
             kPGIntervalMultiplyFunctionName,
-            {kIntervalMinValue, zetasql::values::Double(
+            {kIntervalMinValue, googlesql::values::Double(
                                     -std::numeric_limits<double>::infinity())},
             kNullIntervalValue,
             absl::StatusCode::kInvalidArgument},
         PGScalarFunctionTestCase{
             kPGIntervalMultiplyFunctionName,
-            {kIntervalMaxValue, zetasql::values::Double(
+            {kIntervalMaxValue, googlesql::values::Double(
                                     -std::numeric_limits<double>::infinity())},
             kNullIntervalValue,
             absl::StatusCode::kInvalidArgument},
@@ -2024,16 +2106,16 @@ INSTANTIATE_TEST_SUITE_P(
                                  kNullIntervalValue},
         PGScalarFunctionTestCase{kPGIntervalDivideFunctionName,
                                  {CreateIntervalValue("1-1 8 1:1:1.123456"),
-                                  zetasql::values::Double(1.0)},
+                                  googlesql::values::Double(1.0)},
                                  CreateIntervalValue("1-1 8 1:1:1.123456")},
         PGScalarFunctionTestCase{
             kPGIntervalDivideFunctionName,
             {CreateIntervalValue("-0-5 -9 -5:12:24.449382"),
-             zetasql::values::Double(-2.5)},
+             googlesql::values::Double(-2.5)},
             CreateIntervalValue("0-2 3 16:28:57.779753")},
         PGScalarFunctionTestCase{kPGIntervalDivideFunctionName,
                                  {CreateIntervalValue("1-1 8 1:1:1.123456"),
-                                  zetasql::values::Double(0)},
+                                  googlesql::values::Double(0)},
                                  kNullIntervalValue,
                                  absl::StatusCode::kOutOfRange,
                                  "division by zero"},
@@ -2053,54 +2135,54 @@ INSTANTIATE_TEST_SUITE_P(
                                  absl::StatusCode::kInvalidArgument},
         PGScalarFunctionTestCase{
             kPGIntervalDivideFunctionName,
-            {kIntervalMinValue, zetasql::values::Double(
+            {kIntervalMinValue, googlesql::values::Double(
                                     std::numeric_limits<double>::infinity())},
             CreateIntervalValue("0-0 0 0:0:0")},
 
         // make_interval
         PGScalarFunctionTestCase{
             kPGIntervalMakeIntervalFunctionName,
-            {zetasql::values::Int64(0), zetasql::values::Int64(0),
-             zetasql::values::Int64(0), zetasql::values::Int64(0),
-             zetasql::values::Int64(0), zetasql::values::Int64(0),
+            {googlesql::values::Int64(0), googlesql::values::Int64(0),
+             googlesql::values::Int64(0), googlesql::values::Int64(0),
+             googlesql::values::Int64(0), googlesql::values::Int64(0),
              kNullDoubleValue},
             kNullIntervalValue},
         PGScalarFunctionTestCase{
             kPGIntervalMakeIntervalFunctionName,
-            {zetasql::values::Int64(0), zetasql::values::Int64(0),
-             zetasql::values::Int64(0), zetasql::values::Int64(0),
-             zetasql::values::Int64(0), zetasql::values::Int64(0),
-             zetasql::values::Double(0.0)},
+            {googlesql::values::Int64(0), googlesql::values::Int64(0),
+             googlesql::values::Int64(0), googlesql::values::Int64(0),
+             googlesql::values::Int64(0), googlesql::values::Int64(0),
+             googlesql::values::Double(0.0)},
             CreateIntervalValue("0-0 0 0:0:0")},
         PGScalarFunctionTestCase{
             kPGIntervalMakeIntervalFunctionName,
-            {zetasql::values::Int64(1), zetasql::values::Int64(2),
-             zetasql::values::Int64(3), zetasql::values::Int64(4),
-             zetasql::values::Int64(5), zetasql::values::Int64(6),
-             zetasql::values::Double(10000.12345643)},
+            {googlesql::values::Int64(1), googlesql::values::Int64(2),
+             googlesql::values::Int64(3), googlesql::values::Int64(4),
+             googlesql::values::Int64(5), googlesql::values::Int64(6),
+             googlesql::values::Double(10000.12345643)},
             CreateIntervalValue("1-2 25 7:52:40.123456")},
         PGScalarFunctionTestCase{
             kPGIntervalMakeIntervalFunctionName,
-            {zetasql::values::Int64(1), zetasql::values::Int64(-2),
-             zetasql::values::Int64(3), zetasql::values::Int64(-4),
-             zetasql::values::Int64(5), zetasql::values::Int64(-6),
-             zetasql::values::Double(10000.123456789)},
+            {googlesql::values::Int64(1), googlesql::values::Int64(-2),
+             googlesql::values::Int64(3), googlesql::values::Int64(-4),
+             googlesql::values::Int64(5), googlesql::values::Int64(-6),
+             googlesql::values::Double(10000.123456789)},
             CreateIntervalValue("0-10 17 7:40:40.123457")},
         PGScalarFunctionTestCase{
             kPGIntervalMakeIntervalFunctionName,
-            {zetasql::values::Int64(1), zetasql::values::Int64(-2),
-             zetasql::values::Int64(3), zetasql::values::Int64(-4),
-             zetasql::values::Int64(5), zetasql::values::Int64(-6),
-             zetasql::values::Double(
+            {googlesql::values::Int64(1), googlesql::values::Int64(-2),
+             googlesql::values::Int64(3), googlesql::values::Int64(-4),
+             googlesql::values::Int64(5), googlesql::values::Int64(-6),
+             googlesql::values::Double(
                  std::numeric_limits<double>::infinity())},
             kNullIntervalValue,
             absl::StatusCode::kInvalidArgument},
         PGScalarFunctionTestCase{
             kPGIntervalMakeIntervalFunctionName,
-            {zetasql::values::Int64(1), zetasql::values::Int64(-2),
-             zetasql::values::Int64(3), zetasql::values::Int64(-4),
-             zetasql::values::Int64(5), zetasql::values::Int64(-6),
-             zetasql::values::Double(
+            {googlesql::values::Int64(1), googlesql::values::Int64(-2),
+             googlesql::values::Int64(3), googlesql::values::Int64(-4),
+             googlesql::values::Int64(5), googlesql::values::Int64(-6),
+             googlesql::values::Double(
                  std::numeric_limits<double>::quiet_NaN())},
             kNullIntervalValue,
             absl::StatusCode::kInvalidArgument},
@@ -2201,40 +2283,40 @@ INSTANTIATE_TEST_SUITE_P(
         // cast to string
         PGScalarFunctionTestCase{kPGCastToStringFunctionName,
                                  {kNullIntervalValue},
-                                 zetasql::values::NullString()},
+                                 googlesql::values::NullString()},
         PGScalarFunctionTestCase{
             kPGCastToStringFunctionName,
             {CreateIntervalValue("1-1 8 1:1:1.123456")},
-            zetasql::Value::String("1 year 1 mon 8 days 01:01:01.123456")},
+            googlesql::Value::String("1 year 1 mon 8 days 01:01:01.123456")},
         PGScalarFunctionTestCase{
             kPGCastToStringFunctionName,
             {CreateIntervalValue("0-1 -8 1:7:1.123456897")},
-            zetasql::Value::String("1 mon -8 days +01:07:01.123457")},
+            googlesql::Value::String("1 mon -8 days +01:07:01.123457")},
         PGScalarFunctionTestCase{
             kPGCastToStringFunctionName,
             {CreateIntervalValue("-1-1 68 1:56:30.123456")},
-            zetasql::Value::String(
+            googlesql::Value::String(
                 "-1 years -1 mons +68 days 01:56:30.123456")},
 
         // cast to interval
         PGScalarFunctionTestCase{kPGCastToIntervalFunctionName,
-                                 {zetasql::values::NullString()},
+                                 {googlesql::values::NullString()},
                                  kNullIntervalValue},
         PGScalarFunctionTestCase{
             kPGCastToIntervalFunctionName,
-            {zetasql::values::String("1 year 1 mon 8 days 01:01:01.123456")},
+            {googlesql::values::String("1 year 1 mon 8 days 01:01:01.123456")},
             CreateIntervalValue("1-1 8 1:1:1.123456")},
         PGScalarFunctionTestCase{
             kPGCastToIntervalFunctionName,
-            {zetasql::values::String("P1Y1M8DT1:1:1.123456")},
+            {googlesql::values::String("P1Y1M8DT1:1:1.123456")},
             CreateIntervalValue("1-1 8 1:1:1.123456")},
         PGScalarFunctionTestCase{
             kPGCastToIntervalFunctionName,
-            {zetasql::values::String("P1Y1M8DT1H1M1.123456S")},
+            {googlesql::values::String("P1Y1M8DT1H1M1.123456S")},
             CreateIntervalValue("1-1 8 1:1:1.123456")},
         PGScalarFunctionTestCase{
             kPGCastToIntervalFunctionName,
-            {zetasql::values::String("abc")},
+            {googlesql::values::String("abc")},
             kNullIntervalValue,
             absl::StatusCode::kInvalidArgument,
             "invalid input syntax for type interval: \"abc\""},
@@ -2242,31 +2324,29 @@ INSTANTIATE_TEST_SUITE_P(
         // extract(string, interval) -> numeric
         PGScalarFunctionTestCase{
             kPGIntervalExtractFunctionName,
-            {zetasql::values::String("seconds"),
+            {googlesql::values::String("seconds"),
              CreateIntervalValue("1-1 8 1:1:1.123456")},
             *CreatePgNumericValueWithMemoryContext("1.123456"),
         },
         PGScalarFunctionTestCase{
             kPGIntervalExtractFunctionName,
-            {zetasql::values::String("years"),
+            {googlesql::values::String("years"),
              CreateIntervalValue("1-1 8 1:1:1.123456")},
             *CreatePgNumericValueWithMemoryContext("1"),
         },
         PGScalarFunctionTestCase{
             kPGIntervalExtractFunctionName,
-            {kNullStringValue,
-             CreateIntervalValue("1-1 8 1:1:1.123456")},
+            {kNullStringValue, CreateIntervalValue("1-1 8 1:1:1.123456")},
             kNullPGNumericValue,
         },
         PGScalarFunctionTestCase{
             kPGIntervalExtractFunctionName,
-            {zetasql::values::String("abc"),
-             kNullIntervalValue},
+            {googlesql::values::String("abc"), kNullIntervalValue},
             kNullPGNumericValue,
         },
         PGScalarFunctionTestCase{
             kPGIntervalExtractFunctionName,
-            {zetasql::values::String("abc"),
+            {googlesql::values::String("abc"),
              CreateIntervalValue("1-1 8 1:1:1.123456")},
             kNullIntervalValue,
             absl::StatusCode::kInvalidArgument,
@@ -2275,42 +2355,42 @@ INSTANTIATE_TEST_SUITE_P(
         // timestamptz - timestamptz -> interval
         PGScalarFunctionTestCase{
             kPGTimestamptzSubtractTimestamptzFunctionName,
-            {zetasql::values::NullTimestamp(),
-             zetasql::Value::Timestamp(absl::FromUnixNanos(223456789))},
+            {googlesql::values::NullTimestamp(),
+             googlesql::Value::Timestamp(absl::FromUnixNanos(223456789))},
             kNullIntervalValue},
         PGScalarFunctionTestCase{
             kPGTimestamptzSubtractTimestamptzFunctionName,
-            {zetasql::Value::Timestamp(absl::FromUnixNanos(223456789)),
-             zetasql::values::NullTimestamp()},
+            {googlesql::Value::Timestamp(absl::FromUnixNanos(223456789)),
+             googlesql::values::NullTimestamp()},
             kNullIntervalValue},
         PGScalarFunctionTestCase{kPGTimestamptzSubtractTimestamptzFunctionName,
-                                 {zetasql::values::NullTimestamp(),
-                                  zetasql::values::NullTimestamp()},
+                                 {googlesql::values::NullTimestamp(),
+                                  googlesql::values::NullTimestamp()},
                                  kNullIntervalValue},
         PGScalarFunctionTestCase{
             kPGTimestamptzSubtractTimestamptzFunctionName,
-            {zetasql::Value::Timestamp(absl::FromUnixNanos(123456789)),
-             zetasql::Value::Timestamp(absl::FromUnixNanos(223456789))},
+            {googlesql::Value::Timestamp(absl::FromUnixNanos(123456789)),
+             googlesql::Value::Timestamp(absl::FromUnixNanos(223456789))},
             CreateIntervalValue("0-0 0 -0:0:0.100")},
         PGScalarFunctionTestCase{
             kPGTimestamptzSubtractTimestamptzFunctionName,
-            {zetasql::Value::Timestamp(absl::FromUnixNanos(123456789)),
-             zetasql::Value::Timestamp(absl::FromUnixNanos(133457789))},
+            {googlesql::Value::Timestamp(absl::FromUnixNanos(123456789)),
+             googlesql::Value::Timestamp(absl::FromUnixNanos(133457789))},
             CreateIntervalValue("0-0 0 -0:0:0.010001")},
         PGScalarFunctionTestCase{
             kPGTimestamptzSubtractTimestamptzFunctionName,
-            {zetasql::Value::Timestamp(absl::FromUnixNanos(123456789)),
-             zetasql::Value::Timestamp(absl::FromUnixNanos(123456788))},
+            {googlesql::Value::Timestamp(absl::FromUnixNanos(123456789)),
+             googlesql::Value::Timestamp(absl::FromUnixNanos(123456788))},
             CreateIntervalValue("0-0 0 0:0:0.0")},
         PGScalarFunctionTestCase{
             kPGTimestamptzSubtractTimestamptzFunctionName,
-            {zetasql::Value::Timestamp(absl::FromUnixNanos(123456789)),
-             zetasql::Value::Timestamp(absl::FromUnixNanos(123456679))},
+            {googlesql::Value::Timestamp(absl::FromUnixNanos(123456789)),
+             googlesql::Value::Timestamp(absl::FromUnixNanos(123456679))},
             CreateIntervalValue("0-0 0 -0:0:0.0")},
         PGScalarFunctionTestCase{
             kPGTimestamptzSubtractTimestamptzFunctionName,
-            {zetasql::Value::Timestamp(absl::FromUnixNanos(223456789)),
-             zetasql::Value::Timestamp(absl::FromUnixNanos(123456079))},
+            {googlesql::Value::Timestamp(absl::FromUnixNanos(223456789)),
+             googlesql::Value::Timestamp(absl::FromUnixNanos(123456079))},
             CreateIntervalValue("0-0 0 0:0:0.1")},
         PGScalarFunctionTestCase{
             kPGTimestamptzSubtractTimestamptzFunctionName,
@@ -2324,7 +2404,7 @@ INSTANTIATE_TEST_SUITE_P(
       std::string name = absl::StrCat(
           "idx_", info.index, "_", info.param.function_name, "_",
           absl::StrJoin(info.param.function_arguments, "_",
-                        [](std::string* out, zetasql::Value v) {
+                        [](std::string* out, googlesql::Value v) {
                           absl::StrAppend(
                               out, absl::StrCat(v.type()->DebugString(), "_",
                                                 // Limit number of chars.
@@ -2336,98 +2416,98 @@ INSTANTIATE_TEST_SUITE_P(
 
 TEST_F(EmulatorFunctionsTest,
        RegexpMatchReturnsNullElementForUnmatchedOptionalCapturingGroups) {
-  const zetasql::Function* function =
+  const googlesql::Function* function =
       functions_[kPGRegexpMatchFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      zetasql::Value expected,
-      zetasql::Value::MakeArray(
-          zetasql::types::StringArrayType(),
-          {zetasql::values::String("bc"), kNullStringValue}));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      googlesql::Value expected,
+      googlesql::Value::MakeArray(
+          googlesql::types::StringArrayType(),
+          {googlesql::values::String("bc"), kNullStringValue}));
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::values::String("abcdefg"),
-                                      zetasql::values::String("(b.)(h.)?")})),
+      evaluator_(absl::MakeConstSpan({googlesql::values::String("abcdefg"),
+                                      googlesql::values::String("(b.)(h.)?")})),
       IsOkAndHolds(expected));
 }
 
 // Tested separately from the parameterized tests as we need a memory context
 // before creating a PG.JSONB value.
 TEST_F(EmulatorFunctionsTest, ArrayUpperWithPGJsonb) {
-  const zetasql::Function* function =
+  const googlesql::Function* function =
       functions_[kPGArrayUpperFunctionName].get();
-  zetasql::FunctionSignature signature(
-      zetasql::types::Int64Type(),
+  googlesql::FunctionSignature signature(
+      googlesql::types::Int64Type(),
       {postgres_translator::spangres::datatypes::GetPgJsonbArrayType(),
-       zetasql::types::Int64Type()},
+       googlesql::types::Int64Type()},
       /*context_ptr=*/nullptr);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_,
                        (function->GetFunctionEvaluatorFactory())(signature));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto pg_arena, interfaces::CreatePGArena(nullptr));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto pg_arena, interfaces::CreatePGArena(nullptr));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto pg_jsonb_array,
-      zetasql::Value::MakeArray(
+      googlesql::Value::MakeArray(
           spangres::datatypes::GetPgJsonbArrayType(),
           {spangres::datatypes::CreatePgJsonbValue("{\"a\": \"b\"}").value(),
            spangres::datatypes::CreatePgJsonbValue("null").value(),
            spangres::datatypes::CreatePgJsonbValue("[1, 2, 3]").value()}));
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
-                  {pg_jsonb_array, zetasql::values::Int64(1)})),
-              IsOkAndHolds(zetasql::values::Int64(3)));
+                  {pg_jsonb_array, googlesql::values::Int64(1)})),
+              IsOkAndHolds(googlesql::values::Int64(3)));
 }
 
 TEST_F(EmulatorFunctionsTest, PGJsonbObjectKeysFunction) {
-  const zetasql::Function* function =
+  const googlesql::Function* function =
       functions_[kPGJsonbObjectKeysFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::Value pg_jsonb_object,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(googlesql::Value pg_jsonb_object,
                        CreatePgJsonbValueWithMemoryContext("{\"a\": \"b\"}"));
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan({pg_jsonb_object})),
-              IsOkAndHolds(zetasql::values::StringArray({"a"})));
+              IsOkAndHolds(googlesql::values::StringArray({"a"})));
 }
 
 TEST_F(EmulatorFunctionsTest, PGJsonbMutatorFunctions) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      zetasql::Value pg_jsonb_array,
-      zetasql::Value::MakeArray(
-          zetasql::types::StringArrayType(),
-          {zetasql::values::String("a"), zetasql::values::String("b")}));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      googlesql::Value pg_jsonb_array,
+      googlesql::Value::MakeArray(
+          googlesql::types::StringArrayType(),
+          {googlesql::values::String("a"), googlesql::values::String("b")}));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      zetasql::Value pg_jsonb_object,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      googlesql::Value pg_jsonb_object,
       CreatePgJsonbValueWithMemoryContext("{\"a\": 1, \"b\": 2}"));
 
-  zetasql::Value jsonb_typed_null =
-      zetasql::values::Null(spangres::datatypes::GetPgJsonbType());
+  googlesql::Value jsonb_typed_null =
+      googlesql::values::Null(spangres::datatypes::GetPgJsonbType());
 
-  const zetasql::Function* jsonb_delete_function =
+  const googlesql::Function* jsonb_delete_function =
       functions_[kPGJsonbDeleteFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_,
                        (jsonb_delete_function->GetFunctionEvaluatorFactory())(
                            jsonb_delete_function->signatures().front()));
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
-                  {pg_jsonb_array, zetasql::values::String("a")})),
+                  {pg_jsonb_array, googlesql::values::String("a")})),
               IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext("[\"b\"]")));
   EXPECT_THAT(
       evaluator_(absl::MakeConstSpan(
-          {pg_jsonb_array, zetasql::values::String("c")})),
+          {pg_jsonb_array, googlesql::values::String("c")})),
       IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext("[\"a\", \"b\"]")));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
-                  {pg_jsonb_array, zetasql::values::Int64(0)})),
+                  {pg_jsonb_array, googlesql::values::Int64(0)})),
               IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext("[\"b\"]")));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      zetasql::Value string_array,
-      zetasql::Value::MakeArray(
-          zetasql::types::StringArrayType(),
-          {zetasql::values::String("a"), zetasql::values::String("b")}));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      googlesql::Value string_array,
+      googlesql::Value::MakeArray(
+          googlesql::types::StringArrayType(),
+          {googlesql::values::String("a"), googlesql::values::String("b")}));
 
   EXPECT_THAT(
       evaluator_(absl::MakeConstSpan({pg_jsonb_array, string_array})),
@@ -2435,106 +2515,106 @@ TEST_F(EmulatorFunctionsTest, PGJsonbMutatorFunctions) {
           absl::StatusCode::kUnimplemented,
           HasSubstr("jsonb_delete(jsonb, array) is currently not supported")));
 
-  const zetasql::Function* jsonb_delete_path_function =
+  const googlesql::Function* jsonb_delete_path_function =
       functions_[kPGJsonbDeletePathFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       evaluator_, (jsonb_delete_path_function->GetFunctionEvaluatorFactory())(
                       jsonb_delete_path_function->signatures().front()));
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
-                  {pg_jsonb_array, zetasql::values::StringArray({"0"})})),
+                  {pg_jsonb_array, googlesql::values::StringArray({"0"})})),
               IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext("[\"b\"]")));
   EXPECT_THAT(
       evaluator_(absl::MakeConstSpan(
-          {pg_jsonb_array, zetasql::values::StringArray({"3"})})),
+          {pg_jsonb_array, googlesql::values::StringArray({"3"})})),
       IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext("[\"a\", \"b\"]")));
   EXPECT_THAT(
       evaluator_(absl::MakeConstSpan(
-          {pg_jsonb_array, zetasql::values::StringArray({"a"})})),
+          {pg_jsonb_array, googlesql::values::StringArray({"a"})})),
       StatusIs(
           absl::StatusCode::kInvalidArgument,
           HasSubstr("path element at position 1 is not an integer: \"a\"")));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
-                  {pg_jsonb_object, zetasql::values::StringArray({"a"})})),
+                  {pg_jsonb_object, googlesql::values::StringArray({"a"})})),
               IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext("{\"b\": 2}")));
 
-  const zetasql::Function* jsonb_set_function =
+  const googlesql::Function* jsonb_set_function =
       functions_[kPGJsonbSetFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_,
                        (jsonb_set_function->GetFunctionEvaluatorFactory())(
                            jsonb_set_function->signatures().front()));
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
-                  {pg_jsonb_array, zetasql::values::StringArray({"0"}),
-                   pg_jsonb_array, zetasql::values::Bool(true)})),
+                  {pg_jsonb_array, googlesql::values::StringArray({"0"}),
+                   pg_jsonb_array, googlesql::values::Bool(true)})),
               IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext(
                   "[[\"a\", \"b\"], \"b\"]")));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
-                  {pg_jsonb_array, zetasql::values::StringArray({"-4"}),
-                   pg_jsonb_array, zetasql::values::Bool(true)})),
+                  {pg_jsonb_array, googlesql::values::StringArray({"-4"}),
+                   pg_jsonb_array, googlesql::values::Bool(true)})),
               IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext(
                   "[[\"a\", \"b\"], \"a\", \"b\"]")));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
-                  {pg_jsonb_object, zetasql::values::StringArray({"a"}),
-                   pg_jsonb_array, zetasql::values::Bool(true)})),
+                  {pg_jsonb_object, googlesql::values::StringArray({"a"}),
+                   pg_jsonb_array, googlesql::values::Bool(true)})),
               IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext(
                   "{\"a\": [\"a\", \"b\"], \"b\": 2}")));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
-                  {pg_jsonb_object, zetasql::values::StringArray({"a"}),
-                   pg_jsonb_array, zetasql::values::Bool(true)})),
+                  {pg_jsonb_object, googlesql::values::StringArray({"a"}),
+                   pg_jsonb_array, googlesql::values::Bool(true)})),
               IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext(
                   "{\"a\": [\"a\", \"b\"], \"b\": 2}")));
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
-                  {pg_jsonb_object, zetasql::values::StringArray({"c"}),
-                   pg_jsonb_array, zetasql::values::Bool(true)})),
+                  {pg_jsonb_object, googlesql::values::StringArray({"c"}),
+                   pg_jsonb_array, googlesql::values::Bool(true)})),
               IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext(
                   "{\"a\": 1, \"b\": 2, \"c\": [\"a\", \"b\"]}")));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
-                  {pg_jsonb_object, zetasql::values::StringArray({"c", "0"}),
-                   pg_jsonb_array, zetasql::values::Bool(true)})),
+                  {pg_jsonb_object, googlesql::values::StringArray({"c", "0"}),
+                   pg_jsonb_array, googlesql::values::Bool(true)})),
               IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext(
                   "{\"a\": 1, \"b\": 2}")));
 
-  const zetasql::Function* jsonb_set_lax_function =
+  const googlesql::Function* jsonb_set_lax_function =
       functions_[kPGJsonbSetLaxFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_,
                        (jsonb_set_lax_function->GetFunctionEvaluatorFactory())(
                            jsonb_set_lax_function->signatures().front()));
 
   EXPECT_THAT(
       evaluator_(absl::MakeConstSpan(
-          {pg_jsonb_array, zetasql::values::StringArray({"0"}),
-           jsonb_typed_null, zetasql::values::Bool(true),
-           zetasql::values::String("use_json_null")})),
+          {pg_jsonb_array, googlesql::values::StringArray({"0"}),
+           jsonb_typed_null, googlesql::values::Bool(true),
+           googlesql::values::String("use_json_null")})),
       IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext("[null, \"b\"]")));
   EXPECT_THAT(
       evaluator_(absl::MakeConstSpan(
-          {pg_jsonb_array, zetasql::values::StringArray({"0"}),
-           jsonb_typed_null, zetasql::values::Bool(true),
-           zetasql::values::String("return_target")})),
+          {pg_jsonb_array, googlesql::values::StringArray({"0"}),
+           jsonb_typed_null, googlesql::values::Bool(true),
+           googlesql::values::String("return_target")})),
       IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext("[\"a\", \"b\"]")));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
-                  {pg_jsonb_array, zetasql::values::StringArray({"0"}),
-                   jsonb_typed_null, zetasql::values::Bool(true),
-                   zetasql::values::String("delete_key")})),
+                  {pg_jsonb_array, googlesql::values::StringArray({"0"}),
+                   jsonb_typed_null, googlesql::values::Bool(true),
+                   googlesql::values::String("delete_key")})),
               IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext("[\"b\"]")));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
-                  {pg_jsonb_array, zetasql::values::StringArray({"0"}),
-                   jsonb_typed_null, zetasql::values::Bool(true),
-                   zetasql::values::String("raise_exception")})),
+                  {pg_jsonb_array, googlesql::values::StringArray({"0"}),
+                   jsonb_typed_null, googlesql::values::Bool(true),
+                   googlesql::values::String("raise_exception")})),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("JSON value must not be null")));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
-                  {pg_jsonb_array, zetasql::values::StringArray({"0"}),
-                   jsonb_typed_null, zetasql::values::Bool(true),
-                   zetasql::values::String("invalid_value")})),
+                  {pg_jsonb_array, googlesql::values::StringArray({"0"}),
+                   jsonb_typed_null, googlesql::values::Bool(true),
+                   googlesql::values::String("invalid_value")})),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("null_value_treatment must be")));
 
-  const zetasql::Function* jsonb_concat_function =
+  const googlesql::Function* jsonb_concat_function =
       functions_[kPGJsonbConcatFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_,
                        (jsonb_concat_function->GetFunctionEvaluatorFactory())(
                            jsonb_concat_function->signatures().front()));
 
@@ -2550,54 +2630,54 @@ TEST_F(EmulatorFunctionsTest, PGJsonbMutatorFunctions) {
       IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext(
           "[\"a\", \"b\", {\"a\": 1, \"b\": 2}]")));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
-                  {pg_jsonb_array, zetasql::values::Bool(true)})),
+                  {pg_jsonb_array, googlesql::values::Bool(true)})),
               IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext(
                   "[\"a\", \"b\", true]")));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
-                  {pg_jsonb_object, zetasql::values::Bool(true)})),
+                  {pg_jsonb_object, googlesql::values::Bool(true)})),
               IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext(
                   "[{\"a\": 1, \"b\": 2}, true]")));
 
-  const zetasql::Function* jsonb_insert_function =
+  const googlesql::Function* jsonb_insert_function =
       functions_[kPGJsonbInsertFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_,
                        (jsonb_insert_function->GetFunctionEvaluatorFactory())(
                            jsonb_insert_function->signatures().front()));
 
   EXPECT_THAT(
       evaluator_(absl::MakeConstSpan(
-          {pg_jsonb_array, zetasql::values::StringArray({"0"}),
-           zetasql::values::String("\"c\""), zetasql::values::Bool(true)})),
+          {pg_jsonb_array, googlesql::values::StringArray({"0"}),
+           googlesql::values::String("\"c\""), googlesql::values::Bool(true)})),
       IsOkAndHolds(
           *CreatePgJsonbValueWithMemoryContext("[\"a\", \"c\", \"b\"]")));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
-                  {pg_jsonb_array, zetasql::values::StringArray({"0"}),
-                   zetasql::values::String("\"c\""),
-                   zetasql::values::Bool(false)})),
+                  {pg_jsonb_array, googlesql::values::StringArray({"0"}),
+                   googlesql::values::String("\"c\""),
+                   googlesql::values::Bool(false)})),
               IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext(
                   "[\"c\", \"a\", \"b\"]")));
   EXPECT_THAT(
       evaluator_(absl::MakeConstSpan(
-          {pg_jsonb_array, zetasql::values::StringArray({"-4"}),
-           zetasql::values::String("\"c\""), zetasql::values::Bool(true)})),
+          {pg_jsonb_array, googlesql::values::StringArray({"-4"}),
+           googlesql::values::String("\"c\""), googlesql::values::Bool(true)})),
       IsOkAndHolds(
           *CreatePgJsonbValueWithMemoryContext("[\"c\", \"a\", \"b\"]")));
   EXPECT_THAT(
       evaluator_(absl::MakeConstSpan(
-          {pg_jsonb_object, zetasql::values::StringArray({"c"}),
-           zetasql::values::Int64(3), zetasql::values::Bool(true)})),
+          {pg_jsonb_object, googlesql::values::StringArray({"c"}),
+           googlesql::values::Int64(3), googlesql::values::Bool(true)})),
       IsOkAndHolds(*CreatePgJsonbValueWithMemoryContext(
           "{\"a\": 1, \"b\": 2, \"c\": 3}")));
   EXPECT_THAT(
       evaluator_(absl::MakeConstSpan(
-          {pg_jsonb_object, zetasql::values::StringArray({"a"}),
-           zetasql::values::Int64(3), zetasql::values::Bool(false)})),
+          {pg_jsonb_object, googlesql::values::StringArray({"a"}),
+           googlesql::values::Int64(3), googlesql::values::Bool(false)})),
       StatusIs(absl::StatusCode::kInvalidArgument,
                HasSubstr("cannot replace existing key")));
 
-  const zetasql::Function* jsonb_strip_nulls_function =
+  const googlesql::Function* jsonb_strip_nulls_function =
       functions_[kPGJsonbStripNullsFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       evaluator_, (jsonb_strip_nulls_function->GetFunctionEvaluatorFactory())(
                       jsonb_strip_nulls_function->signatures().front()));
 
@@ -2615,443 +2695,443 @@ TEST_F(EmulatorFunctionsTest, PGJsonbMutatorFunctions) {
 // Tested separately from the parameterized tests as we need a memory context
 // before creating a PG.NUMERIC value.
 TEST_F(EmulatorFunctionsTest, ArrayUpperWithPGNumeric) {
-  const zetasql::Function* function =
+  const googlesql::Function* function =
       functions_[kPGArrayUpperFunctionName].get();
-  zetasql::FunctionSignature signature(
-      zetasql::types::Int64Type(),
+  googlesql::FunctionSignature signature(
+      googlesql::types::Int64Type(),
       {postgres_translator::spangres::datatypes::GetPgNumericArrayType(),
-       zetasql::types::Int64Type()},
+       googlesql::types::Int64Type()},
       /*context_ptr=*/nullptr);
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_,
                        (function->GetFunctionEvaluatorFactory())(signature));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto pg_arena, interfaces::CreatePGArena(nullptr));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto pg_arena, interfaces::CreatePGArena(nullptr));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto pg_numeric_array,
-      zetasql::Value::MakeArray(
+      googlesql::Value::MakeArray(
           spangres::datatypes::GetPgNumericArrayType(),
           {spangres::datatypes::CreatePgNumericValue("1.3").value(),
            spangres::datatypes::CreatePgNumericValue("0.1").value()}));
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
-                  {pg_numeric_array, zetasql::values::Int64(1)})),
-              IsOkAndHolds(zetasql::values::Int64(2)));
+                  {pg_numeric_array, googlesql::values::Int64(1)})),
+              IsOkAndHolds(googlesql::values::Int64(2)));
 }
 
 TEST_F(EmulatorFunctionsTest,
        ArrayUpperReturnsErrorWhenDimensionIsGreaterThanOne) {
-  const zetasql::Function* function =
+  const googlesql::Function* function =
       functions_[kPGArrayUpperFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
   EXPECT_THAT(
       evaluator_(
-          absl::MakeConstSpan({zetasql::values::StringArray({"a", "b"}),
-                               zetasql::values::Int64(2)})),
+          absl::MakeConstSpan({googlesql::values::StringArray({"a", "b"}),
+                               googlesql::values::Int64(2)})),
       StatusIs(absl::StatusCode::kInvalidArgument,
                HasSubstr("multi-dimensional arrays are not supported")));
 }
 
 TEST_F(EmulatorFunctionsTest, ToCharReturnsErrorWhenTypeUnsupported) {
-  const zetasql::Function* function = functions_[kPGToCharFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  const googlesql::Function* function = functions_[kPGToCharFunctionName].get();
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {CreatePgJsonbValueWithMemoryContext("3.14").value(),
-                   zetasql::values::String("999")})),
+                   googlesql::values::String("999")})),
               StatusIs(absl::StatusCode::kUnimplemented,
                        HasSubstr("to_char(PG.JSONB, text)")));
 }
 
 TEST_F(EmulatorFunctionsTest, AddReturnsErrorWhenArgumentsAreInvalid) {
-  const zetasql::Function* function =
-      functions_[kZetaSQLAddFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  const googlesql::Function* function =
+      functions_[kGoogleSQLAddFunctionName].get();
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
-  std::vector<zetasql::Value> args = {};
+  std::vector<googlesql::Value> args = {};
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(args)),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInternal));
 }
 
 TEST_F(EmulatorFunctionsTest, AddReturnsErrorWhenResultIsOverflow) {
-  const zetasql::Function* function =
-      functions_[kZetaSQLAddFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  const googlesql::Function* function =
+      functions_[kGoogleSQLAddFunctionName].get();
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {*CreatePgNumericValueWithMemoryContext(MaxNumericString()),
                    *CreatePgNumericValueWithMemoryContext("1")})),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {*CreatePgNumericValueWithMemoryContext(MinNumericString()),
                    *CreatePgNumericValueWithMemoryContext("-1")})),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
 }
 
 TEST_F(EmulatorFunctionsTest, SubtractReturnsErrorWhenArgumentsAreInvalid) {
-  const zetasql::Function* function =
-      functions_[kZetaSQLSubtractFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  const googlesql::Function* function =
+      functions_[kGoogleSQLSubtractFunctionName].get();
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
-  std::vector<zetasql::Value> args = {};
+  std::vector<googlesql::Value> args = {};
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(args)),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInternal));
 }
 
 TEST_F(EmulatorFunctionsTest, SubtractReturnsErrorWhenResultIsOverflow) {
-  const zetasql::Function* function =
-      functions_[kZetaSQLSubtractFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  const googlesql::Function* function =
+      functions_[kGoogleSQLSubtractFunctionName].get();
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {*CreatePgNumericValueWithMemoryContext(MaxNumericString()),
                    *CreatePgNumericValueWithMemoryContext("-1")})),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {*CreatePgNumericValueWithMemoryContext(MinNumericString()),
                    *CreatePgNumericValueWithMemoryContext("1")})),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
 }
 
 TEST_F(EmulatorFunctionsTest, MultiplyReturnsErrorWhenArgumentsAreInvalid) {
-  const zetasql::Function* function =
-      functions_[kZetaSQLMultiplyFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  const googlesql::Function* function =
+      functions_[kGoogleSQLMultiplyFunctionName].get();
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
-  std::vector<zetasql::Value> args = {};
+  std::vector<googlesql::Value> args = {};
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(args)),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInternal));
 }
 
 TEST_F(EmulatorFunctionsTest, MultiplyReturnsErrorWhenResultIsOverflow) {
-  const zetasql::Function* function =
-      functions_[kZetaSQLMultiplyFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  const googlesql::Function* function =
+      functions_[kGoogleSQLMultiplyFunctionName].get();
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {*CreatePgNumericValueWithMemoryContext(MaxNumericString()),
                    *CreatePgNumericValueWithMemoryContext("2.0")})),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {*CreatePgNumericValueWithMemoryContext(MinNumericString()),
                    *CreatePgNumericValueWithMemoryContext("-2.0")})),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
 }
 
 TEST_F(EmulatorFunctionsTest, DivideReturnsErrorWhenArgumentsAreInvalid) {
-  const zetasql::Function* function =
-      functions_[kZetaSQLDivideFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  const googlesql::Function* function =
+      functions_[kGoogleSQLDivideFunctionName].get();
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
-  std::vector<zetasql::Value> args = {};
+  std::vector<googlesql::Value> args = {};
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(args)),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInternal));
 }
 
 TEST_F(EmulatorFunctionsTest, DivideReturnsErrorWhenDividingByZero) {
-  const zetasql::Function* function =
-      functions_[kZetaSQLDivideFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  const googlesql::Function* function =
+      functions_[kGoogleSQLDivideFunctionName].get();
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {*CreatePgNumericValueWithMemoryContext(MaxNumericString()),
                    *CreatePgNumericValueWithMemoryContext("0.00")})),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {*CreatePgNumericValueWithMemoryContext(MinNumericString()),
                    *CreatePgNumericValueWithMemoryContext("0.0")})),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
 }
 
 TEST_F(EmulatorFunctionsTest, DivideReturnsErrorWhenResultIsOverflow) {
-  const zetasql::Function* function =
-      functions_[kZetaSQLDivideFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  const googlesql::Function* function =
+      functions_[kGoogleSQLDivideFunctionName].get();
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {*CreatePgNumericValueWithMemoryContext(MaxNumericString()),
                    *CreatePgNumericValueWithMemoryContext("0.5")})),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {*CreatePgNumericValueWithMemoryContext(MinNumericString()),
                    *CreatePgNumericValueWithMemoryContext("-0.5")})),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
 }
 
 TEST_F(EmulatorFunctionsTest, DivTruncReturnsErrorWhenArgumentsAreInvalid) {
-  const zetasql::Function* function =
-      functions_[kZetaSQLDivTruncFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  const googlesql::Function* function =
+      functions_[kGoogleSQLDivTruncFunctionName].get();
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
-  std::vector<zetasql::Value> args = {};
+  std::vector<googlesql::Value> args = {};
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(args)),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInternal));
 }
 
 TEST_F(EmulatorFunctionsTest, DivTruncReturnsErrorWhenDividingByZero) {
-  const zetasql::Function* function =
-      functions_[kZetaSQLDivTruncFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  const googlesql::Function* function =
+      functions_[kGoogleSQLDivTruncFunctionName].get();
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {*CreatePgNumericValueWithMemoryContext(MaxNumericString()),
                    *CreatePgNumericValueWithMemoryContext("0.00")})),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {*CreatePgNumericValueWithMemoryContext(MinNumericString()),
                    *CreatePgNumericValueWithMemoryContext("0.0")})),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
 }
 
 TEST_F(EmulatorFunctionsTest, DivTruncReturnsErrorWhenResultIsOverflow) {
-  const zetasql::Function* function =
-      functions_[kZetaSQLDivTruncFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  const googlesql::Function* function =
+      functions_[kGoogleSQLDivTruncFunctionName].get();
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {*CreatePgNumericValueWithMemoryContext(MaxNumericString()),
                    *CreatePgNumericValueWithMemoryContext("0.5")})),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {*CreatePgNumericValueWithMemoryContext(MinNumericString()),
                    *CreatePgNumericValueWithMemoryContext("-0.5")})),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
 }
 
 TEST_F(EmulatorFunctionsTest, UminusReturnsErrorWhenArgumentsAreInvalid) {
-  const zetasql::Function* function =
-      functions_[kZetaSQLUminusFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  const googlesql::Function* function =
+      functions_[kGoogleSQLUminusFunctionName].get();
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
-  std::vector<zetasql::Value> args = {};
+  std::vector<googlesql::Value> args = {};
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(args)),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInternal));
 }
 
 TEST_F(EmulatorFunctionsTest, FloatAddReturnsErrorWhenArgumentsAreInvalid) {
-  const zetasql::Function* function =
+  const googlesql::Function* function =
       functions_[kPGFloatAddFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
-  std::vector<zetasql::Value> args = {};
+  std::vector<googlesql::Value> args = {};
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(args)),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInternal));
 }
 
 TEST_F(EmulatorFunctionsTest, FloatAddReturnsErrorWhenResultIsOverflow) {
-  const zetasql::Function* function =
+  const googlesql::Function* function =
       functions_[kPGFloatAddFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan({kFloatMaxValue, kFloatMaxValue})),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
 
   EXPECT_THAT(
       evaluator_(absl::MakeConstSpan({kFloatLowestValue, kFloatLowestValue})),
-      zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+      googlesql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
 }
 
 TEST_F(EmulatorFunctionsTest,
        FloatSubtractReturnsErrorWhenArgumentsAreInvalid) {
-  const zetasql::Function* function =
+  const googlesql::Function* function =
       functions_[kPGFloatSubtractFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
-  std::vector<zetasql::Value> args = {};
+  std::vector<googlesql::Value> args = {};
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(args)),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInternal));
 }
 
 TEST_F(EmulatorFunctionsTest, FloatSubtractReturnsErrorWhenResultIsOverflow) {
-  const zetasql::Function* function =
+  const googlesql::Function* function =
       functions_[kPGFloatSubtractFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {kFloatLowestValue, kFloatMaxValue})),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {kFloatMaxValue, kFloatLowestValue})),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
 }
 
 TEST_F(EmulatorFunctionsTest,
        FloatMultiplyReturnsErrorWhenArgumentsAreInvalid) {
-  const zetasql::Function* function =
+  const googlesql::Function* function =
       functions_[kPGFloatMultiplyFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
-  std::vector<zetasql::Value> args = {};
+  std::vector<googlesql::Value> args = {};
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(args)),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInternal));
 }
 
 TEST_F(EmulatorFunctionsTest, FloatMultiplyReturnsErrorWhenResultIsOverflow) {
-  const zetasql::Function* function =
+  const googlesql::Function* function =
       functions_[kPGFloatMultiplyFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan({kFloatMaxValue, kFloatMaxValue})),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {kFloatLowestValue, kFloatLowestValue})),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
 }
 
 TEST_F(EmulatorFunctionsTest, FloatDivideReturnsErrorWhenArgumentsAreInvalid) {
-  const zetasql::Function* function =
+  const googlesql::Function* function =
       functions_[kPGFloatDivideFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
-  std::vector<zetasql::Value> args = {};
+  std::vector<googlesql::Value> args = {};
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(args)),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInternal));
 }
 
 TEST_F(EmulatorFunctionsTest, FloatDivideReturnsErrorWhenDividingByZero) {
-  const zetasql::Function* function =
+  const googlesql::Function* function =
       functions_[kPGFloatDivideFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
-                  {kFloatMaxValue, zetasql::Value::Float(0.0f)})),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+                  {kFloatMaxValue, googlesql::Value::Float(0.0f)})),
+              googlesql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
-                  {kFloatMinValue, zetasql::Value::Float(0.0f)})),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+                  {kFloatMinValue, googlesql::Value::Float(0.0f)})),
+              googlesql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
 }
 
 TEST_F(EmulatorFunctionsTest, FloatDivideReturnsErrorWhenResultIsOverflow) {
-  const zetasql::Function* function =
+  const googlesql::Function* function =
       functions_[kPGFloatDivideFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {kFloatMaxValue, kFloatMinValue})),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {kFloatLowestValue, kFloatMinValue})),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
 }
 
 TEST_F(EmulatorFunctionsTest,
        CastOidToInt64ReturnsErrorWhenArgumentsAreInvalid) {
-  const zetasql::Function* function =
+  const googlesql::Function* function =
       functions_[kPGCastFromOidFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
   // Insufficient arguments.
-  EXPECT_THAT(evaluator_(absl::MakeConstSpan(std::vector<zetasql::Value>())),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(std::vector<googlesql::Value>())),
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInternal));
   // Too many arguments.
   EXPECT_THAT(evaluator_(absl::MakeConstSpan({kPGOidMinValue, kPGOidMaxValue})),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInternal));
   // Invalid argument.
-  std::vector<zetasql::Value> args_invalid = {zetasql::Value::Int64(0)};
+  std::vector<googlesql::Value> args_invalid = {googlesql::Value::Int64(0)};
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(args_invalid)),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInternal));
 }
 
 TEST_F(EmulatorFunctionsTest,
        CastOidToStringReturnsErrorWhenArgumentsAreInvalid) {
-  const zetasql::Function* function =
+  const googlesql::Function* function =
       functions_[kPGCastFromOidFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
   // Insufficient arguments.
-  EXPECT_THAT(evaluator_(absl::MakeConstSpan(std::vector<zetasql::Value>())),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(std::vector<googlesql::Value>())),
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInternal));
   // Too many arguments.
   EXPECT_THAT(evaluator_(absl::MakeConstSpan({kPGOidMinValue, kPGOidMaxValue})),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInternal));
   // Invalid argument.
-  EXPECT_THAT(evaluator_(absl::MakeConstSpan({zetasql::Value::Int64(0)})),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan({googlesql::Value::Int64(0)})),
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInternal));
 }
 
 TEST_F(EmulatorFunctionsTest, CastToOidReturnsErrorWhenArgumentAreInvalid) {
-  const zetasql::Function* function =
+  const googlesql::Function* function =
       functions_[kPGCastToOidFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
   // Insufficient arguments.
-  EXPECT_THAT(evaluator_(absl::MakeConstSpan(std::vector<zetasql::Value>())),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(std::vector<googlesql::Value>())),
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInternal));
   // Too many arguments.
   EXPECT_THAT(evaluator_(absl::MakeConstSpan({kInt64Value, kNullStringValue})),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInternal));
   // Invalid argument.
   EXPECT_THAT(evaluator_(absl::MakeConstSpan({kDoubleValue})),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::String("invalid")})),
-      zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+      evaluator_(absl::MakeConstSpan({googlesql::Value::String("invalid")})),
+      googlesql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
   // Argument too small.
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::Int64(
+      evaluator_(absl::MakeConstSpan({googlesql::Value::Int64(
           static_cast<int64_t>(std::numeric_limits<uint32_t>::min()) - 1)})),
-      zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+      googlesql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::String(absl::StrCat(
+      evaluator_(absl::MakeConstSpan({googlesql::Value::String(absl::StrCat(
           static_cast<int64_t>(std::numeric_limits<int32_t>::min()) - 1))})),
-      zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+      googlesql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
   // Argument too large.
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::Int64(
+      evaluator_(absl::MakeConstSpan({googlesql::Value::Int64(
           static_cast<int64_t>(std::numeric_limits<uint32_t>::max()) + 1)})),
-      zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+      googlesql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::String(absl::StrCat(
+      evaluator_(absl::MakeConstSpan({googlesql::Value::String(absl::StrCat(
           static_cast<int64_t>(std::numeric_limits<uint32_t>::max()) + 1))})),
-      zetasql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
+      googlesql_base::testing::StatusIs(absl::StatusCode::kOutOfRange));
 }
 
 TEST_F(EmulatorFunctionsTest,
        CastNumericToDoubleReturnsErrorWhenArgumentsAreInvalid) {
-  const zetasql::Function* function =
+  const googlesql::Function* function =
       functions_[kPGCastNumericToDoubleFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
   // Insufficient arguments.
-  std::vector<zetasql::Value> args = {};
+  std::vector<googlesql::Value> args = {};
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(args)),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInternal));
   // Value too small to be represented by a double.
   EXPECT_THAT(
       evaluator_(absl::MakeConstSpan(
@@ -3062,14 +3142,14 @@ TEST_F(EmulatorFunctionsTest,
 
 TEST_F(EmulatorFunctionsTest,
        CastNumericToFloatReturnsErrorWhenArgumentsAreInvalid) {
-  const zetasql::Function* function =
+  const googlesql::Function* function =
       functions_[kPGCastNumericToFloatFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
   // Insufficient arguments.
-  std::vector<zetasql::Value> args = {};
+  std::vector<googlesql::Value> args = {};
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(args)),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInternal));
   // Value too small to be represented by a float.
   EXPECT_THAT(
       evaluator_(absl::MakeConstSpan(
@@ -3080,33 +3160,33 @@ TEST_F(EmulatorFunctionsTest,
 
 TEST_F(EmulatorFunctionsTest,
        CastNumericToStringReturnsErrorWhenArgumentsAreInvalid) {
-  const zetasql::Function* function =
+  const googlesql::Function* function =
       functions_[kPGCastToStringFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
   // Insufficient arguments.
-  std::vector<zetasql::Value> args = {};
+  std::vector<googlesql::Value> args = {};
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(args)),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInternal));
 }
 
 TEST_F(EmulatorFunctionsTest, CastToNumericWithInvalidArgumentSizeError) {
-  const zetasql::Function* function =
+  const googlesql::Function* function =
       functions_[kPGCastToNumericFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
-  std::vector<zetasql::Value> args = {};
+  std::vector<googlesql::Value> args = {};
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(args)),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInternal));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {kPGNumericValue, kInt64Value, kInt64Value, kInt64Value})),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInternal));
 }
 
 TEST_F(EmulatorFunctionsTest, CastToNumericWithNullPrecisionScaleError) {
-  const zetasql::Function* function =
+  const googlesql::Function* function =
       functions_[kPGCastToNumericFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
   // Null precision or scale
@@ -3124,7 +3204,7 @@ TEST_F(EmulatorFunctionsTest, CastToNumericWithNullPrecisionScaleError) {
           HasSubstr("type modifiers must be simple constants or identifiers")));
   EXPECT_THAT(
       evaluator_(absl::MakeConstSpan(
-          {zetasql::Value::String("1.0"), kNullInt64Value})),
+          {googlesql::Value::String("1.0"), kNullInt64Value})),
       StatusIs(
           absl::StatusCode::kInvalidArgument,
           HasSubstr("type modifiers must be simple constants or identifiers")));
@@ -3185,114 +3265,114 @@ TEST_F(EmulatorFunctionsTest, CastToNumericWithNullPrecisionScaleError) {
 }
 
 TEST_F(EmulatorFunctionsTest, CastToNumericWithOutOfRangePrecisionScaleError) {
-  const zetasql::Function* function =
+  const googlesql::Function* function =
       functions_[kPGCastToNumericFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
   // Out of range precision and scale
   EXPECT_THAT(evaluator_(absl::MakeConstSpan({kPGNumericValue,
-                                              zetasql::Value::Int64(2),
-                                              zetasql::Value::Int64(3)})),
+                                              googlesql::Value::Int64(2),
+                                              googlesql::Value::Int64(3)})),
               StatusIs(absl::StatusCode::kOutOfRange,
                        HasSubstr("numeric field overflow")));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan({kPGNumericValue,
-                                              zetasql::Value::Int64(1001),
-                                              zetasql::Value::Int64(0)})),
+                                              googlesql::Value::Int64(1001),
+                                              googlesql::Value::Int64(0)})),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("NUMERIC precision")));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan({kPGNumericValue,
-                                              zetasql::Value::Int64(-1),
-                                              zetasql::Value::Int64(-2)})),
+                                              googlesql::Value::Int64(-1),
+                                              googlesql::Value::Int64(-2)})),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("NUMERIC precision")));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan({kPGNumericValue,
-                                              zetasql::Value::Int64(-1),
-                                              zetasql::Value::Int64(0)})),
+                                              googlesql::Value::Int64(-1),
+                                              googlesql::Value::Int64(0)})),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("NUMERIC precision")));
-  EXPECT_THAT(evaluator_(absl::MakeConstSpan({zetasql::Value::String("1.0"),
-                                              zetasql::Value::Int64(2),
-                                              zetasql::Value::Int64(3)})),
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan({googlesql::Value::String("1.0"),
+                                              googlesql::Value::Int64(2),
+                                              googlesql::Value::Int64(3)})),
               StatusIs(absl::StatusCode::kOutOfRange,
                        HasSubstr("numeric field overflow")));
 
   // Test that out-of-range precision and scale is checked first when value is
   // special (NaN/NULL).
   EXPECT_THAT(evaluator_(absl::MakeConstSpan({kNullPGNumericValue,
-                                              zetasql::Value::Int64(2),
-                                              zetasql::Value::Int64(3)})),
-              zetasql_base::testing::IsOkAndHolds(kNullPGNumericValue));
+                                              googlesql::Value::Int64(2),
+                                              googlesql::Value::Int64(3)})),
+              googlesql_base::testing::IsOkAndHolds(kNullPGNumericValue));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan({kNullDoubleValue,
-                                              zetasql::Value::Int64(2),
-                                              zetasql::Value::Int64(-1)})),
-              zetasql_base::testing::IsOkAndHolds(kNullPGNumericValue));
+                                              googlesql::Value::Int64(2),
+                                              googlesql::Value::Int64(-1)})),
+              googlesql_base::testing::IsOkAndHolds(kNullPGNumericValue));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan({kPosInfDoubleValue,
-                                              zetasql::Value::Int64(2),
-                                              zetasql::Value::Int64(-1)})),
+                                              googlesql::Value::Int64(2),
+                                              googlesql::Value::Int64(-1)})),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("Cannot cast infinity to PG.NUMERIC")));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan({kNegInfDoubleValue,
-                                              zetasql::Value::Int64(1001),
-                                              zetasql::Value::Int64(0)})),
+                                              googlesql::Value::Int64(1001),
+                                              googlesql::Value::Int64(0)})),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("NUMERIC precision")));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan({kNullInt64Value,
-                                              zetasql::Value::Int64(-1),
-                                              zetasql::Value::Int64(-2)})),
+                                              googlesql::Value::Int64(-1),
+                                              googlesql::Value::Int64(-2)})),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("NUMERIC precision")));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan({kNullStringValue,
-                                              zetasql::Value::Int64(-1),
-                                              zetasql::Value::Int64(0)})),
+                                              googlesql::Value::Int64(-1),
+                                              googlesql::Value::Int64(0)})),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("NUMERIC precision")));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan({kNullStringValue,
-                                              zetasql::Value::Int64(2),
-                                              zetasql::Value::Int64(3)})),
-              zetasql_base::testing::IsOkAndHolds(kNullPGNumericValue));
-  EXPECT_THAT(evaluator_(absl::MakeConstSpan({zetasql::Value::String("-Inf"),
-                                              zetasql::Value::Int64(10001),
-                                              zetasql::Value::Int64(3)})),
+                                              googlesql::Value::Int64(2),
+                                              googlesql::Value::Int64(3)})),
+              googlesql_base::testing::IsOkAndHolds(kNullPGNumericValue));
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan({googlesql::Value::String("-Inf"),
+                                              googlesql::Value::Int64(10001),
+                                              googlesql::Value::Int64(3)})),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("NUMERIC precision")));
 }
 
 TEST_F(EmulatorFunctionsTest, CastToNumericWithTooSmallPrecisionError) {
-  const zetasql::Function* function =
+  const googlesql::Function* function =
       functions_[kPGCastToNumericFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
-                  {zetasql::Value::Int64(1000), zetasql::Value::Int64(2)})),
+                  {googlesql::Value::Int64(1000), googlesql::Value::Int64(2)})),
               StatusIs(absl::StatusCode::kOutOfRange,
                        HasSubstr("must round to an absolute value less than")));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
-                  {zetasql::Value::Double(99), kInt64Value})),
+                  {googlesql::Value::Double(99), kInt64Value})),
               StatusIs(absl::StatusCode::kOutOfRange,
                        HasSubstr("must round to an absolute value less than")));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {*CreatePgNumericValueWithMemoryContext("1234.987654321"),
-                   zetasql::Value::Int64(5), zetasql::Value::Int64(2)})),
+                   googlesql::Value::Int64(5), googlesql::Value::Int64(2)})),
               StatusIs(absl::StatusCode::kOutOfRange,
                        HasSubstr("must round to an absolute value less than")));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
-                  {zetasql::Value::String("1234.987654321"),
-                   zetasql::Value::Int64(3), zetasql::Value::Int64(3)})),
+                  {googlesql::Value::String("1234.987654321"),
+                   googlesql::Value::Int64(3), googlesql::Value::Int64(3)})),
               StatusIs(absl::StatusCode::kOutOfRange,
                        HasSubstr("must round to an absolute value less than")));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
-                  {zetasql::Value::String("-1e1000"),
-                   zetasql::Value::Int64(3), zetasql::Value::Int64(3)})),
+                  {googlesql::Value::String("-1e1000"),
+                   googlesql::Value::Int64(3), googlesql::Value::Int64(3)})),
               StatusIs(absl::StatusCode::kOutOfRange,
                        HasSubstr("must round to an absolute value less than")));
 }
 
 TEST_F(EmulatorFunctionsTest, CastToNumericWithInfinityDoubleError) {
-  const zetasql::Function* function =
+  const googlesql::Function* function =
       functions_[kPGCastToNumericFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
   // Infinity double value
@@ -3306,8 +3386,8 @@ TEST_F(EmulatorFunctionsTest, CastToNumericWithInfinityDoubleError) {
   // Infinity double value with valid precision and scale: expect same error as
   // when there are no precision and scale
   EXPECT_THAT(evaluator_(absl::MakeConstSpan({kNegInfDoubleValue,
-                                              zetasql::Value::Int64(1000),
-                                              zetasql::Value::Int64(100)})),
+                                              googlesql::Value::Int64(1000),
+                                              googlesql::Value::Int64(100)})),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("Cannot cast infinity to PG.NUMERIC")));
   EXPECT_THAT(
@@ -3318,21 +3398,21 @@ TEST_F(EmulatorFunctionsTest, CastToNumericWithInfinityDoubleError) {
   // Infinity double value with out of range precision and scale: expect error
   // regarding invalid precision/scale
   EXPECT_THAT(evaluator_(absl::MakeConstSpan({kNegInfDoubleValue,
-                                              zetasql::Value::Int64(100),
-                                              zetasql::Value::Int64(1000)})),
+                                              googlesql::Value::Int64(100),
+                                              googlesql::Value::Int64(1000)})),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("Cannot cast infinity to PG.NUMERIC")));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
-                  {kPosInfDoubleValue, zetasql::Value::Int64(1001)})),
+                  {kPosInfDoubleValue, googlesql::Value::Int64(1001)})),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("NUMERIC precision")));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
-                  {kPosInfDoubleValue, zetasql::Value::Int64(0)})),
+                  {kPosInfDoubleValue, googlesql::Value::Int64(0)})),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("NUMERIC precision")));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan({kNegInfDoubleValue,
-                                              zetasql::Value::Int64(100),
-                                              zetasql::Value::Int64(-1)})),
+                                              googlesql::Value::Int64(100),
+                                              googlesql::Value::Int64(-1)})),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("Cannot cast infinity to PG.NUMERIC")));
 
@@ -3340,14 +3420,14 @@ TEST_F(EmulatorFunctionsTest, CastToNumericWithInfinityDoubleError) {
   // null
   EXPECT_THAT(
       evaluator_(absl::MakeConstSpan(
-          {kPosInfDoubleValue, zetasql::Value::NullInt64()})),
+          {kPosInfDoubleValue, googlesql::Value::NullInt64()})),
       StatusIs(
           absl::StatusCode::kInvalidArgument,
           HasSubstr("type modifiers must be simple constants or identifiers")));
   EXPECT_THAT(
       evaluator_(
-          absl::MakeConstSpan({kNegInfDoubleValue, zetasql::Value::Int64(100),
-                               zetasql::Value::NullInt64()})),
+          absl::MakeConstSpan({kNegInfDoubleValue, googlesql::Value::Int64(100),
+                               googlesql::Value::NullInt64()})),
       StatusIs(
           absl::StatusCode::kInvalidArgument,
           HasSubstr("type modifiers must be simple constants or identifiers")));
@@ -3358,9 +3438,9 @@ TEST_F(EmulatorFunctionsTest, CastToNumericWithInfinityDoubleError) {
 TEST_F(
     EmulatorFunctionsTest,
     DISABLED_CastToNumericWithInfinityStringError_KnownProdEmulatorErrorMessageMismatches) {
-  const zetasql::Function* function =
+  const googlesql::Function* function =
       functions_[kPGCastToNumericFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
   // Infinity string value with or without space padding with valid precision
@@ -3369,230 +3449,230 @@ TEST_F(
   // Emulator returns error "[ERROR] numeric field overflow Detail: A field with
   // precision 1000, scale 100 cannot hold an infinite value."
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::String("-infinity"),
-                                      zetasql::Value::Int64(1000),
-                                      zetasql::Value::Int64(100)})),
+      evaluator_(absl::MakeConstSpan({googlesql::Value::String("-infinity"),
+                                      googlesql::Value::Int64(1000),
+                                      googlesql::Value::Int64(100)})),
       StatusIs(absl::StatusCode::kInvalidArgument,
                HasSubstr("Invalid NUMERIC value")));
 
   // Emulator returns error "numeric field overflow Detail: A field with
   // precision 1, scale 0 cannot hold an infinite value."
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
-                  {zetasql::Value::String(" INFinity "), kInt64Value})),
+                  {googlesql::Value::String(" INFinity "), kInt64Value})),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("Invalid NUMERIC value")));
 
   // Emulator returns error "numeric field overflow Detail: A field with
   // precision 1000, scale 100 cannot hold an infinite value."
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::String("+INFINITY "),
-                                      zetasql::Value::Int64(1000),
-                                      zetasql::Value::Int64(100)})),
+      evaluator_(absl::MakeConstSpan({googlesql::Value::String("+INFINITY "),
+                                      googlesql::Value::Int64(1000),
+                                      googlesql::Value::Int64(100)})),
       StatusIs(absl::StatusCode::kInvalidArgument,
                HasSubstr("Invalid NUMERIC value")));
 
   // Emulator returns error "numeric field overflow Detail: A field with
   // precision 1, scale 0 cannot hold an infinite value."
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
-                  {zetasql::Value::String("-iNf"), kInt64Value})),
+                  {googlesql::Value::String("-iNf"), kInt64Value})),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("Invalid NUMERIC value")));
 
   // Emulator returns error "numeric field overflow Detail: A field with
   // precision 1000, scale 100 cannot hold an infinite value."
-  EXPECT_THAT(evaluator_(absl::MakeConstSpan({zetasql::Value::String("inf"),
-                                              zetasql::Value::Int64(1000),
-                                              zetasql::Value::Int64(100)})),
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan({googlesql::Value::String("inf"),
+                                              googlesql::Value::Int64(1000),
+                                              googlesql::Value::Int64(100)})),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("Invalid NUMERIC value")));
 
   // Emulator returns error "numeric field overflow Detail: A field with
   // precision 1, scale 0 cannot hold an infinite value.
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
-                  {zetasql::Value::String(" +INF"), kInt64Value})),
+                  {googlesql::Value::String(" +INF"), kInt64Value})),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("Invalid NUMERIC value")));
 }
 
 TEST_F(EmulatorFunctionsTest, CastToNumericWithInfinityStringError) {
-  const zetasql::Function* function =
+  const googlesql::Function* function =
       functions_[kPGCastToNumericFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
   // Infinity string value with or without space padding
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::String("-infinity")})),
+      evaluator_(absl::MakeConstSpan({googlesql::Value::String("-infinity")})),
       StatusIs(absl::StatusCode::kInvalidArgument,
                HasSubstr("Invalid NUMERIC value")));
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::String(" INFinity ")})),
+      evaluator_(absl::MakeConstSpan({googlesql::Value::String(" INFinity ")})),
       StatusIs(absl::StatusCode::kInvalidArgument,
                HasSubstr("Invalid NUMERIC value")));
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::String("+INFINITY ")})),
+      evaluator_(absl::MakeConstSpan({googlesql::Value::String("+INFINITY ")})),
       StatusIs(absl::StatusCode::kInvalidArgument,
                HasSubstr("Invalid NUMERIC value")));
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::String("-iNf")})),
+      evaluator_(absl::MakeConstSpan({googlesql::Value::String("-iNf")})),
       StatusIs(absl::StatusCode::kInvalidArgument,
                HasSubstr("Invalid NUMERIC value")));
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::String("inf")})),
+      evaluator_(absl::MakeConstSpan({googlesql::Value::String("inf")})),
       StatusIs(absl::StatusCode::kInvalidArgument,
                HasSubstr("Invalid NUMERIC value")));
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::String(" +INF")})),
+      evaluator_(absl::MakeConstSpan({googlesql::Value::String(" +INF")})),
       StatusIs(absl::StatusCode::kInvalidArgument,
                HasSubstr("Invalid NUMERIC value")));
 
   // Infinity string value with or without space padding with invalid precision
   // and scale: expect error regarding invalid precision/scale
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::String("-infinity"),
-                                      zetasql::Value::Int64(100),
-                                      zetasql::Value::Int64(1000)})),
+      evaluator_(absl::MakeConstSpan({googlesql::Value::String("-infinity"),
+                                      googlesql::Value::Int64(100),
+                                      googlesql::Value::Int64(1000)})),
       StatusIs(absl::StatusCode::kOutOfRange,
                HasSubstr("numeric field overflow")));
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::String(" INFinity "),
-                                      zetasql::Value::Int64(1001)})),
+      evaluator_(absl::MakeConstSpan({googlesql::Value::String(" INFinity "),
+                                      googlesql::Value::Int64(1001)})),
       StatusIs(absl::StatusCode::kInvalidArgument,
                HasSubstr("NUMERIC precision")));
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::String("+INFINITY "),
-                                      zetasql::Value::Int64(0)})),
+      evaluator_(absl::MakeConstSpan({googlesql::Value::String("+INFINITY "),
+                                      googlesql::Value::Int64(0)})),
       StatusIs(absl::StatusCode::kInvalidArgument,
                HasSubstr("NUMERIC precision")));
-  EXPECT_THAT(evaluator_(absl::MakeConstSpan({zetasql::Value::String("-iNf"),
-                                              zetasql::Value::Int64(100),
-                                              zetasql::Value::Int64(1000)})),
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan({googlesql::Value::String("-iNf"),
+                                              googlesql::Value::Int64(100),
+                                              googlesql::Value::Int64(1000)})),
               StatusIs(absl::StatusCode::kOutOfRange,
                        HasSubstr("numeric field overflow")));
-  EXPECT_THAT(evaluator_(absl::MakeConstSpan({zetasql::Value::String("inf"),
-                                              zetasql::Value::Int64(1001)})),
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan({googlesql::Value::String("inf"),
+                                              googlesql::Value::Int64(1001)})),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("NUMERIC precision")));
-  EXPECT_THAT(evaluator_(absl::MakeConstSpan({zetasql::Value::String(" +INF"),
-                                              zetasql::Value::Int64(0)})),
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan({googlesql::Value::String(" +INF"),
+                                              googlesql::Value::Int64(0)})),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("NUMERIC precision")));
 
   // Infinity string value with or without space padding with null precision and
   // scale: expect error regarding null
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::String("-infinity"),
-                                      zetasql::Value::NullInt64()})),
+      evaluator_(absl::MakeConstSpan({googlesql::Value::String("-infinity"),
+                                      googlesql::Value::NullInt64()})),
       StatusIs(
           absl::StatusCode::kInvalidArgument,
           HasSubstr("type modifiers must be simple constants or identifiers")));
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::String(" INFinity "),
-                                      zetasql::Value::Int64(100),
-                                      zetasql::Value::NullInt64()})),
+      evaluator_(absl::MakeConstSpan({googlesql::Value::String(" INFinity "),
+                                      googlesql::Value::Int64(100),
+                                      googlesql::Value::NullInt64()})),
       StatusIs(
           absl::StatusCode::kInvalidArgument,
           HasSubstr("type modifiers must be simple constants or identifiers")));
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::String("+INFINITY "),
-                                      zetasql::Value::NullInt64()})),
+      evaluator_(absl::MakeConstSpan({googlesql::Value::String("+INFINITY "),
+                                      googlesql::Value::NullInt64()})),
       StatusIs(
           absl::StatusCode::kInvalidArgument,
           HasSubstr("type modifiers must be simple constants or identifiers")));
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::String("-iNf"),
-                                      zetasql::Value::Int64(100),
-                                      zetasql::Value::NullInt64()})),
+      evaluator_(absl::MakeConstSpan({googlesql::Value::String("-iNf"),
+                                      googlesql::Value::Int64(100),
+                                      googlesql::Value::NullInt64()})),
       StatusIs(
           absl::StatusCode::kInvalidArgument,
           HasSubstr("type modifiers must be simple constants or identifiers")));
   EXPECT_THAT(
       evaluator_(absl::MakeConstSpan(
-          {zetasql::Value::String("inf"), zetasql::Value::NullInt64()})),
+          {googlesql::Value::String("inf"), googlesql::Value::NullInt64()})),
       StatusIs(
           absl::StatusCode::kInvalidArgument,
           HasSubstr("type modifiers must be simple constants or identifiers")));
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::String(" +INF"),
-                                      zetasql::Value::Int64(100),
-                                      zetasql::Value::NullInt64()})),
+      evaluator_(absl::MakeConstSpan({googlesql::Value::String(" +INF"),
+                                      googlesql::Value::Int64(100),
+                                      googlesql::Value::NullInt64()})),
       StatusIs(
           absl::StatusCode::kInvalidArgument,
           HasSubstr("type modifiers must be simple constants or identifiers")));
 }
 
 TEST_F(EmulatorFunctionsTest, CastToNumericWithInvalidStringError) {
-  const zetasql::Function* function =
+  const googlesql::Function* function =
       functions_[kPGCastToNumericFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
   // Invalid string
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::String("invalid")})),
+      evaluator_(absl::MakeConstSpan({googlesql::Value::String("invalid")})),
       StatusIs(absl::StatusCode::kInvalidArgument,
                HasSubstr("invalid input syntax for type numeric")));
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::String("- iNf")})),
+      evaluator_(absl::MakeConstSpan({googlesql::Value::String("- iNf")})),
       StatusIs(absl::StatusCode::kInvalidArgument,
                HasSubstr("invalid input syntax for type numeric")));
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::String("+ Infinity")})),
+      evaluator_(absl::MakeConstSpan({googlesql::Value::String("+ Infinity")})),
       StatusIs(absl::StatusCode::kInvalidArgument,
                HasSubstr("invalid input syntax for type numeric")));
 
   // Invalid string with valid precision and scale: expect same error as
   // when there are no precision and scale
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
-                  {zetasql::Value::String("invalid"), kInt64Value})),
+                  {googlesql::Value::String("invalid"), kInt64Value})),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("invalid input syntax for type numeric")));
-  EXPECT_THAT(evaluator_(absl::MakeConstSpan({zetasql::Value::String("- iNf"),
-                                              zetasql::Value::Int64(1000),
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan({googlesql::Value::String("- iNf"),
+                                              googlesql::Value::Int64(1000),
                                               kInt64Value})),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("invalid input syntax for type numeric")));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
-                  {zetasql::Value::String("+ Infinity"), kInt64Value})),
+                  {googlesql::Value::String("+ Infinity"), kInt64Value})),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("invalid input syntax for type numeric")));
 
   // Invalid string with invalid precision and scale: expect error regarding
   // invalid precision/scale
-  EXPECT_THAT(evaluator_(absl::MakeConstSpan({zetasql::Value::String("NULL"),
-                                              zetasql::Value::Int64(1000000),
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan({googlesql::Value::String("NULL"),
+                                              googlesql::Value::Int64(1000000),
                                               kInt64Value})),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("NUMERIC precision")));
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::String("Inf"),
-                                      zetasql::Value::Int64(1000),
-                                      zetasql::Value::Int64(10000)})),
+      evaluator_(absl::MakeConstSpan({googlesql::Value::String("Inf"),
+                                      googlesql::Value::Int64(1000),
+                                      googlesql::Value::Int64(10000)})),
       StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("NUMERIC scale")));
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::String("+ Infinity"),
-                                      zetasql::Value::Int64(-1)})),
+      evaluator_(absl::MakeConstSpan({googlesql::Value::String("+ Infinity"),
+                                      googlesql::Value::Int64(-1)})),
       StatusIs(absl::StatusCode::kInvalidArgument,
                HasSubstr("NUMERIC precision")));
 
   // Invalid string with null precision and scale: expect error regarding null
   EXPECT_THAT(
       evaluator_(
-          absl::MakeConstSpan({zetasql::Value::String("NULL"),
-                               zetasql::Value::NullInt64(), kInt64Value})),
+          absl::MakeConstSpan({googlesql::Value::String("NULL"),
+                               googlesql::Value::NullInt64(), kInt64Value})),
       StatusIs(
           absl::StatusCode::kInvalidArgument,
           HasSubstr("type modifiers must be simple constants or identifiers")));
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::String("Inf"),
-                                      zetasql::Value::Int64(1000),
-                                      zetasql::Value::NullInt64()})),
+      evaluator_(absl::MakeConstSpan({googlesql::Value::String("Inf"),
+                                      googlesql::Value::Int64(1000),
+                                      googlesql::Value::NullInt64()})),
       StatusIs(
           absl::StatusCode::kInvalidArgument,
           HasSubstr("type modifiers must be simple constants or identifiers")));
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::String("+ Infinity"),
-                                      zetasql::Value::NullInt64()})),
+      evaluator_(absl::MakeConstSpan({googlesql::Value::String("+ Infinity"),
+                                      googlesql::Value::NullInt64()})),
       StatusIs(
           absl::StatusCode::kInvalidArgument,
           HasSubstr("type modifiers must be simple constants or identifiers")));
@@ -3603,52 +3683,52 @@ TEST_F(EmulatorFunctionsTest, CastToNumericWithInvalidStringError) {
 TEST_F(
     EmulatorFunctionsTest,
     DISABLED_CastToNumericWithTooLargeStringExponentError_KnownProdEmulatorMismatches) {
-  const zetasql::Function* function =
+  const googlesql::Function* function =
       functions_[kPGCastToNumericFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
   // Emulator returns "numeric field overflow Detail: A field with precision
   // 1000, scale 0 must round to an absolute value less than 10^1000"
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::String("1e1000000"),
-                                      zetasql::Value::Int64(1000)})),
+      evaluator_(absl::MakeConstSpan({googlesql::Value::String("1e1000000"),
+                                      googlesql::Value::Int64(1000)})),
       StatusIs(absl::StatusCode::kInvalidArgument,
                HasSubstr("exponent that is too large")));
 
   // Emulator returns 0
   EXPECT_THAT(
       evaluator_(absl::MakeConstSpan(
-          {zetasql::Value::String("1e-100000"), zetasql::Value::Int64(3)})),
+          {googlesql::Value::String("1e-100000"), googlesql::Value::Int64(3)})),
       StatusIs(absl::StatusCode::kInvalidArgument,
                HasSubstr("fractional component of NUMERIC")));
 
   // Emulator returns 0
   EXPECT_THAT(
       evaluator_(absl::MakeConstSpan(
-          {zetasql::Value::String("1e-10000"), zetasql::Value::Int64(3)})),
+          {googlesql::Value::String("1e-10000"), googlesql::Value::Int64(3)})),
       StatusIs(absl::StatusCode::kInvalidArgument,
                HasSubstr("must round to an absolute value less than")));
 }
 
 TEST_F(EmulatorFunctionsTest,
        FAILEDCastToNumericWithTooLargeStringExponentError) {
-  const zetasql::Function* function =
+  const googlesql::Function* function =
       functions_[kPGCastToNumericFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
   // Exponent values are too large for string to be represented as a numeric
   // value but precision and scale are invalid: expect error regarding invalid
   // precision/scale
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::String("1e1000000"),
-                                      zetasql::Value::Int64(1001)})),
+      evaluator_(absl::MakeConstSpan({googlesql::Value::String("1e1000000"),
+                                      googlesql::Value::Int64(1001)})),
       StatusIs(absl::StatusCode::kInvalidArgument,
                HasSubstr("NUMERIC precision")));
   EXPECT_THAT(
       evaluator_(absl::MakeConstSpan(
-          {zetasql::Value::String("1e-10000"), zetasql::Value::Int64(0)})),
+          {googlesql::Value::String("1e-10000"), googlesql::Value::Int64(0)})),
       StatusIs(absl::StatusCode::kInvalidArgument,
                HasSubstr("NUMERIC precision")));
 
@@ -3656,19 +3736,19 @@ TEST_F(EmulatorFunctionsTest,
   // value but precision and scale are null: expect error regarding null
   EXPECT_THAT(
       evaluator_(absl::MakeConstSpan(
-          {zetasql::Value::String("1e1000000"), kNullInt64Value})),
+          {googlesql::Value::String("1e1000000"), kNullInt64Value})),
       StatusIs(
           absl::StatusCode::kInvalidArgument,
           HasSubstr("type modifiers must be simple constants or identifiers")));
   EXPECT_THAT(
       evaluator_(
-          absl::MakeConstSpan({zetasql::Value::String("1e-100000"),
-                               zetasql::Value::Int64(3), kNullInt64Value})),
+          absl::MakeConstSpan({googlesql::Value::String("1e-100000"),
+                               googlesql::Value::Int64(3), kNullInt64Value})),
       StatusIs(
           absl::StatusCode::kInvalidArgument,
           HasSubstr("type modifiers must be simple constants or identifiers")));
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::String("1e-10000"),
+      evaluator_(absl::MakeConstSpan({googlesql::Value::String("1e-10000"),
                                       kNullInt64Value, kNullInt64Value})),
       StatusIs(
           absl::StatusCode::kInvalidArgument,
@@ -3680,29 +3760,29 @@ TEST_F(EmulatorFunctionsTest,
 TEST_F(
     EmulatorFunctionsTest,
     DISABLED_CastToNumericWithTooLargeStringValueError_KnownProdEmulatorErrorMessageMismatches) {
-  const zetasql::Function* function =
+  const googlesql::Function* function =
       functions_[kPGCastToNumericFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
   // Values are too large to be represented as a numeric value
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::String(
+      evaluator_(absl::MakeConstSpan({googlesql::Value::String(
           std::string(kMaxPGNumericWholeDigits + 1, '9'))})),
       StatusIs(absl::StatusCode::kInvalidArgument,
                HasSubstr("Invalid NUMERIC value: whole component of NUMERIC")));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
-                  {zetasql::Value::String(std::string(147466, '9'))})),
+                  {googlesql::Value::String(std::string(147466, '9'))})),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("Invalid NUMERIC value")));
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::String(absl::StrCat(
+      evaluator_(absl::MakeConstSpan({googlesql::Value::String(absl::StrCat(
           "0.", std::string(kMaxPGNumericFractionalDigits + 1, '9')))})),
       StatusIs(
           absl::StatusCode::kInvalidArgument,
           HasSubstr("Invalid NUMERIC value: fractional component of NUMERIC")));
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::String(
+      evaluator_(absl::MakeConstSpan({googlesql::Value::String(
           absl::StrCat(std::string(131073, '9'), ".",
                        std::string(kMaxPGNumericFractionalDigits + 1, '9')))})),
       StatusIs(absl::StatusCode::kInvalidArgument,
@@ -3710,46 +3790,46 @@ TEST_F(
 }
 
 TEST_F(EmulatorFunctionsTest, CastToNumericWithTooLargeStringValueError) {
-  const zetasql::Function* function =
+  const googlesql::Function* function =
       functions_[kPGCastToNumericFunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
   // Values are too large to be represented as a numeric value but precision and
   // scale are invalid: expect error regarding invalid precision/scale
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
-                  {zetasql::Value::String(
+                  {googlesql::Value::String(
                        std::string(kMaxPGNumericWholeDigits + 1, '9')),
-                   kInt64Value, zetasql::Value::Int64(1000)})),
+                   kInt64Value, googlesql::Value::Int64(1000)})),
               StatusIs(absl::StatusCode::kOutOfRange,
                        HasSubstr("numeric field overflow")));
   EXPECT_THAT(
       evaluator_(absl::MakeConstSpan(
-          {zetasql::Value::String(std::string(
+          {googlesql::Value::String(std::string(
                kMaxPGNumericWholeDigits + kMaxPGNumericFractionalDigits + 1,
                '9')),
-           zetasql::Value::Int64(1001)})),
+           googlesql::Value::Int64(1001)})),
       StatusIs(absl::StatusCode::kInvalidArgument,
                HasSubstr("NUMERIC precision")));
   EXPECT_THAT(
       evaluator_(absl::MakeConstSpan(
-          {zetasql::Value::String(absl::StrCat(
+          {googlesql::Value::String(absl::StrCat(
                "0.", std::string(kMaxPGNumericFractionalDigits + 1, '9'))),
-           zetasql::Value::Int64(0)})),
+           googlesql::Value::Int64(0)})),
       StatusIs(absl::StatusCode::kInvalidArgument,
                HasSubstr("NUMERIC precision")));
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
-                  {zetasql::Value::String(absl::StrCat(
+                  {googlesql::Value::String(absl::StrCat(
                        std::string(kMaxPGNumericWholeDigits + 1, '9'), ".",
                        std::string(kMaxPGNumericFractionalDigits + 1, '9'))),
-                   kInt64Value, zetasql::Value::Int64(-1)})),
+                   kInt64Value, googlesql::Value::Int64(-1)})),
               StatusIs(absl::StatusCode::kOutOfRange,
                        HasSubstr("numeric field overflow")));
 
   // Values are too large to be represented as a numeric value but precision and
   // scale are null: expect error regarding null
   EXPECT_THAT(
-      evaluator_(absl::MakeConstSpan({zetasql::Value::String(std::string(
+      evaluator_(absl::MakeConstSpan({googlesql::Value::String(std::string(
                                           kMaxPGNumericWholeDigits + 1, '9')),
                                       kNullInt64Value, kNullInt64Value})),
       StatusIs(
@@ -3757,16 +3837,16 @@ TEST_F(EmulatorFunctionsTest, CastToNumericWithTooLargeStringValueError) {
           HasSubstr("type modifiers must be simple constants or identifiers")));
   EXPECT_THAT(
       evaluator_(absl::MakeConstSpan(
-          {zetasql::Value::String(std::string(
+          {googlesql::Value::String(std::string(
                kMaxPGNumericWholeDigits + kMaxPGNumericFractionalDigits + 1,
                '9')),
-           kNullInt64Value, zetasql::Value::Int64(0)})),
+           kNullInt64Value, googlesql::Value::Int64(0)})),
       StatusIs(
           absl::StatusCode::kInvalidArgument,
           HasSubstr("type modifiers must be simple constants or identifiers")));
   EXPECT_THAT(
       evaluator_(absl::MakeConstSpan(
-          {zetasql::Value::String(absl::StrCat(
+          {googlesql::Value::String(absl::StrCat(
                "0.", std::string(kMaxPGNumericFractionalDigits + 1, '9'))),
            kInt64Value, kNullInt64Value})),
       StatusIs(
@@ -3774,7 +3854,7 @@ TEST_F(EmulatorFunctionsTest, CastToNumericWithTooLargeStringValueError) {
           HasSubstr("type modifiers must be simple constants or identifiers")));
   EXPECT_THAT(
       evaluator_(absl::MakeConstSpan(
-          {zetasql::Value::String(absl::StrCat(
+          {googlesql::Value::String(absl::StrCat(
                std::string(kMaxPGNumericWholeDigits + 1, '9'), ".",
                std::string(kMaxPGNumericFractionalDigits + 1, '9'))),
            kNullInt64Value})),
@@ -3784,9 +3864,9 @@ TEST_F(EmulatorFunctionsTest, CastToNumericWithTooLargeStringValueError) {
 }
 
 TEST_F(EmulatorFunctionsTest, CastNumericToInt64ReturnsErrorForNaN) {
-  const zetasql::Function* function =
+  const googlesql::Function* function =
       functions_[kPGCastNumericToInt64FunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
@@ -3797,9 +3877,9 @@ TEST_F(EmulatorFunctionsTest, CastNumericToInt64ReturnsErrorForNaN) {
 
 TEST_F(EmulatorFunctionsTest,
        CastNumericToInt64ReturnsErrorForOverflowAndUnderflow) {
-  const zetasql::Function* function =
+  const googlesql::Function* function =
       functions_[kPGCastNumericToInt64FunctionName].get();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                        function->signatures().front()));
 
   EXPECT_THAT(
@@ -3825,63 +3905,63 @@ class EvalToJsonbTest : public EmulatorFunctionsTest {
                   kMaxPgJsonbNumericFractionalDigitStr);
 
   void SetUp() override {
-    const zetasql::Function* function =
+    const googlesql::Function* function =
         functions_[kPGToJsonbFunctionName].get();
-    ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                          function->signatures().front()));
   }
 };
 
 MATCHER_P(NullToJsonb, input, "") {
   EXPECT_THAT(arg(absl::MakeConstSpan({input})),
-              zetasql_base::testing::IsOkAndHolds(zetasql::values::Null(
+              googlesql_base::testing::IsOkAndHolds(googlesql::values::Null(
                   spangres::datatypes::GetPgJsonbType())));
   return true;
 }
 
 TEST_F(EvalToJsonbTest, NullValueInput) {
-  EXPECT_THAT(evaluator_, NullToJsonb(zetasql::values::NullBool()));
-  EXPECT_THAT(evaluator_, NullToJsonb(zetasql::values::NullInt64()));
-  EXPECT_THAT(evaluator_, NullToJsonb(zetasql::values::NullDouble()));
-  EXPECT_THAT(evaluator_, NullToJsonb(zetasql::values::NullDate()));
-  EXPECT_THAT(evaluator_, NullToJsonb(zetasql::values::NullTimestamp()));
+  EXPECT_THAT(evaluator_, NullToJsonb(googlesql::values::NullBool()));
+  EXPECT_THAT(evaluator_, NullToJsonb(googlesql::values::NullInt64()));
+  EXPECT_THAT(evaluator_, NullToJsonb(googlesql::values::NullDouble()));
+  EXPECT_THAT(evaluator_, NullToJsonb(googlesql::values::NullDate()));
+  EXPECT_THAT(evaluator_, NullToJsonb(googlesql::values::NullTimestamp()));
   EXPECT_THAT(evaluator_, NullToJsonb(kNullStringValue));
-  EXPECT_THAT(evaluator_, NullToJsonb(zetasql::values::NullBytes()));
-  EXPECT_THAT(evaluator_, NullToJsonb(zetasql::values::Null(
+  EXPECT_THAT(evaluator_, NullToJsonb(googlesql::values::NullBytes()));
+  EXPECT_THAT(evaluator_, NullToJsonb(googlesql::values::Null(
                               spangres::datatypes::GetPgJsonbType())));
-  EXPECT_THAT(evaluator_, NullToJsonb(zetasql::values::Null(
+  EXPECT_THAT(evaluator_, NullToJsonb(googlesql::values::Null(
                               spangres::datatypes::GetPgNumericType())));
-  EXPECT_THAT(evaluator_, NullToJsonb(zetasql::values::Null(
-                              zetasql::types::StringArrayType())));
+  EXPECT_THAT(evaluator_, NullToJsonb(googlesql::values::Null(
+                              googlesql::types::StringArrayType())));
   EXPECT_THAT(
       evaluator_,
-      NullToJsonb(zetasql::values::Null(zetasql::types::Int64ArrayType())));
-  EXPECT_THAT(evaluator_, NullToJsonb(zetasql::values::Null(
-                              zetasql::types::DoubleArrayType())));
+      NullToJsonb(googlesql::values::Null(googlesql::types::Int64ArrayType())));
+  EXPECT_THAT(evaluator_, NullToJsonb(googlesql::values::Null(
+                              googlesql::types::DoubleArrayType())));
   EXPECT_THAT(
       evaluator_,
-      NullToJsonb(zetasql::values::Null(zetasql::types::BytesArrayType())));
+      NullToJsonb(googlesql::values::Null(googlesql::types::BytesArrayType())));
 
-  EXPECT_THAT(evaluator_, NullToJsonb(zetasql::Value::NullInterval()));
-  EXPECT_THAT(evaluator_, NullToJsonb(zetasql::values::Null(
-                              zetasql::types::IntervalArrayType())));
+  EXPECT_THAT(evaluator_, NullToJsonb(googlesql::Value::NullInterval()));
+  EXPECT_THAT(evaluator_, NullToJsonb(googlesql::values::Null(
+                              googlesql::types::IntervalArrayType())));
   EXPECT_THAT(evaluator_, NullToJsonb(kNullUuidValue));
   EXPECT_THAT(evaluator_, NullToJsonb(kNullUuidArrayValue));
 }
 
 MATCHER_P2(TimestampToJsonb, input, expected_string, "") {
   absl::Time timestamp;
-  absl::Status status = zetasql::functions::ConvertStringToTimestamp(
+  absl::Status status = googlesql::functions::ConvertStringToTimestamp(
       input, absl::UTCTimeZone(),
-      zetasql::functions::TimestampScale::kNanoseconds,
+      googlesql::functions::TimestampScale::kNanoseconds,
       /*allow_tz_in_str=*/true, &timestamp);
   if (!status.ok()) {
     *result_listener << "\nFailed to convert string to timestamp: " << status;
     return false;
   }
   EXPECT_THAT(
-      arg(absl::MakeConstSpan({zetasql::values::Timestamp(timestamp)})),
-      zetasql_base::testing::IsOkAndHolds(
+      arg(absl::MakeConstSpan({googlesql::values::Timestamp(timestamp)})),
+      googlesql_base::testing::IsOkAndHolds(
           spangres::datatypes::CreatePgJsonbValue(expected_string).value()));
   return true;
 }
@@ -3927,8 +4007,8 @@ TEST_F(EvalToJsonbTest, TimestampInput) {
 
 MATCHER_P2(BoolToJsonb, input, expected_string, "") {
   EXPECT_THAT(
-      arg(absl::MakeConstSpan({zetasql::values::Bool(input)})),
-      zetasql_base::testing::IsOkAndHolds(
+      arg(absl::MakeConstSpan({googlesql::values::Bool(input)})),
+      googlesql_base::testing::IsOkAndHolds(
           spangres::datatypes::CreatePgJsonbValue(expected_string).value()));
   return true;
 }
@@ -3940,8 +4020,8 @@ TEST_F(EvalToJsonbTest, BoolInput) {
 
 MATCHER_P2(Int64ToJsonb, input, expected_string, "") {
   EXPECT_THAT(
-      arg(absl::MakeConstSpan({zetasql::values::Int64(input)})),
-      zetasql_base::testing::IsOkAndHolds(
+      arg(absl::MakeConstSpan({googlesql::values::Int64(input)})),
+      googlesql_base::testing::IsOkAndHolds(
           spangres::datatypes::CreatePgJsonbValue(expected_string).value()));
   return true;
 }
@@ -3956,8 +4036,8 @@ TEST_F(EvalToJsonbTest, Int64Input) {
 
 MATCHER_P2(DoubleToJsonb, input, expected_string, "") {
   EXPECT_THAT(
-      arg(absl::MakeConstSpan({zetasql::values::Double(input)})),
-      zetasql_base::testing::IsOkAndHolds(
+      arg(absl::MakeConstSpan({googlesql::values::Double(input)})),
+      googlesql_base::testing::IsOkAndHolds(
           CreatePgJsonbValueWithMemoryContext(expected_string).value()));
   return true;
 }
@@ -3995,8 +4075,8 @@ TEST_F(EvalToJsonbTest, DoubleInput) {
 MATCHER_P2(DateToJsonb, input, expected_string, "") {
   EXPECT_THAT(
       arg(absl::MakeConstSpan(
-          {zetasql::values::Date(input - absl::CivilDay(1970, 1, 1))})),
-      zetasql_base::testing::IsOkAndHolds(
+          {googlesql::values::Date(input - absl::CivilDay(1970, 1, 1))})),
+      googlesql_base::testing::IsOkAndHolds(
           spangres::datatypes::CreatePgJsonbValue(expected_string).value()));
   return true;
 }
@@ -4012,8 +4092,8 @@ TEST_F(EvalToJsonbTest, DateInput) {
 
 MATCHER_P2(StringToJsonb, input, expected_string, "") {
   EXPECT_THAT(
-      arg(absl::MakeConstSpan({zetasql::values::String(input)})),
-      zetasql_base::testing::IsOkAndHolds(
+      arg(absl::MakeConstSpan({googlesql::values::String(input)})),
+      googlesql_base::testing::IsOkAndHolds(
           spangres::datatypes::CreatePgJsonbValue(expected_string).value()));
   return true;
 }
@@ -4034,8 +4114,8 @@ TEST_F(EvalToJsonbTest, StringInput) {
 
 MATCHER_P2(BytesToJsonb, input, expected_string, "") {
   EXPECT_THAT(
-      arg(absl::MakeConstSpan({zetasql::values::Bytes(input)})),
-      zetasql_base::testing::IsOkAndHolds(
+      arg(absl::MakeConstSpan({googlesql::values::Bytes(input)})),
+      googlesql_base::testing::IsOkAndHolds(
           spangres::datatypes::CreatePgJsonbValue(expected_string).value()));
   return true;
 }
@@ -4057,7 +4137,7 @@ MATCHER_P2(JsonbToJsonb, input, expected_string, "") {
   EXPECT_THAT(
       arg(absl::MakeConstSpan(
           {CreatePgJsonbValueWithMemoryContext(input).value()})),
-      zetasql_base::testing::IsOkAndHolds(
+      googlesql_base::testing::IsOkAndHolds(
           CreatePgJsonbValueWithMemoryContext(expected_string).value()));
   return true;
 }
@@ -4082,7 +4162,7 @@ MATCHER_P2(NumericToJsonb, input, expected_string, "") {
   EXPECT_THAT(
       arg(absl::MakeConstSpan(
           {CreatePgNumericValueWithMemoryContext(input).value()})),
-      zetasql_base::testing::IsOkAndHolds(
+      googlesql_base::testing::IsOkAndHolds(
           CreatePgJsonbValueWithMemoryContext(expected_string).value()));
   return true;
 }
@@ -4102,7 +4182,7 @@ TEST_F(EvalToJsonbTest, NumericInput) {
 MATCHER_P2(OidToJsonb, input, expected_string, "") {
   EXPECT_THAT(
       arg(absl::MakeConstSpan({CreatePgOidValue(input).value()})),
-      zetasql_base::testing::IsOkAndHolds(
+      googlesql_base::testing::IsOkAndHolds(
           CreatePgJsonbValueWithMemoryContext(expected_string).value()));
   return true;
 }
@@ -4117,7 +4197,7 @@ TEST_F(EvalToJsonbTest, OidInput) {
 MATCHER_P2(IntervalToJsonb, input, expected_string, "") {
   EXPECT_THAT(
       arg(absl::MakeConstSpan({CreateIntervalValue(input)})),
-      zetasql_base::testing::IsOkAndHolds(
+      googlesql_base::testing::IsOkAndHolds(
           CreatePgJsonbValueWithMemoryContext(expected_string).value()));
   return true;
 }
@@ -4141,7 +4221,7 @@ TEST_F(EvalToJsonbTest, IntervalInput) {
 MATCHER_P2(UuidToJsonb, input, expected_string, "") {
   EXPECT_THAT(
       arg(absl::MakeConstSpan({CreateUuidValue(input)})),
-      zetasql_base::testing::IsOkAndHolds(
+      googlesql_base::testing::IsOkAndHolds(
           CreatePgJsonbValueWithMemoryContext(expected_string).value()));
   return true;
 }
@@ -4164,27 +4244,27 @@ TEST_F(EvalToJsonbTest, UuidInput) {
 MATCHER_P2(ArrayToJsonb, array_input, expected_string, "") {
   EXPECT_THAT(
       arg(absl::MakeConstSpan({array_input})),
-      zetasql_base::testing::IsOkAndHolds(
+      googlesql_base::testing::IsOkAndHolds(
           CreatePgJsonbValueWithMemoryContext(expected_string).value()));
   return true;
 }
 
 TEST_F(EvalToJsonbTest, ArrayInput) {
   EXPECT_THAT(evaluator_,
-              ArrayToJsonb(zetasql::values::Int64Array({1, 9007199254740993}),
+              ArrayToJsonb(googlesql::values::Int64Array({1, 9007199254740993}),
                            "[1, 9007199254740993]"));
   EXPECT_THAT(
       evaluator_,
-      ArrayToJsonb(zetasql::Value::MakeArray(
-                       zetasql::types::StringArrayType(),
-                       {zetasql::values::String("a"), kNullStringValue})
+      ArrayToJsonb(googlesql::Value::MakeArray(
+                       googlesql::types::StringArrayType(),
+                       {googlesql::values::String("a"), kNullStringValue})
                        .value(),
                    "[\"a\", null]"));
   EXPECT_THAT(evaluator_,
-              ArrayToJsonb(zetasql::values::BytesArray({" ", "ab"}),
+              ArrayToJsonb(googlesql::values::BytesArray({" ", "ab"}),
                            "[\"\\\\x20\", \"\\\\x6162\"]"));
   EXPECT_THAT(evaluator_,
-              ArrayToJsonb(zetasql::Value::MakeArray(
+              ArrayToJsonb(googlesql::Value::MakeArray(
                                spangres::datatypes::GetPgNumericArrayType(),
                                {CreatePgNumericValueWithMemoryContext(
                                     absl::StrCat(kMaxPgJsonbNumericDigitStr))
@@ -4192,10 +4272,10 @@ TEST_F(EvalToJsonbTest, ArrayInput) {
                                .value(),
                            absl::StrCat("[", kMaxPgJsonbNumericDigitStr, "]")));
   EXPECT_THAT(evaluator_,
-              ArrayToJsonb(zetasql::values::DoubleArray({}), "[]"));
+              ArrayToJsonb(googlesql::values::DoubleArray({}), "[]"));
 
   EXPECT_THAT(evaluator_,
-              ArrayToJsonb(zetasql::Value::MakeArray(
+              ArrayToJsonb(googlesql::Value::MakeArray(
                                spangres::datatypes::GetPgOidArrayType(),
                             {CreatePgOidValue(0).value(),
                              CreatePgOidValue(
@@ -4206,9 +4286,9 @@ TEST_F(EvalToJsonbTest, ArrayInput) {
 class EvalJsonbSubscriptText : public EmulatorFunctionsTest {
  protected:
   void SetUp() override {
-    const zetasql::Function* function =
+    const googlesql::Function* function =
         functions_[kPGJsonbSubscriptTextFunctionName].get();
-    ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                          function->signatures().front()));
   }
 };
@@ -4216,16 +4296,16 @@ class EvalJsonbSubscriptText : public EmulatorFunctionsTest {
 MATCHER_P3(JsonbArrayElementText, jsonb, element_index, expected_string_value,
            "") {
   EXPECT_THAT(arg(absl::MakeConstSpan(
-                  {jsonb.value(), zetasql::values::Int64(element_index)})),
-              zetasql_base::testing::IsOkAndHolds(expected_string_value));
+                  {jsonb.value(), googlesql::values::Int64(element_index)})),
+              googlesql_base::testing::IsOkAndHolds(expected_string_value));
   return true;
 }
 
 MATCHER_P3(JsonbObjectFieldText, jsonb, object_field, expected_string_value,
            "") {
   EXPECT_THAT(arg(absl::MakeConstSpan(
-                  {jsonb.value(), zetasql::values::String(object_field)})),
-              zetasql_base::testing::IsOkAndHolds(expected_string_value));
+                  {jsonb.value(), googlesql::values::String(object_field)})),
+              googlesql_base::testing::IsOkAndHolds(expected_string_value));
   return true;
 }
 
@@ -4238,7 +4318,7 @@ TEST_F(EvalJsonbSubscriptText, ElementIndexInput) {
       evaluator_,
       JsonbArrayElementText(
           CreatePgJsonbValueWithMemoryContext(R"([1.00, "string val"])"), 1,
-          zetasql::values::String("string val")));
+          googlesql::values::String("string val")));
   EXPECT_THAT(evaluator_,
               JsonbArrayElementText(CreatePgJsonbValueWithMemoryContext(
                                         R"([null, "string val"])"),
@@ -4247,7 +4327,7 @@ TEST_F(EvalJsonbSubscriptText, ElementIndexInput) {
       evaluator_,
       JsonbArrayElementText(
           CreatePgJsonbValueWithMemoryContext(R"([null, "string val"])"), -1,
-          zetasql::values::String("string val")));
+          googlesql::values::String("string val")));
   EXPECT_THAT(evaluator_,
               JsonbArrayElementText(
                   CreatePgJsonbValueWithMemoryContext(R"({"a": "string val"})"),
@@ -4257,30 +4337,30 @@ TEST_F(EvalJsonbSubscriptText, ElementIndexInput) {
   // There is no error in these cases and the results are just NULL.
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {CreatePgJsonbValueWithMemoryContext("[1,2]").value(),
-                   zetasql::values::NullInt64()})),
-              zetasql_base::testing::IsOkAndHolds(kNullStringValue));
+                   googlesql::values::NullInt64()})),
+              googlesql_base::testing::IsOkAndHolds(kNullStringValue));
   EXPECT_THAT(
       evaluator_(absl::MakeConstSpan(
-          {zetasql::values::Null(spangres::datatypes::GetPgJsonbType()),
-           zetasql::values::Int64(-1)})),
-      zetasql_base::testing::IsOkAndHolds(kNullStringValue));
+          {googlesql::values::Null(spangres::datatypes::GetPgJsonbType()),
+           googlesql::values::Int64(-1)})),
+      googlesql_base::testing::IsOkAndHolds(kNullStringValue));
   EXPECT_THAT(
       evaluator_(absl::MakeConstSpan(
-          {zetasql::values::Null(spangres::datatypes::GetPgJsonbType()),
-           zetasql::values::NullInt64()})),
-      zetasql_base::testing::IsOkAndHolds(kNullStringValue));
+          {googlesql::values::Null(spangres::datatypes::GetPgJsonbType()),
+           googlesql::values::NullInt64()})),
+      googlesql_base::testing::IsOkAndHolds(kNullStringValue));
 }
 
 TEST_F(EvalJsonbSubscriptText, ObjectFieldInput) {
   EXPECT_THAT(evaluator_,
               JsonbObjectFieldText(
                   CreatePgJsonbValueWithMemoryContext(R"({"a": "string val"})"),
-                  "a", zetasql::values::String("string val")));
+                  "a", googlesql::values::String("string val")));
   EXPECT_THAT(
       evaluator_,
       JsonbObjectFieldText(
           CreatePgJsonbValueWithMemoryContext(R"({"a": {"b": "string_val"}})"),
-          "a", zetasql::values::String(R"({"b": "string_val"})")));
+          "a", googlesql::values::String(R"({"b": "string_val"})")));
   EXPECT_THAT(evaluator_,
               JsonbObjectFieldText(CreatePgJsonbValueWithMemoryContext(
                                        R"([1.00, "string val"])"),
@@ -4292,21 +4372,21 @@ TEST_F(EvalJsonbSubscriptText, ObjectFieldInput) {
   EXPECT_THAT(
       evaluator_,
       JsonbObjectFieldText(CreatePgJsonbValueWithMemoryContext(R"({"a": ""})"),
-                           "a", zetasql::values::String("")));
+                           "a", googlesql::values::String("")));
 
   // Following is a test case when STRING argument is NULL. There is no error
   // and the result is just NULL.
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {CreatePgJsonbValueWithMemoryContext(R"({"a":1})").value(),
                    kNullStringValue})),
-              zetasql_base::testing::IsOkAndHolds(kNullStringValue));
+              googlesql_base::testing::IsOkAndHolds(kNullStringValue));
 }
 
 TEST_F(EvalJsonbSubscriptText, ErrorCases) {
   // More than 2 arguments
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {CreatePgJsonbValueWithMemoryContext("[null]").value(),
-                   zetasql::values::Int64(1), zetasql::values::Int64(2)})),
+                   googlesql::values::Int64(1), googlesql::values::Int64(2)})),
               StatusIs(absl::StatusCode::kInternal));
 
   // Less than 2 arguments
@@ -4317,16 +4397,16 @@ TEST_F(EvalJsonbSubscriptText, ErrorCases) {
   // Invalid arguments
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {CreatePgJsonbValueWithMemoryContext("[null]").value(),
-                   zetasql::values::NullBool()})),
+                   googlesql::values::NullBool()})),
               StatusIs(absl::StatusCode::kUnimplemented));
 }
 
 class EvalJsonbArrayElement : public EmulatorFunctionsTest {
  protected:
   void SetUp() override {
-    const zetasql::Function* function =
-        functions_[kZetaSQLSubscriptFunctionName].get();
-    ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+    const googlesql::Function* function =
+        functions_[kGoogleSQLSubscriptFunctionName].get();
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                          function->signatures().front()));
   }
 };
@@ -4335,7 +4415,7 @@ TEST_F(EvalJsonbArrayElement, ErrorCases) {
   // More than 2 arguments
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {CreatePgJsonbValueWithMemoryContext("[null]").value(),
-                   zetasql::values::Int64(1), zetasql::values::Int64(2)})),
+                   googlesql::values::Int64(1), googlesql::values::Int64(2)})),
               StatusIs(absl::StatusCode::kInternal));
 
   // Less than 2 arguments
@@ -4346,16 +4426,16 @@ TEST_F(EvalJsonbArrayElement, ErrorCases) {
   // Invalid arguments
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {CreatePgJsonbValueWithMemoryContext("[null]").value(),
-                   zetasql::values::NullBool()})),
+                   googlesql::values::NullBool()})),
               StatusIs(absl::StatusCode::kUnimplemented));
 }
 
 class EvalJsonbObjectField : public EmulatorFunctionsTest {
  protected:
   void SetUp() override {
-    const zetasql::Function* function =
-        functions_[kZetaSQLSubscriptFunctionName].get();
-    ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+    const googlesql::Function* function =
+        functions_[kGoogleSQLSubscriptFunctionName].get();
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                          function->signatures().front()));
   }
 };
@@ -4365,7 +4445,7 @@ TEST_F(EvalJsonbObjectField, ErrorCases) {
   EXPECT_THAT(
       evaluator_(absl::MakeConstSpan(
           {CreatePgJsonbValueWithMemoryContext(R"({"a":1})").value(),
-           zetasql::values::String("a"), zetasql::values::String("b")})),
+           googlesql::values::String("a"), googlesql::values::String("b")})),
       StatusIs(absl::StatusCode::kInternal));
 
   // Less than 2 arguments
@@ -4376,16 +4456,16 @@ TEST_F(EvalJsonbObjectField, ErrorCases) {
   // Invalid arguments
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(
                   {CreatePgJsonbValueWithMemoryContext(R"({"a":1})").value(),
-                   zetasql::values::NullBool()})),
+                   googlesql::values::NullBool()})),
               StatusIs(absl::StatusCode::kUnimplemented));
 }
 
 class EvalJsonbTypeof : public EmulatorFunctionsTest {
  protected:
   void SetUp() override {
-    const zetasql::Function* function =
-        functions_[kZetaSQLJsonTypeFunctionName].get();
-    ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+    const googlesql::Function* function =
+        functions_[kGoogleSQLJsonTypeFunctionName].get();
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                          function->signatures().front()));
   }
 };
@@ -4398,20 +4478,20 @@ TEST_F(EvalJsonbTypeof, ErrorCases) {
               StatusIs(absl::StatusCode::kInternal));
 
   // Less than 1 argument
-  std::vector<zetasql::Value> args = {};
+  std::vector<googlesql::Value> args = {};
 
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(args)),
               StatusIs(absl::StatusCode::kInternal));
 
   // Invalid arguments
-  EXPECT_THAT(evaluator_(absl::MakeConstSpan({zetasql::Value::Double(3.14)})),
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan({googlesql::Value::Double(3.14)})),
               StatusIs(absl::StatusCode::kInternal));
 }
 
 struct EvalCastFromJsonbTestCase {
   std::string test_name;
-  zetasql::Value arg;
-  zetasql::Value expected_value;
+  googlesql::Value arg;
+  googlesql::Value expected_value;
   absl::StatusCode expected_status_code;
 };
 
@@ -4421,16 +4501,16 @@ using EvalCastFromJsonbTest =
 TEST_P(EvalCastFromJsonbTest, TestEvalCastFromJsonb) {
   SpannerPGFunctions spanner_pg_functions =
       GetSpannerPGFunctions("TestCatalog");
-  std::unordered_map<std::string, std::unique_ptr<zetasql::Function>>
+  std::unordered_map<std::string, std::unique_ptr<googlesql::Function>>
       functions;
   for (auto& function : spanner_pg_functions) {
     // Add function alias if it exists.
     if (!function->function_options().alias_name.empty()) {
-      zetasql::FunctionOptions function_options =
+      googlesql::FunctionOptions function_options =
           function->function_options();
       std::string alias_name = function_options.alias_name;
       function_options.set_alias_name("");
-      auto alias_function = std::make_unique<zetasql::Function>(
+      auto alias_function = std::make_unique<googlesql::Function>(
         function->Name(), function->GetGroup(),
         function->mode(), function->signatures(),
           function_options);
@@ -4439,44 +4519,44 @@ TEST_P(EvalCastFromJsonbTest, TestEvalCastFromJsonb) {
     functions[function->Name()] = std::move(function);
   }
 
-  static const zetasql::Type* gsql_pg_jsonb =
+  static const googlesql::Type* gsql_pg_jsonb =
       spangres::datatypes::GetPgJsonbType();
-  static const zetasql::Type* gsql_pg_numeric =
+  static const googlesql::Type* gsql_pg_numeric =
       spangres::datatypes::GetPgNumericType();
 
-  absl::flat_hash_map<zetasql::TypeKind, zetasql::FunctionSignature>
+  absl::flat_hash_map<googlesql::TypeKind, googlesql::FunctionSignature>
       signature_map = {
-          {zetasql::TYPE_BOOL,
-           {zetasql::types::BoolType(), {gsql_pg_jsonb}, nullptr}},
-          {zetasql::TYPE_INT64,
-           {zetasql::types::Int64Type(), {gsql_pg_jsonb}, nullptr}},
-          {zetasql::TYPE_DOUBLE,
-           {zetasql::types::DoubleType(), {gsql_pg_jsonb}, nullptr}},
-          {zetasql::TYPE_EXTENDED,
+          {googlesql::TYPE_BOOL,
+           {googlesql::types::BoolType(), {gsql_pg_jsonb}, nullptr}},
+          {googlesql::TYPE_INT64,
+           {googlesql::types::Int64Type(), {gsql_pg_jsonb}, nullptr}},
+          {googlesql::TYPE_DOUBLE,
+           {googlesql::types::DoubleType(), {gsql_pg_jsonb}, nullptr}},
+          {googlesql::TYPE_EXTENDED,
            {gsql_pg_numeric, {gsql_pg_jsonb}, nullptr}},
-          {zetasql::TYPE_STRING,
-           {zetasql::types::StringType(), {gsql_pg_jsonb}, nullptr}},
+          {googlesql::TYPE_STRING,
+           {googlesql::types::StringType(), {gsql_pg_jsonb}, nullptr}},
           // To trigger an invalid cast.
-          {zetasql::TYPE_TIMESTAMP,
-           {zetasql::types::TimestampType(), {gsql_pg_jsonb}, nullptr}},
+          {googlesql::TYPE_TIMESTAMP,
+           {googlesql::types::TimestampType(), {gsql_pg_jsonb}, nullptr}},
       };
 
   const EvalCastFromJsonbTestCase& test_case = GetParam();
 
-  const zetasql::Function* function =
+  const googlesql::Function* function =
       functions[kPGCastFromJsonbFunctionName].get();
   auto callback = function->GetFunctionEvaluatorFactory();
 
   auto iter = signature_map.find(test_case.expected_value.type_kind());
   ASSERT_NE(iter, signature_map.end());
-  if (test_case.expected_value.type_kind() == zetasql::TYPE_TIMESTAMP) {
+  if (test_case.expected_value.type_kind() == googlesql::TYPE_TIMESTAMP) {
     // This test is attempting to trigger an invalid cast.
     EXPECT_THAT(callback(iter->second),
                 StatusIs(test_case.expected_status_code));
     return;
   }
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto evaluator, callback(iter->second));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto evaluator, callback(iter->second));
 
   if (test_case.expected_status_code == absl::StatusCode::kOk) {
     EXPECT_THAT(evaluator({test_case.arg}),
@@ -4492,94 +4572,94 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::ValuesIn<EvalCastFromJsonbTestCase>({
         // PG.JSONB -> BOOL
         {"CastNullJsonbToNullBool",
-         zetasql::values::Null(spangres::datatypes::GetPgJsonbType()),
-         zetasql::Value::NullBool(), absl::StatusCode::kOk},
+         googlesql::values::Null(spangres::datatypes::GetPgJsonbType()),
+         googlesql::Value::NullBool(), absl::StatusCode::kOk},
         {"CastTrueJsonbToBool", *CreatePgJsonbValueWithMemoryContext("true"),
-         zetasql::values::True(), absl::StatusCode::kOk},
+         googlesql::values::True(), absl::StatusCode::kOk},
         {"CastFalseJsonbToBool", *CreatePgJsonbValueWithMemoryContext("false"),
-         zetasql::values::False(), absl::StatusCode::kOk},
+         googlesql::values::False(), absl::StatusCode::kOk},
         {"CastInvalidValueToBoolFails",
          *CreatePgJsonbValueWithMemoryContext("1.0"),
-         zetasql::Value::NullBool(),  // unused
+         googlesql::Value::NullBool(),  // unused
          absl::StatusCode::kInvalidArgument},
 
         // PG.JSONB -> DOUBLE
         {"CastNullJsonbToNullDouble",
-         zetasql::values::Null(spangres::datatypes::GetPgJsonbType()),
-         zetasql::Value::NullDouble(), absl::StatusCode::kOk},
+         googlesql::values::Null(spangres::datatypes::GetPgJsonbType()),
+         googlesql::Value::NullDouble(), absl::StatusCode::kOk},
         {"CastNumberJsonbToDouble", *CreatePgJsonbValueWithMemoryContext("1.5"),
-         zetasql::Value::Double(1.5), absl::StatusCode::kOk},
+         googlesql::Value::Double(1.5), absl::StatusCode::kOk},
         {"CastInvalidValueToDoubleFails",
          *CreatePgJsonbValueWithMemoryContext("true"),
-         zetasql::Value::NullDouble(),  // unused
+         googlesql::Value::NullDouble(),  // unused
          absl::StatusCode::kInvalidArgument},
 
         // PG.JSONB -> INT64
         {"CastNullJsonbToNullInt64",
-         zetasql::values::Null(spangres::datatypes::GetPgJsonbType()),
-         zetasql::Value::NullInt64(), absl::StatusCode::kOk},
+         googlesql::values::Null(spangres::datatypes::GetPgJsonbType()),
+         googlesql::Value::NullInt64(), absl::StatusCode::kOk},
         {"CastNumberJsonbToInt64", *CreatePgJsonbValueWithMemoryContext("500"),
-         zetasql::Value::Int64(500), absl::StatusCode::kOk},
+         googlesql::Value::Int64(500), absl::StatusCode::kOk},
         {"CastNumberWithDecimalPointJsonbToInt64",
          *CreatePgJsonbValueWithMemoryContext("1.5"),
-         zetasql::Value::Int64(2), absl::StatusCode::kOk},
+         googlesql::Value::Int64(2), absl::StatusCode::kOk},
         {"CastInvalidValueToInt64Fails",
          *CreatePgJsonbValueWithMemoryContext("true"),
-         zetasql::Value::NullInt64(),  // unused
+         googlesql::Value::NullInt64(),  // unused
          absl::StatusCode::kInvalidArgument},
 
         // PG.JSONB -> STRING
         {"CastNullJsonbToNullString",
-         zetasql::values::Null(spangres::datatypes::GetPgJsonbType()),
-         zetasql::Value::NullString(), absl::StatusCode::kOk},
+         googlesql::values::Null(spangres::datatypes::GetPgJsonbType()),
+         googlesql::Value::NullString(), absl::StatusCode::kOk},
         {"CastNumberJsonbToString", *CreatePgJsonbValueWithMemoryContext("500"),
-         zetasql::Value::String("500"), absl::StatusCode::kOk},
+         googlesql::Value::String("500"), absl::StatusCode::kOk},
         {"CastStringJsonbToString",
          *CreatePgJsonbValueWithMemoryContext("\"hello\""),
-         zetasql::Value::String("\"hello\""), absl::StatusCode::kOk},
+         googlesql::Value::String("\"hello\""), absl::StatusCode::kOk},
 
         // PG.JSONB -> <INVALID TYPE>
         {"CastTimestampJsonbToTimestampIsInvalid",
          *CreatePgJsonbValueWithMemoryContext("\"01 Jan 1970 00:00:00+00\""),
-         zetasql::values::Timestamp(absl::UnixEpoch()),
+         googlesql::values::Timestamp(absl::UnixEpoch()),
          absl::StatusCode::kInvalidArgument},
     }));
 
 class EvalCastToDateTest : public EmulatorFunctionsTest {
  protected:
   void SetUp() override {
-    const zetasql::Function* function =
+    const googlesql::Function* function =
         functions_[kPGCastToDateFunctionName].get();
-    ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                          function->signatures().front()));
   }
 };
 
 TEST_F(EvalCastToDateTest, SuccessfulCast) {
-  std::vector<zetasql::Value> args = {
-      zetasql::values::String("1999-01-08")};
+  std::vector<googlesql::Value> args = {
+      googlesql::values::String("1999-01-08")};
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(args)),
-              zetasql_base::testing::IsOkAndHolds(zetasql::Value::Date(
+              googlesql_base::testing::IsOkAndHolds(googlesql::Value::Date(
                   absl::CivilDay(1999, 1, 8) - absl::CivilDay(1970, 1, 1))));
 }
 
 TEST_F(EvalCastToDateTest, NullValue) {
-  auto arg = zetasql::Value::MakeNull<std::string>();
+  auto arg = googlesql::Value::MakeNull<std::string>();
   EXPECT_THAT(evaluator_(absl::MakeConstSpan({arg})),
-              zetasql_base::testing::IsOkAndHolds(zetasql::Value::NullDate()));
+              googlesql_base::testing::IsOkAndHolds(googlesql::Value::NullDate()));
 }
 
 TEST_F(EvalCastToDateTest, UnsupportedDate) {
-  std::vector<zetasql::Value> args = {
-      zetasql::values::String("January 8 04:05:06 1999 PST")};
+  std::vector<googlesql::Value> args = {
+      googlesql::values::String("January 8 04:05:06 1999 PST")};
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(args)),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(EvalCastToDateTest, InvalidArgsCount) {
-  std::vector<zetasql::Value> args = {};
+  std::vector<googlesql::Value> args = {};
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(args)),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInternal));
 }
 
 class EvalCastToTimestampTest : public EmulatorFunctionsTest {
@@ -4589,9 +4669,9 @@ class EvalCastToTimestampTest : public EmulatorFunctionsTest {
   }
 
   void SetUp() override {
-    const zetasql::Function* function =
+    const googlesql::Function* function =
         functions_[kPGCastToTimestampFunctionName].get();
-    ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                          function->signatures().front()));
   }
 
@@ -4599,32 +4679,32 @@ class EvalCastToTimestampTest : public EmulatorFunctionsTest {
 };
 
 TEST_F(EvalCastToTimestampTest, SuccessfulCast) {
-  std::vector<zetasql::Value> args = {
-      zetasql::values::String("January 8 04:05:06 1999")};
+  std::vector<googlesql::Value> args = {
+      googlesql::values::String("January 8 04:05:06 1999")};
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(args)),
-              zetasql_base::testing::IsOkAndHolds(zetasql::values::Timestamp(
+              googlesql_base::testing::IsOkAndHolds(googlesql::values::Timestamp(
                   absl::FromCivil(absl::CivilSecond(1999, 1, 8, 4, 5, 6),
                                   default_timezone_))));
 }
 
 TEST_F(EvalCastToTimestampTest, NullValue) {
-  std::vector<zetasql::Value> args = {
-      zetasql::values::NullString()};
+  std::vector<googlesql::Value> args = {
+      googlesql::values::NullString()};
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(args)),
-              zetasql_base::testing::IsOkAndHolds(zetasql::Value::NullTimestamp()));
+              googlesql_base::testing::IsOkAndHolds(googlesql::Value::NullTimestamp()));
 }
 
 TEST_F(EvalCastToTimestampTest, UnsupportedTime) {
-  std::vector<zetasql::Value> args = {
-      zetasql::values::String("January 8 04:05:06 1999 PST")};
+  std::vector<googlesql::Value> args = {
+      googlesql::values::String("January 8 04:05:06 1999 PST")};
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(args)),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST_F(EvalCastToTimestampTest, InvalidArgsCount) {
-  std::vector<zetasql::Value> args = {};
+  std::vector<googlesql::Value> args = {};
   EXPECT_THAT(evaluator_(absl::MakeConstSpan(args)),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInternal));
 }
 
 template <typename T,
@@ -4632,26 +4712,26 @@ template <typename T,
 class EvalMapFloatingPointToIntTest : public EmulatorFunctionsTest {
  protected:
   void SetUp() override {
-    const zetasql::Function* function;
+    const googlesql::Function* function;
     if constexpr (std::is_same_v<T, double>) {
       function = functions_[kPGMapDoubleToIntFunctionName].get();
     } else {
       function = functions_[kPGMapFloatToIntFunctionName].get();
     }
-    ZETASQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
                                          function->signatures().front()));
   }
 
   void VerifyEquality(const absl::Span<const T> values) {
     ASSERT_GT(values.size(), 1);
     for (int i = 1; i < values.size(); i++) {
-      std::vector<zetasql::Value> args1 = {
-          zetasql::Value::Make<T>(values[i - 1])};
-      std::vector<zetasql::Value> args2 = {
-          zetasql::Value::Make<T>(values[i])};
-      ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::Value res1,
+      std::vector<googlesql::Value> args1 = {
+          googlesql::Value::Make<T>(values[i - 1])};
+      std::vector<googlesql::Value> args2 = {
+          googlesql::Value::Make<T>(values[i])};
+      GOOGLESQL_ASSERT_OK_AND_ASSIGN(googlesql::Value res1,
                            evaluator_(absl::MakeConstSpan(args1)));
-      ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::Value res2,
+      GOOGLESQL_ASSERT_OK_AND_ASSIGN(googlesql::Value res2,
                            evaluator_(absl::MakeConstSpan(args2)));
       EXPECT_EQ(res1.int64_value(), res2.int64_value());
     }
@@ -4660,13 +4740,13 @@ class EvalMapFloatingPointToIntTest : public EmulatorFunctionsTest {
   void VerifyGivenOrder(const absl::Span<const T> values) {
     ASSERT_GT(values.size(), 1);
     for (int i = 1; i < values.size(); i++) {
-      std::vector<zetasql::Value> args1 = {
-          zetasql::Value::Make<T>(values[i - 1])};
-      std::vector<zetasql::Value> args2 = {
-          zetasql::Value::Make<T>(values[i])};
-      ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::Value res1,
+      std::vector<googlesql::Value> args1 = {
+          googlesql::Value::Make<T>(values[i - 1])};
+      std::vector<googlesql::Value> args2 = {
+          googlesql::Value::Make<T>(values[i])};
+      GOOGLESQL_ASSERT_OK_AND_ASSIGN(googlesql::Value res1,
                            evaluator_(absl::MakeConstSpan(args1)));
-      ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::Value res2,
+      GOOGLESQL_ASSERT_OK_AND_ASSIGN(googlesql::Value res2,
                            evaluator_(absl::MakeConstSpan(args2)));
       EXPECT_LT(res1.int64_value(), res2.int64_value());
     }
@@ -4708,8 +4788,8 @@ TYPED_TEST(EvalMapFloatingPointToIntTest, ZerosEquality) {
 }
 
 TYPED_TEST(EvalMapFloatingPointToIntTest, NullInput) {
-  auto arg = zetasql::Value::MakeNull<TypeParam>();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::Value res,
+  auto arg = googlesql::Value::MakeNull<TypeParam>();
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(googlesql::Value res,
                        this->evaluator_(absl::MakeConstSpan({arg})));
   EXPECT_TRUE(res.type()->IsInt64());
   EXPECT_TRUE(res.is_null());
@@ -4747,14 +4827,14 @@ TYPED_TEST(EvalMapFloatingPointToIntTest, RandomOrder) {
 }
 
 TYPED_TEST(EvalMapFloatingPointToIntTest, InvalidArgsCount) {
-  std::vector<zetasql::Value> args = {};
+  std::vector<googlesql::Value> args = {};
   EXPECT_THAT(this->evaluator_(absl::MakeConstSpan(args)),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInternal));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInternal));
 }
 
 struct PgLeastGreatestTestCase {
   std::string test_name;
-  std::vector<zetasql::Value> args;
+  std::vector<googlesql::Value> args;
   std::string type_name;
   size_t expected_least_index;
   size_t expected_greatest_index;
@@ -4767,42 +4847,42 @@ TEST_P(EvalLeastGreatestTest, TestEvalLeastGreatest) {
   // Setup
   SpannerPGFunctions spanner_pg_functions =
       GetSpannerPGFunctions("TestCatalog");
-  std::unordered_map<std::string, std::unique_ptr<zetasql::Function>>
+  std::unordered_map<std::string, std::unique_ptr<googlesql::Function>>
       functions;
   for (auto& function : spanner_pg_functions) {
     functions[function->Name()] = std::move(function);
   }
 
-  const zetasql::Function* least_function =
+  const googlesql::Function* least_function =
       functions[kPGLeastFunctionName].get();
-  const zetasql::Function* greatest_function =
+  const googlesql::Function* greatest_function =
       functions[kPGGreatestFunctionName].get();
 
-  const std::vector<const zetasql::Type*> types = {
-      zetasql::types::DoubleType(), zetasql::types::Int64Type(),
-      zetasql::types::BoolType(), zetasql::types::BytesType(),
-      zetasql::types::StringType(), zetasql::types::DateType(),
-      zetasql::types::FloatType(), zetasql::types::TimestampType(),
-      zetasql::types::IntervalType(),
+  const std::vector<const googlesql::Type*> types = {
+      googlesql::types::DoubleType(), googlesql::types::Int64Type(),
+      googlesql::types::BoolType(), googlesql::types::BytesType(),
+      googlesql::types::StringType(), googlesql::types::DateType(),
+      googlesql::types::FloatType(), googlesql::types::TimestampType(),
+      googlesql::types::IntervalType(),
   };
 
-  absl::flat_hash_map<std::string, zetasql::FunctionEvaluator>
+  absl::flat_hash_map<std::string, googlesql::FunctionEvaluator>
       least_evaluators;
-  absl::flat_hash_map<std::string, zetasql::FunctionEvaluator>
+  absl::flat_hash_map<std::string, googlesql::FunctionEvaluator>
       greatest_evaluators;
 
   least_evaluators.reserve(types.size());
   greatest_evaluators.reserve(types.size());
   for (auto type : types) {
-    zetasql::FunctionSignature signature(
-        type, {type, {type, zetasql::FunctionArgumentType::REPEATED}},
+    googlesql::FunctionSignature signature(
+        type, {type, {type, googlesql::FunctionArgumentType::REPEATED}},
         nullptr);
 
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         least_evaluators[type->DebugString()],
         (least_function->GetFunctionEvaluatorFactory())(signature));
 
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         greatest_evaluators[type->DebugString()],
         (greatest_function->GetFunctionEvaluatorFactory())(signature));
   }
@@ -4813,19 +4893,19 @@ TEST_P(EvalLeastGreatestTest, TestEvalLeastGreatest) {
   if (test_case.status_code == absl::StatusCode::kOk) {
     EXPECT_THAT(least_evaluators[test_case.type_name](
                     absl::MakeConstSpan(test_case.args)),
-                zetasql_base::testing::IsOkAndHolds(
+                googlesql_base::testing::IsOkAndHolds(
                     test_case.args[test_case.expected_least_index]));
     EXPECT_THAT(greatest_evaluators[test_case.type_name](
                     absl::MakeConstSpan(test_case.args)),
-                zetasql_base::testing::IsOkAndHolds(
+                googlesql_base::testing::IsOkAndHolds(
                     test_case.args[test_case.expected_greatest_index]));
   } else {
     EXPECT_THAT(least_evaluators[test_case.type_name](
                     absl::MakeConstSpan(test_case.args)),
-                zetasql_base::testing::StatusIs(test_case.status_code));
+                googlesql_base::testing::StatusIs(test_case.status_code));
     EXPECT_THAT(greatest_evaluators[test_case.type_name](
                     absl::MakeConstSpan(test_case.args)),
-                zetasql_base::testing::StatusIs(test_case.status_code));
+                googlesql_base::testing::StatusIs(test_case.status_code));
   }
 }
 
@@ -4833,240 +4913,240 @@ INSTANTIATE_TEST_SUITE_P(
     EvalLeastGreatestTests, EvalLeastGreatestTest,
     ::testing::ValuesIn<PgLeastGreatestTestCase>(
         {{"DoubleResultsInMid",
-          {zetasql::values::Double(-12),
-           zetasql::values::Double(-87980.125),
-           zetasql::values::Double(100), zetasql::values::Double(-7)},
-          zetasql::types::DoubleType()->DebugString(),
+          {googlesql::values::Double(-12),
+           googlesql::values::Double(-87980.125),
+           googlesql::values::Double(100), googlesql::values::Double(-7)},
+          googlesql::types::DoubleType()->DebugString(),
           1,
           2,
           absl::StatusCode::kOk},
          {"DoubleAscending",
-          {zetasql::values::Double(-10000.123),
-           zetasql::values::Double(-12), zetasql::values::Double(-7),
-           zetasql::values::Double(100)},
-          zetasql::types::DoubleType()->DebugString(),
+          {googlesql::values::Double(-10000.123),
+           googlesql::values::Double(-12), googlesql::values::Double(-7),
+           googlesql::values::Double(100)},
+          googlesql::types::DoubleType()->DebugString(),
           0,
           3,
           absl::StatusCode::kOk},
          {"DoubleDescending",
-          {zetasql::values::Double(100), zetasql::values::Double(-7),
-           zetasql::values::Double(-12), zetasql::values::Double(-879.125)},
-          zetasql::types::DoubleType()->DebugString(),
+          {googlesql::values::Double(100), googlesql::values::Double(-7),
+           googlesql::values::Double(-12), googlesql::values::Double(-879.125)},
+          googlesql::types::DoubleType()->DebugString(),
           3,
           0,
           absl::StatusCode::kOk},
          {"DoubleWithNaN",
-          {zetasql::values::Double(std::numeric_limits<double>::quiet_NaN()),
-           zetasql::values::Double(-12), zetasql::values::Double(-5),
-           zetasql::values::Double(-7)},
-          zetasql::types::DoubleType()->DebugString(),
+          {googlesql::values::Double(std::numeric_limits<double>::quiet_NaN()),
+           googlesql::values::Double(-12), googlesql::values::Double(-5),
+           googlesql::values::Double(-7)},
+          googlesql::types::DoubleType()->DebugString(),
           1,
           0,
           absl::StatusCode::kOk},
          {"DoubleWithNegativeNaN",
-          {zetasql::values::Double(-std::numeric_limits<double>::quiet_NaN()),
-           zetasql::values::Double(-12), zetasql::values::Double(-5),
-           zetasql::values::Double(-7)},
-          zetasql::types::DoubleType()->DebugString(),
+          {googlesql::values::Double(-std::numeric_limits<double>::quiet_NaN()),
+           googlesql::values::Double(-12), googlesql::values::Double(-5),
+           googlesql::values::Double(-7)},
+          googlesql::types::DoubleType()->DebugString(),
           1,
           0,
           absl::StatusCode::kOk},
          {"DoubleSingleValue",
-          {zetasql::values::Double(-87980.125)},
-          zetasql::types::DoubleType()->DebugString(),
+          {googlesql::values::Double(-87980.125)},
+          googlesql::types::DoubleType()->DebugString(),
           0,
           0,
           absl::StatusCode::kOk},
          {"DoubleWithInfinitiesAndNaNAndNull",
-          {zetasql::values::Double(87980.125),
-           zetasql::values::Double(std::numeric_limits<double>::infinity()),
-           zetasql::values::Double(std::numeric_limits<double>::quiet_NaN()),
-           zetasql::values::NullDouble(),
-           zetasql::values::Double(-std::numeric_limits<double>::infinity())},
-          zetasql::types::DoubleType()->DebugString(),
+          {googlesql::values::Double(87980.125),
+           googlesql::values::Double(std::numeric_limits<double>::infinity()),
+           googlesql::values::Double(std::numeric_limits<double>::quiet_NaN()),
+           googlesql::values::NullDouble(),
+           googlesql::values::Double(-std::numeric_limits<double>::infinity())},
+          googlesql::types::DoubleType()->DebugString(),
           4,
           2,
           absl::StatusCode::kOk},
          {"DoubleAllNaNs",
-          {zetasql::values::Double(std::numeric_limits<double>::quiet_NaN()),
-           zetasql::values::Double(std::numeric_limits<double>::quiet_NaN())},
-          zetasql::types::DoubleType()->DebugString(),
+          {googlesql::values::Double(std::numeric_limits<double>::quiet_NaN()),
+           googlesql::values::Double(std::numeric_limits<double>::quiet_NaN())},
+          googlesql::types::DoubleType()->DebugString(),
           0,
           0,
           absl::StatusCode::kOk},
          {"DoubleAllNulls",
-          {zetasql::values::NullDouble(), zetasql::values::NullDouble()},
-          zetasql::types::DoubleType()->DebugString(),
+          {googlesql::values::NullDouble(), googlesql::values::NullDouble()},
+          googlesql::types::DoubleType()->DebugString(),
           0,
           0,
           absl::StatusCode::kOk},
          {"DoubleSkipNullFirst",
-          {zetasql::values::NullDouble(), zetasql::values::Double(100)},
-          zetasql::types::DoubleType()->DebugString(),
+          {googlesql::values::NullDouble(), googlesql::values::Double(100)},
+          googlesql::types::DoubleType()->DebugString(),
           1,
           1,
           absl::StatusCode::kOk},
          {"DoubleSkipNullLast",
-          {zetasql::values::Double(200), zetasql::values::NullDouble()},
-          zetasql::types::DoubleType()->DebugString(),
+          {googlesql::values::Double(200), googlesql::values::NullDouble()},
+          googlesql::types::DoubleType()->DebugString(),
           0,
           0,
           absl::StatusCode::kOk},
          {"FloatResultsInMid",
-          {zetasql::values::Float(-12), zetasql::values::Float(-87980.125f),
-           zetasql::values::Float(100), zetasql::values::Float(-7)},
-          zetasql::types::FloatType()->DebugString(),
+          {googlesql::values::Float(-12), googlesql::values::Float(-87980.125f),
+           googlesql::values::Float(100), googlesql::values::Float(-7)},
+          googlesql::types::FloatType()->DebugString(),
           1,
           2,
           absl::StatusCode::kOk},
          {"FloatAscending",
-          {zetasql::values::Float(-10000.123f), zetasql::values::Float(-12),
-           zetasql::values::Float(-7), zetasql::values::Float(100)},
-          zetasql::types::FloatType()->DebugString(),
+          {googlesql::values::Float(-10000.123f), googlesql::values::Float(-12),
+           googlesql::values::Float(-7), googlesql::values::Float(100)},
+          googlesql::types::FloatType()->DebugString(),
           0,
           3,
           absl::StatusCode::kOk},
          {"FloatDescending",
-          {zetasql::values::Float(100), zetasql::values::Float(-7),
-           zetasql::values::Float(-12), zetasql::values::Float(-879.125f)},
-          zetasql::types::FloatType()->DebugString(),
+          {googlesql::values::Float(100), googlesql::values::Float(-7),
+           googlesql::values::Float(-12), googlesql::values::Float(-879.125f)},
+          googlesql::types::FloatType()->DebugString(),
           3,
           0,
           absl::StatusCode::kOk},
          {"FloatWithNaN",
-          {zetasql::values::Float(std::numeric_limits<float>::quiet_NaN()),
-           zetasql::values::Float(-12), zetasql::values::Float(-5),
-           zetasql::values::Float(-7)},
-          zetasql::types::FloatType()->DebugString(),
+          {googlesql::values::Float(std::numeric_limits<float>::quiet_NaN()),
+           googlesql::values::Float(-12), googlesql::values::Float(-5),
+           googlesql::values::Float(-7)},
+          googlesql::types::FloatType()->DebugString(),
           1,
           0,
           absl::StatusCode::kOk},
          {"FloatWithNegativeNaN",
-          {zetasql::values::Float(-std::numeric_limits<float>::quiet_NaN()),
-           zetasql::values::Float(-12), zetasql::values::Float(-5),
-           zetasql::values::Float(-7)},
-          zetasql::types::FloatType()->DebugString(),
+          {googlesql::values::Float(-std::numeric_limits<float>::quiet_NaN()),
+           googlesql::values::Float(-12), googlesql::values::Float(-5),
+           googlesql::values::Float(-7)},
+          googlesql::types::FloatType()->DebugString(),
           1,
           0,
           absl::StatusCode::kOk},
          {"FloatSingleValue",
-          {zetasql::values::Float(-87980.125f)},
-          zetasql::types::FloatType()->DebugString(),
+          {googlesql::values::Float(-87980.125f)},
+          googlesql::types::FloatType()->DebugString(),
           0,
           0,
           absl::StatusCode::kOk},
          {"FloatWithInfinitiesAndNaNAndNull",
-          {zetasql::values::Float(87980.125f),
-           zetasql::values::Float(std::numeric_limits<float>::infinity()),
-           zetasql::values::Float(std::numeric_limits<float>::quiet_NaN()),
-           zetasql::values::NullFloat(),
-           zetasql::values::Float(-std::numeric_limits<float>::infinity())},
-          zetasql::types::FloatType()->DebugString(),
+          {googlesql::values::Float(87980.125f),
+           googlesql::values::Float(std::numeric_limits<float>::infinity()),
+           googlesql::values::Float(std::numeric_limits<float>::quiet_NaN()),
+           googlesql::values::NullFloat(),
+           googlesql::values::Float(-std::numeric_limits<float>::infinity())},
+          googlesql::types::FloatType()->DebugString(),
           4,
           2,
           absl::StatusCode::kOk},
          {"FloatAllNaNs",
-          {zetasql::values::Float(std::numeric_limits<float>::quiet_NaN()),
-           zetasql::values::Float(std::numeric_limits<float>::quiet_NaN())},
-          zetasql::types::FloatType()->DebugString(),
+          {googlesql::values::Float(std::numeric_limits<float>::quiet_NaN()),
+           googlesql::values::Float(std::numeric_limits<float>::quiet_NaN())},
+          googlesql::types::FloatType()->DebugString(),
           0,
           0,
           absl::StatusCode::kOk},
          {"FloatAllNulls",
-          {zetasql::values::NullFloat(), zetasql::values::NullFloat()},
-          zetasql::types::FloatType()->DebugString(),
+          {googlesql::values::NullFloat(), googlesql::values::NullFloat()},
+          googlesql::types::FloatType()->DebugString(),
           0,
           0,
           absl::StatusCode::kOk},
          {"FloatSkipNullFirst",
-          {zetasql::values::NullFloat(), zetasql::values::Float(100)},
-          zetasql::types::FloatType()->DebugString(),
+          {googlesql::values::NullFloat(), googlesql::values::Float(100)},
+          googlesql::types::FloatType()->DebugString(),
           1,
           1,
           absl::StatusCode::kOk},
          {"FloatSkipNullLast",
-          {zetasql::values::Float(200), zetasql::values::NullFloat()},
-          zetasql::types::FloatType()->DebugString(),
+          {googlesql::values::Float(200), googlesql::values::NullFloat()},
+          googlesql::types::FloatType()->DebugString(),
           0,
           0,
           absl::StatusCode::kOk},
          {"StringWithDuplicates",
-          {zetasql::values::String("aaaaa"),
-           zetasql::values::String("aaaab"),
-           zetasql::values::String("aaaab"),
-           zetasql::values::String("aaaaa")},
-          zetasql::types::StringType()->DebugString(),
+          {googlesql::values::String("aaaaa"),
+           googlesql::values::String("aaaab"),
+           googlesql::values::String("aaaab"),
+           googlesql::values::String("aaaaa")},
+          googlesql::types::StringType()->DebugString(),
           0,
           1,
           absl::StatusCode::kOk},
          {"Int64SmallVals",
-          {zetasql::values::Int64(0), zetasql::values::Int64(12),
-           zetasql::values::Int64(-5), zetasql::values::Int64(7)},
-          zetasql::types::Int64Type()->DebugString(),
+          {googlesql::values::Int64(0), googlesql::values::Int64(12),
+           googlesql::values::Int64(-5), googlesql::values::Int64(7)},
+          googlesql::types::Int64Type()->DebugString(),
           2,
           1,
           absl::StatusCode::kOk},
          {"Int64MinMaxVals",
-          {zetasql::values::Int64(0), zetasql::values::Int64(12),
-           zetasql::values::Int64(-5),
-           zetasql::values::Int64(std::numeric_limits<int64_t>::max()),
-           zetasql::values::Int64(std::numeric_limits<int64_t>::min()),
-           zetasql::values::Int64(-14)},
-          zetasql::types::Int64Type()->DebugString(),
+          {googlesql::values::Int64(0), googlesql::values::Int64(12),
+           googlesql::values::Int64(-5),
+           googlesql::values::Int64(std::numeric_limits<int64_t>::max()),
+           googlesql::values::Int64(std::numeric_limits<int64_t>::min()),
+           googlesql::values::Int64(-14)},
+          googlesql::types::Int64Type()->DebugString(),
           4,
           3,
           absl::StatusCode::kOk},
          {"BoolVals",
-          {zetasql::values::Bool(true), zetasql::values::Bool(false),
-           zetasql::values::Bool(true), zetasql::values::Bool(false)},
-          zetasql::types::BoolType()->DebugString(),
+          {googlesql::values::Bool(true), googlesql::values::Bool(false),
+           googlesql::values::Bool(true), googlesql::values::Bool(false)},
+          googlesql::types::BoolType()->DebugString(),
           1,
           0,
           absl::StatusCode::kOk},
          {"BytesWithDuplicates",
-          {zetasql::values::Bytes("aaaaa"), zetasql::values::Bytes("aaaab"),
-           zetasql::values::Bytes("aaaab"),
-           zetasql::values::Bytes("aaaaa")},
-          zetasql::types::BytesType()->DebugString(),
+          {googlesql::values::Bytes("aaaaa"), googlesql::values::Bytes("aaaab"),
+           googlesql::values::Bytes("aaaab"),
+           googlesql::values::Bytes("aaaaa")},
+          googlesql::types::BytesType()->DebugString(),
           0,
           1,
           absl::StatusCode::kOk},
          {"DateValues",
-          {zetasql::values::Date(absl::CivilDay(1999, 1, 8) -
+          {googlesql::values::Date(absl::CivilDay(1999, 1, 8) -
                                    absl::CivilDay(1970, 1, 1)),
-           zetasql::values::Date(0), zetasql::values::Date(-1),
-           zetasql::values::Date(1000)},
-          zetasql::types::DateType()->DebugString(),
+           googlesql::values::Date(0), googlesql::values::Date(-1),
+           googlesql::values::Date(1000)},
+          googlesql::types::DateType()->DebugString(),
           2,
           0,
           absl::StatusCode::kOk},
          {"TimestampValues",
-          {zetasql::values::Timestamp(absl::UnixEpoch()),
-           zetasql::values::Timestamp(absl::Now() + absl::Hours(20)),
-           zetasql::values::Timestamp(absl::Now())},
-          zetasql::types::TimestampType()->DebugString(),
+          {googlesql::values::Timestamp(absl::UnixEpoch()),
+           googlesql::values::Timestamp(absl::Now() + absl::Hours(20)),
+           googlesql::values::Timestamp(absl::Now())},
+          googlesql::types::TimestampType()->DebugString(),
           0,
           1,
           absl::StatusCode::kOk},
          {"IntervalValues",
           {kIntervalMaxValue, kIntervalMinValue,
-           zetasql::values::Interval(zetasql::IntervalValue())},
-          zetasql::types::IntervalType()->DebugString(),
+           googlesql::values::Interval(googlesql::IntervalValue())},
+          googlesql::types::IntervalType()->DebugString(),
           1,
           0,
           absl::StatusCode::kOk},
          {"IntervalValuesWithDuplicates",
           {kIntervalMaxValue, kIntervalValue, kIntervalMinValue, kIntervalValue,
-           zetasql::values::Interval(zetasql::IntervalValue())},
-          zetasql::types::IntervalType()->DebugString(),
+           googlesql::values::Interval(googlesql::IntervalValue())},
+          googlesql::types::IntervalType()->DebugString(),
           2,
           0,
           absl::StatusCode::kOk},
          {"IntervalValuesWithNull",
           {kIntervalMaxValue, kIntervalValue, kIntervalMinValue,
            kNullIntervalValue,
-           zetasql::values::Interval(zetasql::IntervalValue())},
-          zetasql::types::IntervalType()->DebugString(),
+           googlesql::values::Interval(googlesql::IntervalValue())},
+          googlesql::types::IntervalType()->DebugString(),
           2,
           0,
           absl::StatusCode::kOk},
@@ -5074,33 +5154,33 @@ INSTANTIATE_TEST_SUITE_P(
           {
               kNullIntervalValue,
           },
-          zetasql::types::IntervalType()->DebugString(),
+          googlesql::types::IntervalType()->DebugString(),
           0,
           0,
           absl::StatusCode::kOk},
          {"InvalidArgsCount",
           {},
-          zetasql::types::DoubleType()->DebugString(),
+          googlesql::types::DoubleType()->DebugString(),
           std::numeric_limits<size_t>::max() /* unused */,
           std::numeric_limits<size_t>::max() /* unused */,
           absl::StatusCode::kInternal},
          {"InvalidSingleArgument",
-          {zetasql::Value()},
-          zetasql::types::DoubleType()->DebugString(),
+          {googlesql::Value()},
+          googlesql::types::DoubleType()->DebugString(),
           std::numeric_limits<size_t>::max() /* unused */,
           std::numeric_limits<size_t>::max() /* unused */,
           absl::StatusCode::kInvalidArgument},
          {"InvalidMidArgument",
-          {zetasql::values::Int64(0), zetasql::Value(),
-           zetasql::values::Int64(12)},
-          zetasql::types::DoubleType()->DebugString(),
+          {googlesql::values::Int64(0), googlesql::Value(),
+           googlesql::values::Int64(12)},
+          googlesql::types::DoubleType()->DebugString(),
           std::numeric_limits<size_t>::max() /* unused */,
           std::numeric_limits<size_t>::max() /* unused */,
           absl::StatusCode::kInvalidArgument},
          {"MismatchedTypes",
-          {zetasql::values::Int64(0), zetasql::Value(),
-           zetasql::values::Int64(12)},
-          zetasql::types::DoubleType()->DebugString(),
+          {googlesql::values::Int64(0), googlesql::Value(),
+           googlesql::values::Int64(12)},
+          googlesql::types::DoubleType()->DebugString(),
           std::numeric_limits<size_t>::max() /* unused */,
           std::numeric_limits<size_t>::max() /* unused */,
           absl::StatusCode::kInvalidArgument}}),
@@ -5111,40 +5191,40 @@ INSTANTIATE_TEST_SUITE_P(
 TEST(EvalLeastGreatestInvalidTest, InvalidType) {
   SpannerPGFunctions spanner_pg_functions =
       GetSpannerPGFunctions("TestCatalog");
-  std::unordered_map<std::string, std::unique_ptr<zetasql::Function>>
+  std::unordered_map<std::string, std::unique_ptr<googlesql::Function>>
       functions;
   for (auto& function : spanner_pg_functions) {
     functions[function->Name()] = std::move(function);
   }
 
-  zetasql::FunctionSignature signature(
-      zetasql::types::Int32Type(),
-      {zetasql::types::Int32Type(),
-       {zetasql::types::Int32Type(),
-        zetasql::FunctionArgumentType::REPEATED}},
+  googlesql::FunctionSignature signature(
+      googlesql::types::Int32Type(),
+      {googlesql::types::Int32Type(),
+       {googlesql::types::Int32Type(),
+        googlesql::FunctionArgumentType::REPEATED}},
       nullptr);
 
-  const zetasql::Function* least_function =
+  const googlesql::Function* least_function =
       functions[kPGLeastFunctionName].get();
   EXPECT_THAT((least_function->GetFunctionEvaluatorFactory())(signature),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
 
-  const zetasql::Function* greatest_function =
+  const googlesql::Function* greatest_function =
       functions[kPGGreatestFunctionName].get();
   EXPECT_THAT((greatest_function->GetFunctionEvaluatorFactory())(signature),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(EvalMinSignatureTest, CustomMinSignatures) {
   SpannerPGFunctions spanner_pg_functions =
       GetSpannerPGFunctions("TestCatalog");
-  std::unordered_map<std::string, std::unique_ptr<zetasql::Function>>
+  std::unordered_map<std::string, std::unique_ptr<googlesql::Function>>
       functions;
   for (auto& function : spanner_pg_functions) {
     functions[function->Name()] = std::move(function);
   }
-  const zetasql::Function* function = functions[kPGMinFunctionName].get();
-  const std::vector<zetasql::FunctionSignature>& signatures =
+  const googlesql::Function* function = functions[kPGMinFunctionName].get();
+  const std::vector<googlesql::FunctionSignature>& signatures =
       function->signatures();
   ASSERT_THAT(signatures.size(), 2);
   EXPECT_TRUE(signatures[0].result_type().type()->IsDouble());
@@ -5158,8 +5238,8 @@ TEST(EvalMinSignatureTest, CustomMinSignatures) {
 struct EvalAggregatorTestCase {
   std::string test_name;
   std::string function_name;
-  std::vector<const zetasql::Value*> args;
-  zetasql::Value expected_value;
+  std::vector<const googlesql::Value*> args;
+  googlesql::Value expected_value;
   absl::StatusCode expected_status_code;
 };
 
@@ -5168,33 +5248,33 @@ using EvalMinMaxTest = ::testing::TestWithParam<EvalAggregatorTestCase>;
 TEST_P(EvalMinMaxTest, TestMin) {
   SpannerPGFunctions spanner_pg_functions =
       GetSpannerPGFunctions("TestCatalog");
-  std::unordered_map<std::string, std::unique_ptr<zetasql::Function>>
+  std::unordered_map<std::string, std::unique_ptr<googlesql::Function>>
       functions;
   for (auto& function : spanner_pg_functions) {
     functions[function->Name()] = std::move(function);
   }
   const EvalAggregatorTestCase& test_case = GetParam();
-  const zetasql::Type* agg_type = test_case.expected_value.type();
-  zetasql::FunctionSignature signature(agg_type, {agg_type}, nullptr);
-  const zetasql::Function* function =
+  const googlesql::Type* agg_type = test_case.expected_value.type();
+  googlesql::FunctionSignature signature(agg_type, {agg_type}, nullptr);
+  const googlesql::Function* function =
       functions[test_case.function_name].get();
   auto callback = function->GetAggregateFunctionEvaluatorFactory();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<zetasql::AggregateFunctionEvaluator> evaluator,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<googlesql::AggregateFunctionEvaluator> evaluator,
       callback(signature));
 
   bool stop_acc = false;
   // We have to make a copy here because GetParam() returns a const value but
   // the accumulate interface doesn't want a const span.
-  std::vector<const zetasql::Value*> args = test_case.args;
+  std::vector<const googlesql::Value*> args = test_case.args;
   if (test_case.expected_status_code == absl::StatusCode::kOk) {
     int i = 0;
     while (!stop_acc) {
-      ZETASQL_EXPECT_OK(
+      GOOGLESQL_EXPECT_OK(
           evaluator->Accumulate(absl::MakeSpan(args).subspan(i), &stop_acc));
       ++i;
     }
-    ZETASQL_ASSERT_OK_AND_ASSIGN(zetasql::Value result, evaluator->GetFinalResult());
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(googlesql::Value result, evaluator->GetFinalResult());
     EXPECT_THAT(result, test_case.expected_value);
   } else {
     absl::Status status = absl::OkStatus();
@@ -5205,7 +5285,7 @@ TEST_P(EvalMinMaxTest, TestMin) {
       ++i;
     }
     EXPECT_THAT(status,
-                zetasql_base::testing::StatusIs(test_case.expected_status_code));
+                googlesql_base::testing::StatusIs(test_case.expected_status_code));
   }
 }
 
@@ -5347,64 +5427,64 @@ INSTANTIATE_TEST_SUITE_P(EvalPgMinTests, EvalMinMaxTest,
 INSTANTIATE_TEST_SUITE_P(EvalMinTests, EvalMinMaxTest,
                          ::testing::ValuesIn<EvalAggregatorTestCase>({
                              {"OneOidNullArg",
-                              kZetaSQLMinFunctionName,
+                              kGoogleSQLMinFunctionName,
                               {&kNullPGOidValue},
                               kNullPGOidValue,
                               absl::StatusCode::kOk},
                              {"EmptyOidArgs",
-                              kZetaSQLMinFunctionName,
+                              kGoogleSQLMinFunctionName,
                               {},
                               kNullPGOidValue,
                               absl::StatusCode::kOk},
                              {"OneOidArg",
-                              kZetaSQLMinFunctionName,
+                              kGoogleSQLMinFunctionName,
                               {&kPGOidValue},
                               kPGOidValue,
                               absl::StatusCode::kOk},
                              {"OneOidArgOneNullArg",
-                              kZetaSQLMinFunctionName,
+                              kGoogleSQLMinFunctionName,
                               {&kPGOidValue, &kNullPGOidValue},
                               kPGOidValue,
                               absl::StatusCode::kOk},
 
                              {"OneNumericNullArg",
-                              kZetaSQLMinFunctionName,
+                              kGoogleSQLMinFunctionName,
                               {&kNullPGNumericValue},
                               kNullPGNumericValue,
                               absl::StatusCode::kOk},
                              {"EmptyNumericArgs",
-                              kZetaSQLMinFunctionName,
+                              kGoogleSQLMinFunctionName,
                               {},
                               kNullPGNumericValue,
                               absl::StatusCode::kOk},
                              {"OneNumericArg",
-                              kZetaSQLMinFunctionName,
+                              kGoogleSQLMinFunctionName,
                               {&kNullPGNumericValue},
                               kNullPGNumericValue,
                               absl::StatusCode::kOk},
                              {"OneNumericArgOneNullArg",
-                              kZetaSQLMinFunctionName,
+                              kGoogleSQLMinFunctionName,
                               {&kPGNumericValue, &kNullPGNumericValue},
                               kPGNumericValue,
                               absl::StatusCode::kOk},
                              {"MinNumericArg",
-                              kZetaSQLMinFunctionName,
+                              kGoogleSQLMinFunctionName,
                               {&kPGNumericValue, &kPGNumericMaxValue,
                                &kPGNumericMinValue},
                               kPGNumericMinValue,
                               absl::StatusCode::kOk},
                              {"OneNumericNanArg",
-                              kZetaSQLMinFunctionName,
+                              kGoogleSQLMinFunctionName,
                               {&kPGNumericNaNValue},
                               kPGNumericNaNValue,
                               absl::StatusCode::kOk},
                              {"OneNumericNullArgOneNanArg",
-                              kZetaSQLMinFunctionName,
+                              kGoogleSQLMinFunctionName,
                               {&kNullPGNumericValue, &kPGNumericNaNValue},
                               kPGNumericNaNValue,
                               absl::StatusCode::kOk},
                              {"OneNumericArgOneNanArg",
-                              kZetaSQLMinFunctionName,
+                              kGoogleSQLMinFunctionName,
                               {&kPGNumericValue, &kPGNumericNaNValue},
                               kPGNumericValue,
                               absl::StatusCode::kOk},
@@ -5434,12 +5514,12 @@ INSTANTIATE_TEST_SUITE_P(EvalPgMinFailureTests, EvalMinMaxTest,
                               absl::StatusCode::kInvalidArgument},
 
                              {"OneInvalidDoubleArg",
-                              kZetaSQLMinFunctionName,
+                              kGoogleSQLMinFunctionName,
                               {&kDoubleValue},
                               kNullPGOidValue,  // ignored
                               absl::StatusCode::kInvalidArgument},
                              {"OneValidArgOneInvalidDoubleArg",
-                              kZetaSQLMinFunctionName,
+                              kGoogleSQLMinFunctionName,
                               {&kPGOidValue, &kDoubleValue},
                               kNullPGOidValue,  // ignored
                               absl::StatusCode::kInvalidArgument},
@@ -5448,12 +5528,12 @@ INSTANTIATE_TEST_SUITE_P(EvalPgMinFailureTests, EvalMinMaxTest,
 INSTANTIATE_TEST_SUITE_P(EvalMinFailureTests, EvalMinMaxTest,
                          ::testing::ValuesIn<EvalAggregatorTestCase>({
                              {"OneInvalidDoubleArg",
-                              kZetaSQLMinFunctionName,
+                              kGoogleSQLMinFunctionName,
                               {&kDoubleValue},
                               kNullPGOidValue,  // ignored
                               absl::StatusCode::kInvalidArgument},
                              {"OneValidArgOneInvalidDoubleArg",
-                              kZetaSQLMinFunctionName,
+                              kGoogleSQLMinFunctionName,
                               {&kPGOidValue, &kDoubleValue},
                               kNullPGOidValue,  // ignored
                               absl::StatusCode::kInvalidArgument},
@@ -5462,14 +5542,14 @@ INSTANTIATE_TEST_SUITE_P(EvalMinFailureTests, EvalMinMaxTest,
 TEST(EvalMaxSignatureTest, ExtendedTypeMaxSignatures) {
   SpannerPGFunctions spanner_pg_functions =
       GetSpannerPGFunctions("TestCatalog");
-  std::unordered_map<std::string, std::unique_ptr<zetasql::Function>>
+  std::unordered_map<std::string, std::unique_ptr<googlesql::Function>>
       functions;
   for (auto& function : spanner_pg_functions) {
     functions[function->Name()] = std::move(function);
   }
-  const zetasql::Function* function =
-      functions[kZetaSQLMaxFunctionName].get();
-  const std::vector<zetasql::FunctionSignature>& signatures =
+  const googlesql::Function* function =
+      functions[kGoogleSQLMaxFunctionName].get();
+  const std::vector<googlesql::FunctionSignature>& signatures =
       function->signatures();
   ASSERT_THAT(signatures.size(), 2);
   EXPECT_TRUE(signatures[0].result_type().type() ==
@@ -5487,22 +5567,22 @@ TEST(EvalMaxSignatureTest, ExtendedTypeMaxSignatures) {
 INSTANTIATE_TEST_SUITE_P(EvalMaxTest, EvalMinMaxTest,
                          ::testing::ValuesIn<EvalAggregatorTestCase>({
                              {"OneOidNullArg",
-                              kZetaSQLMaxFunctionName,
+                              kGoogleSQLMaxFunctionName,
                               {&kNullPGOidValue},
                               kNullPGOidValue,
                               absl::StatusCode::kOk},
                              {"EmptyOidArgs",
-                              kZetaSQLMaxFunctionName,
+                              kGoogleSQLMaxFunctionName,
                               {},
                               kNullPGOidValue,
                               absl::StatusCode::kOk},
                              {"OneOidArg",
-                              kZetaSQLMaxFunctionName,
+                              kGoogleSQLMaxFunctionName,
                               {&kPGOidValue},
                               kPGOidValue,
                               absl::StatusCode::kOk},
                              {"OneOidArgOneNullArg",
-                              kZetaSQLMaxFunctionName,
+                              kGoogleSQLMaxFunctionName,
                               {&kPGOidValue, &kNullPGOidValue},
                               kPGOidValue,
                               absl::StatusCode::kOk},
@@ -5512,55 +5592,55 @@ INSTANTIATE_TEST_SUITE_P(EvalMaxFailureTests, EvalMinMaxTest,
                          ::testing::ValuesIn<EvalAggregatorTestCase>({
                              // NUMERIC
                              {"OneNumericNullArg",
-                              kZetaSQLMaxFunctionName,
+                              kGoogleSQLMaxFunctionName,
                               {&kNullPGNumericValue},
                               kNullPGNumericValue,
                               absl::StatusCode::kOk},
                              {"EmptyNumericArgs",
-                              kZetaSQLMaxFunctionName,
+                              kGoogleSQLMaxFunctionName,
                               {},
                               kNullPGNumericValue,
                               absl::StatusCode::kOk},
                              {"OneNumericArg",
-                              kZetaSQLMaxFunctionName,
+                              kGoogleSQLMaxFunctionName,
                               {&kNullPGNumericValue},
                               kNullPGNumericValue,
                               absl::StatusCode::kOk},
                              {"OneNumericArgOneNullArg",
-                              kZetaSQLMaxFunctionName,
+                              kGoogleSQLMaxFunctionName,
                               {&kPGNumericValue, &kNullPGNumericValue},
                               kPGNumericValue,
                               absl::StatusCode::kOk},
                              {"MaxNumericArg",
-                              kZetaSQLMaxFunctionName,
+                              kGoogleSQLMaxFunctionName,
                               {&kPGNumericValue, &kPGNumericMaxValue,
                                &kPGNumericMinValue},
                               kPGNumericMaxValue,
                               absl::StatusCode::kOk},
                              {"OneNumericNanArg",
-                              kZetaSQLMaxFunctionName,
+                              kGoogleSQLMaxFunctionName,
                               {&kPGNumericNaNValue},
                               kPGNumericNaNValue,
                               absl::StatusCode::kOk},
                              {"OneNumericNullArgOneNanArg",
-                              kZetaSQLMaxFunctionName,
+                              kGoogleSQLMaxFunctionName,
                               {&kNullPGNumericValue, &kPGNumericNaNValue},
                               kPGNumericNaNValue,
                               absl::StatusCode::kOk},
                              {"OneNumericArgOneNanArg",
-                              kZetaSQLMaxFunctionName,
+                              kGoogleSQLMaxFunctionName,
                               {&kPGNumericValue, &kPGNumericNaNValue},
                               kPGNumericNaNValue,
                               absl::StatusCode::kOk},
 
                              // OID
                              {"OneNumericInvalidArg",
-                              kZetaSQLMaxFunctionName,
+                              kGoogleSQLMaxFunctionName,
                               {&kDoubleValue},
                               kNullPGOidValue,  // ignored
                               absl::StatusCode::kInvalidArgument},
                              {"OneValidArgOneInvalidDoubleArg",
-                              kZetaSQLMaxFunctionName,
+                              kGoogleSQLMaxFunctionName,
                               {&kPGOidValue, &kDoubleValue},
                               kNullPGOidValue,  // ignored
                               absl::StatusCode::kInvalidArgument},
@@ -5571,61 +5651,61 @@ using EvalSumAvgTest = ::testing::TestWithParam<EvalAggregatorTestCase>;
 TEST_P(EvalSumAvgTest, TestSumAvgAggregator) {
   SpannerPGFunctions spanner_pg_functions =
       GetSpannerPGFunctions("TestCatalog");
-  std::unordered_map<std::string, std::unique_ptr<zetasql::Function>>
+  std::unordered_map<std::string, std::unique_ptr<googlesql::Function>>
       functions;
   for (auto& function : spanner_pg_functions) {
     functions[function->Name()] = std::move(function);
   }
 
-  static const zetasql::Type* gsql_pg_numeric =
+  static const googlesql::Type* gsql_pg_numeric =
       spangres::datatypes::GetPgNumericType();
 
   const EvalAggregatorTestCase& test_case = GetParam();
 
-  absl::flat_hash_map<zetasql::TypeKind, zetasql::FunctionSignature>
+  absl::flat_hash_map<googlesql::TypeKind, googlesql::FunctionSignature>
       signature_map = {
-          {zetasql::TYPE_INT64,
-           {gsql_pg_numeric, {zetasql::types::Int64Type()}, nullptr}},
-          {zetasql::TYPE_DOUBLE,
-           {zetasql::types::DoubleType(),
-            {zetasql::types::DoubleType()},
+          {googlesql::TYPE_INT64,
+           {gsql_pg_numeric, {googlesql::types::Int64Type()}, nullptr}},
+          {googlesql::TYPE_DOUBLE,
+           {googlesql::types::DoubleType(),
+            {googlesql::types::DoubleType()},
             nullptr}},
-          {zetasql::TYPE_FLOAT,
+          {googlesql::TYPE_FLOAT,
            // For avg, the result type is double if the input type is float.
            // For sum, the result type is float if the input type is float.
            {test_case.function_name == kPGAvgFunctionName
-                ? zetasql::types::DoubleType()
-                : zetasql::types::FloatType(),
-            {zetasql::types::FloatType()},
+                ? googlesql::types::DoubleType()
+                : googlesql::types::FloatType(),
+            {googlesql::types::FloatType()},
             nullptr}},
-          {zetasql::TYPE_EXTENDED,
+          {googlesql::TYPE_EXTENDED,
            {gsql_pg_numeric, {gsql_pg_numeric}, nullptr}},
       };
 
   bool stop_acc = false;
 
-  const zetasql::Function* function =
+  const googlesql::Function* function =
       functions[test_case.function_name].get();
   auto callback = function->GetAggregateFunctionEvaluatorFactory();
 
   // In these test cases, we don't know what the input type is if we don't have
   // any test args so we assume it's an INT64 input that returns a PG.NUMERIC
   // output.
-  zetasql::TypeKind type_kind = test_case.args.empty()
-      ? zetasql::TYPE_INT64 : test_case.args[0]->type_kind();
+  googlesql::TypeKind type_kind = test_case.args.empty()
+      ? googlesql::TYPE_INT64 : test_case.args[0]->type_kind();
   auto iter = signature_map.find(type_kind);
   ASSERT_NE(iter, signature_map.end());
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<zetasql::AggregateFunctionEvaluator> evaluator,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<googlesql::AggregateFunctionEvaluator> evaluator,
       callback(iter->second));
 
   // We have to make a copy here because GetParam() returns a const value but
   // the accumulate interface doesn't want a const span.
-  std::vector<const zetasql::Value*> args = test_case.args;
+  std::vector<const googlesql::Value*> args = test_case.args;
   if (test_case.expected_status_code == absl::StatusCode::kOk) {
     int i = 0;
     while (!stop_acc) {
-      ZETASQL_EXPECT_OK(
+      GOOGLESQL_EXPECT_OK(
           evaluator->Accumulate(absl::MakeSpan(args).subspan(i), &stop_acc));
       ++i;
     }
@@ -5640,7 +5720,7 @@ TEST_P(EvalSumAvgTest, TestSumAvgAggregator) {
       ++i;
     }
     EXPECT_THAT(status,
-                zetasql_base::testing::StatusIs(test_case.expected_status_code));
+                googlesql_base::testing::StatusIs(test_case.expected_status_code));
   }
 }
 
@@ -5715,22 +5795,22 @@ INSTANTIATE_TEST_SUITE_P(
         {"ManyDoubleArgs",
          kPGSumFunctionName,
          {&kDoubleValue, &kDoubleValue, &kDoubleValue},
-         zetasql::values::Double(3.0),
+         googlesql::values::Double(3.0),
          absl::StatusCode::kOk},
         {"NullDoubleArgFirst",
          kPGSumFunctionName,
          {&kNullDoubleValue, &kDoubleValue, &kDoubleValue},
-         zetasql::values::Double(2.0),
+         googlesql::values::Double(2.0),
          absl::StatusCode::kOk},
         {"NullDoubleArgsBeforeDoubleValues",
          kPGSumFunctionName,
          {&kNullDoubleValue, &kNullDoubleValue, &kDoubleValue, &kDoubleValue},
-         zetasql::values::Double(2.0),
+         googlesql::values::Double(2.0),
          absl::StatusCode::kOk},
         {"NullDoubleArgsElsewhere",
          kPGSumFunctionName,
          {&kDoubleValue, &kNullDoubleValue, &kDoubleValue, &kNullDoubleValue},
-         zetasql::values::Double(2.0),
+         googlesql::values::Double(2.0),
          absl::StatusCode::kOk},
         {"OneNanDoubleArg",
          kPGSumFunctionName,
@@ -5772,22 +5852,22 @@ INSTANTIATE_TEST_SUITE_P(
         {"ManyFloatArgs",
          kPGSumFunctionName,
          {&kFloatValue, &kFloatValue, &kFloatValue},
-         zetasql::values::Float(3.0f),
+         googlesql::values::Float(3.0f),
          absl::StatusCode::kOk},
         {"NullFloatArgFirst",
          kPGSumFunctionName,
          {&kNullFloatValue, &kFloatValue, &kFloatValue},
-         zetasql::values::Float(2.0f),
+         googlesql::values::Float(2.0f),
          absl::StatusCode::kOk},
         {"NullFloatArgsBeforeFloatValues",
          kPGSumFunctionName,
          {&kNullFloatValue, &kNullFloatValue, &kFloatValue, &kFloatValue},
-         zetasql::values::Float(2.0f),
+         googlesql::values::Float(2.0f),
          absl::StatusCode::kOk},
         {"NullFloatArgsElsewhere",
          kPGSumFunctionName,
          {&kFloatValue, &kNullFloatValue, &kFloatValue, &kNullFloatValue},
-         zetasql::values::Float(2.0f),
+         googlesql::values::Float(2.0f),
          absl::StatusCode::kOk},
         {"OneNanFloatArg",
          kPGSumFunctionName,
@@ -5975,7 +6055,7 @@ INSTANTIATE_TEST_SUITE_P(
         {"AvgMinAndMaxDouble",
          kPGAvgFunctionName,
          {&kDoubleMinValue, &kDoubleMaxValue},
-         zetasql::values::Double((std::numeric_limits<double>::min() +
+         googlesql::values::Double((std::numeric_limits<double>::min() +
                                     std::numeric_limits<double>::max()) /
                                    2.0),
          absl::StatusCode::kOk},
@@ -6039,14 +6119,14 @@ INSTANTIATE_TEST_SUITE_P(
         {"AvgMinAndMaxFloat",
          kPGAvgFunctionName,
          {&kFloatMinValue, &kFloatMaxValue},
-         zetasql::values::Double((std::numeric_limits<float>::min() +
+         googlesql::values::Double((std::numeric_limits<float>::min() +
                                     std::numeric_limits<float>::max()) /
                                    2.0),
          absl::StatusCode::kOk},
         {"AvgFloatMaxDoesNotOverflow",
          kPGAvgFunctionName,
          {&kFloatMaxValue, &kFloatMaxValue},
-         zetasql::values::Double(std::numeric_limits<float>::max()),
+         googlesql::values::Double(std::numeric_limits<float>::max()),
          absl::StatusCode::kOk},
 
         // Tests for pg.avg of PG.NUMERIC

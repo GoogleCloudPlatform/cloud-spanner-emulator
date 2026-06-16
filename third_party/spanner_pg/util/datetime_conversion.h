@@ -32,12 +32,14 @@
 #ifndef UTIL_DATETIME_CONVERSION_H_
 #define UTIL_DATETIME_CONVERSION_H_
 
+#include <cstdint>
+
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/time/time.h"
 
 /*
- * A library to convert between PostgreSQL and ZetaSQL datetime
+ * A library to convert between PostgreSQL and GoogleSQL datetime
  * representations. This library is used by the Transformer, which links
  * against spangres_src/src, and also by the function_evaluators library, which
  * links against spangres/datetime_parsing. We've chosen to copy typedef and

@@ -3,7 +3,7 @@
  * wchar.c
  *	  Functions for working with multibyte characters in various encodings.
  *
- * Portions Copyright (c) 1998-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1998-2023, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/common/wchar.c
@@ -12,8 +12,29 @@
  */
 #include "c.h"
 
+#include <limits.h>
+
 #include "mb/pg_wchar.h"
 #include "utils/ascii.h"
+
+
+/*
+ * In today's multibyte encodings other than UTF8, this two-byte sequence
+ * ensures pg_encoding_mblen() == 2 && pg_encoding_verifymbstr() == 0.
+ *
+ * For historical reasons, several verifychar implementations opt to reject
+ * this pair specifically.  Byte pair range constraints, in encoding
+ * originator documentation, always excluded this pair.  No core conversion
+ * could translate it.  However, longstanding verifychar implementations
+ * accepted any non-NUL byte.  big5_to_euc_tw and big5_to_mic even translate
+ * pairs not valid per encoding originator documentation.  To avoid tightening
+ * core or non-core conversions in a security patch, we sought this one pair.
+ *
+ * PQescapeString() historically used spaces for BYTE1; many other values
+ * could suffice for BYTE1.
+ */
+#define NONUTF8_INVALID_BYTE0 (0x8d)
+#define NONUTF8_INVALID_BYTE1 (' ')
 
 
 /*
@@ -621,7 +642,7 @@ mbbisearch(pg_wchar ucs, const struct mbinterval *table, int max)
  *		value of -1.
  *
  *	  - Non-spacing and enclosing combining characters (general
- *		category code Mn or Me in the Unicode database) have a
+ *		category code Mn, Me or Cf in the Unicode database) have a
  *		column width of 0.
  *
  *	  - Spacing characters in the East Asian Wide (W) or East Asian
@@ -639,7 +660,7 @@ mbbisearch(pg_wchar ucs, const struct mbinterval *table, int max)
 static int
 ucs_wcwidth(pg_wchar ucs)
 {
-#include "common/unicode_combining_table.h"
+#include "common/unicode_nonspacing_table.h"
 #include "common/unicode_east_asian_fw_table.h"
 
 	/* test for 8-bit control characters */
@@ -658,8 +679,8 @@ ucs_wcwidth(pg_wchar ucs)
 	 * factor for display width leads to the correct behavior, so do that
 	 * search first.
 	 */
-	if (mbbisearch(ucs, combining,
-				   sizeof(combining) / sizeof(struct mbinterval) - 1))
+	if (mbbisearch(ucs, nonspacing,
+				   sizeof(nonspacing) / sizeof(struct mbinterval) - 1))
 		return 0;
 
 	/* binary search in table of wide characters */
@@ -1526,6 +1547,11 @@ pg_big5_verifychar(const unsigned char *s, int len)
 	if (len < l)
 		return -1;
 
+	if (l == 2 &&
+		s[0] == NONUTF8_INVALID_BYTE0 &&
+		s[1] == NONUTF8_INVALID_BYTE1)
+		return -1;
+
 	while (--l > 0)
 	{
 		if (*++s == '\0')
@@ -1575,6 +1601,11 @@ pg_gbk_verifychar(const unsigned char *s, int len)
 	if (len < l)
 		return -1;
 
+	if (l == 2 &&
+		s[0] == NONUTF8_INVALID_BYTE0 &&
+		s[1] == NONUTF8_INVALID_BYTE1)
+		return -1;
+
 	while (--l > 0)
 	{
 		if (*++s == '\0')
@@ -1622,6 +1653,11 @@ pg_uhc_verifychar(const unsigned char *s, int len)
 	l = mbl = pg_uhc_mblen(s);
 
 	if (len < l)
+		return -1;
+
+	if (l == 2 &&
+		s[0] == NONUTF8_INVALID_BYTE0 &&
+		s[1] == NONUTF8_INVALID_BYTE1)
 		return -1;
 
 	while (--l > 0)
@@ -1920,10 +1956,11 @@ pg_utf8_verifystr(const unsigned char *s, int len)
 	uint32		state = BGN;
 
 /*
- * Sixteen seems to give the best balance of performance across different
- * byte distributions.
+ * With a stride of two vector widths, gcc will unroll the loop. Even if
+ * the compiler can unroll a longer loop, it's not worth it because we
+ * must fall back to the byte-wise algorithm if we find any non-ASCII.
  */
-#define STRIDE_LENGTH 16
+#define STRIDE_LENGTH (2 * sizeof(Vector8))
 
 	if (len >= STRIDE_LENGTH)
 	{
@@ -2068,6 +2105,19 @@ pg_utf8_islegal(const unsigned char *source, int length)
 
 
 /*
+ * Fills the provided buffer with two bytes such that:
+ *   pg_encoding_mblen(dst) == 2 && pg_encoding_verifymbstr(dst) == 0
+ */
+void
+pg_encoding_set_invalid(int encoding, char *dst)
+{
+	Assert(pg_encoding_max_length(encoding) > 1);
+
+	dst[0] = (encoding == PG_UTF8 ? 0xc0 : NONUTF8_INVALID_BYTE0);
+	dst[1] = NONUTF8_INVALID_BYTE1;
+}
+
+/*
  *-------------------------------------------------------------------
  * encoding info table
  * XXX must be sorted by the same order as enum pg_enc (in mb/pg_wchar.h)
@@ -2121,10 +2171,27 @@ const pg_wchar_tbl pg_wchar_table[] = {
 /*
  * Returns the byte length of a multibyte character.
  *
- * Caution: when dealing with text that is not certainly valid in the
- * specified encoding, the result may exceed the actual remaining
- * string length.  Callers that are not prepared to deal with that
- * should use pg_encoding_mblen_bounded() instead.
+ * Choose "mblen" functions based on the input string characteristics.
+ * pg_encoding_mblen() can be used when ANY of these conditions are met:
+ *
+ * - The input string is zero-terminated
+ *
+ * - The input string is known to be valid in the encoding (e.g., string
+ *   converted from database encoding)
+ *
+ * - The encoding is not GB18030 (e.g., when only database encodings are
+ *   passed to 'encoding' parameter)
+ *
+ * encoding==GB18030 requires examining up to two bytes to determine character
+ * length.  Therefore, callers satisfying none of those conditions must use
+ * pg_encoding_mblen_or_incomplete() instead, as access to mbstr[1] cannot be
+ * guaranteed to be within allocation bounds.
+ *
+ * When dealing with text that is not certainly valid in the specified
+ * encoding, the result may exceed the actual remaining string length.
+ * Callers that are not prepared to deal with that should use Min(remaining,
+ * pg_encoding_mblen_or_incomplete()).  For zero-terminated strings, that and
+ * pg_encoding_mblen_bounded() are interchangeable.
  */
 int
 pg_encoding_mblen(int encoding, const char *mbstr)
@@ -2135,8 +2202,28 @@ pg_encoding_mblen(int encoding, const char *mbstr)
 }
 
 /*
- * Returns the byte length of a multibyte character; but not more than
- * the distance to end of string.
+ * Returns the byte length of a multibyte character (possibly not
+ * zero-terminated), or INT_MAX if too few bytes remain to determine a length.
+ */
+int
+pg_encoding_mblen_or_incomplete(int encoding, const char *mbstr,
+								size_t remaining)
+{
+	/*
+	 * Define zero remaining as too few, even for single-byte encodings.
+	 * pg_gb18030_mblen() reads one or two bytes; single-byte encodings read
+	 * zero; others read one.
+	 */
+	if (remaining < 1 ||
+		(encoding == PG_GB18030 && IS_HIGHBIT_SET(*mbstr) && remaining < 2))
+		return INT_MAX;
+	return pg_encoding_mblen(encoding, mbstr);
+}
+
+/*
+ * Returns the byte length of a multibyte character; but not more than the
+ * distance to the terminating zero byte.  For input that might lack a
+ * terminating zero, use Min(remaining, pg_encoding_mblen_or_incomplete()).
  */
 int
 pg_encoding_mblen_bounded(int encoding, const char *mbstr)
@@ -2189,5 +2276,11 @@ pg_encoding_max_length(int encoding)
 {
 	Assert(PG_VALID_ENCODING(encoding));
 
-	return pg_wchar_table[encoding].maxmblen;
+	/*
+	 * Check for the encoding despite the assert, due to some mingw versions
+	 * otherwise issuing bogus warnings.
+	 */
+	return PG_VALID_ENCODING(encoding) ?
+		pg_wchar_table[encoding].maxmblen :
+		pg_wchar_table[PG_SQL_ASCII].maxmblen;
 }

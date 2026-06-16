@@ -26,7 +26,7 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
@@ -36,10 +36,10 @@
 #include "absl/types/span.h"
 #include "backend/query/search/tokenizer.h"
 #include "common/errors.h"
+#include "googlesql/base/status_macros.h"
 #include "nlohmann/json_fwd.hpp"
 #include "nlohmann/json.hpp"
 #include "re2/re2.h"
-#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -212,7 +212,7 @@ absl::StatusOr<std::string> SnippetEvaluator::BuildSnippets(
 
 namespace {
 absl::StatusOr<int> TryGetIntParameterValue(
-    absl::Span<const zetasql::Value> args, int parameter_index,
+    absl::Span<const googlesql::Value> args, int parameter_index,
     int default_value, absl::string_view parameter_name) {
   int value = GetIntParameterValue(args, parameter_index, default_value);
 
@@ -226,7 +226,7 @@ absl::StatusOr<int> TryGetIntParameterValue(
 }  // namespace
 
 absl::StatusOr<std::optional<std::string>> SnippetEvaluator::Evaluate(
-    absl::Span<const zetasql::Value> args) {
+    absl::Span<const googlesql::Value> args) {
   // argument indexes
   constexpr int kTarget = 0;
   constexpr int kQuery = 1;
@@ -234,8 +234,8 @@ absl::StatusOr<std::optional<std::string>> SnippetEvaluator::Evaluate(
   constexpr int kMaxSnippets = 5;
   constexpr int kContentType = 6;
 
-  const zetasql::Value target = args[kTarget];
-  const zetasql::Value query = args[kQuery];
+  const googlesql::Value target = args[kTarget];
+  const googlesql::Value query = args[kQuery];
 
   if (!target.type()->IsString()) {
     return error::IncorrectSnippetColumnType(target.type()->DebugString());
@@ -246,7 +246,7 @@ absl::StatusOr<std::optional<std::string>> SnippetEvaluator::Evaluate(
   }
 
   if (args.size() > kContentType) {
-    const zetasql::Value content_type = args[kContentType];
+    const googlesql::Value content_type = args[kContentType];
     if (!content_type.is_null() && content_type.type()->IsString() &&
         !absl::EqualsIgnoreCase(content_type.string_value(),
                                 kHtmlContentType) &&
@@ -262,11 +262,11 @@ absl::StatusOr<std::optional<std::string>> SnippetEvaluator::Evaluate(
     return std::nullopt;
   }
 
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       auto max_snippet_length,
       TryGetIntParameterValue(args, kMaxSnippetLength, kDefaultMaxSnippetLength,
                               "max_snippet_length"));
-  ZETASQL_ASSIGN_OR_RETURN(auto max_snippets, TryGetIntParameterValue(
+  GOOGLESQL_ASSIGN_OR_RETURN(auto max_snippets, TryGetIntParameterValue(
                                           args, kMaxSnippets,
                                           kDefaultMaxSnippets, "max_snippets"));
 

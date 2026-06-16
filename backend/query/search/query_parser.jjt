@@ -49,7 +49,7 @@ TOKEN:
   |  <TERM:     (<LETTER>|<DIGIT>)+ >
 }
 
-void search_query() #void:
+void rquery() #void:
 {}
 {
   (

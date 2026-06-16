@@ -24,7 +24,7 @@
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/graph/schema_graph_editor.h"
 #include "backend/schema/graph/schema_node.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -46,7 +46,7 @@ std::string CheckConstraint::DebugString() const {
 
 absl::Status CheckConstraint::DeepClone(SchemaGraphEditor* editor,
                                         const SchemaNode* orig) {
-  ZETASQL_ASSIGN_OR_RETURN(const auto* table_clone, editor->Clone(table_));
+  GOOGLESQL_ASSIGN_OR_RETURN(const auto* table_clone, editor->Clone(table_));
   table_ = table_clone->As<const Table>();
   // The Check Constraint should be deleted if the table containing the Check
   // Constraint is deleted.
@@ -55,12 +55,12 @@ absl::Status CheckConstraint::DeepClone(SchemaGraphEditor* editor,
   }
 
   for (const Column*& column : dependent_columns_) {
-    ZETASQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(column));
+    GOOGLESQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(column));
     column = schema_node->As<const Column>();
   }
 
   for (const SchemaNode*& dependency : udf_dependencies_) {
-    ZETASQL_ASSIGN_OR_RETURN(const SchemaNode* cloned_dep, editor->Clone(dependency));
+    GOOGLESQL_ASSIGN_OR_RETURN(const SchemaNode* cloned_dep, editor->Clone(dependency));
     dependency = cloned_dep;
   }
 

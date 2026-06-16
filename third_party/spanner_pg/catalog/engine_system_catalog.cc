@@ -36,17 +36,18 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/analyzer/function_signature_matcher.h"
-#include "zetasql/public/cast.h"
-#include "zetasql/public/coercer.h"
-#include "zetasql/public/function.pb.h"
-#include "zetasql/public/function_signature.h"
-#include "zetasql/public/input_argument_type.h"
-#include "zetasql/public/language_options.h"
-#include "zetasql/public/options.pb.h"
-#include "zetasql/public/procedure.h"
-#include "zetasql/public/table_valued_function.h"
-#include "zetasql/public/types/type.h"
+#include "googlesql/analyzer/function_signature_matcher.h"
+#include "googlesql/parser/ast_node.h"
+#include "googlesql/public/cast.h"
+#include "googlesql/public/coercer.h"
+#include "googlesql/public/function.pb.h"
+#include "googlesql/public/function_signature.h"
+#include "googlesql/public/input_argument_type.h"
+#include "googlesql/public/language_options.h"
+#include "googlesql/public/options.pb.h"
+#include "googlesql/public/procedure.h"
+#include "googlesql/public/table_valued_function.h"
+#include "googlesql/public/types/type.h"
 #include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
@@ -60,25 +61,24 @@
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
-#include "absl/synchronization/mutex.h"
 #include "absl/types/span.h"
 #include "third_party/spanner_pg/bootstrap_catalog/bootstrap_catalog.h"
 #include "third_party/spanner_pg/catalog/builtin_function.h"
+#include "third_party/spanner_pg/catalog/spangres_system_catalog.h"
 #include "third_party/spanner_pg/catalog/function.h"
 #include "third_party/spanner_pg/catalog/function_identifier.h"
 #include "third_party/spanner_pg/catalog/type.h"
 #include "third_party/spanner_pg/interface/bootstrap_catalog_data.pb.h"
 #include "third_party/spanner_pg/util/nodetag_to_string.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
-#include "zetasql/public/builtin_function.h"
-#include "zetasql/public/builtin_function_options.h"
-
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
+#include "googlesql/public/builtin_function.h"
+#include "googlesql/public/builtin_function_options.h"
 
 namespace postgres_translator {
 
-static bool TypesMatch(const zetasql::Type* type1,
-                       const zetasql::Type* type2) {
+static bool TypesMatch(const googlesql::Type* type1,
+                       const googlesql::Type* type2) {
   if (type1 == type2) {
     return true;
   }
@@ -97,32 +97,32 @@ static bool TypesMatch(const zetasql::Type* type1,
   return false;
 }
 
-absl::StatusOr<std::unique_ptr<zetasql::Function>>
+absl::StatusOr<std::unique_ptr<googlesql::Function>>
 EngineSystemCatalog::BuildMappedFunction(
-    const zetasql::FunctionSignature& postgres_signature,
-    const std::vector<zetasql::InputArgumentType>&
+    const googlesql::FunctionSignature& postgres_signature,
+    const std::vector<googlesql::InputArgumentType>&
         postgres_input_argument_types,
-    const zetasql::Function* mapped_function,
-    const zetasql::LanguageOptions& language_options) {
+    const googlesql::Function* mapped_function,
+    const googlesql::LanguageOptions& language_options) {
   // Verify that there is a matching builtin signature.
-  ZETASQL_RET_CHECK_NE(mapped_function, nullptr);
-  for (const zetasql::FunctionSignature& googlesql_signature :
+  GOOGLESQL_RET_CHECK_NE(mapped_function, nullptr);
+  for (const googlesql::FunctionSignature& googlesql_signature :
        mapped_function->signatures()) {
-    if (googlesql_signature.result_type().kind() == zetasql::ARG_TYPE_FIXED &&
+    if (googlesql_signature.result_type().kind() == googlesql::ARG_TYPE_FIXED &&
         !TypesMatch(googlesql_signature.result_type().type(),
                     postgres_signature.result_type().type())) {
       // The return type is specified and does not match.
       continue;
     }
 
-    std::unique_ptr<zetasql::FunctionSignature> result_signature;
+    std::unique_ptr<googlesql::FunctionSignature> result_signature;
     if (SignatureMatches(postgres_input_argument_types, googlesql_signature,
                          &result_signature, language_options)) {
       // Create and return the copied function.
-      return std::make_unique<zetasql::Function>(
+      return std::make_unique<googlesql::Function>(
           mapped_function->FunctionNamePath(), mapped_function->GetGroup(),
           mapped_function->mode(),
-          std::vector<zetasql::FunctionSignature>{googlesql_signature},
+          std::vector<googlesql::FunctionSignature>{googlesql_signature},
           mapped_function->function_options());
     }
   }
@@ -132,21 +132,11 @@ EngineSystemCatalog::BuildMappedFunction(
 }
 
 EngineSystemCatalog* EngineSystemCatalog::GetEngineSystemCatalog() {
-  absl::ReaderMutexLock l(&engine_system_catalog_mutex);
-  EngineSystemCatalog** engine_system_catalog = GetEngineSystemCatalogPtr();
-  ABSL_DCHECK(*engine_system_catalog != nullptr)
-      << "EngineSystemCatalog accessed before it was initialized";
-  return *engine_system_catalog;
-}
-
-EngineSystemCatalog** EngineSystemCatalog::GetEngineSystemCatalogPtr() {
-  static EngineSystemCatalog* engine_system_catalog ABSL_GUARDED_BY(
-      engine_system_catalog_mutex) = nullptr;
-  return &engine_system_catalog;
+  return spangres::SpangresSystemCatalog::GetSpangresSystemCatalog();
 }
 
 absl::Status EngineSystemCatalog::GetType(const std::string& name,
-                                          const zetasql::Type** type,
+                                          const googlesql::Type** type,
                                           const FindOptions& options) {
   *type = GetType(name);
   return absl::OkStatus();
@@ -172,7 +162,7 @@ const PostgresTypeMapping* EngineSystemCatalog::GetType(Oid oid) const {
 }
 
 const PostgresTypeMapping* EngineSystemCatalog::GetTypeFromReverseMapping(
-    const zetasql::Type* type, int max_length) const {
+    const googlesql::Type* type, int max_length) const {
   ABSL_DCHECK_GE(max_length, 0);
 
   auto it = engine_types_reverse_map_.find(type);
@@ -186,7 +176,7 @@ const PostgresTypeMapping* EngineSystemCatalog::GetTypeFromReverseMapping(
 }
 
 absl::Status EngineSystemCatalog::GetFunction(
-    const std::string& name, const zetasql::Function** function,
+    const std::string& name, const googlesql::Function** function,
     const FindOptions& options) {
   std::vector<absl::string_view> name_path = absl::StrSplit(name, '.');
   absl::string_view namespace_name, function_name;
@@ -216,7 +206,7 @@ const PostgresExtendedFunction* EngineSystemCatalog::GetFunction(
   }
 }
 
-const zetasql::Function* EngineSystemCatalog::GetFunction(
+const googlesql::Function* EngineSystemCatalog::GetFunction(
     const PostgresExprIdentifier& expr_id) const {
   auto it = pg_expr_to_builtin_function_.find(expr_id);
   if (it != pg_expr_to_builtin_function_.end()) {
@@ -226,7 +216,7 @@ const zetasql::Function* EngineSystemCatalog::GetFunction(
   }
 }
 
-const zetasql::TableValuedFunction*
+const googlesql::TableValuedFunction*
 EngineSystemCatalog::GetTableValuedFunction(Oid proc_oid) const {
   auto it = proc_oid_to_tvf_.find(proc_oid);
   if (it != proc_oid_to_tvf_.end()) {
@@ -237,7 +227,7 @@ EngineSystemCatalog::GetTableValuedFunction(Oid proc_oid) const {
 }
 
 absl::StatusOr<Oid> EngineSystemCatalog::GetOidForTVF(
-    const zetasql::TableValuedFunction* tvf) const {
+    const googlesql::TableValuedFunction* tvf) const {
   auto it = tvf_to_proc_oid_.find(tvf);
   if (it != tvf_to_proc_oid_.end()) {
     return it->second;
@@ -247,7 +237,7 @@ absl::StatusOr<Oid> EngineSystemCatalog::GetOidForTVF(
                       tvf->FullName()));
 }
 
-const zetasql::Procedure* EngineSystemCatalog::GetProcedure(
+const googlesql::Procedure* EngineSystemCatalog::GetProcedure(
     Oid proc_oid) const {
   auto it = proc_oid_to_procedure_.find(proc_oid);
   if (it != proc_oid_to_procedure_.end()) {
@@ -258,21 +248,21 @@ const zetasql::Procedure* EngineSystemCatalog::GetProcedure(
 }
 
 bool EngineSystemCatalog::HasCastOverrideFunction(
-    const zetasql::Type* source_type, const zetasql::Type* target_type) {
-  std::pair<const zetasql::Type*, const zetasql::Type*> cast_pair(
+    const googlesql::Type* source_type, const googlesql::Type* target_type) {
+  std::pair<const googlesql::Type*, const googlesql::Type*> cast_pair(
       source_type, target_type);
   return pg_cast_to_builtin_function_.contains(cast_pair);
 }
 
 absl::StatusOr<FunctionAndSignature>
 EngineSystemCatalog::GetCastOverrideFunctionAndSignature(
-    const zetasql::Type* source_type, const zetasql::Type* target_type,
-    const zetasql::LanguageOptions& language_options) {
-  zetasql::ProductMode product_mode = language_options.product_mode();
-  std::pair<const zetasql::Type*, const zetasql::Type*> cast_pair(
+    const googlesql::Type* source_type, const googlesql::Type* target_type,
+    const googlesql::LanguageOptions& language_options) {
+  googlesql::ProductMode product_mode = language_options.product_mode();
+  std::pair<const googlesql::Type*, const googlesql::Type*> cast_pair(
       source_type, target_type);
   auto it = pg_cast_to_builtin_function_.find(cast_pair);
-  ZETASQL_RET_CHECK(it != pg_cast_to_builtin_function_.end()) << absl::StrFormat(
+  GOOGLESQL_RET_CHECK(it != pg_cast_to_builtin_function_.end()) << absl::StrFormat(
       "Unable to find cast override function from <%s> to <%s>",
       source_type->TypeName(product_mode), target_type->TypeName(product_mode));
   return it->second;
@@ -281,21 +271,21 @@ EngineSystemCatalog::GetCastOverrideFunctionAndSignature(
 absl::StatusOr<FunctionAndSignature>
 EngineSystemCatalog::GetFunctionAndSignature(
     Oid proc_oid,
-    const std::vector<zetasql::InputArgumentType>& input_argument_types,
-    const zetasql::LanguageOptions& language_options) {
-  ZETASQL_ASSIGN_OR_RETURN(const struct FormData_pg_proc* proc,
+    const std::vector<googlesql::InputArgumentType>& input_argument_types,
+    const googlesql::LanguageOptions& language_options) {
+  GOOGLESQL_ASSIGN_OR_RETURN(const struct FormData_pg_proc* proc,
                    PgBootstrapCatalog::Default()->GetProc(proc_oid));
-  ZETASQL_RET_CHECK_NE(proc, nullptr);
+  GOOGLESQL_RET_CHECK_NE(proc, nullptr);
 
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       const char* namespace_name,
       PgBootstrapCatalog::Default()->GetNamespaceName(proc->pronamespace));
-  ZETASQL_RET_CHECK_NE(namespace_name, nullptr);
+  GOOGLESQL_RET_CHECK_NE(namespace_name, nullptr);
 
   // This builds a string representation of the postgres input types
   // to be used in error messages.
   std::vector<absl::string_view> postgres_input_type_names;
-  for (const zetasql::InputArgumentType& input_arg : input_argument_types) {
+  for (const googlesql::InputArgumentType& input_arg : input_argument_types) {
     const PostgresTypeMapping* pg_type =
         GetTypeFromReverseMapping(input_arg.type());
 
@@ -305,7 +295,7 @@ EngineSystemCatalog::GetFunctionAndSignature(
       postgres_input_type_names.clear();
       break;
     } else {
-      ZETASQL_ASSIGN_OR_RETURN(const char* pg_type_name,
+      GOOGLESQL_ASSIGN_OR_RETURN(const char* pg_type_name,
                        pg_type->PostgresExternalTypeName());
       postgres_input_type_names.push_back(pg_type_name);
     }
@@ -317,7 +307,7 @@ EngineSystemCatalog::GetFunctionAndSignature(
   const PostgresExtendedFunction* function =
       GetFunction(namespace_name, NameStr(proc->proname));
   if (function != nullptr) {
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         const std::vector<PostgresExtendedFunctionSignature*>& signatures,
         function->GetSignaturesForOid(proc_oid, postgres_input_args_string));
 
@@ -325,7 +315,7 @@ EngineSystemCatalog::GetFunctionAndSignature(
       // Run the function signature matcher to be sure that the
       // EngineSystemCatalog signature is compatible with the input argument
       // types.
-      std::unique_ptr<zetasql::FunctionSignature> result_signature;
+      std::unique_ptr<googlesql::FunctionSignature> result_signature;
       if (SignatureMatches(input_argument_types, *signature, &result_signature,
                            language_options)) {
         if (!signature->mapped_function()) {
@@ -344,7 +334,7 @@ EngineSystemCatalog::GetFunctionAndSignature(
               postgres_input_args_string, ")"));
         }
 
-        for (const zetasql::FunctionSignature& mapped_signature :
+        for (const googlesql::FunctionSignature& mapped_signature :
           signature->mapped_function()->signatures()) {
           // Run the function signature matcher again to be sure that the
           // mapped builtin signature matches the input argument types.
@@ -368,15 +358,15 @@ EngineSystemCatalog::GetFunctionAndSignature(
 absl::StatusOr<FunctionAndSignature>
 EngineSystemCatalog::GetFunctionAndSignature(
     const PostgresExprIdentifier& expr_id,
-    const std::vector<zetasql::InputArgumentType>& input_argument_types,
-    const zetasql::LanguageOptions& language_options) {
-  const zetasql::Function* builtin_function = GetFunction(expr_id);
+    const std::vector<googlesql::InputArgumentType>& input_argument_types,
+    const googlesql::LanguageOptions& language_options) {
+  const googlesql::Function* builtin_function = GetFunction(expr_id);
   if (builtin_function != nullptr) {
-    for (const zetasql::FunctionSignature& signature :
+    for (const googlesql::FunctionSignature& signature :
          builtin_function->signatures()) {
       // Run the function signature matcher to check if the builtin signature
       // matches the input argument types.
-      std::unique_ptr<zetasql::FunctionSignature> result_signature;
+      std::unique_ptr<googlesql::FunctionSignature> result_signature;
       if (SignatureMatches(input_argument_types, signature, &result_signature,
                            language_options)) {
         // We return the result signature instead of the mapped signature
@@ -388,7 +378,7 @@ EngineSystemCatalog::GetFunctionAndSignature(
     }
   }
   std::vector<absl::string_view> postgres_input_type_names;
-  for (const zetasql::InputArgumentType& input_arg : input_argument_types) {
+  for (const googlesql::InputArgumentType& input_arg : input_argument_types) {
     const PostgresTypeMapping* pg_type =
         GetTypeFromReverseMapping(input_arg.type());
 
@@ -398,7 +388,7 @@ EngineSystemCatalog::GetFunctionAndSignature(
       postgres_input_type_names.clear();
       break;
     } else {
-      ZETASQL_ASSIGN_OR_RETURN(const char* pg_type_name,
+      GOOGLESQL_ASSIGN_OR_RETURN(const char* pg_type_name,
                        pg_type->PostgresExternalTypeName());
       postgres_input_type_names.push_back(pg_type_name);
     }
@@ -415,13 +405,13 @@ EngineSystemCatalog::GetFunctionAndSignature(
 absl::StatusOr<ProcedureAndSignature>
 EngineSystemCatalog::GetProcedureAndSignature(
     Oid proc_oid,
-    const std::vector<zetasql::InputArgumentType>& input_argument_types,
-    const zetasql::LanguageOptions& language_options) {
-  ZETASQL_ASSIGN_OR_RETURN(const FormData_pg_proc* proc,
+    const std::vector<googlesql::InputArgumentType>& input_argument_types,
+    const googlesql::LanguageOptions& language_options) {
+  GOOGLESQL_ASSIGN_OR_RETURN(const FormData_pg_proc* proc,
                    PgBootstrapCatalog::Default()->GetProc(proc_oid));
   std::string full_proc_name = NameStr(proc->proname);
   if (proc->pronamespace != PG_CATALOG_NAMESPACE) {
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         const char* namespace_name,
         PgBootstrapCatalog::Default()->GetNamespaceName(proc->pronamespace));
     full_proc_name = absl::StrCat(namespace_name, ".", full_proc_name);
@@ -430,7 +420,7 @@ EngineSystemCatalog::GetProcedureAndSignature(
   // This builds a string representation of the postgres input types
   // to be used in error messages.
   std::vector<absl::string_view> postgres_input_type_names;
-  for (const zetasql::InputArgumentType& input_arg : input_argument_types) {
+  for (const googlesql::InputArgumentType& input_arg : input_argument_types) {
     const PostgresTypeMapping* pg_type =
         GetTypeFromReverseMapping(input_arg.type());
 
@@ -440,7 +430,7 @@ EngineSystemCatalog::GetProcedureAndSignature(
       postgres_input_type_names.clear();
       break;
     } else {
-      ZETASQL_ASSIGN_OR_RETURN(const char* pg_type_name,
+      GOOGLESQL_ASSIGN_OR_RETURN(const char* pg_type_name,
                        pg_type->PostgresExternalTypeName());
       postgres_input_type_names.push_back(pg_type_name);
     }
@@ -449,9 +439,9 @@ EngineSystemCatalog::GetProcedureAndSignature(
   std::string postgres_input_args_string = absl::StrJoin(
       postgres_input_type_names.begin(), postgres_input_type_names.end(), ", ");
 
-  const zetasql::Procedure* procedure = GetProcedure(proc_oid);
+  const googlesql::Procedure* procedure = GetProcedure(proc_oid);
   if (procedure != nullptr) {
-    std::unique_ptr<zetasql::FunctionSignature> result_signature;
+    std::unique_ptr<googlesql::FunctionSignature> result_signature;
     if (SignatureMatches(input_argument_types, procedure->signature(),
                          &result_signature, language_options)) {
       return ProcedureAndSignature(procedure, *result_signature);
@@ -463,8 +453,8 @@ EngineSystemCatalog::GetProcedureAndSignature(
 
 absl::StatusOr<Oid> EngineSystemCatalog::GetPgProcOidFromReverseMapping(
     const std::string& function_name,
-    const std::vector<zetasql::InputArgumentType>& input_argument_types,
-    const zetasql::LanguageOptions& language_options) {
+    const std::vector<googlesql::InputArgumentType>& input_argument_types,
+    const googlesql::LanguageOptions& language_options) {
   // Check the operators first for a matching signature.
   auto it = engine_function_operators_reverse_map_.find(function_name);
   if (it != engine_function_operators_reverse_map_.end()) {
@@ -505,7 +495,7 @@ bool EngineSystemCatalog::IsGsqlFunctionMappedToPgExpr(
 absl::StatusOr<PostgresExprIdentifier>
 EngineSystemCatalog::GetPostgresExprIdentifier(
     const std::string& function_name) {
-  ZETASQL_RET_CHECK(IsGsqlFunctionMappedToPgExpr(function_name));
+  GOOGLESQL_RET_CHECK(IsGsqlFunctionMappedToPgExpr(function_name));
   return engine_function_expr_reverse_map_.find(function_name)->second;
 }
 
@@ -515,16 +505,16 @@ bool EngineSystemCatalog::IsGsqlFunctionMappedToPgCast(
 }
 
 absl::Status EngineSystemCatalog::GetTypes(
-    absl::flat_hash_set<const zetasql::Type*>* output) const {
-  ZETASQL_RET_CHECK_NE(output, nullptr);
-  ZETASQL_RET_CHECK(output->empty());
+    absl::flat_hash_set<const googlesql::Type*>* output) const {
+  GOOGLESQL_RET_CHECK_NE(output, nullptr);
+  GOOGLESQL_RET_CHECK(output->empty());
 
   // Engines may include types that are unsupported.
   // These types may only be used in queries where they are explicitly cast to
   // a supported type.
   // For now, RQG only cares about the fully supported types.
   for (const auto& [type_name, type] : engine_types_) {
-    if (type->IsSupportedType(zetasql::LanguageOptions())) {
+    if (type->IsSupportedType(googlesql::LanguageOptions())) {
       if (type->mapped_type() == nullptr) {
         output->insert(type);
       } else {
@@ -537,13 +527,13 @@ absl::Status EngineSystemCatalog::GetTypes(
 
 absl::StatusOr<bool> EngineSystemCatalog::IsSetReturningFunction(
     Oid proc_oid) const {
-  ZETASQL_ASSIGN_OR_RETURN(const FormData_pg_proc* proc,
+  GOOGLESQL_ASSIGN_OR_RETURN(const FormData_pg_proc* proc,
                    PgBootstrapCatalog::Default()->GetProc(proc_oid));
   return proc->proretset;
 }
 
 absl::Status EngineSystemCatalog::GetFunctions(
-    absl::flat_hash_set<const zetasql::Function*>* output) const {
+    absl::flat_hash_set<const googlesql::Function*>* output) const {
   for (const auto& [_, function] : engine_functions_) {
     for (const std::unique_ptr<PostgresExtendedFunctionSignature>& signature :
          function->GetPostgresSignatures()) {
@@ -552,7 +542,7 @@ absl::Status EngineSystemCatalog::GetFunctions(
       if (signature->mapped_function() == nullptr) {
         continue;
       }
-      ZETASQL_ASSIGN_OR_RETURN(bool is_set_returning_function,
+      GOOGLESQL_ASSIGN_OR_RETURN(bool is_set_returning_function,
                        IsSetReturningFunction(signature->postgres_proc_oid()));
       if (!is_set_returning_function) {
         output->insert(signature->mapped_function());
@@ -579,18 +569,18 @@ EngineSystemCatalog::GetFunctionSigPairs(
     absl::string_view function_name) const {
   const PostgresExtendedFunction* pg_function =
       GetFunction(function_namespace, function_name);
-  ZETASQL_RET_CHECK_NE(pg_function, nullptr) << "Function not found: " << function_name;
+  GOOGLESQL_RET_CHECK_NE(pg_function, nullptr) << "Function not found: " << function_name;
   std::vector<FunctionSigPair> signatures;
   for (const std::unique_ptr<PostgresExtendedFunctionSignature>& signature :
        pg_function->GetPostgresSignatures()) {
-    ZETASQL_RET_CHECK_NE(signature->mapped_function(), nullptr);
+    GOOGLESQL_RET_CHECK_NE(signature->mapped_function(), nullptr);
     signatures.push_back({signature->mapped_function(), signature.get()});
   }
   return signatures;
 }
 
 absl::Status EngineSystemCatalog::GetSetReturningFunctions(
-    absl::flat_hash_set<const zetasql::Function*>* output) const {
+    absl::flat_hash_set<const googlesql::Function*>* output) const {
   for (const auto& [function_name, function] : engine_functions_) {
     for (const std::unique_ptr<PostgresExtendedFunctionSignature>& signature :
          function->GetPostgresSignatures()) {
@@ -599,7 +589,7 @@ absl::Status EngineSystemCatalog::GetSetReturningFunctions(
       if (signature->mapped_function() == nullptr) {
         continue;
       }
-      ZETASQL_ASSIGN_OR_RETURN(bool is_set_returning_function,
+      GOOGLESQL_ASSIGN_OR_RETURN(bool is_set_returning_function,
                        IsSetReturningFunction(signature->postgres_proc_oid()));
       if (is_set_returning_function) {
         output->insert(signature->mapped_function());
@@ -610,7 +600,7 @@ absl::Status EngineSystemCatalog::GetSetReturningFunctions(
 }
 
 absl::Status EngineSystemCatalog::GetTableValuedFunctions(
-    absl::flat_hash_map<Oid, const zetasql::TableValuedFunction*>* output)
+    absl::flat_hash_map<Oid, const googlesql::TableValuedFunction*>* output)
     const {
   for (const auto& [tvf_oid, tvf] : proc_oid_to_tvf_) {
     output->insert({tvf_oid, tvf});
@@ -619,7 +609,7 @@ absl::Status EngineSystemCatalog::GetTableValuedFunctions(
 }
 
 absl::Status EngineSystemCatalog::GetProcedures(
-    absl::flat_hash_map<Oid, const zetasql::Procedure*>* output) const {
+    absl::flat_hash_map<Oid, const googlesql::Procedure*>* output) const {
   for (const auto& [proc_oid, procedure] : proc_oid_to_procedure_) {
     output->insert({proc_oid, procedure});
   }
@@ -644,39 +634,39 @@ absl::Status EngineSystemCatalog::GetPostgreSQLTypes(
 }
 
 absl::StatusOr<bool> EngineSystemCatalog::IsValidCast(
-    const zetasql::Type* from_type, const zetasql::Type* to_type,
-    const zetasql::LanguageOptions& language_options) {
-  zetasql::Coercer coercer(type_factory(), &language_options,
+    const googlesql::Type* from_type, const googlesql::Type* to_type,
+    const googlesql::LanguageOptions& language_options) {
+  googlesql::Coercer coercer(type_factory(), &language_options,
                              /*catalog=*/this);
-  zetasql::InputArgumentType input_type(from_type);
-  zetasql::SignatureMatchResult result;
-  auto evaluator = zetasql::ExtendedCompositeCastEvaluator::Invalid();
+  googlesql::InputArgumentType input_type(from_type);
+  googlesql::SignatureMatchResult result;
+  auto evaluator = googlesql::ExtendedCompositeCastEvaluator::Invalid();
   return coercer.CoercesTo(input_type, to_type,
                            /*is_explicit=*/true, &result, &evaluator);
 }
 
 absl::Status EngineSystemCatalog::AddType(
     const PostgresTypeMapping* type,
-    const zetasql::LanguageOptions& language_options) {
-  zetasql::ProductMode product_mode = language_options.product_mode();
-  ZETASQL_VLOG(4) << "PostgresCatalog::AddType, type = "
+    const googlesql::LanguageOptions& language_options) {
+  googlesql::ProductMode product_mode = language_options.product_mode();
+  GOOGLESQL_VLOG(4) << "PostgresCatalog::AddType, type = "
           << type->TypeName(product_mode);
   engine_types_.insert({std::string(type->raw_type_name()), type});
 
-  const zetasql::Type* gsql_type = type->mapped_type();
+  const googlesql::Type* gsql_type = type->mapped_type();
   // Special case (2 to 1): `PgVarcharMapping` and `PgTextMapping` both map to
-  // `zetasql::types::StringType`. Use `PgTextMapping` as the
+  // `googlesql::types::StringType`. Use `PgTextMapping` as the
   // default type for reverse mapping in the catalog.
   // Same for `PgVarcharArrayMapping` and `PgTextArrayMapping`.
   if (gsql_type && type != types::PgVarcharMapping() &&
       type != types::PgVarcharArrayMapping()) {
-    ZETASQL_VLOG(4) << "PostgresCatalog::AddType, type.mapped_type = "
+    GOOGLESQL_VLOG(4) << "PostgresCatalog::AddType, type.mapped_type = "
             << gsql_type->TypeName(product_mode);
     bool unique = engine_types_reverse_map_
                       .insert({gsql_type, std::string(type->raw_type_name())})
                       .second;
 
-    ZETASQL_RET_CHECK(unique) << absl::Substitute(
+    GOOGLESQL_RET_CHECK(unique) << absl::Substitute(
         "Multiple PostgresTypeMapping will be mapped to the builtin type: "
         "$0, the last PostgresTypeMapping is: $1",
         gsql_type->TypeName(product_mode), type->TypeName(product_mode));
@@ -686,18 +676,18 @@ absl::Status EngineSystemCatalog::AddType(
 }
 
 bool EngineSystemCatalog::SignatureMatches(
-    const std::vector<zetasql::InputArgumentType>& input_arguments,
-    const zetasql::FunctionSignature& signature,
-    std::unique_ptr<zetasql::FunctionSignature>* result_signature,
-    const zetasql::LanguageOptions& language_options) {
-  // Run the ZetaSQL Function Signature Matcher to determine if the input
+    const std::vector<googlesql::InputArgumentType>& input_arguments,
+    const googlesql::FunctionSignature& signature,
+    std::unique_ptr<googlesql::FunctionSignature>* result_signature,
+    const googlesql::LanguageOptions& language_options) {
+  // Run the GoogleSQL Function Signature Matcher to determine if the input
   // arguments exactly match the signature
-  zetasql::Coercer coercer(type_factory(), &language_options,
+  googlesql::Coercer coercer(type_factory(), &language_options,
                              /*catalog=*/this);
-  const std::vector<const zetasql::ASTNode*> arg_ast_nodes = {};
-  zetasql::SignatureMatchResult signature_match_result;
+  const std::vector<const googlesql::ASTNode*> arg_ast_nodes = {};
+  googlesql::SignatureMatchResult signature_match_result;
   absl::StatusOr<bool> function_signature_matches_or =
-      zetasql::FunctionSignatureMatchesWithStatus(
+      googlesql::FunctionSignatureMatchesWithStatus(
           language_options, coercer, arg_ast_nodes, input_arguments, signature,
           /*allow_argument_coercion=*/false, type_factory(),
           /*resolve_lambda_callback=*/nullptr, result_signature,
@@ -711,19 +701,19 @@ bool EngineSystemCatalog::SignatureMatches(
          signature_match_result.literals_coerced() == 0;
 }
 
-absl::StatusOr<zetasql::FunctionArgumentType>
+absl::StatusOr<googlesql::FunctionArgumentType>
 EngineSystemCatalog::BuildGsqlFunctionArgumentType(
-    Oid type_oid, zetasql::FunctionEnums::ArgumentCardinality cardinality) {
+    Oid type_oid, googlesql::FunctionEnums::ArgumentCardinality cardinality) {
   if (type_oid == ANYOID || type_oid == ANYELEMENTOID ||
       // Technically this is more permissive than we should be (ARG_TYPE_ANY_1
       // would actually accept an array type too), but the specific function
       // signatures we register handle this because they refer to specific,
       // non-pseudo types.
       type_oid == ANYNONARRAYOID) {
-    return zetasql::FunctionArgumentType(zetasql::ARG_TYPE_ANY_1,
+    return googlesql::FunctionArgumentType(googlesql::ARG_TYPE_ANY_1,
                                            cardinality);
   } else if (type_oid == ANYARRAYOID || type_oid == ANYCOMPATIBLEARRAYOID) {
-    return zetasql::FunctionArgumentType(zetasql::ARG_ARRAY_TYPE_ANY_1,
+    return googlesql::FunctionArgumentType(googlesql::ARG_ARRAY_TYPE_ANY_1,
                                            cardinality);
   } else {
     // Get the PostgresTypeMapping.
@@ -737,56 +727,56 @@ EngineSystemCatalog::BuildGsqlFunctionArgumentType(
     // If there is a mapped builtin type, use it.
     // Otherwise use the PostgreSQL type.
     if (type->mapped_type()) {
-      return zetasql::FunctionArgumentType(type->mapped_type(), cardinality);
+      return googlesql::FunctionArgumentType(type->mapped_type(), cardinality);
     } else {
-      return zetasql::FunctionArgumentType(type, cardinality);
+      return googlesql::FunctionArgumentType(type, cardinality);
     }
   }
 }
 
-absl::StatusOr<zetasql::FunctionSignature>
+absl::StatusOr<googlesql::FunctionSignature>
 EngineSystemCatalog::BuildGsqlFunctionSignature(
     const absl::Span<const Oid>& postgres_input_types, Oid postgres_output_type,
     Oid postgres_variadic_type, bool postgres_retset) {
-  ZETASQL_ASSIGN_OR_RETURN(
-      zetasql::FunctionArgumentType pg_return_type,
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      googlesql::FunctionArgumentType pg_return_type,
       BuildGsqlFunctionArgumentType(postgres_output_type,
-                                    zetasql::FunctionEnums::REQUIRED));
-  std::unique_ptr<zetasql::FunctionArgumentType> return_type_ptr;
+                                    googlesql::FunctionEnums::REQUIRED));
+  std::unique_ptr<googlesql::FunctionArgumentType> return_type_ptr;
   if (postgres_retset) {
-    const zetasql::Type* array_type;
-    ZETASQL_RETURN_IF_ERROR(
+    const googlesql::Type* array_type;
+    GOOGLESQL_RETURN_IF_ERROR(
         type_factory()->MakeArrayType(pg_return_type.type(), &array_type));
-    zetasql::FunctionArgumentType array_argument_type =
-        zetasql::FunctionArgumentType(array_type,
-                                        zetasql::FunctionEnums::REQUIRED);
+    googlesql::FunctionArgumentType array_argument_type =
+        googlesql::FunctionArgumentType(array_type,
+                                        googlesql::FunctionEnums::REQUIRED);
     return_type_ptr =
-        std::make_unique<zetasql::FunctionArgumentType>(array_argument_type);
+        std::make_unique<googlesql::FunctionArgumentType>(array_argument_type);
   } else {
     return_type_ptr =
-        std::make_unique<zetasql::FunctionArgumentType>(pg_return_type);
+        std::make_unique<googlesql::FunctionArgumentType>(pg_return_type);
   }
 
-  zetasql::FunctionArgumentTypeList arguments;
+  googlesql::FunctionArgumentTypeList arguments;
   for (int i = 0; i < postgres_input_types.size(); i++) {
     Oid input_type_oid = postgres_input_types[i];
     auto cardinality = input_type_oid == postgres_variadic_type
-                           ? zetasql::FunctionEnums::REPEATED
-                           : zetasql::FunctionEnums::REQUIRED;
-    ZETASQL_ASSIGN_OR_RETURN(
-        zetasql::FunctionArgumentType input_type,
+                           ? googlesql::FunctionEnums::REPEATED
+                           : googlesql::FunctionEnums::REQUIRED;
+    GOOGLESQL_ASSIGN_OR_RETURN(
+        googlesql::FunctionArgumentType input_type,
         BuildGsqlFunctionArgumentType(input_type_oid, cardinality));
     arguments.push_back(input_type);
   }
 
-  return zetasql::FunctionSignature(*return_type_ptr, arguments,
+  return googlesql::FunctionSignature(*return_type_ptr, arguments,
                                       /*context_ptr=*/nullptr);
 }
 
-absl::StatusOr<std::vector<zetasql::InputArgumentType>>
+absl::StatusOr<std::vector<googlesql::InputArgumentType>>
 EngineSystemCatalog::BuildGsqlInputTypeList(
     const oidvector& postgres_input_types) {
-  std::vector<zetasql::InputArgumentType> input_arguments;
+  std::vector<googlesql::InputArgumentType> input_arguments;
   for (int i = 0; i < postgres_input_types.vl_len_; i++) {
     // Get the PostgresTypeMapping.
     const PostgresTypeMapping* type = GetType(postgres_input_types.values[i]);
@@ -809,13 +799,13 @@ EngineSystemCatalog::BuildGsqlInputTypeList(
 
 absl::StatusOr<Oid> EngineSystemCatalog::FindMatchingPgProcOid(
     absl::Span<const PgProcData* const> procs,
-    const std::vector<zetasql::InputArgumentType>& input_argument_types,
-    const zetasql::Type* return_type,
-    const zetasql::LanguageOptions& language_options) {
+    const std::vector<googlesql::InputArgumentType>& input_argument_types,
+    const googlesql::Type* return_type,
+    const googlesql::LanguageOptions& language_options) {
   bool srf_ret_type_mismatch = false;
   for (const PgProcData* proc_proto : procs) {
-    // Convert the proc from a PostgreSQL signature into a ZetaSQL signature
-    absl::StatusOr<const zetasql::FunctionSignature> postgres_signature =
+    // Convert the proc from a PostgreSQL signature into a GoogleSQL signature
+    absl::StatusOr<const googlesql::FunctionSignature> postgres_signature =
         BuildGsqlFunctionSignature(
             proc_proto->proargtypes(), proc_proto->prorettype(),
             proc_proto->provariadic(), proc_proto->proretset());
@@ -838,7 +828,7 @@ absl::StatusOr<Oid> EngineSystemCatalog::FindMatchingPgProcOid(
     }
 
     // If we find a matching PostgreSQL proc oid, return it.
-    std::unique_ptr<zetasql::FunctionSignature> result_signature;
+    std::unique_ptr<googlesql::FunctionSignature> result_signature;
     if (SignatureMatches(input_argument_types, *postgres_signature,
                          &result_signature, language_options)) {
       return proc_proto->oid();
@@ -878,11 +868,11 @@ void EngineSystemCatalog::AddFunctionToReverseMappings(
 
 absl::Status EngineSystemCatalog::AddTVF(Oid proc_oid,
                                          const std::string& engine_tvf_name) {
-  ZETASQL_ASSIGN_OR_RETURN(const FormData_pg_proc* pg_proc,
+  GOOGLESQL_ASSIGN_OR_RETURN(const FormData_pg_proc* pg_proc,
                    PgBootstrapCatalog::Default()->GetProc(proc_oid));
-  ZETASQL_RET_CHECK_EQ(pg_proc->proretset, true);
-  ZETASQL_ASSIGN_OR_RETURN(
-      const zetasql::TableValuedFunction* tvf,
+  GOOGLESQL_RET_CHECK_EQ(pg_proc->proretset, true);
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      const googlesql::TableValuedFunction* tvf,
       builtin_function_catalog_->GetTableValuedFunction(engine_tvf_name));
   proc_oid_to_tvf_[proc_oid] = tvf;
   tvf_to_proc_oid_[tvf] = proc_oid;
@@ -891,12 +881,12 @@ absl::Status EngineSystemCatalog::AddTVF(Oid proc_oid,
 
 absl::Status EngineSystemCatalog::AddProcedure(
     Oid proc_oid, const std::string& engine_procedure_name) {
-  ZETASQL_ASSIGN_OR_RETURN(const FormData_pg_proc* pg_proc,
+  GOOGLESQL_ASSIGN_OR_RETURN(const FormData_pg_proc* pg_proc,
                    PgBootstrapCatalog::Default()->GetProc(proc_oid));
-  ZETASQL_RET_CHECK_EQ(pg_proc->prokind, 'p');
-  ZETASQL_RET_CHECK_EQ(pg_proc->prorettype, VOIDOID);
-  ZETASQL_ASSIGN_OR_RETURN(
-      const zetasql::Procedure* procedure,
+  GOOGLESQL_RET_CHECK_EQ(pg_proc->prokind, 'p');
+  GOOGLESQL_RET_CHECK_EQ(pg_proc->prorettype, VOIDOID);
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      const googlesql::Procedure* procedure,
       builtin_function_catalog_->GetProcedure(engine_procedure_name));
   proc_oid_to_procedure_[proc_oid] = procedure;
   return absl::OkStatus();
@@ -905,28 +895,28 @@ absl::Status EngineSystemCatalog::AddProcedure(
 absl::StatusOr<std::unique_ptr<PostgresExtendedFunctionSignature>>
 EngineSystemCatalog::BuildVariadicPostgresExtendedFunctionSignature(
     const std::string& mapped_function_name,
-    const zetasql::FunctionSignature& signature, Oid proc_oid,
+    const googlesql::FunctionSignature& signature, Oid proc_oid,
     const std::vector<std::string>& query_features_names) {
   // Get the original builtin function.
-  const zetasql::Function* mapped_builtin_function;
-  ZETASQL_ASSIGN_OR_RETURN(
+  const googlesql::Function* mapped_builtin_function;
+  GOOGLESQL_ASSIGN_OR_RETURN(
       mapped_builtin_function,
       builtin_function_catalog_->GetFunction(mapped_function_name));
-  ZETASQL_RET_CHECK_NE(mapped_builtin_function, nullptr);
+  GOOGLESQL_RET_CHECK_NE(mapped_builtin_function, nullptr);
 
   return std::make_unique<PostgresExtendedFunctionSignature>(
       signature,
-      std::make_unique<zetasql::Function>(
+      std::make_unique<googlesql::Function>(
           mapped_builtin_function->FunctionNamePath(),
           mapped_builtin_function->GetGroup(), mapped_builtin_function->mode(),
-          std::vector<zetasql::FunctionSignature>{signature},
+          std::vector<googlesql::FunctionSignature>{signature},
           mapped_builtin_function->function_options()),
       proc_oid, query_features_names);
 }
 
 absl::Status EngineSystemCatalog::AddFunction(
     const PostgresFunctionArguments& function_arguments,
-    const zetasql::LanguageOptions& language_options) {
+    const googlesql::LanguageOptions& language_options) {
   // The function should not already be in the catalog.
   std::pair<std::string, std::string> function_key =
       std::make_pair(function_arguments.postgres_namespace(),
@@ -943,16 +933,16 @@ absl::Status EngineSystemCatalog::AddFunction(
 
   // Get the list of procs that match the PostgreSQL proc name and namespace
   // name.
-  ZETASQL_ASSIGN_OR_RETURN(Oid namespace_oid,
+  GOOGLESQL_ASSIGN_OR_RETURN(Oid namespace_oid,
                    PgBootstrapCatalog::Default()->GetNamespaceOid(
                        function_arguments.postgres_namespace()));
-  ZETASQL_ASSIGN_OR_RETURN(absl::Span<const FormData_pg_proc* const> proc_data,
+  GOOGLESQL_ASSIGN_OR_RETURN(absl::Span<const FormData_pg_proc* const> proc_data,
                    PgBootstrapCatalog::Default()->GetProcsByName(
                        function_arguments.postgres_function_name()));
   std::vector<const PgProcData*> procs;
   for (const FormData_pg_proc* proc : proc_data) {
     if (proc->pronamespace == namespace_oid) {
-      ZETASQL_ASSIGN_OR_RETURN(const PgProcData* proc_proto,
+      GOOGLESQL_ASSIGN_OR_RETURN(const PgProcData* proc_proto,
                        PgBootstrapCatalog::Default()->GetProcProto(proc->oid));
       procs.push_back(proc_proto);
     }
@@ -973,8 +963,8 @@ absl::Status EngineSystemCatalog::AddFunction(
     if (signature_arguments.postgres_proc_oid() != InvalidOid) {
       // The proc oid is provided and validation should not be performed.
       // Use the provided proc oid and signature as-is.
-      ZETASQL_RET_CHECK(signature_arguments.has_mapped_function());
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_RET_CHECK(signature_arguments.has_mapped_function());
+      GOOGLESQL_ASSIGN_OR_RETURN(
           std::unique_ptr<PostgresExtendedFunctionSignature> signature,
           BuildVariadicPostgresExtendedFunctionSignature(
               mapped_function_name, signature_arguments.signature(),
@@ -986,7 +976,7 @@ absl::Status EngineSystemCatalog::AddFunction(
       continue;
     }
 
-    zetasql::FunctionSignature engine_system_catalog_signature =
+    googlesql::FunctionSignature engine_system_catalog_signature =
         signature_arguments.signature();
     if (engine_system_catalog_signature.NumRepeatedArguments() != 0 ||
         engine_system_catalog_signature.NumOptionalArguments() != 0) {
@@ -998,14 +988,14 @@ absl::Status EngineSystemCatalog::AddFunction(
     // Turn the EngineSystemCatalog signature into a list of input argument
     // types which will be used to signature match against the PostgreSQL
     // procs and the mapped builtin functions.
-    std::vector<zetasql::InputArgumentType> input_arguments;
-    for (const zetasql::FunctionArgumentType& arg :
+    std::vector<googlesql::InputArgumentType> input_arguments;
+    for (const googlesql::FunctionArgumentType& arg :
          engine_system_catalog_signature.arguments()) {
       input_arguments.emplace_back(arg.type());
     }
 
     // Get and verify the mapped PostgreSQL proc oid.
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         Oid oid,
         FindMatchingPgProcOid(
             procs, input_arguments,
@@ -1025,29 +1015,29 @@ absl::Status EngineSystemCatalog::AddFunction(
     } else {
       // Get and verify a copy of the mapped builtin function and signature for
       // specific signature.
-      ZETASQL_RET_CHECK(!mapped_function_name.empty());
+      GOOGLESQL_RET_CHECK(!mapped_function_name.empty());
       // Get the original builtin function.
-      const zetasql::Function* mapped_builtin_function;
-      ZETASQL_ASSIGN_OR_RETURN(
+      const googlesql::Function* mapped_builtin_function;
+      GOOGLESQL_ASSIGN_OR_RETURN(
           mapped_builtin_function,
           builtin_function_catalog_->GetFunction(mapped_function_name));
-      ZETASQL_RET_CHECK_NE(mapped_builtin_function, nullptr)
+      GOOGLESQL_RET_CHECK_NE(mapped_builtin_function, nullptr)
           << "Original function " << mapped_function_name
           << " not found in builtin function catalog";
 
       // Check that the original builtin function has a compatible signature and
       // create a copy of the function with just this signature.
-      ZETASQL_ASSIGN_OR_RETURN(
-          std::unique_ptr<zetasql::Function> mapped_function,
+      GOOGLESQL_ASSIGN_OR_RETURN(
+          std::unique_ptr<googlesql::Function> mapped_function,
           BuildMappedFunction(engine_system_catalog_signature, input_arguments,
                               mapped_builtin_function, language_options));
 
-      ZETASQL_RET_CHECK_EQ(mapped_function->NumSignatures(), 1);
-      const zetasql::FunctionSignature* mapped_signature =
+      GOOGLESQL_RET_CHECK_EQ(mapped_function->NumSignatures(), 1);
+      const googlesql::FunctionSignature* mapped_signature =
           mapped_function->GetSignature(0);
 
       // Copy over the signature options from the builtin-function signature.
-      engine_system_catalog_signature = zetasql::FunctionSignature(
+      engine_system_catalog_signature = googlesql::FunctionSignature(
           engine_system_catalog_signature.result_type(),
           engine_system_catalog_signature.arguments(),
           mapped_signature->context_id(),
@@ -1077,10 +1067,10 @@ absl::Status EngineSystemCatalog::AddExprFunction(
     const PostgresExprIdentifier& expr_id,
     const std::string& builtin_function_name) {
   // Look up the builtin function by name.
-  const zetasql::Function* builtin_function;
-  ZETASQL_ASSIGN_OR_RETURN(builtin_function, builtin_function_catalog_->GetFunction(
+  const googlesql::Function* builtin_function;
+  GOOGLESQL_ASSIGN_OR_RETURN(builtin_function, builtin_function_catalog_->GetFunction(
                                          builtin_function_name));
-  ZETASQL_RET_CHECK_NE(builtin_function, nullptr);
+  GOOGLESQL_RET_CHECK_NE(builtin_function, nullptr);
 
   // Update the forward map.
   pg_expr_to_builtin_function_.insert({expr_id, builtin_function});
@@ -1092,30 +1082,30 @@ absl::Status EngineSystemCatalog::AddExprFunction(
 
 absl::Status EngineSystemCatalog::AddPgNumericCastFunction(
     const std::string& builtin_function_name) {
-  ZETASQL_RET_CHECK(!engine_cast_functions_.contains(builtin_function_name))
+  GOOGLESQL_RET_CHECK(!engine_cast_functions_.contains(builtin_function_name))
       << "Attempting to insert duplicate cast function.";
   engine_cast_functions_.insert(builtin_function_name);
   return absl::OkStatus();
 }
 
 absl::Status EngineSystemCatalog::AddCastOverrideFunction(
-    const zetasql::Type* source_type, const zetasql::Type* target_type,
+    const googlesql::Type* source_type, const googlesql::Type* target_type,
     const std::string& builtin_function_name,
-    const zetasql::LanguageOptions& language_options) {
-  std::pair<const zetasql::Type*, const zetasql::Type*> cast_pair(
+    const googlesql::LanguageOptions& language_options) {
+  std::pair<const googlesql::Type*, const googlesql::Type*> cast_pair(
       source_type, target_type);
 
   // Look up the function and validate the input/output.
-  const zetasql::Function* builtin_function;
-  ZETASQL_ASSIGN_OR_RETURN(builtin_function, builtin_function_catalog_->GetFunction(
+  const googlesql::Function* builtin_function;
+  GOOGLESQL_ASSIGN_OR_RETURN(builtin_function, builtin_function_catalog_->GetFunction(
                                          builtin_function_name));
-  std::vector<zetasql::InputArgumentType> input_argument_types;
-  input_argument_types.push_back(zetasql::InputArgumentType(source_type));
-  for (const zetasql::FunctionSignature& signature :
+  std::vector<googlesql::InputArgumentType> input_argument_types;
+  input_argument_types.push_back(googlesql::InputArgumentType(source_type));
+  for (const googlesql::FunctionSignature& signature :
        builtin_function->signatures()) {
     // Run the function signature matcher to check if the builtin signature
     // matches the input argument types.
-    std::unique_ptr<zetasql::FunctionSignature> result_signature;
+    std::unique_ptr<googlesql::FunctionSignature> result_signature;
     if (SignatureMatches(input_argument_types, signature, &result_signature,
                          language_options) &&
         result_signature->result_type().type()->Equals(target_type)) {
@@ -1123,7 +1113,7 @@ absl::Status EngineSystemCatalog::AddCastOverrideFunction(
       // because the the Function Signature Matcher fills in the actual
       // types if the original signature had ARG_TYPE_ANY_1 input or output
       // types.
-      ZETASQL_RET_CHECK(!pg_cast_to_builtin_function_.contains(cast_pair))
+      GOOGLESQL_RET_CHECK(!pg_cast_to_builtin_function_.contains(cast_pair))
           << "Attempting to insert duplicate cast function.";
       pg_cast_to_builtin_function_.insert(
           {cast_pair,
@@ -1147,26 +1137,26 @@ absl::Status EngineSystemCatalog::AddCastOverrideFunction(
       target_type->TypeName(language_options.product_mode())));
 }
 
-absl::StatusOr<const zetasql::Function*>
+absl::StatusOr<const googlesql::Function*>
 EngineSystemCatalog::GetBuiltinFunction(const std::string& name) const {
   return builtin_function_catalog_->GetFunction(name);
 }
 
 bool EngineSystemCatalog::IsBuiltinSqlRewriteFunction(
     const std::string& function_name,
-    const zetasql::LanguageOptions& language_options,
-    zetasql::TypeFactory* type_factory) {
-  zetasql::BuiltinFunctionOptions function_options(language_options);
-  absl::flat_hash_map<std::string, std::unique_ptr<zetasql::Function>>
+    const googlesql::LanguageOptions& language_options,
+    googlesql::TypeFactory* type_factory) {
+  googlesql::BuiltinFunctionOptions function_options(language_options);
+  absl::flat_hash_map<std::string, std::unique_ptr<googlesql::Function>>
       spanner_function_map;
-  absl::flat_hash_map<std::string, const zetasql::Type*> types;
-  zetasql::GetBuiltinFunctionsAndTypes(function_options, *type_factory,
+  absl::flat_hash_map<std::string, const googlesql::Type*> types;
+  googlesql::GetBuiltinFunctionsAndTypes(function_options, *type_factory,
                                spanner_function_map, types);
   if (spanner_function_map.find(function_name) ==
       spanner_function_map.end()) {
     return false;
   }
-  const zetasql::Function* builtin_function =
+  const googlesql::Function* builtin_function =
       spanner_function_map.at(function_name).get();
   for (const auto& signature : builtin_function->signatures()) {
     if (!signature.options().rewrite_options() ||

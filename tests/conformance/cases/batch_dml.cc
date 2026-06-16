@@ -17,7 +17,7 @@
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "google/cloud/spanner/transaction.h"
@@ -34,7 +34,7 @@ namespace {
 
 // TODO: Replace all uses of internal C++ client library details.
 using google::cloud::spanner_internal::MakeSingleUseTransaction;
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 class BatchDmlTest
     : public DatabaseTest,
@@ -69,8 +69,8 @@ TEST_P(BatchDmlTest, EmptyBatchDmlRequestReturnsInvalidArgumentError) {
       txn,
       {SqlStatement("INSERT INTO users(id, name, age) VALUES (1, 'Levin', 27)"),
        SqlStatement("UPDATE users SET name = 'Mark' WHERE id = 1")});
-  ZETASQL_ASSERT_OK(ToUtilStatus(result.value().status));
-  ZETASQL_ASSERT_OK(CommitTransaction(txn, {}));
+  GOOGLESQL_ASSERT_OK(ToUtilStatus(result.value().status));
+  GOOGLESQL_ASSERT_OK(CommitTransaction(txn, {}));
 
   // Verify data after commit.
   EXPECT_THAT(Query("SELECT id, name, age FROM users"),
@@ -85,7 +85,7 @@ TEST_P(BatchDmlTest, ReadYourWrites) {
       txn,
       {SqlStatement("INSERT INTO users(id, name, age) VALUES (1, 'Levin', 27)"),
        SqlStatement("UPDATE users SET name = 'Mark' WHERE id = 1")});
-  ZETASQL_ASSERT_OK(ToUtilStatus(result.value().status));
+  GOOGLESQL_ASSERT_OK(ToUtilStatus(result.value().status));
 
   // Read data before commit.
   EXPECT_THAT(QueryTransaction(txn, "SELECT id, name, age FROM users"),
@@ -94,13 +94,13 @@ TEST_P(BatchDmlTest, ReadYourWrites) {
 
 TEST_P(BatchDmlTest, DifferentDmlStatementsSucceed) {
   // Add token rows.
-  ZETASQL_ASSERT_OK(CommitBatchDml(
+  GOOGLESQL_ASSERT_OK(CommitBatchDml(
       {SqlStatement("INSERT INTO users(id, name, age) VALUES (1, 'Levin', 27)"),
        SqlStatement(
            "INSERT INTO users(id, name, age) VALUES (2, 'Mark', 27)")}));
 
   // Insert, Update and Delete Dml statements all succeed.
-  ZETASQL_ASSERT_OK(CommitBatchDml(
+  GOOGLESQL_ASSERT_OK(CommitBatchDml(
       {SqlStatement("INSERT INTO users(id, name, age) VALUES (3, 'Dan', 27)"),
        SqlStatement("UPDATE users SET name = 'Mark' WHERE id = 1"),
        SqlStatement("DELETE FROM users WHERE id = 2")}));
@@ -111,7 +111,7 @@ TEST_P(BatchDmlTest, DifferentDmlStatementsSucceed) {
 }
 
 TEST_P(BatchDmlTest, ConstraintErrorOnBatchDmlReplaysError) {
-  ZETASQL_ASSERT_OK(CommitBatchDml({SqlStatement(
+  GOOGLESQL_ASSERT_OK(CommitBatchDml({SqlStatement(
       "INSERT INTO users(id, name, age) VALUES (1, 'Levin', 27)")}));
 
   // Verify the row exists in the database.
@@ -123,7 +123,7 @@ TEST_P(BatchDmlTest, ConstraintErrorOnBatchDmlReplaysError) {
   auto result = BatchDmlTransaction(
       txn, {SqlStatement(
                "INSERT INTO users(id, name, age) VALUES (1, 'Levin', 27)")});
-  ZETASQL_EXPECT_OK(result);
+  GOOGLESQL_EXPECT_OK(result);
   EXPECT_THAT(ToUtilStatus(result.value().status),
               StatusIs(absl::StatusCode::kAlreadyExists));
 
@@ -143,7 +143,7 @@ TEST_P(BatchDmlTest, QueryNotAllowedInBatchDml) {
 
   // Invalid argument error for executing non-Dml statement.
   auto result = BatchDmlTransaction(txn, {SqlStatement("SELECT * FROM users")});
-  ZETASQL_EXPECT_OK(result);
+  GOOGLESQL_EXPECT_OK(result);
   EXPECT_THAT(ToUtilStatus(result.value().status),
               StatusIs(absl::StatusCode::kInvalidArgument));
 
@@ -151,8 +151,8 @@ TEST_P(BatchDmlTest, QueryNotAllowedInBatchDml) {
   result = BatchDmlTransaction(
       txn, {SqlStatement(
                "INSERT INTO users(id, name, age) VALUES (1, 'Levin', 27)")});
-  ZETASQL_ASSERT_OK(ToUtilStatus(result.value().status));
-  ZETASQL_ASSERT_OK(CommitTransaction(txn, {}));
+  GOOGLESQL_ASSERT_OK(ToUtilStatus(result.value().status));
+  GOOGLESQL_ASSERT_OK(CommitTransaction(txn, {}));
 
   // Verify the row exists in the database.
   EXPECT_THAT(Query("SELECT id, name, age FROM users"),
@@ -163,7 +163,7 @@ TEST_P(BatchDmlTest, MixDmlAndBatchDmlInTransactionSucceeds) {
   auto txn = Transaction(Transaction::ReadWriteOptions());
 
   // Executing Dml.
-  ZETASQL_ASSERT_OK(ExecuteDmlTransaction(
+  GOOGLESQL_ASSERT_OK(ExecuteDmlTransaction(
       txn, {SqlStatement(
                "INSERT INTO users(id, name, age) VALUES (1, 'Levin', 27)")}));
 
@@ -171,10 +171,10 @@ TEST_P(BatchDmlTest, MixDmlAndBatchDmlInTransactionSucceeds) {
   auto result = BatchDmlTransaction(
       txn, {SqlStatement(
                "INSERT INTO users(id, name, age) VALUES (2, 'Mark', 27)")});
-  ZETASQL_ASSERT_OK(ToUtilStatus(result.value().status));
+  GOOGLESQL_ASSERT_OK(ToUtilStatus(result.value().status));
 
   // Commit.
-  ZETASQL_ASSERT_OK(CommitTransaction(txn, {}));
+  GOOGLESQL_ASSERT_OK(CommitTransaction(txn, {}));
 
   // Read data to verify database.
   EXPECT_THAT(ReadAll("users", {"id", "name", "age"}),
@@ -192,8 +192,8 @@ TEST_P(BatchDmlTest, ConcurrentTransactionWithBatchDmlNotAllowed) {
   auto result = BatchDmlTransaction(
       txn1, {SqlStatement(
                 "INSERT INTO users(id, name, age) VALUES (1, 'Levin', 27)")});
-  ZETASQL_ASSERT_OK(result);
-  ZETASQL_ASSERT_OK(ToUtilStatus(result.value().status));
+  GOOGLESQL_ASSERT_OK(result);
+  GOOGLESQL_ASSERT_OK(ToUtilStatus(result.value().status));
 
   // Subsequent transactions will abort.
   result = BatchDmlTransaction(
@@ -204,7 +204,7 @@ TEST_P(BatchDmlTest, ConcurrentTransactionWithBatchDmlNotAllowed) {
   EXPECT_THAT(status, StatusIs(in_prod_env() ? absl::StatusCode::kOk
                                              : absl::StatusCode::kAborted));
   // Commit first transaction succeeds.
-  ZETASQL_EXPECT_OK(CommitTransaction(txn1, {}));
+  GOOGLESQL_EXPECT_OK(CommitTransaction(txn1, {}));
 
   if (status.code() == absl::StatusCode::kAborted) {
     // A real application should use the Transaction runner which restarts the
@@ -221,7 +221,7 @@ TEST_P(BatchDmlTest, ConcurrentTransactionWithBatchDmlNotAllowed) {
   }
 
   // Commit second transaction succeeds.
-  ZETASQL_EXPECT_OK(CommitTransaction(txn2, {}));
+  GOOGLESQL_EXPECT_OK(CommitTransaction(txn2, {}));
 
   config::set_abort_current_transaction_probability(current_probability);
 }
@@ -242,8 +242,8 @@ TEST_P(BatchDmlTest, InvalidDmlFailsButCommitSucceeds) {
       txn,
       {SqlStatement("INSERT INTO users(id, name, age) VALUES (1, 'Levin', 27)"),
        SqlStatement("UPDATE users SET name = 'Mark' WHERE id = 1")});
-  ZETASQL_ASSERT_OK(ToUtilStatus(result.value().status));
-  ZETASQL_ASSERT_OK(CommitTransaction(txn, {}));
+  GOOGLESQL_ASSERT_OK(ToUtilStatus(result.value().status));
+  GOOGLESQL_ASSERT_OK(CommitTransaction(txn, {}));
 
   // Verify the row exists in the database.
   EXPECT_THAT(Query("SELECT id, name, age FROM users"),
@@ -282,12 +282,12 @@ TEST_P(BatchDmlTest, InvalidNonInitialDmlTransactionRemainsOpen) {
        // Invalid Dml since table does not exist.
        SqlStatement(
            "INSERT INTO InvalidTable(id, name, age) VALUES (1, 'Levin', 27)")});
-  ZETASQL_EXPECT_OK(ToUtilStatus(result.status()));
+  GOOGLESQL_EXPECT_OK(ToUtilStatus(result.status()));
   EXPECT_EQ(result.value().stats.size(), 2);
   EXPECT_THAT(ToUtilStatus(result.value().status),
               StatusIs(absl::StatusCode::kInvalidArgument));
   // Commit succeeds on same transaction because it was not rolled back.
-  ZETASQL_EXPECT_OK(CommitTransaction(txn, {}));
+  GOOGLESQL_EXPECT_OK(CommitTransaction(txn, {}));
 }
 
 }  // namespace

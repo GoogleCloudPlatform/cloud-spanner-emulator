@@ -42,8 +42,8 @@ class StorageIteratorRowCursor : public RowCursor {
   absl::Status Status() const override;
   int NumColumns() const override;
   const std::string ColumnName(int i) const override;
-  const zetasql::Value ColumnValue(int i) const override;
-  const zetasql::Type* ColumnType(int i) const override;
+  const googlesql::Value ColumnValue(int i) const override;
+  const googlesql::Type* ColumnType(int i) const override;
 
  private:
   const std::vector<std::unique_ptr<StorageIterator>> iterators_;

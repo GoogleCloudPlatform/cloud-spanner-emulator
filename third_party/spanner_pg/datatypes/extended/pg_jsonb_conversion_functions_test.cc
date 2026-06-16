@@ -33,13 +33,13 @@
 
 #include <string>
 
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/types/type_factory.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/types/type_factory.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
-#include "zetasql/base/no_destructor.h"
+#include "googlesql/base/testing/status_matchers.h"
+#include "googlesql/base/no_destructor.h"
 #include "absl/status/status.h"
 #include "third_party/spanner_pg/datatypes/common/numeric_core.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
@@ -51,15 +51,15 @@ namespace postgres_translator::spangres {
 namespace datatypes {
 namespace {
 
-const zetasql::Type* gsql_bool = zetasql::types::BoolType();
-const zetasql::Type* gsql_double = zetasql::types::DoubleType();
-const zetasql::Type* gsql_float = zetasql::types::FloatType();
-const zetasql::Type* gsql_int64 = zetasql::types::Int64Type();
-const zetasql::Type* gsql_string = zetasql::types::StringType();
+const googlesql::Type* gsql_bool = googlesql::types::BoolType();
+const googlesql::Type* gsql_double = googlesql::types::DoubleType();
+const googlesql::Type* gsql_float = googlesql::types::FloatType();
+const googlesql::Type* gsql_int64 = googlesql::types::Int64Type();
+const googlesql::Type* gsql_string = googlesql::types::StringType();
 
-using FindConversionOptions = ::zetasql::Catalog::FindConversionOptions;
+using FindConversionOptions = ::googlesql::Catalog::FindConversionOptions;
 using ConversionSourceExpressionKind =
-    ::zetasql::Catalog::ConversionSourceExpressionKind;
+    ::googlesql::Catalog::ConversionSourceExpressionKind;
 
 const std::string* const kMaxPGNumericWholeDigitStr =
     new std::string(common::kMaxPGNumericWholeDigits, '9');
@@ -78,19 +78,19 @@ const std::string* const kMaxPgJsonbNumericDigitStr =
                     *kMaxPgJsonbNumericFractionalDigitStr);
 
 using ConversionPair =
-    std::pair<const zetasql::Type*, const zetasql::Type*>;
+    std::pair<const googlesql::Type*, const googlesql::Type*>;
 using ConversionMap =
     absl::flat_hash_map<ConversionPair,
-                        std::function<absl::StatusOr<zetasql::Value>(
-                            const absl::Span<const zetasql::Value>)>>;
+                        std::function<absl::StatusOr<googlesql::Value>(
+                            const absl::Span<const googlesql::Value>)>>;
 
 static const ConversionMap& GetConversionMap() {
-  static const zetasql::Type* gsql_pg_jsonb =
+  static const googlesql::Type* gsql_pg_jsonb =
       spangres::datatypes::GetPgJsonbType();
-  static const zetasql::Type* gsql_pg_numeric =
+  static const googlesql::Type* gsql_pg_numeric =
       spangres::datatypes::GetPgNumericType();
 
-  static const zetasql_base::NoDestructor<ConversionMap> kConversionMap({
+  static const googlesql_base::NoDestructor<ConversionMap> kConversionMap({
       // PG.JSONB -> <TYPE>
       {{gsql_pg_jsonb, gsql_bool}, PgJsonbToBoolConversion},
       {{gsql_pg_jsonb, gsql_double}, PgJsonbToDoubleConversion},
@@ -103,9 +103,9 @@ static const ConversionMap& GetConversionMap() {
 }
 
 static void TestConversion(
-    const zetasql::Type* from, const zetasql::Type* to,
-    const zetasql::Value& input,
-    const std::optional<zetasql::Value>& expected_output,
+    const googlesql::Type* from, const googlesql::Type* to,
+    const googlesql::Value& input,
+    const std::optional<googlesql::Value>& expected_output,
     bool is_error = false, absl::StatusCode status_code = absl::StatusCode::kOk,
     std::string error_msg = "") {
   auto conversion_map = GetConversionMap();
@@ -115,15 +115,15 @@ static void TestConversion(
   // Create the pg arena to create and compare PG.NUMERIC.
   absl::StatusOr<std::unique_ptr<postgres_translator::interfaces::PGArena>>
       pg_arena = postgres_translator::interfaces::CreatePGArena(nullptr);
-  ZETASQL_EXPECT_OK(pg_arena);
+  GOOGLESQL_EXPECT_OK(pg_arena);
 
   if (!is_error) {
     EXPECT_THAT(conversion_fn->second(absl::MakeConstSpan({input})),
-                zetasql_base::testing::IsOkAndHolds(expected_output.value()));
+                googlesql_base::testing::IsOkAndHolds(expected_output.value()));
   } else {
     EXPECT_THAT(
         conversion_fn->second(absl::MakeConstSpan({input})),
-        zetasql_base::testing::StatusIs(status_code, testing::HasSubstr(error_msg)));
+        googlesql_base::testing::StatusIs(status_code, testing::HasSubstr(error_msg)));
   }
 }
 
@@ -131,16 +131,16 @@ static void TestConversion(
 
 TEST(PgJsonbConversionTest, ConvertPgJsonbToBoolSuccess) {
   TestConversion(
-      GetPgJsonbType(), zetasql::types::BoolType(),
-      zetasql::Value::Null(
+      GetPgJsonbType(), googlesql::types::BoolType(),
+      googlesql::Value::Null(
           postgres_translator::spangres::datatypes::GetPgJsonbType()),
-      zetasql::Value::NullBool());
-  TestConversion(GetPgJsonbType(), zetasql::types::BoolType(),
+      googlesql::Value::NullBool());
+  TestConversion(GetPgJsonbType(), googlesql::types::BoolType(),
                  CreatePgJsonbValue("true").value(),
-                 zetasql::Value::Bool(true));
-  TestConversion(GetPgJsonbType(), zetasql::types::BoolType(),
+                 googlesql::Value::Bool(true));
+  TestConversion(GetPgJsonbType(), googlesql::types::BoolType(),
                  CreatePgJsonbValue("false").value(),
-                 zetasql::Value::Bool(false));
+                 googlesql::Value::Bool(false));
 }
 
 TEST(PgJsonbConversionTest, ConvertPgJsonbToBoolError) {
@@ -153,7 +153,7 @@ TEST(PgJsonbConversionTest, ConvertPgJsonbToBoolError) {
   for (const auto& [input, expected_error] : bool_test_cases) {
     SCOPED_TRACE(
         absl::StrCat("input:", input, " expected_error: ", expected_error));
-    TestConversion(GetPgJsonbType(), zetasql::types::BoolType(),
+    TestConversion(GetPgJsonbType(), googlesql::types::BoolType(),
                    CreatePgJsonbValueWithMemoryContext(input).value(),
                    std::nullopt,
                    /* is_error= */ true, absl::StatusCode::kInvalidArgument,
@@ -163,10 +163,10 @@ TEST(PgJsonbConversionTest, ConvertPgJsonbToBoolError) {
 
 TEST(PgJsonbConversionTest, ConvertPgJsonbToInt64Success) {
   TestConversion(
-      GetPgJsonbType(), zetasql::types::Int64Type(),
-      zetasql::Value::Null(
+      GetPgJsonbType(), googlesql::types::Int64Type(),
+      googlesql::Value::Null(
           postgres_translator::spangres::datatypes::GetPgJsonbType()),
-      zetasql::Value::NullInt64());
+      googlesql::Value::NullInt64());
   std::vector<std::pair<std::string, int64_t>> int64_test_cases = {
       {"10", 10L},
       {"123.456", 123L},
@@ -184,9 +184,9 @@ TEST(PgJsonbConversionTest, ConvertPgJsonbToInt64Success) {
   for (const auto& [input, expected_output] : int64_test_cases) {
     SCOPED_TRACE(absl::StrCat(
         "input:", input, " expected_output:", std::to_string(expected_output)));
-    TestConversion(GetPgJsonbType(), zetasql::types::Int64Type(),
+    TestConversion(GetPgJsonbType(), googlesql::types::Int64Type(),
                    CreatePgJsonbValueWithMemoryContext(input).value(),
-                   zetasql::Value::Int64(expected_output));
+                   googlesql::Value::Int64(expected_output));
   }
 }
 
@@ -202,7 +202,7 @@ TEST(PgJsonbConversionTest, ConvertPgJsonbToInt64Error) {
   for (const auto& [input, expected_error] : int64_invalid_arg_test_cases) {
     SCOPED_TRACE(
         absl::StrCat("input:", input, " expected_error: ", expected_error));
-    TestConversion(GetPgJsonbType(), zetasql::types::Int64Type(),
+    TestConversion(GetPgJsonbType(), googlesql::types::Int64Type(),
                    CreatePgJsonbValueWithMemoryContext(input).value(),
                    std::nullopt,
                    /* is_error= */ true, absl::StatusCode::kInvalidArgument,
@@ -221,7 +221,7 @@ TEST(PgJsonbConversionTest, ConvertPgJsonbToInt64Error) {
     SCOPED_TRACE(
         absl::StrCat("input:", input, " expected_error: ", expected_error));
     TestConversion(
-        GetPgJsonbType(), zetasql::types::Int64Type(),
+        GetPgJsonbType(), googlesql::types::Int64Type(),
         CreatePgJsonbValueWithMemoryContext(input).value(), std::nullopt,
         /* is_error= */ true, absl::StatusCode::kOutOfRange, expected_error);
   }
@@ -229,10 +229,10 @@ TEST(PgJsonbConversionTest, ConvertPgJsonbToInt64Error) {
 
 TEST(PgJsonbConversionTest, ConvertPgJsonbToDoubleSuccess) {
   TestConversion(
-      GetPgJsonbType(), zetasql::types::DoubleType(),
-      zetasql::Value::Null(
+      GetPgJsonbType(), googlesql::types::DoubleType(),
+      googlesql::Value::Null(
           postgres_translator::spangres::datatypes::GetPgJsonbType()),
-      zetasql::Value::NullDouble());
+      googlesql::Value::NullDouble());
   std::vector<std::pair<std::string, double>> double_test_cases = {
       {"0", 0},
       {"0.0", 0.0},
@@ -264,9 +264,9 @@ TEST(PgJsonbConversionTest, ConvertPgJsonbToDoubleSuccess) {
   for (const auto& [input, expected_output] : double_test_cases) {
     SCOPED_TRACE(absl::StrCat(
         "input:", input, " expected_output:", std::to_string(expected_output)));
-    TestConversion(GetPgJsonbType(), zetasql::types::DoubleType(),
+    TestConversion(GetPgJsonbType(), googlesql::types::DoubleType(),
                    CreatePgJsonbValueWithMemoryContext(input).value(),
-                   zetasql::Value::Double(expected_output));
+                   googlesql::Value::Double(expected_output));
   }
 }
 
@@ -287,7 +287,7 @@ TEST(PgJsonbConversionTest, ConvertPgJsonbToDoubleError) {
   for (const auto& [input, expected_error] : double_invalid_arg_test_cases) {
     SCOPED_TRACE(
         absl::StrCat("input:", input, " expected_error: ", expected_error));
-    TestConversion(GetPgJsonbType(), zetasql::types::DoubleType(),
+    TestConversion(GetPgJsonbType(), googlesql::types::DoubleType(),
                    CreatePgJsonbValueWithMemoryContext(input).value(),
                    std::nullopt,
                    /* is_error= */ true, absl::StatusCode::kInvalidArgument,
@@ -316,7 +316,7 @@ TEST(PgJsonbConversionTest, ConvertPgJsonbToDoubleError) {
     SCOPED_TRACE(
         absl::StrCat("input:", input, " expected_error: ", expected_error));
     TestConversion(
-        GetPgJsonbType(), zetasql::types::DoubleType(),
+        GetPgJsonbType(), googlesql::types::DoubleType(),
         CreatePgJsonbValueWithMemoryContext(input).value(), std::nullopt,
         /* is_error= */ true, absl::StatusCode::kOutOfRange, expected_error);
   }
@@ -324,10 +324,10 @@ TEST(PgJsonbConversionTest, ConvertPgJsonbToDoubleError) {
 
 TEST(PgJsonbConversionTest, ConvertPgJsonbToFloatSuccess) {
   TestConversion(
-      GetPgJsonbType(), zetasql::types::FloatType(),
-      zetasql::Value::Null(
+      GetPgJsonbType(), googlesql::types::FloatType(),
+      googlesql::Value::Null(
           postgres_translator::spangres::datatypes::GetPgJsonbType()),
-      zetasql::Value::NullFloat());
+      googlesql::Value::NullFloat());
 
   std::vector<std::pair<std::string, float>> float_test_cases = {
       {"0", 0},
@@ -364,9 +364,9 @@ TEST(PgJsonbConversionTest, ConvertPgJsonbToFloatSuccess) {
   for (const auto& [input, expected_output] : float_test_cases) {
     SCOPED_TRACE(absl::StrCat(
         "input:", input, " expected_output:", std::to_string(expected_output)));
-    TestConversion(GetPgJsonbType(), zetasql::types::FloatType(),
+    TestConversion(GetPgJsonbType(), googlesql::types::FloatType(),
                    CreatePgJsonbValueWithMemoryContext(input).value(),
-                   zetasql::Value::Float(expected_output));
+                   googlesql::Value::Float(expected_output));
   }
 }
 
@@ -386,7 +386,7 @@ TEST(PgJsonbConversionTest, ConvertPgJsonbToFloatError) {
   for (const auto& [input, expected_error] : float_invalid_arg_test_cases) {
     SCOPED_TRACE(
         absl::StrCat("input:", input, " expected_error: ", expected_error));
-    TestConversion(GetPgJsonbType(), zetasql::types::FloatType(),
+    TestConversion(GetPgJsonbType(), googlesql::types::FloatType(),
                    CreatePgJsonbValueWithMemoryContext(input).value(),
                    std::nullopt,
                    /* is_error= */ true, absl::StatusCode::kInvalidArgument,
@@ -405,7 +405,7 @@ TEST(PgJsonbConversionTest, ConvertPgJsonbToFloatError) {
     SCOPED_TRACE(
         absl::StrCat("input:", input, " expected_error: ", expected_error));
     TestConversion(
-        GetPgJsonbType(), zetasql::types::FloatType(),
+        GetPgJsonbType(), googlesql::types::FloatType(),
         CreatePgJsonbValueWithMemoryContext(input).value(), std::nullopt,
         /* is_error= */ true, absl::StatusCode::kOutOfRange, expected_error);
   }
@@ -413,8 +413,8 @@ TEST(PgJsonbConversionTest, ConvertPgJsonbToFloatError) {
 
 TEST(PgJsonbConversionTest, ConvertPgJsonbToPgNumericSuccess) {
   TestConversion(GetPgJsonbType(), GetPgNumericType(),
-                 zetasql::Value::Null(GetPgJsonbType()),
-                 zetasql::values::Null(GetPgNumericType()));
+                 googlesql::Value::Null(GetPgJsonbType()),
+                 googlesql::values::Null(GetPgNumericType()));
 
   std::vector<std::string> pg_numeric_test_cases = {
       "0", absl::StrCat("-", *kMaxPgJsonbNumericDigitStr),
@@ -449,10 +449,10 @@ TEST(PgJsonbConversionTest, ConvertPgJsonbToPgNumericError) {
 
 TEST(PgJsonbConversionTest, ConvertPgJsonbToString) {
   TestConversion(
-      GetPgJsonbType(), zetasql::types::StringType(),
-      zetasql::Value::Null(
+      GetPgJsonbType(), googlesql::types::StringType(),
+      googlesql::Value::Null(
           postgres_translator::spangres::datatypes::GetPgJsonbType()),
-      zetasql::Value::NullString());
+      googlesql::Value::NullString());
   std::vector<std::string> string_test_cases = {
       {"\"hello\""},
       {"\"special characters(', \\\", \\r, \\n)\""},
@@ -468,9 +468,9 @@ TEST(PgJsonbConversionTest, ConvertPgJsonbToString) {
       {"null"}};
   for (const std::string& input : string_test_cases) {
     SCOPED_TRACE(absl::StrCat("input:", input, " expected_output:", input));
-    TestConversion(GetPgJsonbType(), zetasql::types::StringType(),
+    TestConversion(GetPgJsonbType(), googlesql::types::StringType(),
                    CreatePgJsonbValue(input).value(),
-                   zetasql::Value::String(input));
+                   googlesql::Value::String(input));
   }
 }
 

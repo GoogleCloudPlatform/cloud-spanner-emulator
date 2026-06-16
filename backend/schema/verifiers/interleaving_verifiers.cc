@@ -19,8 +19,8 @@
 #include <memory>
 #include <vector>
 
-#include "zetasql/public/analyzer_options.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/value.h"
 #include "absl/status/status.h"
 #include "absl/time/time.h"
 #include "backend/common/ids.h"
@@ -36,7 +36,7 @@
 #include "backend/storage/iterator.h"
 #include "backend/storage/storage.h"
 #include "common/errors.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -50,7 +50,7 @@ absl::Status VerifyInterleaveInParentTableRowsExist(
       context->type_factory(),
       /*catalog_name=*/kCloudSpannerEmulatorFunctionCatalogName,
       /*latest_schema=*/context->validated_new_schema());
-  zetasql::AnalyzerOptions analyzer_options = MakeGoogleSqlAnalyzerOptions(
+  googlesql::AnalyzerOptions analyzer_options = MakeGoogleSqlAnalyzerOptions(
       context->validated_new_schema()->default_time_zone());
   Catalog catalog(context->validated_new_schema(), &function_catalog,
                   context->type_factory(), analyzer_options);
@@ -60,14 +60,14 @@ absl::Status VerifyInterleaveInParentTableRowsExist(
   std::unique_ptr<StorageIterator> iterator;
   std::vector<ColumnID> column_ids = GetColumnIDs(child->columns());
   std::vector<ColumnID> parent_column_ids = GetColumnIDs(parent->columns());
-  ZETASQL_RETURN_IF_ERROR(storage->Read(timestamp, child->id(), KeyRange::All(),
+  GOOGLESQL_RETURN_IF_ERROR(storage->Read(timestamp, child->id(), KeyRange::All(),
                                 column_ids, &iterator));
 
   // Loop through every row of the child table and look for a parent row.
   while (iterator->Next()) {
     // Compute the parent key as prefix of the child key.
     Key parent_key = iterator->Key().Prefix(parent->primary_key().size());
-    std::vector<zetasql::Value> parent_values;
+    std::vector<googlesql::Value> parent_values;
     absl::Status status = storage->Lookup(timestamp, parent->id(), parent_key,
                                           parent_column_ids, &parent_values);
     if (!status.ok()) {

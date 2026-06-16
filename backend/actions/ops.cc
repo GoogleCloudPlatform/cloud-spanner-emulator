@@ -20,7 +20,7 @@
 #include <string>
 #include <variant>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/strings/str_cat.h"
 
 namespace google {

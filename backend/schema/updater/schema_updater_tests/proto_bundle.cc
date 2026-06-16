@@ -20,7 +20,7 @@
 #include "google/protobuf/descriptor.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/container/btree_set.h"
 #include "absl/status/status.h"
@@ -29,7 +29,7 @@
 #include "backend/schema/updater/schema_updater_tests/base.h"
 #include "tests/common/test.pb.h"
 #include "tests/common/test_2.pb.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -40,7 +40,7 @@ namespace test {
 // Proto bundles are not supported in PG yet and we skip the tests for PG.
 using database_api::DatabaseDialect::POSTGRESQL;
 using ::testing::HasSubstr;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 
 namespace {
 std::string read_descriptors() {
@@ -54,7 +54,7 @@ std::string read_descriptors() {
 
 TEST_P(SchemaUpdaterTest, CreateProtoBundle_SetsTheProtoBundle) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema(
                                         {
                                             R"sql(
     CREATE PROTO BUNDLE (
@@ -72,15 +72,15 @@ TEST_P(SchemaUpdaterTest, CreateProtoBundle_SetsTheProtoBundle) {
                   "emulator.tests.common.ImportingAndParentingLevelTwo",
                   "emulator.tests.common.TestEnum",
                   "emulator.tests.common.EnumContainer.TestEnum"));
-  ZETASQL_EXPECT_OK(schema->proto_bundle()->GetTypeDescriptor(
+  GOOGLESQL_EXPECT_OK(schema->proto_bundle()->GetTypeDescriptor(
       "emulator.tests.common.Simple"));
-  ZETASQL_EXPECT_OK(schema->proto_bundle()->GetEnumTypeDescriptor(
+  GOOGLESQL_EXPECT_OK(schema->proto_bundle()->GetEnumTypeDescriptor(
       "emulator.tests.common.TestEnum"));
 }
 
 TEST_P(SchemaUpdaterTest, CreateProtoBundle_InUpdateSchema_SetsTheProtoBundle) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"sql(
     CREATE TABLE T (
       col1 INT64,
@@ -88,7 +88,7 @@ TEST_P(SchemaUpdaterTest, CreateProtoBundle_InUpdateSchema_SetsTheProtoBundle) {
     ) PRIMARY KEY(col1)
   )sql"}));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(),
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(),
                                             {
                                                 R"sql(
     CREATE PROTO BUNDLE (
@@ -99,13 +99,13 @@ TEST_P(SchemaUpdaterTest, CreateProtoBundle_InUpdateSchema_SetsTheProtoBundle) {
 
   EXPECT_THAT(schema->proto_bundle()->types(),
               testing::UnorderedElementsAre("emulator.tests.common.Simple"));
-  ZETASQL_EXPECT_OK(schema->proto_bundle()->GetTypeDescriptor(
+  GOOGLESQL_EXPECT_OK(schema->proto_bundle()->GetTypeDescriptor(
       "emulator.tests.common.Simple"));
 }
 
 TEST_P(SchemaUpdaterTest, ProtoBundle_WithoutCreateProtoBundle_IsEmpty) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema(
                                         {
                                             R"sql(
     CREATE TABLE T (
@@ -118,7 +118,7 @@ TEST_P(SchemaUpdaterTest, ProtoBundle_WithoutCreateProtoBundle_IsEmpty) {
   EXPECT_TRUE(schema->proto_bundle()->empty());
   EXPECT_THAT(
       schema->proto_bundle()->GetTypeDescriptor("emulator.tests.common.Simple"),
-      zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+      googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_P(SchemaUpdaterTest, AlterProtoBundle_WithoutCreateProtoBundle_Fails) {
@@ -131,12 +131,12 @@ TEST_P(SchemaUpdaterTest, AlterProtoBundle_WithoutCreateProtoBundle_Fails) {
     )
   )sql"},
                   read_descriptors()),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kFailedPrecondition));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_P(SchemaUpdaterTest, AlterProtoBundleAltersTypes) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema(
                                         {
                                             R"sql(
     CREATE PROTO BUNDLE (
@@ -150,7 +150,7 @@ TEST_P(SchemaUpdaterTest, AlterProtoBundleAltersTypes) {
               testing::UnorderedElementsAre("emulator.tests.common.Simple",
                                             "emulator.tests.common.TestEnum"));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(),
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(),
                                             {
                                                 R"sql(
     ALTER PROTO BUNDLE INSERT (
@@ -167,15 +167,15 @@ TEST_P(SchemaUpdaterTest, AlterProtoBundleAltersTypes) {
                   "emulator.tests.common.Simple",
                   "emulator.tests.common.ImportingParent",
                   "emulator.tests.common.EnumContainer.TestEnum"));
-  ZETASQL_EXPECT_OK(schema->proto_bundle()->GetTypeDescriptor(
+  GOOGLESQL_EXPECT_OK(schema->proto_bundle()->GetTypeDescriptor(
       "emulator.tests.common.ImportingParent"));
-  ZETASQL_EXPECT_OK(schema->proto_bundle()->GetEnumTypeDescriptor(
+  GOOGLESQL_EXPECT_OK(schema->proto_bundle()->GetEnumTypeDescriptor(
       "emulator.tests.common.EnumContainer.TestEnum"));
 }
 
 TEST_P(SchemaUpdaterTest, AlterProtoBundle_UpdateNonExistent_Fails) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema(
                                         {
                                             R"sql(
     CREATE PROTO BUNDLE (
@@ -194,12 +194,12 @@ TEST_P(SchemaUpdaterTest, AlterProtoBundle_UpdateNonExistent_Fails) {
   )sql",
                            },
                            read_descriptors()),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_P(SchemaUpdaterTest, AlterProtoBundle_DeleteNonExistent_Fails) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema(
                                         {
                                             R"sql(
     CREATE PROTO BUNDLE (
@@ -218,12 +218,12 @@ TEST_P(SchemaUpdaterTest, AlterProtoBundle_DeleteNonExistent_Fails) {
   )sql",
                            },
                            read_descriptors()),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_P(SchemaUpdaterTest, DropProtoBundle_Succeeds) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema(
                                         {
                                             R"sql(
     CREATE PROTO BUNDLE (
@@ -234,7 +234,7 @@ TEST_P(SchemaUpdaterTest, DropProtoBundle_Succeeds) {
                                         },
                                         read_descriptors()));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(),
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(),
                                             {
                                                 R"sql(
                                                   DROP PROTO BUNDLE
@@ -245,7 +245,7 @@ TEST_P(SchemaUpdaterTest, DropProtoBundle_Succeeds) {
   EXPECT_TRUE(schema->proto_bundle()->empty());
   EXPECT_THAT(
       schema->proto_bundle()->GetTypeDescriptor("emulator.tests.common.Simple"),
-      zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+      googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_P(SchemaUpdaterTest, DropProtoBundleWithoutExistingProtoBundle_Fails) {
@@ -257,12 +257,12 @@ TEST_P(SchemaUpdaterTest, DropProtoBundleWithoutExistingProtoBundle_Fails) {
                       )sql",
                   },
                   read_descriptors()),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kFailedPrecondition));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_P(SchemaUpdaterTest, CreateAfterDropProtoBundle_Succeeds) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema(
                                         {
                                             R"sql(
     CREATE PROTO BUNDLE (
@@ -273,7 +273,7 @@ TEST_P(SchemaUpdaterTest, CreateAfterDropProtoBundle_Succeeds) {
                                         },
                                         read_descriptors()));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(),
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(),
                                             {
                                                 R"sql(
                                                   DROP PROTO BUNDLE
@@ -283,7 +283,7 @@ TEST_P(SchemaUpdaterTest, CreateAfterDropProtoBundle_Succeeds) {
 
   ASSERT_TRUE(schema->proto_bundle()->empty());
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(),
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(),
                                             {
                                                 R"sql(
     CREATE PROTO BUNDLE (
@@ -293,16 +293,16 @@ TEST_P(SchemaUpdaterTest, CreateAfterDropProtoBundle_Succeeds) {
                                             },
                                             read_descriptors()));
 
-  ZETASQL_EXPECT_OK(schema->proto_bundle()->GetTypeDescriptor(
+  GOOGLESQL_EXPECT_OK(schema->proto_bundle()->GetTypeDescriptor(
       "emulator.tests.common.Simple"));
   EXPECT_THAT(schema->proto_bundle()->GetEnumTypeDescriptor(
                   "emulator.tests.common.TestEnum"),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_P(SchemaUpdaterTest, AlterAfterDropProtoBundle_Fails) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema(
                                         {
                                             R"sql(
     CREATE PROTO BUNDLE (
@@ -313,7 +313,7 @@ TEST_P(SchemaUpdaterTest, AlterAfterDropProtoBundle_Fails) {
                                         },
                                         read_descriptors()));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(),
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(),
                                             {
                                                 R"sql(
                                                   DROP PROTO BUNDLE
@@ -332,12 +332,12 @@ TEST_P(SchemaUpdaterTest, AlterAfterDropProtoBundle_Fails) {
                                                 )sql",
                            },
                            read_descriptors()),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kFailedPrecondition));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_P(SchemaUpdaterTest, AlterProtoBundleUpdatesProtoColumnTypes) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema(
                                         {
                                             R"sql(
     CREATE PROTO BUNDLE (
@@ -356,8 +356,8 @@ TEST_P(SchemaUpdaterTest, AlterProtoBundleUpdatesProtoColumnTypes) {
   auto table = schema->FindTable("Albums");
   auto column = table->FindColumn("AlbumInfo");
   auto array_column = table->FindColumn("ArrayAlbumInfo");
-  const zetasql::Type* column_type = column->GetType();
-  const zetasql::Type* array_column_element_type =
+  const googlesql::Type* column_type = column->GetType();
+  const googlesql::Type* array_column_element_type =
       array_column->GetType()->AsArray()->element_type();
   ASSERT_NE(column_type->AsProto()->descriptor()->DebugString().find(
                 "optional string field = 1"),
@@ -378,7 +378,7 @@ TEST_P(SchemaUpdaterTest, AlterProtoBundleUpdatesProtoColumnTypes) {
   std::string serialized_descriptor_bytes =
       file_descriptor_set.SerializeAsString();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(),
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(),
                                             {
                                                 R"sql(
                                                   ALTER PROTO BUNDLE UPDATE (
@@ -390,8 +390,8 @@ TEST_P(SchemaUpdaterTest, AlterProtoBundleUpdatesProtoColumnTypes) {
   auto new_table = schema->FindTable("Albums");
   auto new_column = new_table->FindColumn("AlbumInfo");
   auto new_array_column = new_table->FindColumn("ArrayAlbumInfo");
-  const zetasql::Type* new_column_type = new_column->GetType();
-  const zetasql::Type* new_array_column_element_type =
+  const googlesql::Type* new_column_type = new_column->GetType();
+  const googlesql::Type* new_array_column_element_type =
       new_array_column->GetType()->AsArray()->element_type();
   EXPECT_NE(new_column_type->AsProto()->descriptor()->DebugString().find(
                 "optional string new_field = 1"),
@@ -405,7 +405,7 @@ TEST_P(SchemaUpdaterTest, AlterProtoBundleUpdatesProtoColumnTypes) {
 
 TEST_P(SchemaUpdaterTest, AlterProtoBundleUpdatesEnumColumnTypes) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema(
                                         {
                                             R"sql(
     CREATE PROTO BUNDLE (
@@ -424,8 +424,8 @@ TEST_P(SchemaUpdaterTest, AlterProtoBundleUpdatesEnumColumnTypes) {
   auto table = schema->FindTable("Albums");
   auto column = table->FindColumn("AlbumTypes");
   auto array_column = table->FindColumn("AlbumTypesArray");
-  const zetasql::Type* column_type = column->GetType();
-  const zetasql::Type* array_column_element_type =
+  const googlesql::Type* column_type = column->GetType();
+  const googlesql::Type* array_column_element_type =
       array_column->GetType()->AsArray()->element_type();
   ASSERT_NE(column_type->AsEnum()->enum_descriptor()->DebugString().find(
                 "TEST_ENUM_ONE"),
@@ -447,7 +447,7 @@ TEST_P(SchemaUpdaterTest, AlterProtoBundleUpdatesEnumColumnTypes) {
   std::string serialized_descriptor_bytes =
       file_descriptor_set.SerializeAsString();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(),
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, UpdateSchema(schema.get(),
                                             {
                                                 R"sql(
                                                   ALTER PROTO BUNDLE UPDATE (
@@ -459,8 +459,8 @@ TEST_P(SchemaUpdaterTest, AlterProtoBundleUpdatesEnumColumnTypes) {
   auto new_table = schema->FindTable("Albums");
   auto new_column = new_table->FindColumn("AlbumTypes");
   auto new_array_column = new_table->FindColumn("AlbumTypesArray");
-  const zetasql::Type* new_column_type = new_column->GetType();
-  const zetasql::Type* new_array_column_element_type =
+  const googlesql::Type* new_column_type = new_column->GetType();
+  const googlesql::Type* new_array_column_element_type =
       new_array_column->GetType()->AsArray()->element_type();
   EXPECT_NE(new_column_type->AsEnum()->enum_descriptor()->DebugString().find(
                 "TEST_ENUM_CHANGED"),
@@ -488,7 +488,7 @@ TEST_P(SchemaUpdaterTest,
 TEST_P(SchemaUpdaterTest,
        CreateProtoBundle_AlterColumnWithUnrecognizedProtoType) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"sql(
     CREATE TABLE T (
       col1 INT64,

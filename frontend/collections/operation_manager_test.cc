@@ -20,7 +20,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/strings/match.h"
 #include "frontend/entities/operation.h"
@@ -39,7 +39,7 @@ class OperationManagerTest : public testing::Test {
 };
 
 TEST_F(OperationManagerTest, CreatesNewOperationWithUserSpecifiedID) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Operation> operation,
       manager()->CreateOperation("projects/123/instances/456", "789"));
   google::longrunning::Operation operation_pb;
@@ -48,7 +48,7 @@ TEST_F(OperationManagerTest, CreatesNewOperationWithUserSpecifiedID) {
 }
 
 TEST_F(OperationManagerTest, CreatesNewOperationWithSystemGeneratedId) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Operation> operation,
       manager()->CreateOperation("projects/123/instances/456", ""));
   google::longrunning::Operation operation_pb;
@@ -58,16 +58,16 @@ TEST_F(OperationManagerTest, CreatesNewOperationWithSystemGeneratedId) {
 }
 
 TEST_F(OperationManagerTest, FailsToCreateOperationWithExistingURI) {
-  ZETASQL_ASSERT_OK(manager()->CreateOperation("projects/123/instances/456", "789"));
+  GOOGLESQL_ASSERT_OK(manager()->CreateOperation("projects/123/instances/456", "789"));
   EXPECT_THAT(manager()->CreateOperation("projects/123/instances/456", "789"),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kAlreadyExists));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kAlreadyExists));
 }
 
 TEST_F(OperationManagerTest, GetExistingOperation) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Operation> expected,
       manager()->CreateOperation("projects/123/instances/456", "789"));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Operation> actual,
       manager()->GetOperation("projects/123/instances/456/operations/789"));
   EXPECT_EQ(expected, actual);
@@ -76,27 +76,27 @@ TEST_F(OperationManagerTest, GetExistingOperation) {
 TEST_F(OperationManagerTest, CannotGetNonExistingOperation) {
   EXPECT_THAT(
       manager()->GetOperation("projects/123/instances/456/operations/789"),
-      zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+      googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(OperationManagerTest, DeletesAnExistingOperation) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Operation> expected,
       manager()->CreateOperation("projects/123/instances/456", "789"));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::shared_ptr<Operation> actual,
       manager()->GetOperation("projects/123/instances/456/operations/789"));
   EXPECT_EQ(expected, actual);
 
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       manager()->DeleteOperation("projects/123/instances/456/operations/789"));
   EXPECT_THAT(
       manager()->GetOperation("projects/123/instances/456/operations/789"),
-      zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+      googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(OperationManagerTest, DeletesANonExistingOperation) {
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       manager()->DeleteOperation("projects/123/instances/456/operations/789"));
 }
 
@@ -105,11 +105,11 @@ TEST_F(OperationManagerTest, ListsOperations) {
   std::string instance_uri = "projects/test-project/instances/test-instance";
   const int kNumOperations = 5;
   for (int i = 0; i < kNumOperations; ++i) {
-    ZETASQL_ASSERT_OK(manager()->CreateOperation(instance_uri, absl::StrCat(i)));
+    GOOGLESQL_ASSERT_OK(manager()->CreateOperation(instance_uri, absl::StrCat(i)));
   }
 
   // Expect that they are returned in order.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<std::shared_ptr<Operation>> operations,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<std::shared_ptr<Operation>> operations,
                        manager()->ListOperations(instance_uri));
   EXPECT_EQ(kNumOperations, operations.size());
   for (int i = 0; i < kNumOperations; ++i) {
@@ -125,10 +125,10 @@ TEST_F(OperationManagerTest, ListsOperationsWithSimilarInstanceURI) {
       absl::StrCat("projects/test-project/instances/test-instance-a");
   const std::string kInstanceURIb =
       absl::StrCat("projects/test-project/instances/test-instance-b");
-  ZETASQL_ASSERT_OK(manager()->CreateOperation(kInstanceURIa, "1"));
-  ZETASQL_ASSERT_OK(manager()->CreateOperation(kInstanceURIb, "1"));
+  GOOGLESQL_ASSERT_OK(manager()->CreateOperation(kInstanceURIa, "1"));
+  GOOGLESQL_ASSERT_OK(manager()->CreateOperation(kInstanceURIb, "1"));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::vector<std::shared_ptr<Operation>> operations,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<std::shared_ptr<Operation>> operations,
                        manager()->ListOperations(
                            "projects/test-project/instances/test-instance-a"));
   EXPECT_EQ(operations.size(), 1);

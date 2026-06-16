@@ -20,11 +20,11 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/analyzer.h"
-#include "zetasql/public/analyzer_options.h"
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/property_graph.h"
-#include "zetasql/public/types/type.h"
+#include "googlesql/public/analyzer.h"
+#include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/property_graph.h"
+#include "googlesql/public/types/type.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
@@ -36,8 +36,8 @@
 #include "backend/query/analyzer_options.h"
 #include "backend/schema/catalog/property_graph.h"
 #include "common/constants.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -47,38 +47,38 @@ namespace backend {
 // Helper function to match up the column names in a GraphElementTable to the
 // columns in the underlying Table.
 absl::Status MatchGraphTableColumnHelper(
-    const zetasql::Table* source_table,
+    const googlesql::Table* source_table,
     absl::Span<const std::string> column_names,
     std::vector<int>& underlying_column_indices) {
-  ZETASQL_RET_CHECK_NE(source_table, nullptr);
+  GOOGLESQL_RET_CHECK_NE(source_table, nullptr);
   underlying_column_indices.reserve(column_names.size());
   for (absl::string_view col_name : column_names) {
     const int num_data_source_cols = source_table->NumColumns();
     for (int i = 0; i < num_data_source_cols; ++i) {
-      const zetasql::Column* source_col = source_table->GetColumn(i);
+      const googlesql::Column* source_col = source_table->GetColumn(i);
       if (absl::EqualsIgnoreCase(source_col->Name(), col_name)) {
         underlying_column_indices.push_back(i);
       }
     }
   }
-  ZETASQL_RET_CHECK(underlying_column_indices.size() == column_names.size())
+  GOOGLESQL_RET_CHECK(underlying_column_indices.size() == column_names.size())
       << "Column mismatch between GraphElementTable and its underlying Table. "
       << ". Underlying table: " << source_table->Name();
   return absl::OkStatus();
 }
 
 QueryableGraphPropertyDeclaration::QueryableGraphPropertyDeclaration(
-    const QueryablePropertyGraph* property_graph, zetasql::Catalog* catalog,
-    zetasql::TypeFactory* type_factory,
+    const QueryablePropertyGraph* property_graph, googlesql::Catalog* catalog,
+    googlesql::TypeFactory* type_factory,
     const google::spanner::emulator::backend::PropertyGraph::
         PropertyDeclaration* wrapped_property_declaration)
     : property_graph_(property_graph),
       wrapped_property_declaration_(wrapped_property_declaration) {
-  const zetasql::Type* type;
-  zetasql::AnalyzerOptions analyzer_options =
+  const googlesql::Type* type;
+  googlesql::AnalyzerOptions analyzer_options =
       MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone);
   absl::Status analyze_status =
-      zetasql::AnalyzeType(wrapped_property_declaration->type,
+      googlesql::AnalyzeType(wrapped_property_declaration->type,
                              analyzer_options, catalog, type_factory, &type);
   if (!analyze_status.ok()) {
     ABSL_LOG(FATAL) << "Failed to analyze property type: "
@@ -91,12 +91,12 @@ std::string QueryableGraphPropertyDeclaration::FullName() const {
   return absl::StrCat(property_graph_->FullName(), ".", Name());
 }
 
-void ConfigureCatalogColumnCallBack(const zetasql::Table* data_source_table,
-                                    zetasql::AnalyzerOptions& options) {
+void ConfigureCatalogColumnCallBack(const googlesql::Table* data_source_table,
+                                    googlesql::AnalyzerOptions& options) {
   options.SetLookupCatalogColumnCallback(
       [data_source_table](const std::string& column_name)
-          -> absl::StatusOr<const zetasql::Column*> {
-        const zetasql::Column* column =
+          -> absl::StatusOr<const googlesql::Column*> {
+        const googlesql::Column* column =
             data_source_table->FindColumnByName(column_name);
         if (column == nullptr) {
           return absl::NotFoundError(
@@ -107,19 +107,19 @@ void ConfigureCatalogColumnCallBack(const zetasql::Table* data_source_table,
 }
 
 QueryableGraphPropertyDefinition::QueryableGraphPropertyDefinition(
-    zetasql::Catalog* catalog, zetasql::TypeFactory* type_factory,
-    const zetasql::Table* data_source_table,
-    const zetasql::GraphPropertyDeclaration* property_declaration,
+    googlesql::Catalog* catalog, googlesql::TypeFactory* type_factory,
+    const googlesql::Table* data_source_table,
+    const googlesql::GraphPropertyDeclaration* property_declaration,
     const google::spanner::emulator::backend::PropertyGraph::GraphElementTable::
         PropertyDefinition* wrapped_property_definition)
     : property_declaration_(property_declaration),
       wrapped_property_definition_(wrapped_property_definition) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone);
-  // Setup a callback for ZetaSQL's resolver to be able to map the property
+  // Setup a callback for GoogleSQL's resolver to be able to map the property
   // definition expression back to existing columns in the catalog.
-  zetasql::AnalyzerOptions local_options = analyzer_options;
-  std::unique_ptr<const zetasql::AnalyzerOutput> analyzer_output;
+  googlesql::AnalyzerOptions local_options = analyzer_options;
+  std::unique_ptr<const googlesql::AnalyzerOutput> analyzer_output;
   ConfigureCatalogColumnCallBack(data_source_table, local_options);
 
   // b/307318516: As we re-analyze each property definition expression below,
@@ -128,10 +128,10 @@ QueryableGraphPropertyDefinition::QueryableGraphPropertyDefinition(
   // Parse locations are also primarily used for providing better error
   // messages, hence we turn off parse location recording.
   local_options.set_parse_location_record_type(
-      zetasql::ParseLocationRecordType::PARSE_LOCATION_RECORD_NONE);
+      googlesql::ParseLocationRecordType::PARSE_LOCATION_RECORD_NONE);
   // Analyze the expression and store the resulting ResolvedExpr in the
   // catalog.
-  absl::Status analyze_status = zetasql::AnalyzeExpressionForAssignmentToType(
+  absl::Status analyze_status = googlesql::AnalyzeExpressionForAssignmentToType(
       wrapped_property_definition->value_expression_string, local_options,
       catalog, type_factory, property_declaration->Type(), &analyzer_output_);
   if (!analyze_status.ok()) {
@@ -145,11 +145,11 @@ std::string QueryableGraphElementLabel::FullName() const {
 }
 
 absl::Status QueryableGraphElementLabel::GetPropertyDeclarations(
-    absl::flat_hash_set<const zetasql::GraphPropertyDeclaration*>& output)
+    absl::flat_hash_set<const googlesql::GraphPropertyDeclaration*>& output)
     const {
   for (const auto& property_name : label_->property_names) {
-    const zetasql::GraphPropertyDeclaration* property_declaration = nullptr;
-    ZETASQL_RETURN_IF_ERROR(property_graph_->FindPropertyDeclarationByName(
+    const googlesql::GraphPropertyDeclaration* property_declaration = nullptr;
+    GOOGLESQL_RETURN_IF_ERROR(property_graph_->FindPropertyDeclarationByName(
         property_name, property_declaration));
     ABSL_CHECK_NE(property_declaration, nullptr)
         << "Property declaration not found: " << property_name;
@@ -159,14 +159,14 @@ absl::Status QueryableGraphElementLabel::GetPropertyDeclarations(
 }
 
 QueryableGraphElementTableInternal::QueryableGraphElementTableInternal(
-    zetasql::Catalog* catalog, zetasql::TypeFactory* type_factory,
+    googlesql::Catalog* catalog, googlesql::TypeFactory* type_factory,
     const QueryablePropertyGraph* property_graph,
     const google::spanner::emulator::backend::PropertyGraph::GraphElementTable*
         wrapped_element_table)
     : property_graph_(property_graph),
       wrapped_element_table_(wrapped_element_table) {
   for (const auto& label_name : wrapped_element_table_->label_names()) {
-    const zetasql::GraphElementLabel* label = nullptr;
+    const googlesql::GraphElementLabel* label = nullptr;
     absl::Status find_status =
         property_graph_->FindLabelByName(label_name, label);
     if (!find_status.ok()) {
@@ -175,7 +175,7 @@ QueryableGraphElementTableInternal::QueryableGraphElementTableInternal(
     label_ptrs_[label_name] = label;
   }
 
-  const zetasql::Table* data_source_table;
+  const googlesql::Table* data_source_table;
   std::string data_source_table_name = wrapped_element_table_->name();
   absl::Status find_status =
       catalog->FindTable({data_source_table_name}, &data_source_table);
@@ -197,7 +197,7 @@ QueryableGraphElementTableInternal::QueryableGraphElementTableInternal(
 
   for (const auto& property_definition :
        wrapped_element_table_->property_definitions()) {
-    const zetasql::GraphPropertyDeclaration* property_declaration = nullptr;
+    const googlesql::GraphPropertyDeclaration* property_declaration = nullptr;
     absl::Status find_status = property_graph_->FindPropertyDeclarationByName(
         property_definition.name, property_declaration);
     if (find_status.ok()) {
@@ -218,7 +218,7 @@ QueryableGraphElementTableInternal::QueryableGraphElementTableInternal(
   }
 }
 
-const zetasql::Table* QueryableGraphElementTableInternal::GetTable() const {
+const googlesql::Table* QueryableGraphElementTableInternal::GetTable() const {
   return data_source_table_;
 }
 
@@ -233,7 +233,7 @@ std::string QueryableGraphElementTableInternal::FullName() const {
 
 absl::Status QueryableGraphElementTableInternal::FindPropertyDefinitionByName(
     absl::string_view property_name,
-    const zetasql::GraphPropertyDefinition*& property_definition) const {
+    const googlesql::GraphPropertyDefinition*& property_definition) const {
   auto it = property_definitions_.find(std::string(property_name));
   if (it == property_definitions_.end()) {
     return absl::NotFoundError(
@@ -244,7 +244,7 @@ absl::Status QueryableGraphElementTableInternal::FindPropertyDefinitionByName(
 }
 
 absl::Status QueryableGraphElementTableInternal::GetPropertyDefinitions(
-    absl::flat_hash_set<const zetasql::GraphPropertyDefinition*>& output)
+    absl::flat_hash_set<const googlesql::GraphPropertyDefinition*>& output)
     const {
   for (const auto& [_, property_definition] : property_definitions_) {
     output.insert(property_definition.get());
@@ -253,7 +253,7 @@ absl::Status QueryableGraphElementTableInternal::GetPropertyDefinitions(
 }
 
 absl::Status QueryableGraphElementTableInternal::FindLabelByName(
-    absl::string_view name, const zetasql::GraphElementLabel*& label) const {
+    absl::string_view name, const googlesql::GraphElementLabel*& label) const {
   auto it = label_ptrs_.find(std::string(name));
   if (it == label_ptrs_.end()) {
     return absl::NotFoundError(absl::StrCat("Label not found: ", name));
@@ -263,7 +263,7 @@ absl::Status QueryableGraphElementTableInternal::FindLabelByName(
 }
 
 absl::Status QueryableGraphElementTableInternal::GetLabels(
-    absl::flat_hash_set<const zetasql::GraphElementLabel*>& output) const {
+    absl::flat_hash_set<const googlesql::GraphElementLabel*>& output) const {
   for (const auto& [_, label] : label_ptrs_) {
     output.insert(label);
   }
@@ -271,7 +271,7 @@ absl::Status QueryableGraphElementTableInternal::GetLabels(
 }
 
 QueryableGraphDynamicLabel::QueryableGraphDynamicLabel(
-    zetasql::Catalog* catalog, zetasql::TypeFactory* type_factory,
+    googlesql::Catalog* catalog, googlesql::TypeFactory* type_factory,
     const QueryablePropertyGraph* property_graph,
     const google::spanner::emulator::backend::PropertyGraph::GraphElementTable*
         element_table) {
@@ -279,7 +279,7 @@ QueryableGraphDynamicLabel::QueryableGraphDynamicLabel(
     ABSL_LOG(FATAL) << "Dynamic label expression is empty for element table: "
                << element_table->name();
   }
-  const zetasql::Table* data_source_table;
+  const googlesql::Table* data_source_table;
   const std::string& data_source_table_name = element_table->name();
   absl::Status find_status =
       catalog->FindTable({data_source_table_name}, &data_source_table);
@@ -288,21 +288,21 @@ QueryableGraphDynamicLabel::QueryableGraphDynamicLabel(
                << data_source_table_name;
   }
   label_expression_ = element_table->dynamic_label_expression();
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone);
-  // Setup a callback for ZetaSQL's resolver to be able to map the property
+  // Setup a callback for GoogleSQL's resolver to be able to map the property
   // definition expression back to existing columns in the catalog.
-  zetasql::AnalyzerOptions local_options = analyzer_options;
+  googlesql::AnalyzerOptions local_options = analyzer_options;
   ConfigureCatalogColumnCallBack(data_source_table, local_options);
   absl::Status analyze_status =
-      zetasql::AnalyzeExpression(label_expression_, local_options, catalog,
+      googlesql::AnalyzeExpression(label_expression_, local_options, catalog,
                                    type_factory, &analyzer_output_);
   if (!analyze_status.ok()) {
     ABSL_LOG(FATAL) << "Failed to analyze dynamic label expression: "
                << label_expression_;
   }
   ABSL_CHECK_NE(analyzer_output_->resolved_expr(), nullptr);
-  ZETASQL_VLOG(analyzer_output_->resolved_expr()->type()->IsString() ||
+  GOOGLESQL_VLOG(analyzer_output_->resolved_expr()->type()->IsString() ||
         (analyzer_output_->resolved_expr()->type()->IsArray() &&
          analyzer_output_->resolved_expr()
              ->type()
@@ -314,7 +314,7 @@ QueryableGraphDynamicLabel::QueryableGraphDynamicLabel(
 }
 
 QueryableGraphDynamicProperties::QueryableGraphDynamicProperties(
-    zetasql::Catalog* catalog, zetasql::TypeFactory* type_factory,
+    googlesql::Catalog* catalog, googlesql::TypeFactory* type_factory,
     const QueryablePropertyGraph* property_graph,
     const google::spanner::emulator::backend::PropertyGraph::GraphElementTable*
         element_table) {
@@ -322,7 +322,7 @@ QueryableGraphDynamicProperties::QueryableGraphDynamicProperties(
     ABSL_LOG(FATAL) << "Dynamic properties expression is empty for element table: "
                << element_table->name();
   }
-  const zetasql::Table* data_source_table;
+  const googlesql::Table* data_source_table;
   std::string data_source_table_name = element_table->name();
   absl::Status find_status =
       catalog->FindTable({data_source_table_name}, &data_source_table);
@@ -331,27 +331,27 @@ QueryableGraphDynamicProperties::QueryableGraphDynamicProperties(
                << data_source_table_name;
   }
   properties_expression_ = element_table->dynamic_properties_expression();
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone);
-  // Setup a callback for ZetaSQL's resolver to be able to map the property
+  // Setup a callback for GoogleSQL's resolver to be able to map the property
   // definition expression back to existing columns in the catalog.
-  zetasql::AnalyzerOptions local_options = analyzer_options;
+  googlesql::AnalyzerOptions local_options = analyzer_options;
   ConfigureCatalogColumnCallBack(data_source_table, local_options);
   absl::Status analyze_status =
-      zetasql::AnalyzeExpression(properties_expression_, local_options,
+      googlesql::AnalyzeExpression(properties_expression_, local_options,
                                    catalog, type_factory, &analyzer_output_);
   if (!analyze_status.ok()) {
     ABSL_LOG(FATAL) << "Failed to analyze dynamic properties expression: "
                << properties_expression_;
   }
   ABSL_CHECK_NE(analyzer_output_->resolved_expr(), nullptr);
-  ZETASQL_VLOG(analyzer_output_->resolved_expr()->type()->IsJson())
+  GOOGLESQL_VLOG(analyzer_output_->resolved_expr()->type()->IsJson())
       << "Dynamic properties expression must reference a table column of type "
          "JSON";
 }
 
 QueryableGraphNodeTable::QueryableGraphNodeTable(
-    zetasql::Catalog* catalog, zetasql::TypeFactory* type_factory,
+    googlesql::Catalog* catalog, googlesql::TypeFactory* type_factory,
     const QueryablePropertyGraph* property_graph,
     const google::spanner::emulator::backend::PropertyGraph::GraphElementTable*
         node_table)
@@ -360,20 +360,28 @@ QueryableGraphNodeTable::QueryableGraphNodeTable(
               catalog, type_factory, property_graph, node_table)) {}
 
 QueryableGraphNodeTableReference::QueryableGraphNodeTableReference(
-    zetasql::Catalog* catalog, const QueryablePropertyGraph* property_graph,
+    googlesql::Catalog* catalog, const QueryablePropertyGraph* property_graph,
     const google::spanner::emulator::backend::PropertyGraph::GraphElementTable::
         GraphNodeReference* wrapped_node_reference,
     const google::spanner::emulator::backend::PropertyGraph::GraphElementTable*
         wrapped_edge_table)
     : property_graph_(property_graph),
       wrapped_node_reference_(wrapped_node_reference) {
-  const zetasql::Table* referenced_node_table;
-  absl::Status find_status = catalog->FindTable(
-      {wrapped_node_reference_->node_table_name}, &referenced_node_table);
-  if (!find_status.ok()) {
-    ABSL_LOG(FATAL) << "Data source table not found in catalog: "
-               << wrapped_node_reference_->node_table_name;
+  // The node table reference might be using an alias. Resolve it to the real
+  // table name and corresponding element table using the property graph.
+  const googlesql::GraphElementTable* element_table = nullptr;
+  std::string node_table_name = wrapped_node_reference_->node_table_name;
+  const googlesql::Table* referenced_node_table = nullptr;
+  absl::Status element_table_status =
+      property_graph_->FindElementTableByName(node_table_name, element_table);
+  if (!element_table_status.ok()) {
+    // Theoretically, element table should always exist because GoogleSQL
+    // analyzer should validate that the referenced node table exists in the
+    // property graph during DDL analysis
+    ABSL_LOG(FATAL) << "Element table not found in property graph: "
+               << node_table_name;
   }
+  referenced_node_table = element_table->GetTable();
 
   absl::Status match_status = MatchGraphTableColumnHelper(
       referenced_node_table,
@@ -383,11 +391,11 @@ QueryableGraphNodeTableReference::QueryableGraphNodeTableReference(
     ABSL_LOG(FATAL) << "Failed to match graph table columns: " << match_status;
   }
 
-  const zetasql::Table* referencing_edge_table;
-  find_status =
+  const googlesql::Table* referencing_edge_table;
+  absl::Status find_status =
       catalog->FindTable({wrapped_edge_table->name()}, &referencing_edge_table);
   if (!find_status.ok()) {
-    ABSL_LOG(FATAL) << "Data source table not found in catalog: "
+    ABSL_LOG(FATAL) << "Data source edge table not found in catalog: "
                << wrapped_edge_table->name();
   }
 
@@ -400,9 +408,9 @@ QueryableGraphNodeTableReference::QueryableGraphNodeTableReference(
   }
 }
 
-const zetasql::GraphNodeTable*
+const googlesql::GraphNodeTable*
 QueryableGraphNodeTableReference::GetReferencedNodeTable() const {
-  const zetasql::GraphElementTable* element_table = nullptr;
+  const googlesql::GraphElementTable* element_table = nullptr;
   absl::Status status = property_graph_->FindElementTableByName(
       wrapped_node_reference_->node_table_name, element_table);
   // DDL Validation ensures that the referenced node table exists.
@@ -411,7 +419,7 @@ QueryableGraphNodeTableReference::GetReferencedNodeTable() const {
 }
 
 QueryableGraphEdgeTable::QueryableGraphEdgeTable(
-    zetasql::Catalog* catalog, zetasql::TypeFactory* type_factory,
+    googlesql::Catalog* catalog, googlesql::TypeFactory* type_factory,
     const QueryablePropertyGraph* property_graph,
     const google::spanner::emulator::backend::PropertyGraph::GraphElementTable*
         edge_table)

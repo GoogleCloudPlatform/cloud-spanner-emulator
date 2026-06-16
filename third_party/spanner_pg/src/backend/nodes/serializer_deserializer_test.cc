@@ -1,6 +1,6 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "third_party/spanner_pg/util/postgres.h"
 #include "third_party/spanner_pg/util/valid_memory_context_fixture.h"
 #include "third_party/spanner_pg/src/include/nodes/parsenodes.h"
@@ -353,7 +353,7 @@ TEST_F(SerializationDeserializationTest, PartitionSpec) {
   PartitionSpec* partition_spec = makeNode(PartitionSpec);
   partition_spec->location = 99;
   partition_spec->partParams = list_make1(PlaceHolderNode());
-  partition_spec->strategy = pstrdup("test_strategy");
+  partition_spec->strategy = PartitionStrategy::PARTITION_STRATEGY_LIST;
 
   EXPECT_THAT(partition_spec, CanSerializeAndDeserialize());
 }
@@ -479,38 +479,6 @@ TEST_F(SerializationDeserializationTest, IndexElem) {
   EXPECT_THAT(index_elem, CanSerializeAndDeserialize());
 }
 
-TEST_F(SerializationDeserializationTest, UpdateStmt) {
-  UpdateStmt* update_stmt = makeNode(UpdateStmt);
-
-  update_stmt->relation = makeNode(RangeVar);
-  update_stmt->targetList = list_make1(PlaceHolderNode());
-  update_stmt->whereClause = PlaceHolderNode();
-  update_stmt->fromClause = list_make1(PlaceHolderNode());
-  update_stmt->returningList = list_make1(PlaceHolderNode());
-  update_stmt->withClause = makeNode(WithClause);
-
-  EXPECT_THAT(update_stmt, CanSerializeAndDeserialize());
-}
-
-TEST_F(SerializationDeserializationTest, MultiAssignRef) {
-  MultiAssignRef* multi_assign_ref = makeNode(MultiAssignRef);
-
-  multi_assign_ref->source = PlaceHolderNode();
-  multi_assign_ref->colno = 1;
-  multi_assign_ref->ncolumns = 10;
-
-  EXPECT_THAT(multi_assign_ref, CanSerializeAndDeserialize());
-}
-
-TEST_F(SerializationDeserializationTest, DeleteStmt) {
-  DeleteStmt* delete_stmt = makeNode(DeleteStmt);
-
-  delete_stmt->relation = makeNode(RangeVar);
-  delete_stmt->usingClause = list_make1(PlaceHolderNode());
-  delete_stmt->whereClause = PlaceHolderNode();
-  delete_stmt->returningList = list_make1(PlaceHolderNode());
-  delete_stmt->withClause = makeNode(WithClause);
-
   EXPECT_THAT(delete_stmt, CanSerializeAndDeserialize());
 }
 
@@ -523,14 +491,18 @@ TEST_F(SerializationDeserializationTest, IndexStmt) {
   index_stmt->tableSpace = pstrdup("placeholder_tablespace");
   index_stmt->locality_group_name = makeNode(LocalityGroupOption);
   index_stmt->columnar_policy_name = makeNode(ColumnarPolicyOption);
-  index_stmt->indexParams = list_make1(PlaceHolderNode());
+
+  IndexElem* index_elem = makeNode(IndexElem);
+  index_elem->name = pstrdup("index_elem_name");
+  index_stmt->indexParams = list_make1(index_elem);
+
   index_stmt->indexIncludingParams = list_make1(PlaceHolderNode());
   index_stmt->options = list_make1(PlaceHolderNode());
   index_stmt->whereClause = PlaceHolderNode();
   index_stmt->excludeOpNames = list_make1(PlaceHolderNode());
   index_stmt->idxcomment = pstrdup("placeholder comment");
   index_stmt->indexOid = 124;
-  index_stmt->oldNode = 125;
+  index_stmt->oldNumber = 125;
   index_stmt->unique = true;
   index_stmt->nulls_not_distinct = true;
   index_stmt->primary = true;
@@ -762,7 +734,7 @@ TEST_F(SerializationDeserializationTest, Query) {
 
 // We added hints to SubLink, so test it.
 TEST_F(SerializationDeserializationTest, SubLink) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto sublink,
       internal::makeSubLink(SubLinkType::ANY_SUBLINK, /*subLinkId=*/1,
                             PlaceHolderNode(), list_make1(PlaceHolderNode()),
@@ -1034,7 +1006,6 @@ TEST_F(SerializationDeserializationTest, GrantRoleStmt) {
   grant_role_stmt->granted_roles = list_make1(PlaceHolderNode());
   grant_role_stmt->grantee_roles = list_make1(PlaceHolderNode());
   grant_role_stmt->is_grant = true;
-  grant_role_stmt->admin_opt = true;
   grant_role_stmt->grantor = makeNode(RoleSpec);
   grant_role_stmt->behavior = DROP_RESTRICT;
   EXPECT_THAT(grant_role_stmt, CanSerializeAndDeserialize());
@@ -1102,7 +1073,7 @@ TEST_F(SerializationDeserializationTest, FunctionHints) {
       list_make2(PlaceHolderNode(), PlaceHolderNode());
   EXPECT_THAT(function_expr, CanSerializeAndDeserialize());
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Aggref* aggref,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Aggref* aggref,
                        internal::makeAggref(F_COUNT_ANY, INT8OID,
                                             /*aggcollid=*/InvalidOid,
                                             /*inputcollid=*/InvalidOid,
@@ -1156,6 +1127,36 @@ TEST_F(SerializationDeserializationTest, AlterObjectSchemaStmt) {
   alter_object_schema_stmt->newschema = pstrdup("new_schema");
   alter_object_schema_stmt->missing_ok = true;
   EXPECT_THAT(alter_object_schema_stmt, CanSerializeAndDeserialize());
+}
+
+TEST_F(SerializationDeserializationTest, CreateFunctionStmt) {
+  CreateFunctionStmt* create_function_stmt = makeNode(CreateFunctionStmt);
+  create_function_stmt->is_procedure = false;
+  create_function_stmt->replace = false;
+  create_function_stmt->funcname = list_make1(makeString(pstrdup("funcname")));
+  create_function_stmt->parameters = list_make1(makeNode(FunctionParameter));
+  create_function_stmt->returnType = makeNode(TypeName);
+  create_function_stmt->options = list_make1(makeNode(DefElem));
+  create_function_stmt->sql_body = PlaceHolderNode();
+  create_function_stmt->routine_body_string = pstrdup("routine_body_string");
+  EXPECT_THAT(create_function_stmt, CanSerializeAndDeserialize());
+}
+
+TEST_F(SerializationDeserializationTest, FunctionParameter) {
+  FunctionParameter* function_parameter = makeNode(FunctionParameter);
+  function_parameter->name = pstrdup("name");
+  function_parameter->argType = makeNode(TypeName);
+  function_parameter->mode = FUNC_PARAM_IN;
+  function_parameter->defexpr = PlaceHolderNode();
+  function_parameter->def_expr_string = pstrdup("def_expr_string");
+  EXPECT_THAT(function_parameter, CanSerializeAndDeserialize());
+}
+
+TEST_F(SerializationDeserializationTest, ReturnStmt) {
+  ReturnStmt* return_stmt = makeNode(ReturnStmt);
+  return_stmt->returnval = PlaceHolderNode();
+
+  EXPECT_THAT(return_stmt, CanSerializeAndDeserialize());
 }
 
 }  // namespace

@@ -16,7 +16,7 @@
 
 #include "frontend/converters/keys.h"
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/status/statusor.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/index.h"
@@ -60,8 +60,8 @@ absl::StatusOr<backend::Key> KeyFromProtoInternal(
 
   backend::Key key;
   for (int i = 0; i < list_pb.values_size(); ++i) {
-    ZETASQL_ASSIGN_OR_RETURN(
-        zetasql::Value value,
+    GOOGLESQL_ASSIGN_OR_RETURN(
+        googlesql::Value value,
         ValueFromProto(list_pb.values(i),
                        table.primary_key()[i]->column()->GetType()));
     key.AddColumn(value, table.primary_key()[i]->is_descending());
@@ -85,12 +85,12 @@ absl::StatusOr<backend::KeyRange> KeyRangeFromProto(
   backend::Key start_key;
   if (range_pb.has_start_open()) {
     start_type = backend::EndpointType::kOpen;
-    ZETASQL_ASSIGN_OR_RETURN(start_key,
+    GOOGLESQL_ASSIGN_OR_RETURN(start_key,
                      KeyFromProtoInternal(range_pb.start_open(), table,
                                           /*allow_prefix_key=*/true));
   } else if (range_pb.has_start_closed()) {
     start_type = backend::EndpointType::kClosed;
-    ZETASQL_ASSIGN_OR_RETURN(start_key,
+    GOOGLESQL_ASSIGN_OR_RETURN(start_key,
                      KeyFromProtoInternal(range_pb.start_closed(), table,
                                           /*allow_prefix_key=*/true));
   } else {
@@ -102,12 +102,12 @@ absl::StatusOr<backend::KeyRange> KeyRangeFromProto(
   backend::Key limit_key;
   if (range_pb.has_end_open()) {
     limit_type = backend::EndpointType::kOpen;
-    ZETASQL_ASSIGN_OR_RETURN(limit_key,
+    GOOGLESQL_ASSIGN_OR_RETURN(limit_key,
                      KeyFromProtoInternal(range_pb.end_open(), table,
                                           /*allow_prefix_key=*/true));
   } else if (range_pb.has_end_closed()) {
     limit_type = backend::EndpointType::kClosed;
-    ZETASQL_ASSIGN_OR_RETURN(limit_key,
+    GOOGLESQL_ASSIGN_OR_RETURN(limit_key,
                      KeyFromProtoInternal(range_pb.end_closed(), table,
                                           /*allow_prefix_key=*/true));
   } else {
@@ -123,7 +123,7 @@ absl::StatusOr<backend::KeySet> KeySetFromProto(
 
   // Parse individual keys.
   for (const auto& key_pb : key_set_pb.keys()) {
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         backend::Key key,
         KeyFromProtoInternal(key_pb, table, /*allow_prefix_key=*/false));
     key_set.AddKey(key);
@@ -131,7 +131,7 @@ absl::StatusOr<backend::KeySet> KeySetFromProto(
 
   // Parse key ranges.
   for (const auto& range_pb : key_set_pb.ranges()) {
-    ZETASQL_ASSIGN_OR_RETURN(backend::KeyRange range,
+    GOOGLESQL_ASSIGN_OR_RETURN(backend::KeyRange range,
                      KeyRangeFromProto(range_pb, table));
     key_set.AddRange(range);
   }

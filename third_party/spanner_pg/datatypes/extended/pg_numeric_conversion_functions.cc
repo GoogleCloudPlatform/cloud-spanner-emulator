@@ -31,89 +31,89 @@
 
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_conversion_functions.h"
 
-#include "zetasql/public/function.h"
+#include "googlesql/public/function.h"
 #include "third_party/spanner_pg/catalog/emulator_function_evaluators.h"
 #include "third_party/spanner_pg/catalog/emulator_functions.h"
 
 namespace postgres_translator::spangres {
 namespace datatypes {
 
-const zetasql::Function* GetInt64ToPgNumericConversion() {
-  static const zetasql::Function* kInt64ToPgNumericConv =
-      new zetasql::Function("int64_to_pg_numeric_conv", "spanner",
-                              zetasql::Function::SCALAR,
+const googlesql::Function* GetInt64ToPgNumericConversion() {
+  static const googlesql::Function* kInt64ToPgNumericConv =
+      new googlesql::Function("int64_to_pg_numeric_conv", "spanner",
+                              googlesql::Function::SCALAR,
                               /*function_signatures=*/{},
-                              zetasql::FunctionOptions().set_evaluator(
+                              googlesql::FunctionOptions().set_evaluator(
                                   PGFunctionEvaluator(EvalCastToNumeric)));
   return kInt64ToPgNumericConv;
 }
 
-const zetasql::Function* GetDoubleToPgNumericConversion() {
-  static const zetasql::Function* kDoubleToPgNumericConv =
-      new zetasql::Function("double_to_pg_numeric_conv", "spanner",
-                              zetasql::Function::SCALAR,
+const googlesql::Function* GetDoubleToPgNumericConversion() {
+  static const googlesql::Function* kDoubleToPgNumericConv =
+      new googlesql::Function("double_to_pg_numeric_conv", "spanner",
+                              googlesql::Function::SCALAR,
                               /*function_signatures=*/{},
-                              zetasql::FunctionOptions().set_evaluator(
+                              googlesql::FunctionOptions().set_evaluator(
                                   PGFunctionEvaluator(EvalCastToNumeric)));
   return kDoubleToPgNumericConv;
 }
 
-const zetasql::Function* GetFloatToPgNumericConversion() {
-  static const zetasql::Function* kFloatToPgNumericConv =
-      new zetasql::Function("float_to_pg_numeric_conv", "spanner",
-                              zetasql::Function::SCALAR,
+const googlesql::Function* GetFloatToPgNumericConversion() {
+  static const googlesql::Function* kFloatToPgNumericConv =
+      new googlesql::Function("float_to_pg_numeric_conv", "spanner",
+                              googlesql::Function::SCALAR,
                               /*function_signatures=*/{},
-                              zetasql::FunctionOptions().set_evaluator(
+                              googlesql::FunctionOptions().set_evaluator(
                                   PGFunctionEvaluator(EvalCastToNumeric)));
   return kFloatToPgNumericConv;
 }
 
-const zetasql::Function* GetStringToPgNumericConversion() {
-  static const zetasql::Function* kStringToPgNumericConv =
-      new zetasql::Function("string_to_pg_numeric_conv", "spanner",
-                              zetasql::Function::SCALAR,
+const googlesql::Function* GetStringToPgNumericConversion() {
+  static const googlesql::Function* kStringToPgNumericConv =
+      new googlesql::Function("string_to_pg_numeric_conv", "spanner",
+                              googlesql::Function::SCALAR,
                               /*function_signatures=*/{},
-                              zetasql::FunctionOptions().set_evaluator(
+                              googlesql::FunctionOptions().set_evaluator(
                                   PGFunctionEvaluator(EvalCastToNumeric)));
   return kStringToPgNumericConv;
 }
 
-const zetasql::Function* GetPgNumericToInt64Conversion() {
-  static const zetasql::Function* kPgNumericToInt64Conv =
-      new zetasql::Function("pg_numeric_to_int64_conv", "spanner",
-                              zetasql::Function::SCALAR,
+const googlesql::Function* GetPgNumericToInt64Conversion() {
+  static const googlesql::Function* kPgNumericToInt64Conv =
+      new googlesql::Function("pg_numeric_to_int64_conv", "spanner",
+                              googlesql::Function::SCALAR,
                               /*function_signatures=*/{},
-                              zetasql::FunctionOptions().set_evaluator(
+                              googlesql::FunctionOptions().set_evaluator(
                                   PGFunctionEvaluator(EvalCastNumericToInt64)));
   return kPgNumericToInt64Conv;
 }
 
-const zetasql::Function* GetPgNumericToDoubleConversion() {
-  static const zetasql::Function* kPgNumericToDoubleConv =
-      new zetasql::Function(
-          "pg_numeric_to_double_conv", "spanner", zetasql::Function::SCALAR,
+const googlesql::Function* GetPgNumericToDoubleConversion() {
+  static const googlesql::Function* kPgNumericToDoubleConv =
+      new googlesql::Function(
+          "pg_numeric_to_double_conv", "spanner", googlesql::Function::SCALAR,
           /*function_signatures=*/{},
-          zetasql::FunctionOptions().set_evaluator(
+          googlesql::FunctionOptions().set_evaluator(
               PGFunctionEvaluator(EvalCastNumericToDouble)));
   return kPgNumericToDoubleConv;
 }
 
-const zetasql::Function* GetPgNumericToFloatConversion() {
-  static const zetasql::Function* kPgNumericToFloatConv =
-      new zetasql::Function("pg_numeric_to_float_conv", "spanner",
-                              zetasql::Function::SCALAR,
+const googlesql::Function* GetPgNumericToFloatConversion() {
+  static const googlesql::Function* kPgNumericToFloatConv =
+      new googlesql::Function("pg_numeric_to_float_conv", "spanner",
+                              googlesql::Function::SCALAR,
                               /*function_signatures=*/{},
-                              zetasql::FunctionOptions().set_evaluator(
+                              googlesql::FunctionOptions().set_evaluator(
                                   PGFunctionEvaluator(EvalCastNumericToFloat)));
   return kPgNumericToFloatConv;
 }
 
-const zetasql::Function* GetPgNumericToStringConversion() {
-  static const zetasql::Function* kPgNumericToStringConv =
-      new zetasql::Function(
-          "pg_numeric_to_string_conv", "spanner", zetasql::Function::SCALAR,
+const googlesql::Function* GetPgNumericToStringConversion() {
+  static const googlesql::Function* kPgNumericToStringConv =
+      new googlesql::Function(
+          "pg_numeric_to_string_conv", "spanner", googlesql::Function::SCALAR,
           /*function_signatures=*/{},
-          zetasql::FunctionOptions().set_evaluator(
+          googlesql::FunctionOptions().set_evaluator(
               PGFunctionEvaluator(EvalCastNumericToString)));
   return kPgNumericToStringConv;
 }

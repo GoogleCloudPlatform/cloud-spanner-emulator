@@ -19,9 +19,9 @@
 #include <cstdint>
 #include <string>
 
-#include "zetasql/public/options.pb.h"
-#include "zetasql/public/type.pb.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/options.pb.h"
+#include "googlesql/public/type.pb.h"
+#include "googlesql/public/value.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
@@ -68,8 +68,8 @@ absl::Status Sequence::DeepClone(SchemaGraphEditor* editor,
   return absl::OkStatus();
 }
 
-absl::StatusOr<zetasql::Value> Sequence::GetNextSequenceValue() const {
-  absl::MutexLock lock(&SequenceMutex);
+absl::StatusOr<googlesql::Value> Sequence::GetNextSequenceValue() const {
+  absl::MutexLock lock(SequenceMutex);
   if (!Sequence::SequenceLastValues.contains(id_)) {
     if (start_with_.has_value()) {
       Sequence::SequenceLastValues[id_] = start_with_.value();
@@ -109,21 +109,21 @@ absl::StatusOr<zetasql::Value> Sequence::GetNextSequenceValue() const {
       skip_range_min_.has_value() && skip_range_max_.has_value() &&
       (value <= skip_range_max_.value() && value >= skip_range_min_.value()));
 
-  return zetasql::Value::Int64(value);
+  return googlesql::Value::Int64(value);
 }
 
-zetasql::Value Sequence::GetInternalSequenceState() const {
+googlesql::Value Sequence::GetInternalSequenceState() const {
   // If no sequence value has been retrieved before, then the current state is
   // NULL.
-  absl::MutexLock lock(&SequenceMutex);
+  absl::MutexLock lock(SequenceMutex);
   if (!Sequence::SequenceLastValues.contains(id_)) {
-    return zetasql::Value::NullInt64();
+    return googlesql::Value::NullInt64();
   }
-  return zetasql::Value::Int64(Sequence::SequenceLastValues[id_]);
+  return googlesql::Value::Int64(Sequence::SequenceLastValues[id_]);
 }
 
 void Sequence::ResetSequenceLastValue() const {
-  absl::MutexLock lock(&SequenceMutex);
+  absl::MutexLock lock(SequenceMutex);
   if (!Sequence::SequenceLastValues.contains(id_)) {
     return;
   }
@@ -135,7 +135,7 @@ void Sequence::ResetSequenceLastValue() const {
 }
 
 void Sequence::RemoveSequenceFromLastValuesMap() const {
-  absl::MutexLock lock(&SequenceMutex);
+  absl::MutexLock lock(SequenceMutex);
   absl::flat_hash_map<std::string, int64_t>::iterator it =
       Sequence::SequenceLastValues.find(id_);
   if (it != Sequence::SequenceLastValues.end()) {

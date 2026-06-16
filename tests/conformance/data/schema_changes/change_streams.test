@@ -157,9 +157,9 @@ CREATE TABLE a ( id INT64 NOT NULL, ) PRIMARY KEY(id); CREATE TABLE b ( id INT64
 ==
 # ALTER CHANGE STREAM SET OPTIONS;
 CREATE CHANGE STREAM change_stream;
-ALTER CHANGE STREAM change_stream SET OPTIONS (value_capture_type = 'OLD_AND_NEW_VALUES', retention_period = '2d', exclude_insert = true, exclude_update = false, exclude_delete = true, exclude_ttl_deletes = false);
+ALTER CHANGE STREAM change_stream SET OPTIONS (value_capture_type = 'OLD_AND_NEW_VALUES', retention_period = '2d', exclude_insert = true, exclude_update = false, exclude_delete = true, allow_txn_exclusion = true, exclude_ttl_deletes = false);
 --
-CREATE CHANGE STREAM change_stream OPTIONS ( value_capture_type = 'OLD_AND_NEW_VALUES', retention_period = '2d', exclude_insert = true, exclude_update = false, exclude_delete = true, exclude_ttl_deletes = false );
+CREATE CHANGE STREAM change_stream OPTIONS ( value_capture_type = 'OLD_AND_NEW_VALUES', retention_period = '2d', exclude_insert = true, exclude_update = false, exclude_delete = true, allow_txn_exclusion = true, exclude_ttl_deletes = false );
 ==
 # ALTER CHANGE STREAM DROP FOR ALL;
 CREATE CHANGE STREAM change_stream FOR ALL;

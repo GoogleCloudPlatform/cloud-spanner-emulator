@@ -29,7 +29,7 @@
 #include "absl/time/time.h"
 #include "backend/common/utils.h"
 #include "backend/schema/catalog/schema.h"
-#include "zetasql/base/ret_check.h"
+#include "googlesql/base/ret_check.h"
 
 namespace google {
 namespace spanner {
@@ -71,7 +71,7 @@ VersionedCatalog::VersionedCatalog(
 }
 
 const Schema* VersionedCatalog::GetSchema(absl::Time timestamp) const {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   auto itr = schemas_.upper_bound(timestamp);
   itr--;
   return itr->second.get();
@@ -83,8 +83,8 @@ const Schema* VersionedCatalog::GetLatestSchema() const {
 
 absl::Status VersionedCatalog::AddSchema(absl::Time creation_time,
                                          std::unique_ptr<const Schema> schema) {
-  absl::MutexLock lock(&mu_);
-  ZETASQL_RET_CHECK(creation_time > schemas_.rbegin()->first)
+  absl::MutexLock lock(mu_);
+  GOOGLESQL_RET_CHECK(creation_time > schemas_.rbegin()->first)
       << "Failed to insert schema at " << absl::FormatTime(creation_time)
       << ": the latest schema creation timestamp is "
       << absl::FormatTime(schemas_.rbegin()->first);
@@ -99,7 +99,7 @@ absl::Status VersionedCatalog::AddSchema(absl::Time creation_time,
 }
 
 void VersionedCatalog::RemoveExpiredSchemas(absl::Time timestamp) {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   auto upper_bound =
       schemas_.upper_bound(timestamp - version_retention_period_);
   auto it = ++schemas_.begin();  // Skip the infinite past schema.

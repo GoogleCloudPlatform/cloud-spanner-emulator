@@ -17,7 +17,7 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_SEARCH_JSON_TOKENIZER_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_SEARCH_JSON_TOKENIZER_H_
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 
 namespace google {
 namespace spanner {
@@ -28,8 +28,8 @@ namespace search {
 
 class JsonTokenizer {
  public:
-  static absl::StatusOr<zetasql::Value> Tokenize(
-      absl::Span<const zetasql::Value> args);
+  static absl::StatusOr<googlesql::Value> Tokenize(
+      absl::Span<const googlesql::Value> args);
 };
 
 }  // namespace search

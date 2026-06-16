@@ -18,7 +18,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/strings/string_view.h"
 
@@ -30,7 +30,7 @@ namespace {
 TEST(UriUtilTest, ParseProjectUri) {
   absl::string_view project_uri = "projects/test-project-0";
   absl::string_view project_id;
-  ZETASQL_EXPECT_OK(ParseProjectUri(project_uri, &project_id));
+  GOOGLESQL_EXPECT_OK(ParseProjectUri(project_uri, &project_id));
   EXPECT_EQ(project_id, "test-project-0");
 }
 
@@ -38,10 +38,10 @@ TEST(UriUtilTest, InvalidProjectUriReturnsInvalidArgumentError) {
   absl::string_view invalid_uri = "project/test-project-0";
   absl::string_view project_id;
   EXPECT_THAT(ParseProjectUri(invalid_uri, &project_id),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
   invalid_uri = "/projects/test-project-0";
   EXPECT_THAT(ParseProjectUri(invalid_uri, &project_id),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(UriUtilTest, MakeProjectUri) {
@@ -53,7 +53,7 @@ TEST(UriUtilTest, ParseInstanceConfigUri) {
   absl::string_view instance_config_uri =
       "projects/test-project-0/instanceConfigs/test-instance-config-0";
   absl::string_view project_id, instance_config_id;
-  ZETASQL_EXPECT_OK(ParseInstanceConfigUri(instance_config_uri, &project_id,
+  GOOGLESQL_EXPECT_OK(ParseInstanceConfigUri(instance_config_uri, &project_id,
                                    &instance_config_id));
   EXPECT_EQ(project_id, "test-project-0");
   EXPECT_EQ(instance_config_id, "test-instance-config-0");
@@ -64,7 +64,7 @@ TEST(UriUtilTest, ParseDatabaseUri) {
       "projects/test-project/instances/test-instance/databases/"
       "test-database";
   absl::string_view project_id, instance_id, database_id;
-  ZETASQL_EXPECT_OK(
+  GOOGLESQL_EXPECT_OK(
       ParseDatabaseUri(database_uri, &project_id, &instance_id, &database_id));
   EXPECT_EQ(project_id, "test-project");
   EXPECT_EQ(instance_id, "test-instance");
@@ -77,24 +77,24 @@ TEST(UriUtilTest, ParseInvalidDatabaseUriReturnsInvalidArgumentError) {
                                "test-instance/databases/"
                                "test-database",
                                &project_id, &instance_id, &database_id),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
   EXPECT_THAT(
       ParseDatabaseUri(
           "projects/test-project/invalid-instances/test-instance/databases/"
           "test-database",
           &project_id, &instance_id, &database_id),
-      zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+      googlesql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
   EXPECT_THAT(
       ParseDatabaseUri(
           "projects/test-project/instances/test-instance/invalid-databases/"
           "test-database",
           &project_id, &instance_id, &database_id),
-      zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+      googlesql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
   EXPECT_THAT(ParseDatabaseUri(
                   "projects/test-project/instances/test-instance//databases/"
                   "test-database",
                   &project_id, &instance_id, &database_id),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(UriUtilTest, ParseSessionUri) {
@@ -102,7 +102,7 @@ TEST(UriUtilTest, ParseSessionUri) {
       "projects/test-project/instances/test-instance/databases/test-database/"
       "sessions/test-session-000";
   absl::string_view project_id, instance_id, database_id, session_id;
-  ZETASQL_EXPECT_OK(ParseSessionUri(session_uri, &project_id, &instance_id,
+  GOOGLESQL_EXPECT_OK(ParseSessionUri(session_uri, &project_id, &instance_id,
                             &database_id, &session_id));
   EXPECT_EQ(project_id, "test-project");
   EXPECT_EQ(instance_id, "test-instance");
@@ -117,7 +117,7 @@ TEST(UriUtilTest, InvalidSessionUri) {
   absl::string_view project_id, instance_id, database_id, session_id;
   EXPECT_THAT(ParseSessionUri(session_uri, &project_id, &instance_id,
                               &database_id, &session_id),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(UriUtilTest, InvalidInstanceConfigUriReturnsInvalidArgumentError) {
@@ -126,7 +126,7 @@ TEST(UriUtilTest, InvalidInstanceConfigUriReturnsInvalidArgumentError) {
       "projects/test-project-0/instances/test-instance-config-0";
   EXPECT_THAT(
       ParseInstanceConfigUri(invalid_uri, &project_id, &instance_config_id),
-      zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+      googlesql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(UriUtilTest, MakeInstanceConfigUri) {
@@ -140,7 +140,7 @@ TEST(UriUtilTest, ParseInstanceUri) {
   absl::string_view instance_uri =
       "projects/test-project-0/instances/test-instance-0";
   absl::string_view project_id, instance_id;
-  ZETASQL_EXPECT_OK(ParseInstanceUri(instance_uri, &project_id, &instance_id));
+  GOOGLESQL_EXPECT_OK(ParseInstanceUri(instance_uri, &project_id, &instance_id));
   EXPECT_EQ(project_id, "test-project-0");
   EXPECT_EQ(instance_id, "test-instance-0");
 }
@@ -150,7 +150,7 @@ TEST(UriUtilTest, InvalidInstanceUriReturnsInvalidArgumentError) {
   absl::string_view invalid_uri =
       "projects/test-project-0/instanceConfigs/test-instance-0";
   EXPECT_THAT(ParseInstanceUri(invalid_uri, &project_id, &instance_id),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(UriUtilTest, MakeInstanceUri) {

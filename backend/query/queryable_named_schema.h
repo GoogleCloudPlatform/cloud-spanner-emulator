@@ -21,8 +21,8 @@
 #include <string>
 #include <utility>
 
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/types/type_factory.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/types/type_factory.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "backend/common/case.h"
@@ -39,9 +39,9 @@ namespace emulator {
 namespace backend {
 
 // A wrapper over NamedSchema class which implements
-// zetasql::EnumerableCatalog. QueryableNamedSchema has a reference to the
+// googlesql::EnumerableCatalog. QueryableNamedSchema has a reference to the
 // backend NamedSchema.
-class QueryableNamedSchema : public zetasql::EnumerableCatalog {
+class QueryableNamedSchema : public googlesql::EnumerableCatalog {
  public:
   explicit QueryableNamedSchema(
       const backend::NamedSchema* backend_named_schema);
@@ -72,31 +72,31 @@ class QueryableNamedSchema : public zetasql::EnumerableCatalog {
     models_[model->Name()] = std::move(model);
   }
 
-  void AddObject(std::unique_ptr<const zetasql::Function> function) {
+  void AddObject(std::unique_ptr<const googlesql::Function> function) {
     udfs_[function->Name()] = std::move(function);
   }
 
-  // Implementation of the zetasql::EnumerableCatalog interface.
+  // Implementation of the googlesql::EnumerableCatalog interface.
   absl::Status GetTables(
-      absl::flat_hash_set<const zetasql::Table*>* output) const final;
+      absl::flat_hash_set<const googlesql::Table*>* output) const final;
   absl::Status GetFunctions(
-      absl::flat_hash_set<const zetasql::Function*>* output) const final;
+      absl::flat_hash_set<const googlesql::Function*>* output) const final;
   absl::Status GetCatalogs(
-      absl::flat_hash_set<const zetasql::Catalog*>* output) const final;
+      absl::flat_hash_set<const googlesql::Catalog*>* output) const final;
   absl::Status GetTypes(
-      absl::flat_hash_set<const zetasql::Type*>* output) const final;
+      absl::flat_hash_set<const googlesql::Type*>* output) const final;
 
-  absl::Status GetType(const std::string& name, const zetasql::Type** type,
+  absl::Status GetType(const std::string& name, const googlesql::Type** type,
                        const FindOptions& options) final;
-  absl::Status GetTable(const std::string& name, const zetasql::Table** table,
+  absl::Status GetTable(const std::string& name, const googlesql::Table** table,
                         const FindOptions& options) final;
-  absl::Status GetModel(const std::string& name, const zetasql::Model** model,
+  absl::Status GetModel(const std::string& name, const googlesql::Model** model,
                         const FindOptions& options) final;
   absl::Status GetSequence(const std::string& name,
-                           const zetasql::Sequence** sequence,
+                           const googlesql::Sequence** sequence,
                            const FindOptions& options) final;
   absl::Status GetFunction(const std::string& name,
-                           const zetasql::Function** function,
+                           const googlesql::Function** function,
                            const FindOptions& options) final;
 
  private:
@@ -104,11 +104,11 @@ class QueryableNamedSchema : public zetasql::EnumerableCatalog {
   CaseInsensitiveStringMap<std::unique_ptr<const QueryableSequence>> sequences_;
   CaseInsensitiveStringMap<std::unique_ptr<const QueryableView>> views_;
   CaseInsensitiveStringMap<std::unique_ptr<const QueryableModel>> models_;
-  CaseInsensitiveStringMap<std::unique_ptr<const zetasql::Function>> udfs_;
+  CaseInsensitiveStringMap<std::unique_ptr<const googlesql::Function>> udfs_;
 
   // Functions available in the default schema.
   const FunctionCatalog* function_catalog_ = nullptr;
-  zetasql::TypeFactory* type_factory_ = nullptr;
+  googlesql::TypeFactory* type_factory_ = nullptr;
 
   // The underlying NamedSchema object which backs the QueryableNamedSchema.
   const backend::NamedSchema* wrapped_named_schema_;

@@ -20,7 +20,7 @@
 #include <memory>
 #include <string>
 
-#include "zetasql/public/simple_catalog.h"
+#include "googlesql/public/simple_catalog.h"
 #include "absl/container/flat_hash_map.h"
 
 namespace google {
@@ -28,7 +28,7 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 
-class SpannerSysCatalog : public zetasql::SimpleCatalog {
+class SpannerSysCatalog : public googlesql::SimpleCatalog {
  public:
   static constexpr char kName[] = "SPANNER_SYS";
 
@@ -37,7 +37,7 @@ class SpannerSysCatalog : public zetasql::SimpleCatalog {
  private:
   // Explicitly storing the tables because we are using SimpleCatalog::AddTable
   // which expects that the caller maintains the ownership of the added objects.
-  absl::flat_hash_map<std::string, std::unique_ptr<zetasql::SimpleTable>>
+  absl::flat_hash_map<std::string, std::unique_ptr<googlesql::SimpleTable>>
       tables_by_name_;
 
   void FillOptimizerVersionsTable();

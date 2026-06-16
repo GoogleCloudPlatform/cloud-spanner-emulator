@@ -19,7 +19,7 @@
 
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/status/statusor.h"
 #include "absl/types/span.h"
 #include "backend/query/search/SimpleNode.h"
@@ -38,8 +38,8 @@ namespace search {
 // NULL, always return FALSE. If STRING query is NULL, always return TRUE.
 class SearchEvaluator {
  public:
-  static absl::StatusOr<zetasql::Value> Evaluate(
-      absl::Span<const zetasql::Value> args);
+  static absl::StatusOr<googlesql::Value> Evaluate(
+      absl::Span<const googlesql::Value> args);
 
  private:
   // Default Around distance if it cannot be determined from user input.

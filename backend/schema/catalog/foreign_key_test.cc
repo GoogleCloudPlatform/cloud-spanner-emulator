@@ -17,7 +17,7 @@
 #include "backend/schema/catalog/foreign_key.h"
 
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 
 namespace google {

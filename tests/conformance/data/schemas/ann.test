@@ -1,0 +1,28 @@
+@Dialect=GOOGLE_STANDARD_SQL
+CREATE TABLE Base (
+  MyKey INT64 NOT NULL,
+  MyData STRING(MAX),
+  Embedding ARRAY<FLOAT32>(vector_length=>2),
+  Embedding2 ARRAY<FLOAT32>(vector_length=>2),
+  Embedding3 ARRAY<FLOAT64>(vector_length=>2),
+) PRIMARY KEY(MyKey);
+CREATE VECTOR INDEX vec_index ON Base(Embedding)
+WHERE Embedding IS NOT NULL
+OPTIONS(distance_type = 'COSINE', tree_depth = 2);
+CREATE VECTOR INDEX vec_index_dot_product ON Base(Embedding)
+WHERE Embedding IS NOT NULL
+OPTIONS(distance_type = 'DOT_PRODUCT', tree_depth = 3);
+CREATE VECTOR INDEX vec_index_euclidean ON Base(Embedding2)
+WHERE Embedding2 IS NOT NULL
+OPTIONS(distance_type = 'EUCLIDEAN', tree_depth = 2);
+CREATE VECTOR INDEX vec_index_store ON Base(Embedding)
+STORING (MyData)
+WHERE Embedding IS NOT NULL
+OPTIONS(distance_type = 'COSINE', tree_depth = 2);
+CREATE VECTOR INDEX vec_index_double ON Base(Embedding3)
+WHERE Embedding3 IS NOT NULL
+OPTIONS(distance_type = 'COSINE', tree_depth = 2);
+CREATE INDEX index2 ON Base(MyData);
+===
+@Dialect=POSTGRESQL
+# The test suite does not currently test the POSTGRESQL dialect.

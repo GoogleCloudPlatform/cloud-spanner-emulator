@@ -17,7 +17,7 @@
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "tests/conformance/common/database_test_base.h"
@@ -53,8 +53,8 @@ INSTANTIATE_TEST_SUITE_P(
 
 TEST_P(CaseSensitivityTest, NamesAreCaseInsensitive) {
   // Insert a few rows, with random case changes in table and column names.
-  ZETASQL_EXPECT_OK(Insert("UserS", {"Id", "NamE"}, {1, "John"}));
-  ZETASQL_EXPECT_OK(Insert("UsErs", {"iD", "NAme"}, {2, "Peter"}));
+  GOOGLESQL_EXPECT_OK(Insert("UserS", {"Id", "NamE"}, {1, "John"}));
+  GOOGLESQL_EXPECT_OK(Insert("UsErs", {"iD", "NAme"}, {2, "Peter"}));
 
   // Read back all rows, with random case changes in table and column names.
   EXPECT_THAT(ReadAll("users", {"id", "NaMe"}),

@@ -19,7 +19,7 @@
 
 #include <utility>
 
-#include "zetasql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
 #include "absl/status/status.h"
 #include "backend/query/query_context.h"
 #include "backend/query/query_engine_options.h"
@@ -38,10 +38,10 @@ class DMLQueryValidator : public QueryValidator {
 
  protected:
   absl::Status VisitResolvedFunctionCall(
-      const zetasql::ResolvedFunctionCall* node) override;
+      const googlesql::ResolvedFunctionCall* node) override;
 
   absl::Status VisitResolvedReturningClause(
-      const zetasql::ResolvedReturningClause* node) override;
+      const googlesql::ResolvedReturningClause* node) override;
 };
 
 }  // namespace backend

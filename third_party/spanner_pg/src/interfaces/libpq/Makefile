@@ -2,7 +2,7 @@
 #
 # Makefile for src/interfaces/libpq library
 #
-# Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+# Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
 # Portions Copyright (c) 1994, Regents of the University of California
 #
 # src/interfaces/libpq/Makefile
@@ -22,7 +22,7 @@ NAME= pq
 SO_MAJOR_VERSION= 5
 SO_MINOR_VERSION= $(MAJORVERSION)
 
-override CPPFLAGS :=  -DFRONTEND -DUNSAFE_STAT_OK -I$(srcdir) $(CPPFLAGS) -I$(top_builddir)/src/port -I$(top_srcdir)/src/port
+override CPPFLAGS := -I$(srcdir) -I$(top_builddir)/src/port -I$(top_srcdir)/src/port $(CPPFLAGS)
 ifneq ($(PORTNAME), win32)
 override CFLAGS += $(PTHREAD_CFLAGS)
 endif
@@ -96,7 +96,7 @@ SHLIB_PREREQS = submake-libpgport
 SHLIB_EXPORTS = exports.txt
 
 ifeq ($(with_ssl),openssl)
-PKG_CONFIG_REQUIRES_PRIVATE = libssl libcrypto
+PKG_CONFIG_REQUIRES_PRIVATE = libssl, libcrypto
 endif
 
 all: all-lib libpq-refs-stamp

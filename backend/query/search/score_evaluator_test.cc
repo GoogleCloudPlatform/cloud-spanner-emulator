@@ -19,10 +19,10 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_split.h"
 #include "backend/query/search/exact_match_tokenizer.h"
@@ -36,12 +36,12 @@ namespace query {
 namespace search {
 
 using testing::HasSubstr;
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 TEST(ScoreEvaluatorTest, EvaluateWrongSearchColumnType) {
-  std::vector<zetasql::Value> args;
-  args.push_back(zetasql::Value::Bool(false));
-  args.push_back(zetasql::Value::String("test"));
+  std::vector<googlesql::Value> args;
+  args.push_back(googlesql::Value::Bool(false));
+  args.push_back(googlesql::Value::String("test"));
 
   EXPECT_THAT(
       ScoreEvaluator::Evaluate(args),
@@ -52,9 +52,9 @@ TEST(ScoreEvaluatorTest, EvaluateWrongSearchColumnType) {
 }
 
 TEST(ScoreEvaluatorTest, EvaluateWrongSearchQueryType) {
-  std::vector<zetasql::Value> args;
-  args.push_back(zetasql::Value::NullTokenList());
-  args.push_back(zetasql::Value::Bool(false));
+  std::vector<googlesql::Value> args;
+  args.push_back(googlesql::Value::NullTokenList());
+  args.push_back(googlesql::Value::Bool(false));
 
   EXPECT_THAT(ScoreEvaluator::Evaluate(args),
               StatusIs(absl::StatusCode::kInvalidArgument,
@@ -62,11 +62,11 @@ TEST(ScoreEvaluatorTest, EvaluateWrongSearchQueryType) {
 }
 
 TEST(ScoreEvaluatorTest, EvaluateOnWrongTokenList) {
-  std::vector<zetasql::Value> args;
+  std::vector<googlesql::Value> args;
   const auto fulltext_tokenlist =
-      ExactMatchTokenizer::Tokenize({zetasql::Value::String("numeric")});
+      ExactMatchTokenizer::Tokenize({googlesql::Value::String("numeric")});
   args.push_back(*fulltext_tokenlist);
-  args.push_back(zetasql::Value::String("test"));
+  args.push_back(googlesql::Value::String("test"));
 
   EXPECT_THAT(
       ScoreEvaluator::Evaluate(args),
@@ -90,16 +90,16 @@ TEST_P(ScoreEvaluatorTest, TestEvaluation) {
   std::vector<std::string> tokens =
       absl::StrSplit(test_case.original_doc, ", ");
   tokens.insert(tokens.begin(), "fulltext-0");
-  zetasql::Value tokenlist = TokenListFromStrings(tokens);
+  googlesql::Value tokenlist = TokenListFromStrings(tokens);
 
-  std::vector<zetasql::Value> args;
+  std::vector<googlesql::Value> args;
   args.push_back(tokenlist);
-  args.push_back(zetasql::Value::String(test_case.query));
+  args.push_back(googlesql::Value::String(test_case.query));
 
-  absl::StatusOr<zetasql::Value> result = ScoreEvaluator::Evaluate(args);
-  ZETASQL_EXPECT_OK(result.status());
+  absl::StatusOr<googlesql::Value> result = ScoreEvaluator::Evaluate(args);
+  GOOGLESQL_EXPECT_OK(result.status());
 
-  zetasql::Value score = result.value();
+  googlesql::Value score = result.value();
   EXPECT_TRUE(score.type()->IsDouble());
 
   EXPECT_EQ(test_case.expected_result, score.double_value());

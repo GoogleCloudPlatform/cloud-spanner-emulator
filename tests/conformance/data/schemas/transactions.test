@@ -1,0 +1,14 @@
+@Dialect=GOOGLE_STANDARD_SQL
+CREATE TABLE TestTable(
+  key1 STRING(MAX) NOT NULL,
+  key2 STRING(MAX),
+  col1 STRING(MAX)
+) PRIMARY KEY (key1, key2);
+===
+@Dialect=POSTGRESQL
+CREATE TABLE TestTable(
+  key1 text NOT NULL,
+  key2 text NOT NULL,
+  col1 text,
+  PRIMARY KEY (key1, key2)
+);

@@ -35,8 +35,8 @@
 #include <cstdint>
 #include <vector>
 
-#include "zetasql/public/function_signature.h"
-#include "zetasql/public/types/type.h"
+#include "googlesql/public/function_signature.h"
+#include "googlesql/public/types/type.h"
 #include "absl/status/statusor.h"
 #include "third_party/spanner_pg/catalog/builtin_function.h"
 #include "third_party/spanner_pg/catalog/engine_system_catalog.h"
@@ -62,12 +62,12 @@ class SpangresFunctionMapper {
  private:
   const EngineSystemCatalog* catalog_;
 
-  const zetasql::Type* FindTypeByOid(uint32_t oid) const;
+  const googlesql::Type* FindTypeByOid(uint32_t oid) const;
 
-  absl::StatusOr<zetasql::FunctionArgumentType> FunctionArgumentTypeFrom(
+  absl::StatusOr<googlesql::FunctionArgumentType> FunctionArgumentTypeFrom(
       ArgumentTypeProto arg_type) const;
 
-  absl::StatusOr<zetasql::FunctionArgumentType> FunctionArgumentTypeFrom(
+  absl::StatusOr<googlesql::FunctionArgumentType> FunctionArgumentTypeFrom(
       FunctionArgumentProto arg) const;
 };
 }  // namespace postgres_translator

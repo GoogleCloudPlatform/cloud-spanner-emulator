@@ -22,18 +22,21 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/types/type.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/types/type.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
 #include "backend/schema/catalog/model.h"
 #include "backend/schema/catalog/schema.h"
+#include "googlesql/base/ret_check.h"
 
 namespace google {
 namespace spanner {
 namespace emulator {
 namespace backend {
 
-class QueryableModelColumn : public zetasql::Column {
+class QueryableModelColumn : public googlesql::Column {
  public:
   QueryableModelColumn(const backend::Model* model,
                        const backend::Model::ModelColumn* column)
@@ -43,7 +46,7 @@ class QueryableModelColumn : public zetasql::Column {
   std::string FullName() const override {
     return absl::StrCat(wrapped_model_->Name(), ".", wrapped_column_->name);
   }
-  const zetasql::Type* GetType() const override {
+  const googlesql::Type* GetType() const override {
     return wrapped_column_->type;
   }
   bool IsWritableColumn() const override { return false; }
@@ -55,7 +58,7 @@ class QueryableModelColumn : public zetasql::Column {
   const backend::Model::ModelColumn* const wrapped_column_;
 };
 
-class QueryableModel : public zetasql::Model {
+class QueryableModel : public googlesql::Model {
  public:
   explicit QueryableModel(const backend::Model* model);
 
@@ -64,16 +67,16 @@ class QueryableModel : public zetasql::Model {
   }
   std::string FullName() const override { return wrapped_model_->Name(); }
   uint64_t NumInputs() const override { return wrapped_model_->input().size(); }
-  const zetasql::Column* GetInput(int i) const override {
+  const googlesql::Column* GetInput(int i) const override {
     return input_columns_[i].get();
   }
   uint64_t NumOutputs() const override {
     return wrapped_model_->output().size();
   }
-  const zetasql::Column* GetOutput(int i) const override {
+  const googlesql::Column* GetOutput(int i) const override {
     return output_columns_[i].get();
   }
-  const zetasql::Column* FindInputByName(
+  const googlesql::Column* FindInputByName(
       const std::string& name) const override {
     for (auto& column : input_columns_) {
       if (column->Name() == name) {
@@ -82,7 +85,7 @@ class QueryableModel : public zetasql::Model {
     }
     return nullptr;
   }
-  const zetasql::Column* FindOutputByName(
+  const googlesql::Column* FindOutputByName(
       const std::string& name) const override {
     for (auto& column : output_columns_) {
       if (column->Name() == name) {
@@ -90,6 +93,20 @@ class QueryableModel : public zetasql::Model {
       }
     }
     return nullptr;
+  }
+
+  // Returns the first endpoint for the model.
+  // In the real implementation, we fail-over between endpoints in case of
+  // errors. In emulator however, all endpoints are either evaluated locally or
+  // connect to the same server, so there is no need for fail-over.
+  absl::StatusOr<absl::string_view> GetFirstEndpoint() const {
+    if (wrapped_model_->endpoint().has_value()) {
+      return wrapped_model_->endpoint().value();
+    }
+    if (!wrapped_model_->endpoints().empty()) {
+      return wrapped_model_->endpoints()[0];
+    }
+    GOOGLESQL_RET_CHECK_FAIL() << "No endpoint found for model";
   }
 
  private:

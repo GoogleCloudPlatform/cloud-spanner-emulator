@@ -18,7 +18,7 @@
 
 #include "google/spanner/admin/database/v1/spanner_database_admin.pb.h"
 #include "absl/status/status.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {

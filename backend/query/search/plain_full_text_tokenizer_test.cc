@@ -21,7 +21,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/statusor.h"
 #include "backend/query/search/tokenizer.h"
 
@@ -49,23 +49,23 @@ struct TokenizeTestCase {
 };
 
 void VerifyTestCase(TokenizeTestCase& tc) {
-  zetasql::Value value;
+  googlesql::Value value;
   if (tc.is_array_input) {
-    value = zetasql::values::StringArray(tc.inputs);
+    value = googlesql::values::StringArray(tc.inputs);
   } else {
-    value = zetasql::Value::String(tc.inputs[0]);
+    value = googlesql::Value::String(tc.inputs[0]);
   }
 
-  absl::StatusOr<zetasql::Value> result =
+  absl::StatusOr<googlesql::Value> result =
       PlainFullTextTokenizer::Tokenize({value});
-  ZETASQL_EXPECT_OK(result.status());
+  GOOGLESQL_EXPECT_OK(result.status());
 
-  zetasql::Value token_list = result.value();
+  googlesql::Value token_list = result.value();
   EXPECT_TRUE(token_list.type()->IsTokenList());
 
   // Always expect the tokenlist has at least one token
   // which stores tokenizer information.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto tokens, StringsFromTokenList(token_list));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto tokens, StringsFromTokenList(token_list));
   ASSERT_FALSE(tokens.empty());
   EXPECT_EQ(tokens[0], "fulltext-0");
 
@@ -127,14 +127,14 @@ TEST(PlainFullTextTokenizerTest, NullTokenList) {
       "", " ", "   ", " \t", "\r\n", "!?", " \"\"", "-\"\r\n\" !", " +\t@\r."};
 
   for (auto& tc : test_cases) {
-    absl::StatusOr<zetasql::Value> result =
-        PlainFullTextTokenizer::Tokenize({zetasql::Value::String(tc)});
-    ZETASQL_EXPECT_OK(result.status());
+    absl::StatusOr<googlesql::Value> result =
+        PlainFullTextTokenizer::Tokenize({googlesql::Value::String(tc)});
+    GOOGLESQL_EXPECT_OK(result.status());
 
-    zetasql::Value token_list = result.value();
+    googlesql::Value token_list = result.value();
     EXPECT_TRUE(token_list.type()->IsTokenList());
 
-    ZETASQL_ASSERT_OK_AND_ASSIGN(auto tokens, StringsFromTokenList(token_list));
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto tokens, StringsFromTokenList(token_list));
     ASSERT_EQ(tokens.size(), 1);
     // The sources have value as empty strings but not null. The signature uses
     // 0 to mark it.
@@ -157,16 +157,16 @@ TEST(PlainFullTextTokenizerTest, ToLowerCases) {
 }
 
 TEST(PlainFullTextTokenizerTest, NullInputValue) {
-  absl::StatusOr<zetasql::Value> result =
-      PlainFullTextTokenizer::Tokenize({zetasql::Value::NullString()});
-  ZETASQL_EXPECT_OK(result.status());
+  absl::StatusOr<googlesql::Value> result =
+      PlainFullTextTokenizer::Tokenize({googlesql::Value::NullString()});
+  GOOGLESQL_EXPECT_OK(result.status());
 
-  zetasql::Value token_list = result.value();
+  googlesql::Value token_list = result.value();
   EXPECT_TRUE(token_list.type()->IsTokenList());
 
   // Always expect the tokenlist has at least one token
   // which stores tokenizer information.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto tokens, StringsFromTokenList(token_list));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto tokens, StringsFromTokenList(token_list));
   ASSERT_EQ(tokens.size(), 1);
   // The signature uses 1 to indicate that the source is NULL.
   EXPECT_EQ(tokens[0], "fulltext-1");

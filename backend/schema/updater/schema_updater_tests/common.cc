@@ -27,7 +27,7 @@ namespace test {
 namespace {
 
 TEST_P(SchemaUpdaterTest, CreationOrder) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T1 (
         k1 INT64,

@@ -38,7 +38,7 @@
 #include "third_party/spanner_pg/interface/bootstrap_catalog_data.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 
 using ::google::protobuf::contrib::parse_proto::ParseTextProtoOrDie;
 
@@ -52,7 +52,7 @@ class PgTypeDataTest : public testing::TestWithParam<absl::string_view> {};
 
 TEST_P(PgCollationDataTest, GetPgCollationDataFromBootstrapSuccess) {
   PgCollationData expected = ParseTextProtoOrDie(GetParam());
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgCollationData actual,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgCollationData actual,
                        GetPgCollationDataFromBootstrap(GetPgBootstrapCatalog(),
                                                        expected.collname()));
   EXPECT_THAT(actual, testing::EqualsProto(expected));
@@ -79,12 +79,12 @@ INSTANTIATE_TEST_SUITE_P(
 
 TEST_F(PgCollationDataTest, GetPgCollationDataFromBootstrapFailure) {
   ASSERT_THAT(GetPgTypeDataFromBootstrap(GetPgBootstrapCatalog(), "invalid"),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_P(PgNamespaceDataTest, GetPgNamespaceDataFromBootstrapSuccess) {
   PgNamespaceData expected = ParseTextProtoOrDie(GetParam());
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgNamespaceData actual,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgNamespaceData actual,
                        GetPgNamespaceDataFromBootstrap(GetPgBootstrapCatalog(),
                                                       expected.nspname()));
   EXPECT_THAT(actual, testing::EqualsProto(expected));
@@ -93,7 +93,7 @@ TEST_P(PgNamespaceDataTest, GetPgNamespaceDataFromBootstrapSuccess) {
 TEST_F(PgNamespaceDataTest, GetPgNamespaceDataFromBootstrapFailure) {
   ASSERT_THAT(GetPgNamespaceDataFromBootstrap(GetPgBootstrapCatalog(),
                                               "invalid"),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
 INSTANTIATE_TEST_SUITE_P(PgNamespaceDataTestData, PgNamespaceDataTest,
@@ -119,7 +119,7 @@ INSTANTIATE_TEST_SUITE_P(PgNamespaceDataTestData, PgNamespaceDataTest,
 
 TEST_P(PgProcDataTest, GetPgProcDataFromBootstrapOidSuccess) {
   PgProcData expected = ParseTextProtoOrDie(GetParam());
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       PgProcData actual,
       GetPgProcDataFromBootstrap(GetPgBootstrapCatalog(), expected.oid()));
   EXPECT_THAT(actual, testing::EqualsProto(expected));
@@ -127,7 +127,7 @@ TEST_P(PgProcDataTest, GetPgProcDataFromBootstrapOidSuccess) {
 
 TEST_P(PgProcDataTest, GetPgProcDataFromBootstrapNameSuccess) {
   PgProcData expected = ParseTextProtoOrDie(GetParam());
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::vector<PgProcData> actual,
       GetPgProcDataFromBootstrap(GetPgBootstrapCatalog(), expected.proname()));
   EXPECT_EQ(actual.size(), 1);
@@ -138,14 +138,14 @@ TEST_F(PgProcDataTest, GetPgProcDataFromBootstrapOidFailure) {
   // default (100) is a collation, not a proc.
   ASSERT_THAT(
       GetPgProcDataFromBootstrap(GetPgBootstrapCatalog(), 100),
-      zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+      googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(PgProcDataTest, GetPgProcDataFromBootstrapNameFailure) {
   // "C" is a collation, not a proc.
   ASSERT_THAT(
       GetPgProcDataFromBootstrap(GetPgBootstrapCatalog(), "C"),
-      zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+      googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
 INSTANTIATE_TEST_SUITE_P(PgProcDataTestData, PgProcDataTest,
@@ -213,7 +213,7 @@ INSTANTIATE_TEST_SUITE_P(PgProcDataTestData, PgProcDataTest,
 
 TEST_P(PgTypeDataTest, GetPgTypeDataFromBootstrapNameSuccess) {
   PgTypeData expected = ParseTextProtoOrDie(GetParam());
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgTypeData actual,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgTypeData actual,
                        GetPgTypeDataFromBootstrap(GetPgBootstrapCatalog(),
                                                   expected.typname()));
   EXPECT_THAT(actual, testing::EqualsProto(expected));
@@ -221,7 +221,7 @@ TEST_P(PgTypeDataTest, GetPgTypeDataFromBootstrapNameSuccess) {
 
 TEST_P(PgTypeDataTest, GetPgTypeDataFromBootstrapOidSuccess) {
   PgTypeData expected = ParseTextProtoOrDie(GetParam());
-  ZETASQL_ASSERT_OK_AND_ASSIGN(PgTypeData actual,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PgTypeData actual,
                        GetPgTypeDataFromBootstrap(GetPgBootstrapCatalog(),
                                                   expected.oid()));
   EXPECT_THAT(actual, testing::EqualsProto(expected));
@@ -262,13 +262,13 @@ INSTANTIATE_TEST_SUITE_P(
 
 TEST_F(PgTypeDataTest, GetPgTypeDataFromBootstrapNameFailure) {
   ASSERT_THAT(GetPgTypeDataFromBootstrap(GetPgBootstrapCatalog(), "invalid"),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
 TEST_F(PgTypeDataTest, GetPgTypeDataFromBootstrapOidFailure) {
   // default (100) is a collation, not a type.
   ASSERT_THAT(GetPgTypeDataFromBootstrap(GetPgBootstrapCatalog(), 100),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
 }
 
 }  // namespace postgres_translator

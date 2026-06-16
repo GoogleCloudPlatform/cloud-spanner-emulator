@@ -22,7 +22,7 @@
 #include <queue>
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
@@ -81,11 +81,11 @@ class TransactionEffectsBuffer : public EffectsBuffer {
 
   void Insert(const Table* table, const Key& key,
               absl::Span<const Column* const> columns,
-              const std::vector<zetasql::Value>& values) override;
+              const std::vector<googlesql::Value>& values) override;
 
   void Update(const Table* table, const Key& key,
               absl::Span<const Column* const> columns,
-              const std::vector<zetasql::Value>& values) override;
+              const std::vector<googlesql::Value>& values) override;
 
   void Delete(const Table* table, const Key& key) override;
 

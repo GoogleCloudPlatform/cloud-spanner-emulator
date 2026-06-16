@@ -20,7 +20,7 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
@@ -36,8 +36,8 @@ namespace search {
 
 class SearchSubstringEvaluator {
  public:
-  static absl::StatusOr<zetasql::Value> Evaluate(
-      absl::Span<const zetasql::Value> args);
+  static absl::StatusOr<googlesql::Value> Evaluate(
+      absl::Span<const googlesql::Value> args);
 
  private:
   // SEARCH_SUBSTRING argument indexes.
@@ -45,7 +45,7 @@ class SearchSubstringEvaluator {
   static constexpr int kQuery = 1;
   static constexpr int kRelativeSearchType = 2;
 
-  static absl::Status BuildTokenList(const zetasql::Value& tokenlist,
+  static absl::Status BuildTokenList(const googlesql::Value& tokenlist,
                                      bool& source_is_null,
                                      int& relative_search_types,
                                      int& ngram_min_size,
@@ -57,12 +57,12 @@ class SearchSubstringEvaluator {
 
   // search substrings inside tokens based on the relative_search_type.
   // Return true if all substrings are found in the tokenlist.
-  static zetasql::Value SearchSubstring(
+  static googlesql::Value SearchSubstring(
       int ngram_min_size, absl::Span<const std::string> tokens,
       absl::Span<const std::string> substrings,
       RelativeSearchType relative_search_type);
 
-  static zetasql::Value SearchSubstringPharse(
+  static googlesql::Value SearchSubstringPharse(
       int ngram_min_size, absl::Span<const std::string> tokens,
       absl::Span<const std::string> substrings);
 };

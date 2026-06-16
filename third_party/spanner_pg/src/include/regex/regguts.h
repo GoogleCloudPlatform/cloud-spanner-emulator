@@ -77,6 +77,11 @@
 #define FREE(p)		free(VS(p))
 #endif
 
+/* interruption */
+#ifndef INTERRUPT
+#define INTERRUPT(re)
+#endif
+
 /* want size of a char in bits, and max value in bounded quantifiers */
 #ifndef _POSIX2_RE_DUP_MAX
 #define _POSIX2_RE_DUP_MAX	255 /* normally from <limits.h> */
@@ -405,6 +410,8 @@ struct cnfa
 	int			flags;			/* bitmask of the following flags: */
 #define  HASLACONS	01			/* uses lookaround constraints */
 #define  MATCHALL	02			/* matches all strings of a range of lengths */
+#define  HASCANTMATCH 04		/* contains CANTMATCH arcs */
+	/* Note: HASCANTMATCH appears in nfa structs' flags, but never in cnfas */
 	int			pre;			/* setup state number */
 	int			post;			/* teardown state number */
 	color		bos[2];			/* colors, if any, assigned to BOS and BOL */
@@ -510,16 +517,12 @@ struct subre
 struct fns
 {
 	void		FUNCPTR(free, (regex_t *));
-	int			FUNCPTR(cancel_requested, (void));
 	int			FUNCPTR(stack_too_deep, (void));
 	// SPANGRES BEGIN
 	void FUNCPTR(asan_increment_stack_depth, (void));
 	void FUNCPTR(asan_decrement_stack_depth, (void));
 	// SPANGRES END
 };
-
-#define CANCEL_REQUESTED(re)  \
-	((*((struct fns *) (re)->re_fns)->cancel_requested) ())
 
 #define STACK_TOO_DEEP(re)	\
 	((*((struct fns *) (re)->re_fns)->stack_too_deep) ())

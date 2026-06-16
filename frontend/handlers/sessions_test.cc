@@ -21,7 +21,7 @@
 #include "google/spanner/v1/spanner.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/container/flat_hash_set.h"
 #include "frontend/common/protos.h"
@@ -36,15 +36,15 @@ namespace frontend {
 
 namespace {
 
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 
 namespace spanner_api = google::spanner::v1;
 
 class SessionApiTest : public test::ServerTest {
  protected:
   void SetUp() override {
-    ZETASQL_EXPECT_OK(CreateTestInstance());
-    ZETASQL_EXPECT_OK(CreateTestDatabase());
+    GOOGLESQL_EXPECT_OK(CreateTestInstance());
+    GOOGLESQL_EXPECT_OK(CreateTestDatabase());
   }
 
   spanner_api::Session response_;
@@ -55,7 +55,7 @@ TEST_F(SessionApiTest, CannotReadUsingExpiredTransactions) {
   // Create a test session.
   spanner_api::CreateSessionRequest request;
   request.set_database(test_database_uri_);
-  ZETASQL_EXPECT_OK(test_env()->spanner_client()->CreateSession(&context_, request,
+  GOOGLESQL_EXPECT_OK(test_env()->spanner_client()->CreateSession(&context_, request,
                                                         &response_));
   std::string test_sessions_uri = response_.name();
   EXPECT_THAT(test_sessions_uri,
@@ -73,7 +73,7 @@ TEST_F(SessionApiTest, CannotReadUsingExpiredTransactions) {
     txn_request.set_session(test_sessions_uri);
 
     spanner_api::Transaction txn_response;
-    ZETASQL_ASSERT_OK(BeginTransaction(txn_request, &txn_response));
+    GOOGLESQL_ASSERT_OK(BeginTransaction(txn_request, &txn_response));
     id = TransactionIDFromProto(txn_response.id());
   }
 
@@ -104,7 +104,7 @@ TEST_F(SessionApiTest, CanBeginAndUseMultipleTransactionsInSameSession) {
   // Create a test session.
   spanner_api::CreateSessionRequest request;
   request.set_database(test_database_uri_);
-  ZETASQL_EXPECT_OK(test_env()->spanner_client()->CreateSession(&context_, request,
+  GOOGLESQL_EXPECT_OK(test_env()->spanner_client()->CreateSession(&context_, request,
                                                         &response_));
   std::string test_sessions_uri = response_.name();
   EXPECT_THAT(test_sessions_uri,
@@ -123,7 +123,7 @@ TEST_F(SessionApiTest, CanBeginAndUseMultipleTransactionsInSameSession) {
     txn_request.set_session(test_sessions_uri);
 
     spanner_api::Transaction txn_response;
-    ZETASQL_ASSERT_OK(BeginTransaction(txn_request, &txn_response));
+    GOOGLESQL_ASSERT_OK(BeginTransaction(txn_request, &txn_response));
     id = TransactionIDFromProto(txn_response.id());
   }
 
@@ -143,7 +143,7 @@ TEST_F(SessionApiTest, CanBeginAndUseMultipleTransactionsInSameSession) {
   for (int i = 31; i >= 0; --i) {
     *selector.mutable_id() = std::to_string(id - i);
     *read_request.mutable_transaction() = selector;
-    ZETASQL_EXPECT_OK(Read(read_request, &read_response));
+    GOOGLESQL_EXPECT_OK(Read(read_request, &read_response));
     EXPECT_THAT(read_response, test::EqualsProto(
                                    R"(metadata {
                                         row_type {

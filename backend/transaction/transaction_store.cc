@@ -23,7 +23,7 @@
 #include <variant>
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/container/btree_map.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/log/check.h"
@@ -44,7 +44,7 @@
 #include "backend/storage/iterator.h"
 #include "backend/transaction/commit_timestamp.h"
 #include "common/errors.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 namespace google {
 namespace spanner {
 namespace emulator {
@@ -67,7 +67,7 @@ void ResetInvalidValuesToNull(absl::Span<const Column* const> columns,
 
   for (int i = 0; i < columns.size(); ++i) {
     if (!values->at(i).is_valid()) {
-      values->at(i) = zetasql::values::Null(columns[i]->GetType());
+      values->at(i) = googlesql::values::Null(columns[i]->GetType());
     }
   }
 }
@@ -94,7 +94,7 @@ absl::Status TransactionStore::BufferInsert(
     const Table* table, const Key& key, absl::Span<const Column* const> columns,
     const ValueList& values) {
   // Acquire locks to prevent another transaction to modify this entity.
-  ZETASQL_RETURN_IF_ERROR(AcquireWriteLock(table, KeyRange::Point(key), columns));
+  GOOGLESQL_RETURN_IF_ERROR(AcquireWriteLock(table, KeyRange::Point(key), columns));
 
   RowOp row_op;
   bool row_exists = RowExistsInBuffer(table, key, &row_op);
@@ -117,7 +117,7 @@ absl::Status TransactionStore::BufferUpdate(
     const Table* table, const Key& key, absl::Span<const Column* const> columns,
     const ValueList& values) {
   // Acquire locks to prevent another transaction to modify this entity.
-  ZETASQL_RETURN_IF_ERROR(AcquireWriteLock(table, KeyRange::Point(key), columns));
+  GOOGLESQL_RETURN_IF_ERROR(AcquireWriteLock(table, KeyRange::Point(key), columns));
 
   RowOp row_op;
   bool row_exists = RowExistsInBuffer(table, key, &row_op);
@@ -146,7 +146,7 @@ absl::Status TransactionStore::BufferUpdate(
 absl::Status TransactionStore::BufferDelete(const Table* table,
                                             const Key& key) {
   // Acquire locks to prevent another transaction to modify this entity.
-  ZETASQL_RETURN_IF_ERROR(AcquireWriteLock(table, KeyRange::Point(key), {}));
+  GOOGLESQL_RETURN_IF_ERROR(AcquireWriteLock(table, KeyRange::Point(key), {}));
 
   RowOp row_op;
 
@@ -162,7 +162,7 @@ absl::Status TransactionStore::BufferDelete(const Table* table,
     // Marking all columns null to indicate a delete.
     Row row_values;
     for (auto column : table->columns()) {
-      row_values[column] = zetasql::values::Null(column->GetType());
+      row_values[column] = googlesql::values::Null(column->GetType());
     }
     buffered_ops_[table][key] = std::make_pair(OpType::kDelete, row_values);
   }
@@ -210,9 +210,9 @@ std::vector<WriteOp> TransactionStore::GetDeduplicatedCurrentStatementOps()
 absl::StatusOr<ValueList> TransactionStore::ReadCommitted(
     const Table* table, const Key& key,
     std::vector<const Column*> columns) const {
-  ZETASQL_RETURN_IF_ERROR(AcquireReadLock(table, KeyRange::Point(key), columns));
+  GOOGLESQL_RETURN_IF_ERROR(AcquireReadLock(table, KeyRange::Point(key), columns));
   std::unique_ptr<StorageIterator> base_itr;
-  ZETASQL_RETURN_IF_ERROR(base_storage_->Read(absl::InfiniteFuture(), table->id(),
+  GOOGLESQL_RETURN_IF_ERROR(base_storage_->Read(absl::InfiniteFuture(), table->id(),
                                       KeyRange::Point(key),
                                       GetColumnIDs(columns), &base_itr));
   ValueList values;
@@ -221,7 +221,7 @@ absl::StatusOr<ValueList> TransactionStore::ReadCommitted(
       if (base_itr->ColumnValue(i).is_valid()) {
         values.push_back(base_itr->ColumnValue(i));
       } else {
-        values.push_back(zetasql::values::Null(columns[i]->GetType()));
+        values.push_back(googlesql::values::Null(columns[i]->GetType()));
       }
     }
   }
@@ -242,7 +242,7 @@ absl::Status TransactionStore::Read(
     std::unique_ptr<StorageIterator>* storage_itr,
     bool allow_pending_commit_timestamps_in_read) const {
   // Acquire locks to prevent another transaction to modify this entity.
-  ZETASQL_RETURN_IF_ERROR(AcquireReadLock(table, key_range, columns));
+  GOOGLESQL_RETURN_IF_ERROR(AcquireReadLock(table, key_range, columns));
 
   // Read rows buffered within transaction store.
   // Table lookup.
@@ -264,7 +264,7 @@ absl::Status TransactionStore::Read(
         values.reserve(columns.size());
         for (const Column* column : columns) {
           if (row_values.find(column) == row_values.end()) {
-            values.emplace_back(zetasql::values::Null(column->GetType()));
+            values.emplace_back(googlesql::values::Null(column->GetType()));
           } else {
             values.emplace_back(row_values.at(column));
           }
@@ -281,7 +281,7 @@ absl::Status TransactionStore::Read(
   // Read from the base storage and apply the changes buffered in transaction
   // store.
   std::unique_ptr<StorageIterator> base_itr;
-  ZETASQL_RETURN_IF_ERROR(base_storage_->Read(absl::InfiniteFuture(), table->id(),
+  GOOGLESQL_RETURN_IF_ERROR(base_storage_->Read(absl::InfiniteFuture(), table->id(),
                                       key_range, GetColumnIDs(columns),
                                       &base_itr));
 
@@ -320,7 +320,7 @@ absl::Status TransactionStore::Read(
           } else if (base_itr->ColumnValue(i).is_valid()) {
             values.emplace_back(base_itr->ColumnValue(i));
           } else {
-            values.emplace_back(zetasql::values::Null(columns[i]->GetType()));
+            values.emplace_back(googlesql::values::Null(columns[i]->GetType()));
           }
         }
       }
@@ -330,7 +330,7 @@ absl::Status TransactionStore::Read(
         if (base_itr->ColumnValue(i).is_valid()) {
           values.emplace_back(base_itr->ColumnValue(i));
         } else {
-          values.emplace_back(zetasql::values::Null(columns[i]->GetType()));
+          values.emplace_back(googlesql::values::Null(columns[i]->GetType()));
         }
       }
     }
@@ -340,7 +340,7 @@ absl::Status TransactionStore::Read(
   // Pending commit timestamp values in buffer cannot be returned to
   // clients.
   if (!allow_pending_commit_timestamps_in_read) {
-    ZETASQL_RETURN_IF_ERROR(commit_timestamp_tracker_->CheckRead(table, columns));
+    GOOGLESQL_RETURN_IF_ERROR(commit_timestamp_tracker_->CheckRead(table, columns));
   }
 
   // The keys need to be sorted to provide iterating in order. The rows added
@@ -383,7 +383,7 @@ absl::StatusOr<ValueList> TransactionStore::Lookup(
   ValueList values;
 
   // Acquire locks to prevent another transaction to modify this entity.
-  ZETASQL_RETURN_IF_ERROR(AcquireReadLock(table, KeyRange::Point(key), columns));
+  GOOGLESQL_RETURN_IF_ERROR(AcquireReadLock(table, KeyRange::Point(key), columns));
 
   // Check if row exists within the buffer.
   RowOp row_op;
@@ -396,7 +396,7 @@ absl::StatusOr<ValueList> TransactionStore::Lookup(
           if (row_value != row_op.second.end()) {
             values.emplace_back(row_value->second);
           } else {
-            values.emplace_back(zetasql::values::Null(column->GetType()));
+            values.emplace_back(googlesql::values::Null(column->GetType()));
           }
         }
         break;
@@ -404,7 +404,7 @@ absl::StatusOr<ValueList> TransactionStore::Lookup(
       case OpType::kUpdate: {
         // For update, the base storage needs to be checked to retrieve values
         // which might not be included in the update.
-        ZETASQL_RETURN_IF_ERROR(base_storage_->Lookup(absl::InfiniteFuture(),
+        GOOGLESQL_RETURN_IF_ERROR(base_storage_->Lookup(absl::InfiniteFuture(),
                                               table->id(), key,
                                               GetColumnIDs(columns), &values));
         ResetInvalidValuesToNull(columns, &values);
@@ -425,7 +425,7 @@ absl::StatusOr<ValueList> TransactionStore::Lookup(
     }
     return values;
   }
-  ZETASQL_RETURN_IF_ERROR(base_storage_->Lookup(absl::InfiniteFuture(), table->id(),
+  GOOGLESQL_RETURN_IF_ERROR(base_storage_->Lookup(absl::InfiniteFuture(), table->id(),
                                         key, GetColumnIDs(columns), &values));
   ResetInvalidValuesToNull(columns, &values);
   return values;

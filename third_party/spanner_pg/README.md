@@ -22,7 +22,7 @@ The PostgreSQL Interface for the Cloud Spanner Emulator parses PostgreSQL DDL
 statements, queries and DML statements with the open-source PostgreSQL
 implementation to produce a PostgreSQL parse tree. The parse tree is then
 translated to Cloud Spanner DDL statements and
-[ZetaSQL](https://github.com/google/zetasql) ASTs, respectively.
+[GoogleSQL](https://github.com/google/googlesql) ASTs, respectively.
 
 
 ```
@@ -46,7 +46,7 @@ if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
 ```
 
 The Cloud Spanner Emulator then executes DDL statements, queries and DML
-statements using the ZetaSQL reference implementation. Please refer to the
+statements using the GoogleSQL reference implementation. Please refer to the
 [Cloud Spanner Emulator Technical
 Details](https://github.com/GoogleCloudPlatform/cloud-spanner-emulator#technical-details)
 for further information.

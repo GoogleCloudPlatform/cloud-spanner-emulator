@@ -7,7 +7,7 @@
  * knowledge of the tuple descriptor. Fixed column widths, NOT NULLness, etc
  * can be taken advantage of.
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -677,7 +677,7 @@ slot_compile_deform(LLVMJitContext *context, TupleDesc desc,
 			v_tmp_loaddata =
 				LLVMBuildPointerCast(b, v_attdatap, vartypep, "");
 			v_tmp_loaddata = l_load(b, vartype, v_tmp_loaddata, "attr_byval");
-			v_tmp_loaddata = LLVMBuildZExt(b, v_tmp_loaddata, TypeSizeT, "");
+			v_tmp_loaddata = LLVMBuildSExt(b, v_tmp_loaddata, TypeSizeT, "");
 
 			LLVMBuildStore(b, v_tmp_loaddata, v_resultp);
 		}

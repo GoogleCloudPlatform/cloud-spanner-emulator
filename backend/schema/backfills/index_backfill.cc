@@ -21,9 +21,9 @@
 #include <set>
 #include <vector>
 
-#include "zetasql/public/functions/string.h"
-#include "zetasql/public/type.pb.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/functions/string.h"
+#include "googlesql/public/type.pb.h"
+#include "googlesql/public/value.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/time/time.h"
@@ -41,9 +41,9 @@
 #include "backend/storage/iterator.h"
 #include "common/errors.h"
 #include "common/limits.h"
-#include "zetasql/base/ret_check.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 #include "absl/status/status.h"
-#include "zetasql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -53,8 +53,8 @@ namespace backend {
 absl::Status BackfillIndexAddedColumn(const Index* index,
                                       const Column* added_column,
                                       const SchemaValidationContext* context) {
-  ZETASQL_RET_CHECK_NE(added_column, nullptr);
-  ZETASQL_RET_CHECK_NE(context, nullptr);
+  GOOGLESQL_RET_CHECK_NE(added_column, nullptr);
+  GOOGLESQL_RET_CHECK_NE(context, nullptr);
 
   const Table* index_data_table = index->index_data_table();
   const Table* indexed_table = index->indexed_table();
@@ -67,7 +67,7 @@ absl::Status BackfillIndexAddedColumn(const Index* index,
         index_data_table->FindColumn(key_column->column()->Name())->id());
   }
   std::unique_ptr<StorageIterator> itr;
-  ZETASQL_RETURN_IF_ERROR(context->storage()->Read(
+  GOOGLESQL_RETURN_IF_ERROR(context->storage()->Read(
       context->pending_commit_timestamp(), index_data_table->id(),
       KeyRange::All(), key_column_ids, &itr));
 
@@ -78,18 +78,18 @@ absl::Status BackfillIndexAddedColumn(const Index* index,
       indexed_table_key.AddColumn(
           itr->ColumnValue(i).is_valid()
               ? itr->ColumnValue(i)
-              : zetasql::Value::Null(
+              : googlesql::Value::Null(
                     index_data_table->columns()[i]->GetType()),
           indexed_table->primary_key()[i]->is_descending(),
           indexed_table->primary_key()[i]->is_nulls_last());
     }
     // Read added column from the indexed table using the key constructed above.
-    std::vector<zetasql::Value> values;
-    ZETASQL_RETURN_IF_ERROR(context->storage()->Lookup(
+    std::vector<googlesql::Value> values;
+    GOOGLESQL_RETURN_IF_ERROR(context->storage()->Lookup(
         context->pending_commit_timestamp(), indexed_table->id(),
         indexed_table_key, {indexed_table_column->id()}, &values));
     // Write the value of the added column to index's data table.
-    ZETASQL_RETURN_IF_ERROR(context->storage()->Write(
+    GOOGLESQL_RETURN_IF_ERROR(context->storage()->Write(
         context->pending_commit_timestamp(), index_data_table->id(), itr->Key(),
         {added_column->id()}, values));
   }
@@ -108,14 +108,14 @@ absl::Status BackfillIndex(const Index* index,
 
   // TODO: Use actions framework for index backfills.
   std::unique_ptr<StorageIterator> itr;
-  ZETASQL_RETURN_IF_ERROR(context->storage()->Read(
+  GOOGLESQL_RETURN_IF_ERROR(context->storage()->Read(
       context->pending_commit_timestamp(), index->indexed_table()->id(),
       KeyRange::All(), base_column_ids, &itr));
 
   // List of index keys used for verifying index uniqueness.
   std::set<Key> index_keys;
   while (itr->Next()) {
-    std::vector<zetasql::Value> row_values;
+    std::vector<googlesql::Value> row_values;
     row_values.reserve(itr->NumColumns());
     for (int i = 0; i < itr->NumColumns(); ++i) {
       // Storage returns invalid values if a value is not present, in which case
@@ -123,13 +123,13 @@ absl::Status BackfillIndex(const Index* index,
       row_values.emplace_back(
           itr->ColumnValue(i).is_valid()
               ? itr->ColumnValue(i)
-              : zetasql::Value::Null(base_columns[i]->GetType()));
+              : googlesql::Value::Null(base_columns[i]->GetType()));
     }
 
     // Compute the index key and column values.
     Row base_row = MakeRow(base_columns, row_values);
     // Backfill should return failed precondition error for invalid index keys.
-    ZETASQL_ASSIGN_OR_RETURN(Key index_data_table_key, ComputeIndexKey(base_row, index),
+    GOOGLESQL_ASSIGN_OR_RETURN(Key index_data_table_key, ComputeIndexKey(base_row, index),
                      _.SetErrorCode(absl::StatusCode::kFailedPrecondition));
     ValueList index_values = ComputeIndexValues(base_row, index);
     if (ShouldFilterIndexKeyOrValue(index, index_data_table_key, base_row)) {
@@ -148,7 +148,7 @@ absl::Status BackfillIndex(const Index* index,
     }
 
     // Insert the new row in the index.
-    ZETASQL_RETURN_IF_ERROR(context->storage()->Write(
+    GOOGLESQL_RETURN_IF_ERROR(context->storage()->Write(
         context->pending_commit_timestamp(), index->index_data_table()->id(),
         index_data_table_key, index_column_ids, index_values));
   }

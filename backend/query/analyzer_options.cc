@@ -20,11 +20,11 @@
 #include <vector>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
-#include "zetasql/public/analyzer_options.h"
-#include "zetasql/public/builtin_function_options.h"
-#include "zetasql/public/language_options.h"
-#include "zetasql/public/options.pb.h"
-#include "zetasql/resolved_ast/resolved_node_kind.pb.h"
+#include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/builtin_function_options.h"
+#include "googlesql/public/language_options.h"
+#include "googlesql/public/options.pb.h"
+#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 #include "absl/time/time.h"
 #include "common/constants.h"
 #include "common/feature_flags.h"
@@ -36,123 +36,123 @@ namespace backend {
 
 using admin::database::v1::DatabaseDialect;
 
-zetasql::AnalyzerOptions MakeGoogleSqlAnalyzerOptions(
+googlesql::AnalyzerOptions MakeGoogleSqlAnalyzerOptions(
     const std::string time_zone) {
-  zetasql::AnalyzerOptions options;
+  googlesql::AnalyzerOptions options;
   absl::TimeZone time_zone_obj;
   absl::LoadTimeZone(time_zone, &time_zone_obj);
   options.set_default_time_zone(time_zone_obj);
   options.set_error_message_mode(
-      zetasql::AnalyzerOptions::ERROR_MESSAGE_MULTI_LINE_WITH_CARET);
+      googlesql::AnalyzerOptions::ERROR_MESSAGE_MULTI_LINE_WITH_CARET);
 
   options.set_language(MakeGoogleSqlLanguageOptions());
 
   options.set_allow_undeclared_parameters(true);
 
-  // Spanner does not support positional parameters, so tell ZetaSQL to always
+  // Spanner does not support positional parameters, so tell GoogleSQL to always
   // use named parameter bindings.
-  options.set_parameter_mode(zetasql::PARAMETER_NAMED);
+  options.set_parameter_mode(googlesql::PARAMETER_NAMED);
 
   return options;
 }
 
-zetasql::LanguageOptions MakeGoogleSqlLanguageOptions() {
-  zetasql::LanguageOptions options;
+googlesql::LanguageOptions MakeGoogleSqlLanguageOptions() {
+  googlesql::LanguageOptions options;
 
-  options.set_name_resolution_mode(zetasql::NAME_RESOLUTION_DEFAULT);
-  options.set_product_mode(zetasql::PRODUCT_EXTERNAL);
+  options.set_name_resolution_mode(googlesql::NAME_RESOLUTION_DEFAULT);
+  options.set_product_mode(googlesql::PRODUCT_EXTERNAL);
   options.SetEnabledLanguageFeatures({
-      zetasql::FEATURE_EXTENDED_TYPES,
-      zetasql::FEATURE_FUNCTION_ARGUMENTS_WITH_DEFAULTS,
-      zetasql::FEATURE_NAMED_ARGUMENTS,
-      zetasql::FEATURE_NUMERIC_TYPE,
-      zetasql::FEATURE_TABLESAMPLE,
-      zetasql::FEATURE_TIMESTAMP_NANOS,
-      zetasql::FEATURE_HAVING_IN_AGGREGATE,
-      zetasql::FEATURE_NULL_HANDLING_MODIFIER_IN_AGGREGATE,
-      zetasql::FEATURE_ORDER_BY_IN_AGGREGATE,
-      zetasql::FEATURE_LIMIT_IN_AGGREGATE,
-      zetasql::FEATURE_ORDER_BY_COLLATE,
-      zetasql::FEATURE_SELECT_STAR_EXCEPT_REPLACE,
-      zetasql::FEATURE_SAFE_FUNCTION_CALL,
-      zetasql::FEATURE_JSON_KEYS_FUNCTION,
-      zetasql::FEATURE_JSON_TYPE,
-      zetasql::FEATURE_JSON_ARRAY_FUNCTIONS,
-      zetasql::FEATURE_JSON_CONSTRUCTOR_FUNCTIONS,
-      zetasql::FEATURE_JSON_CONTAINS_FUNCTION,
-      zetasql::FEATURE_JSON_MUTATOR_FUNCTIONS,
-      zetasql::FEATURE_JSON_STRICT_NUMBER_PARSING,
-      zetasql::FEATURE_JSON_VALUE_EXTRACTION_FUNCTIONS,
-      zetasql::FEATURE_JSON_LAX_VALUE_EXTRACTION_FUNCTIONS,
-      zetasql::FEATURE_DML_RETURNING,
-      zetasql::FEATURE_WITH_EXPRESSION,
-      zetasql::FEATURE_TABLE_VALUED_FUNCTIONS,
-      zetasql::FEATURE_TOKENIZED_SEARCH,
-      zetasql::FEATURE_ADDITIONAL_STRING_FUNCTIONS,
-      zetasql::FEATURE_SEQUENCE_ARG,
-      zetasql::FEATURE_JSON_ARRAY_VALUE_EXTRACTION_FUNCTIONS,
-      zetasql::FEATURE_JSON_MORE_VALUE_EXTRACTION_FUNCTIONS,
-      zetasql::FEATURE_ENABLE_FLOAT_DISTANCE_FUNCTIONS,
-      zetasql::FEATURE_DOT_PRODUCT,
-      zetasql::FEATURE_INTERVAL_TYPE,
-      zetasql::FEATURE_SQL_GRAPH,
-      zetasql::FEATURE_SQL_GRAPH_ADVANCED_QUERY,
-      zetasql::FEATURE_SQL_GRAPH_BOUNDED_PATH_QUANTIFICATION,
-      zetasql::FEATURE_SQL_GRAPH_PATH_TYPE,
-      zetasql::FEATURE_SQL_GRAPH_PATH_MODE,
-      zetasql::FEATURE_SQL_GRAPH_DYNAMIC_LABEL_PROPERTIES_IN_DDL,
-      zetasql::FEATURE_SQL_GRAPH_DYNAMIC_LABEL_EXTENSION_IN_DDL,
-      zetasql::FEATURE_SQL_GRAPH_DYNAMIC_ELEMENT_TYPE,
-      zetasql::FEATURE_SQL_GRAPH_RETURN_EXTENSIONS,
-      zetasql::FEATURE_UUID_TYPE,
-      zetasql::FEATURE_FOR_UPDATE,
-      zetasql::FEATURE_INLINE_LAMBDA_ARGUMENT,
+      googlesql::FEATURE_EXTENDED_TYPES,
+      googlesql::FEATURE_FUNCTION_ARGUMENTS_WITH_DEFAULTS,
+      googlesql::FEATURE_NAMED_ARGUMENTS,
+      googlesql::FEATURE_NUMERIC_TYPE,
+      googlesql::FEATURE_TABLESAMPLE,
+      googlesql::FEATURE_TIMESTAMP_NANOS,
+      googlesql::FEATURE_HAVING_IN_AGGREGATE,
+      googlesql::FEATURE_NULL_HANDLING_MODIFIER_IN_AGGREGATE,
+      googlesql::FEATURE_ORDER_BY_IN_AGGREGATE,
+      googlesql::FEATURE_LIMIT_IN_AGGREGATE,
+      googlesql::FEATURE_ORDER_BY_COLLATE,
+      googlesql::FEATURE_SELECT_STAR_EXCEPT_REPLACE,
+      googlesql::FEATURE_SAFE_FUNCTION_CALL,
+      googlesql::FEATURE_JSON_KEYS_FUNCTION,
+      googlesql::FEATURE_JSON_TYPE,
+      googlesql::FEATURE_JSON_ARRAY_FUNCTIONS,
+      googlesql::FEATURE_JSON_CONSTRUCTOR_FUNCTIONS,
+      googlesql::FEATURE_JSON_CONTAINS_FUNCTION,
+      googlesql::FEATURE_JSON_MUTATOR_FUNCTIONS,
+      googlesql::FEATURE_JSON_STRICT_NUMBER_PARSING,
+      googlesql::FEATURE_JSON_VALUE_EXTRACTION_FUNCTIONS,
+      googlesql::FEATURE_JSON_LAX_VALUE_EXTRACTION_FUNCTIONS,
+      googlesql::FEATURE_DML_RETURNING,
+      googlesql::FEATURE_WITH_EXPRESSION,
+      googlesql::FEATURE_TABLE_VALUED_FUNCTIONS,
+      googlesql::FEATURE_TOKENIZED_SEARCH,
+      googlesql::FEATURE_ADDITIONAL_STRING_FUNCTIONS,
+      googlesql::FEATURE_SEQUENCE_ARG,
+      googlesql::FEATURE_JSON_ARRAY_VALUE_EXTRACTION_FUNCTIONS,
+      googlesql::FEATURE_JSON_MORE_VALUE_EXTRACTION_FUNCTIONS,
+      googlesql::FEATURE_ENABLE_FLOAT_DISTANCE_FUNCTIONS,
+      googlesql::FEATURE_DOT_PRODUCT,
+      googlesql::FEATURE_INTERVAL_TYPE,
+      googlesql::FEATURE_SQL_GRAPH,
+      googlesql::FEATURE_SQL_GRAPH_ADVANCED_QUERY,
+      googlesql::FEATURE_SQL_GRAPH_BOUNDED_PATH_QUANTIFICATION,
+      googlesql::FEATURE_SQL_GRAPH_PATH_TYPE,
+      googlesql::FEATURE_SQL_GRAPH_PATH_MODE,
+      googlesql::FEATURE_SQL_GRAPH_DYNAMIC_LABEL_PROPERTIES_IN_DDL,
+      googlesql::FEATURE_SQL_GRAPH_DYNAMIC_LABEL_EXTENSION_IN_DDL,
+      googlesql::FEATURE_SQL_GRAPH_DYNAMIC_ELEMENT_TYPE,
+      googlesql::FEATURE_SQL_GRAPH_RETURN_EXTENSIONS,
+      googlesql::FEATURE_UUID_TYPE,
+      googlesql::FEATURE_FOR_UPDATE,
+      googlesql::FEATURE_INLINE_LAMBDA_ARGUMENT,
   });
   if (EmulatorFeatureFlags::instance().flags().enable_protos) {
-    options.EnableLanguageFeature(zetasql::FEATURE_PROTO_BASE);
-    options.EnableLanguageFeature(zetasql::FEATURE_BRACED_PROTO_CONSTRUCTORS);
-    options.EnableLanguageFeature(zetasql::FEATURE_REPLACE_FIELDS);
+    options.EnableLanguageFeature(googlesql::FEATURE_PROTO_BASE);
+    options.EnableLanguageFeature(googlesql::FEATURE_BRACED_PROTO_CONSTRUCTORS);
+    options.EnableLanguageFeature(googlesql::FEATURE_REPLACE_FIELDS);
   }
 
   options.SetSupportedStatementKinds({
-      zetasql::RESOLVED_QUERY_STMT,
-      zetasql::RESOLVED_INSERT_STMT,
-      zetasql::RESOLVED_UPDATE_STMT,
-      zetasql::RESOLVED_DELETE_STMT,
-      zetasql::RESOLVED_CALL_STMT,
+      googlesql::RESOLVED_QUERY_STMT,
+      googlesql::RESOLVED_INSERT_STMT,
+      googlesql::RESOLVED_UPDATE_STMT,
+      googlesql::RESOLVED_DELETE_STMT,
+      googlesql::RESOLVED_CALL_STMT,
   });
 
   return options;
 }
 
-static void DisableOption(zetasql::LanguageFeature feature,
-                          zetasql::LanguageOptions* options) {
+static void DisableOption(googlesql::LanguageFeature feature,
+                          googlesql::LanguageOptions* options) {
   auto features = options->GetEnabledLanguageFeatures();
   features.erase(feature);
   options->SetEnabledLanguageFeatures(features);
 }
 
-zetasql::LanguageOptions MakeGoogleSqlLanguageOptionsForCompliance() {
+googlesql::LanguageOptions MakeGoogleSqlLanguageOptionsForCompliance() {
   auto options = MakeGoogleSqlLanguageOptions();
-  DisableOption(zetasql::FEATURE_ANALYTIC_FUNCTIONS, &options);
+  DisableOption(googlesql::FEATURE_ANALYTIC_FUNCTIONS, &options);
   return options;
 }
 
-zetasql::AnalyzerOptions MakeGoogleSqlAnalyzerOptionsForViewsAndFunctions(
+googlesql::AnalyzerOptions MakeGoogleSqlAnalyzerOptionsForViewsAndFunctions(
     std::string time_zone, DatabaseDialect dialect) {
   auto language_opts = MakeGoogleSqlLanguageOptions();
   if (dialect == DatabaseDialect::POSTGRESQL) {
     // PG needs ASC NULLS LAST and DESC NULLS FIRST for default values.
     language_opts.EnableLanguageFeature(
-        zetasql::FEATURE_NULLS_FIRST_LAST_IN_ORDER_BY);
+        googlesql::FEATURE_NULLS_FIRST_LAST_IN_ORDER_BY);
   }
   // Only CREATE VIEW and CREATE FUNCTION are supported in DDL.
   language_opts.SetSupportedStatementKinds({
-      zetasql::RESOLVED_CREATE_VIEW_STMT,
-      zetasql::RESOLVED_CREATE_FUNCTION_STMT,
+      googlesql::RESOLVED_CREATE_VIEW_STMT,
+      googlesql::RESOLVED_CREATE_FUNCTION_STMT,
   });
   // VIEW defintions must be specified in strict name resolution mode.
-  language_opts.set_name_resolution_mode(zetasql::NAME_RESOLUTION_STRICT);
+  language_opts.set_name_resolution_mode(googlesql::NAME_RESOLUTION_STRICT);
 
   auto analyzer_options = MakeGoogleSqlAnalyzerOptions(time_zone);
   analyzer_options.set_prune_unused_columns(true);
@@ -160,25 +160,25 @@ zetasql::AnalyzerOptions MakeGoogleSqlAnalyzerOptionsForViewsAndFunctions(
   return analyzer_options;
 }
 
-zetasql::BuiltinFunctionOptions MakeGoogleSqlBuiltinFunctionOptions() {
-  zetasql::BuiltinFunctionOptions options(MakeGoogleSqlLanguageOptions());
+googlesql::BuiltinFunctionOptions MakeGoogleSqlBuiltinFunctionOptions() {
+  googlesql::BuiltinFunctionOptions options(MakeGoogleSqlLanguageOptions());
   // Modify the GSQL function options to exclude function signatures that
   // aren't yet supported in spanner.
-  const std::vector<zetasql::FunctionSignatureId> exclude_function_ids = {
+  const std::vector<googlesql::FunctionSignatureId> exclude_function_ids = {
       // Exclude sparse distance signatures. There are no sparse fn signatures
       // for DOT_PRODUCT at the moment; put them here if they are ever added by
-      // ZetaSQL.
-      zetasql::FN_COSINE_DISTANCE_SPARSE_INT64,
-      zetasql::FN_COSINE_DISTANCE_SPARSE_STRING,
-      zetasql::FN_EUCLIDEAN_DISTANCE_SPARSE_INT64,
-      zetasql::FN_EUCLIDEAN_DISTANCE_SPARSE_STRING,
+      // GoogleSQL.
+      googlesql::FN_COSINE_DISTANCE_SPARSE_INT64,
+      googlesql::FN_COSINE_DISTANCE_SPARSE_STRING,
+      googlesql::FN_EUCLIDEAN_DISTANCE_SPARSE_INT64,
+      googlesql::FN_EUCLIDEAN_DISTANCE_SPARSE_STRING,
       // Exclude additional string functions not yet supported in Spanner since
       // we have enabled FEATURE_ADDITIONAL_STRING_FUNCTIONS for SOUNDEX.
-      zetasql::FN_INSTR_STRING,
-      zetasql::FN_INSTR_BYTES,
-      zetasql::FN_TRANSLATE_STRING,
-      zetasql::FN_TRANSLATE_BYTES,
-      zetasql::FN_INITCAP_STRING,
+      googlesql::FN_INSTR_STRING,
+      googlesql::FN_INSTR_BYTES,
+      googlesql::FN_TRANSLATE_STRING,
+      googlesql::FN_TRANSLATE_BYTES,
+      googlesql::FN_INITCAP_STRING,
   };
 
   for (const auto& exclude_function_id : exclude_function_ids) {

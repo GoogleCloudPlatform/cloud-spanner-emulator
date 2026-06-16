@@ -34,6 +34,7 @@
 
 #include <string>
 
+#include "third_party/spanner_pg/util/integral_types.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/synchronization/mutex.h"

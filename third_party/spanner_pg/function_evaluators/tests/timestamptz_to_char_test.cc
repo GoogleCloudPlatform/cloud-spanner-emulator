@@ -31,7 +31,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/time/civil_time.h"
 #include "absl/time/time.h"
 #include "third_party/spanner_pg/function_evaluators/tests/test_base.h"
@@ -45,7 +45,7 @@ namespace {
 using ::testing::IsNull;
 using ::testing::Pointee;
 using ::testing::StrEq;
-using ::zetasql_base::testing::IsOkAndHolds;
+using ::googlesql_base::testing::IsOkAndHolds;
 
 constexpr char kDefaultTimezone[] = "UTC";
 
@@ -53,7 +53,7 @@ class TimestampTzTest : public PgEvaluatorTest {
  protected:
   void SetUp() override {
     PgEvaluatorTest::SetUp();
-    ZETASQL_ASSERT_OK(InitTimezone(kDefaultTimezone));
+    GOOGLESQL_ASSERT_OK(InitTimezone(kDefaultTimezone));
   }
   void TearDown() override {
     PgEvaluatorTest::TearDown();
@@ -87,32 +87,32 @@ TEST_F(PgEvaluatorTest, SupportsOlsonTimezones) {
   absl::Duration subseconds = absl::Microseconds(123456);
   absl::Time time = timezone.At(civil_second).pre + subseconds;
 
-  ZETASQL_ASSERT_OK(InitTimezone("Antarctica/Palmer"));
+  GOOGLESQL_ASSERT_OK(InitTimezone("Antarctica/Palmer"));
   EXPECT_THAT(PgTimestampTzToChar(time, "YYYY-MM-DD HH24:MI:SS.US TZ"),
               IsOkAndHolds(Pointee(StrEq("2000-01-02 00:04:05.123456 -03"))));
   CleanupTimezone();
 
-  ZETASQL_ASSERT_OK(InitTimezone("America/Caracas"));
+  GOOGLESQL_ASSERT_OK(InitTimezone("America/Caracas"));
   EXPECT_THAT(PgTimestampTzToChar(time, "YYYY-MM-DD HH24:MI:SS.US TZ"),
               IsOkAndHolds(Pointee(StrEq("2000-01-01 23:04:05.123456 -04"))));
   CleanupTimezone();
 
-  ZETASQL_ASSERT_OK(InitTimezone("Australia/Adelaide"));  // UTC+10:30
+  GOOGLESQL_ASSERT_OK(InitTimezone("Australia/Adelaide"));  // UTC+10:30
   EXPECT_THAT(PgTimestampTzToChar(time, "YYYY-MM-DD HH24:MI:SS.US TZ"),
               IsOkAndHolds(Pointee(StrEq("2000-01-02 13:34:05.123456 ACDT"))));
   CleanupTimezone();
 
-  ZETASQL_ASSERT_OK(InitTimezone("Pacific/Chatham"));
+  GOOGLESQL_ASSERT_OK(InitTimezone("Pacific/Chatham"));
   EXPECT_THAT(PgTimestampTzToChar(time, "YYYY-MM-DD HH24:MI:SS.US TZ"),
               IsOkAndHolds(Pointee(StrEq("2000-01-02 16:49:05.123456 +1345"))));
   CleanupTimezone();
 
-  ZETASQL_ASSERT_OK(InitTimezone("Universal"));
+  GOOGLESQL_ASSERT_OK(InitTimezone("Universal"));
   EXPECT_THAT(PgTimestampTzToChar(time, "YYYY-MM-DD HH24:MI:SS.US TZ"),
               IsOkAndHolds(Pointee(StrEq("2000-01-02 03:04:05.123456 UTC"))));
   CleanupTimezone();
 
-  ZETASQL_ASSERT_OK(InitTimezone("Asia/Amman"));  // UTC+02
+  GOOGLESQL_ASSERT_OK(InitTimezone("Asia/Amman"));  // UTC+02
   EXPECT_THAT(PgTimestampTzToChar(time, "YYYY-MM-DD HH24:MI:SS.US TZ"),
               IsOkAndHolds(Pointee(StrEq("2000-01-02 05:04:05.123456 EET"))));
   CleanupTimezone();
@@ -130,7 +130,7 @@ TEST_F(PgEvaluatorTest, SupportsPosixTimezones) {
   // EAST, but the TZ value is printed in ISO format, where positive values are
   // EAST of Greenwich and negative values are WEST. This is why the sign is
   // inverted in the result (and the time is back 12 hours).
-  ZETASQL_ASSERT_OK(InitTimezone("Etc/GMT+12"));
+  GOOGLESQL_ASSERT_OK(InitTimezone("Etc/GMT+12"));
   EXPECT_THAT(PgTimestampTzToChar(time, "YYYY-MM-DD HH24:MI:SS.US TZ"),
               IsOkAndHolds(Pointee(StrEq("2000-01-01 15:04:05.123456 -12"))));
   CleanupTimezone();
@@ -153,7 +153,7 @@ class RegressionTest : public PgEvaluatorTestWithParam<RegressionTestCase> {
  protected:
   void SetUp() override {
     PgEvaluatorTestWithParam<RegressionTestCase>::SetUp();
-    ZETASQL_ASSERT_OK(InitTimezone(kDefaultTimezone));
+    GOOGLESQL_ASSERT_OK(InitTimezone(kDefaultTimezone));
   }
 
   void TearDown() override {
@@ -249,7 +249,7 @@ TEST_F(PgEvaluatorTest, RegressionFixedGMTTimeOffset) {
   // PostgreSQL takes POSIX timezone offsets (positive values are WEST of
   // Greenwich, the opposite of the ISO format). Thus, we need to invert the
   // sign.
-  ZETASQL_ASSERT_OK(InitTimezoneOffset(-iso_timezone_offset_seconds));
+  GOOGLESQL_ASSERT_OK(InitTimezoneOffset(-iso_timezone_offset_seconds));
 
   // Although PostgreSQL takes POSIX timezone offsets they are represented in
   // ISO in the to_char method, thus the sign is inverted in the formatting

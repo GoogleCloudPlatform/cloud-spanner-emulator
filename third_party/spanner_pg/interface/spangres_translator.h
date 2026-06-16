@@ -34,9 +34,10 @@
 
 #include <optional>
 
-#include "zetasql/public/analyzer.h"
-#include "zetasql/public/catalog.h"
-#include "zetasql/resolved_ast/resolved_ast.h"
+#include "third_party/spanner_pg/util/integral_types.h"
+#include "googlesql/public/analyzer.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
 #include "absl/flags/declare.h"
 #include "absl/status/statusor.h"
 #include "third_party/spanner_pg/interface/memory_reservation_manager.h"
@@ -49,7 +50,7 @@ ABSL_DECLARE_FLAG(int64_t, spangres_sql_length_limit);
 namespace postgres_translator {
 namespace spangres {
 
-// Invokes Spangres to parse Postgres-dialect SQL and transform to a ZetaSQL
+// Invokes Spangres to parse Postgres-dialect SQL and transform to a GoogleSQL
 // resolved AST.
 class SpangresTranslator : public interfaces::SpangresTranslatorInterface {
  public:
@@ -62,22 +63,22 @@ class SpangresTranslator : public interfaces::SpangresTranslatorInterface {
   SpangresTranslator(SpangresTranslator&&) = delete;
   SpangresTranslator& operator=(SpangresTranslator&&) = delete;
 
-  absl::StatusOr<std::unique_ptr<zetasql::AnalyzerOutput>> TranslateQuery(
+  absl::StatusOr<std::unique_ptr<googlesql::AnalyzerOutput>> TranslateQuery(
       interfaces::TranslateQueryParams params) override;
 
-  // Invokes ZetaSQL AST rewriter workflow on top of translator output.
+  // Invokes GoogleSQL AST rewriter workflow on top of translator output.
   absl::Status RewriteTranslatedTree(
-    zetasql::AnalyzerOutput* analyzer_output,
+    googlesql::AnalyzerOutput* analyzer_output,
     interfaces::TranslateParsedQueryParams& params);
 
-  absl::StatusOr<std::unique_ptr<zetasql::AnalyzerOutput>>
+  absl::StatusOr<std::unique_ptr<googlesql::AnalyzerOutput>>
   TranslateParsedQuery(interfaces::TranslateParsedQueryParams params) override;
 
   // Translates SQL expressions by wrapping them in a SELECT statement. The main
   // use case for this function is to be called during the DDL translation of
   // function parameter default value expressions.
   //
-  // This translation does not rewrite functions implemented with ZetaSQL's
+  // This translation does not rewrite functions implemented with GoogleSQL's
   // SQL-inlined framework. The reason is because the analyzer later runs a
   // check on the translated AST to verify that column expressions
   // (i.e., generated columns, default values, and check constraints) do not
@@ -104,7 +105,7 @@ class SpangresTranslator : public interfaces::SpangresTranslatorInterface {
   // the DDL translation of table expressions such as generated columns,
   // check constraints, and default value expressions.
   //
-  // This translation does not rewrite functions implemented with ZetaSQL's
+  // This translation does not rewrite functions implemented with GoogleSQL's
   // SQL-inlined framework. The reason is because the analyzer later runs a
   // check on the translated AST to verify that column expressions
   // (i.e., generated columns, default values, and check constraints) do not
@@ -117,14 +118,14 @@ class SpangresTranslator : public interfaces::SpangresTranslatorInterface {
   TranslateParsedTableLevelExpression(
       interfaces::TranslateParsedQueryParams params,
       std::string_view table_name) override {
-    ZETASQL_RET_CHECK(!table_name.empty()) << "Table name cannot be null or empty";
+    GOOGLESQL_RET_CHECK(!table_name.empty()) << "Table name cannot be null or empty";
     return TranslateParsedExpression(std::move(params), table_name);
   }
 
   // TranslateTableLevelExpression aims to replace old API:
   // TranslateParsedTableLevelExpression, this new API accepts
   // TranslateQueryParams as parameter. It translates expression in text
-  // from PostgreSQL dialect to ZetaSQL dialect. It is also just used for
+  // from PostgreSQL dialect to GoogleSQL dialect. It is also just used for
   // DDL translation.
   absl::StatusOr<interfaces::ExpressionTranslateResult>
   TranslateTableLevelExpression(interfaces::TranslateQueryParams params,
@@ -133,26 +134,26 @@ class SpangresTranslator : public interfaces::SpangresTranslatorInterface {
   }
 
   // Translates SQL body of the create view statement. It is used by DDL
-  // which requires the result of both deparsed ZetaSQL and PostgreSQL.
+  // which requires the result of both deparsed GoogleSQL and PostgreSQL.
   // TODO: renaming ExpressionTranslateResult to make it more
   // general to share between APIs for query and expression.
   absl::StatusOr<interfaces::ExpressionTranslateResult> TranslateQueryInView(
       interfaces::TranslateQueryParams params) override;
 
   // Translates SQL body of the create view statement. It is used by DDL
-  // which requires the result of both deparsed ZetaSQL and PostgreSQL.
+  // which requires the result of both deparsed GoogleSQL and PostgreSQL.
   // This is used by the emulator.
   absl::StatusOr<interfaces::ExpressionTranslateResult>
   TranslateParsedQueryInView(
       interfaces::TranslateParsedQueryParams params) override;
 
   // Translates SQL body of the create function statement. It is used by DDL
-  // which requires the result of both deparsed ZetaSQL and PostgreSQL.
+  // which requires the result of both deparsed GoogleSQL and PostgreSQL.
   absl::StatusOr<interfaces::ExpressionTranslateResult> TranslateFunctionBody(
       interfaces::TranslateQueryParams params) override;
 
   // Translates SQL body of the create function statement. It is used by DDL
-  // which requires the result of both deparsed ZetaSQL and PostgreSQL.
+  // which requires the result of both deparsed GoogleSQL and PostgreSQL.
   // This is used by the emulator.
   absl::StatusOr<interfaces::ExpressionTranslateResult>
   TranslateParsedFunctionBody(
@@ -223,11 +224,11 @@ class SpangresTranslator : public interfaces::SpangresTranslatorInterface {
   // 2: query_deparser_callback: a callback to process query, it is used by
   // TranslateParsedExpression to deparse and get the analyzed expression.
   //
-  // `enable_rewrite` is used to control whether to apply ZetaSQL rewriter to
+  // `enable_rewrite` is used to control whether to apply GoogleSQL rewriter to
   // SQL-inlined functions in the translated AST. The rewriter should not be
   // applied to generated column, default value, and check constraint
   // expressions. For details, see b/341765529.
-  absl::StatusOr<std::unique_ptr<zetasql::AnalyzerOutput>>
+  absl::StatusOr<std::unique_ptr<googlesql::AnalyzerOutput>>
   TranslateParsedTree(
       interfaces::TranslateParsedQueryParams& params,
       std::function<decltype(GetParserQueryOutput)> parser_output_getter,
@@ -235,7 +236,7 @@ class SpangresTranslator : public interfaces::SpangresTranslatorInterface {
       bool enable_rewrite);
 
   static absl::StatusOr<int> FindMaxColumnID(
-      const zetasql::ResolvedStatement& stmt);
+      const googlesql::ResolvedStatement& stmt);
 };
 
 }  // namespace spangres

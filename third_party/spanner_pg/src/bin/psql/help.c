@@ -1,7 +1,7 @@
 /*
  * psql - the PostgreSQL interactive terminal
  *
- * Copyright (c) 2000-2022, PostgreSQL Global Development Group
+ * Copyright (c) 2000-2023, PostgreSQL Global Development Group
  *
  * src/bin/psql/help.c
  */
@@ -189,6 +189,7 @@ slashUsage(unsigned short int pager)
 	initPQExpBuffer(&buf);
 
 	HELP0("General\n");
+	HELP0("  \\bind [PARAM]...       set query parameters\n");
 	HELP0("  \\copyright             show PostgreSQL usage and distribution terms\n");
 	HELP0("  \\crosstabview [COLUMNS] execute query and display result in crosstab\n");
 	HELP0("  \\errverbose            show most recent error message at maximum verbosity\n");
@@ -199,7 +200,11 @@ slashUsage(unsigned short int pager)
 	HELP0("  \\gset [PREFIX]         execute query and store result in psql variables\n");
 	HELP0("  \\gx [(OPTIONS)] [FILE] as \\g, but forces expanded output mode\n");
 	HELP0("  \\q                     quit psql\n");
-	HELP0("  \\watch [SEC]           execute query every SEC seconds\n");
+	HELP0("  \\restrict RESTRICT_KEY\n"
+		  "                         enter restricted mode with provided key\n");
+	HELP0("  \\unrestrict RESTRICT_KEY\n"
+		  "                         exit restricted mode if key matches\n");
+	HELP0("  \\watch [[i=]SEC] [c=N] execute query every SEC seconds, up to N times\n");
 	HELP0("\n");
 
 	HELP0("Help\n");
@@ -276,9 +281,10 @@ slashUsage(unsigned short int pager)
 	HELP0("  \\do[S+] [OPPTRN [TYPEPTRN [TYPEPTRN]]]\n"
 		  "                         list operators\n");
 	HELP0("  \\dO[S+] [PATTERN]      list collations\n");
-	HELP0("  \\dp     [PATTERN]      list table, view, and sequence access privileges\n");
+	HELP0("  \\dp[S]  [PATTERN]      list table, view, and sequence access privileges\n");
 	HELP0("  \\dP[itn+] [PATTERN]    list [only index/table] partitioned relations [n=nested]\n");
 	HELP0("  \\drds [ROLEPTRN [DBPTRN]] list per-database role settings\n");
+	HELP0("  \\drg[S] [PATTERN]      list role grants\n");
 	HELP0("  \\dRp[+] [PATTERN]      list replication publications\n");
 	HELP0("  \\dRs[+] [PATTERN]      list replication subscriptions\n");
 	HELP0("  \\ds[S+] [PATTERN]      list sequences\n");
@@ -292,7 +298,7 @@ slashUsage(unsigned short int pager)
 	HELP0("  \\l[+]   [PATTERN]      list databases\n");
 	HELP0("  \\sf[+]  FUNCNAME       show a function's definition\n");
 	HELP0("  \\sv[+]  VIEWNAME       show a view's definition\n");
-	HELP0("  \\z      [PATTERN]      same as \\dp\n");
+	HELP0("  \\z[S]   [PATTERN]      same as \\dp\n");
 	HELP0("\n");
 
 	HELP0("Large Objects\n");
@@ -315,7 +321,7 @@ slashUsage(unsigned short int pager)
 		  "                         numericlocale|pager|pager_min_lines|recordsep|\n"
 		  "                         recordsep_zero|tableattr|title|tuples_only|\n"
 		  "                         unicode_border_linestyle|unicode_column_linestyle|\n"
-		  "                         unicode_header_linestyle)\n");
+		  "                         unicode_header_linestyle|xheader_width)\n");
 	HELPN("  \\t [on|off]            show only rows (currently %s)\n",
 		  ON(pset.popt.topt.tuples_only));
 	HELP0("  \\T [STRING]            set HTML <table> tag attributes, or unset if none\n");
@@ -409,7 +415,7 @@ helpVariables(unsigned short int pager)
 	HELP0("  ENCODING\n"
 		  "    current client character set encoding\n");
 	HELP0("  ERROR\n"
-		  "    true if last query failed, else false\n");
+		  "    \"true\" if last query failed, else \"false\"\n");
 	HELP0("  FETCH_COUNT\n"
 		  "    the number of result rows to fetch and display at a time (0 = unlimited)\n");
 	HELP0("  HIDE_TABLEAM\n"
@@ -450,6 +456,10 @@ helpVariables(unsigned short int pager)
 	HELP0("  SERVER_VERSION_NAME\n"
 		  "  SERVER_VERSION_NUM\n"
 		  "    server's version (in short string or numeric format)\n");
+	HELP0("  SHELL_ERROR\n"
+		  "    \"true\" if the last shell command failed, \"false\" if it succeeded\n");
+	HELP0("  SHELL_EXIT_CODE\n"
+		  "    exit status of the last shell command\n");
 	HELP0("  SHOW_ALL_RESULTS\n"
 		  "    show all results of a combined query (\\;) instead of only the last\n");
 	HELP0("  SHOW_CONTEXT\n"
@@ -477,6 +487,9 @@ helpVariables(unsigned short int pager)
 		  "    border style (number)\n");
 	HELP0("  columns\n"
 		  "    target width for the wrapped format\n");
+	HELPN("  csv_fieldsep\n"
+		  "    field separator for CSV output format (default \"%c\")\n",
+		  DEFAULT_CSV_FIELD_SEP);
 	HELP0("  expanded (or x)\n"
 		  "    expanded output [on, off, auto]\n");
 	HELPN("  fieldsep\n"
@@ -511,6 +524,9 @@ helpVariables(unsigned short int pager)
 		  "  unicode_column_linestyle\n"
 		  "  unicode_header_linestyle\n"
 		  "    set the style of Unicode line drawing [single, double]\n");
+	HELP0("  xheader_width\n"
+		  "    set the maximum width of the header for expanded output\n"
+		  "    [full, column, page, integer value]\n");
 
 	HELP0("\nEnvironment variables:\n");
 	HELP0("Usage:\n");
@@ -746,8 +762,8 @@ void
 print_copyright(void)
 {
 	puts("PostgreSQL Database Management System\n"
-		 "(formerly known as Postgres, then as Postgres95)\n\n"
-		 "Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group\n\n"
+		 "(also known as Postgres, formerly known as Postgres95)\n\n"
+		 "Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group\n\n"
 		 "Portions Copyright (c) 1994, The Regents of the University of California\n\n"
 		 "Permission to use, copy, modify, and distribute this software and its\n"
 		 "documentation for any purpose, without fee, and without a written agreement\n"

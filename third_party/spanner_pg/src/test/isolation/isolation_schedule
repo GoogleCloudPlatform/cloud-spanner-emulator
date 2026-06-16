@@ -34,6 +34,7 @@ test: fk-deadlock2
 test: fk-partitioned-1
 test: fk-partitioned-2
 test: fk-snapshot
+test: subxid-overflow
 test: eval-plan-qual
 test: eval-plan-qual-trigger
 test: inplace-inval
@@ -112,3 +113,4 @@ test: truncate-conflict
 test: serializable-parallel
 test: serializable-parallel-2
 test: serializable-parallel-3
+test: matview-write-skew

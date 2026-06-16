@@ -44,7 +44,7 @@ namespace postgres_translator {
 
 namespace {
 
-// Spangres and ZetaSQL record parse locations for literals, parameters, and
+// Spangres and GoogleSQL record parse locations for literals, parameters, and
 // a few other Resolved AST nodes. The actually locations may differ due to the
 // input SQL strings have slightly different syntax. The only node that must
 // have a parse location range is the ResolvedLiteral since the location range
@@ -72,11 +72,11 @@ static std::string StripParseLocations(
   return absl::StrJoin(stripped_lines, "\n");
 }
 
-// The has_explicit_type boolean field on a ZetaSQL literal is not used during
+// The has_explicit_type boolean field on a GoogleSQL literal is not used during
 // query execution and is not possible for the Spangres transformer to match
 // exactly. This method strips the has_explicit_type field from a resolved AST
 // debug string so that we can compare debug strings between Spangres and
-// ZetaSQL.
+// GoogleSQL.
 static std::string StripHasExplicitType(
     absl::string_view original_debug_string) {
   const std::string kHasExplicitType = ", has_explicit_type=TRUE";
@@ -89,11 +89,11 @@ static std::string StripHasExplicitType(
   return absl::StrJoin(stripped_lines, "\n");
 }
 
-// The is_untyped boolean field on a ZetaSQL parameter is not used during
+// The is_untyped boolean field on a GoogleSQL parameter is not used during
 // query execution and is not possible for the Spangres transformer to match
 // exactly. This method strips the is_untyped field from a resolved AST
 // debug string so that we can compare debug strings between Spangres and
-// ZetaSQL.
+// GoogleSQL.
 static std::string StripIsUntyped(
     absl::string_view original_debug_string) {
   const std::string kHasExplicitType = ", is_untyped=TRUE";
@@ -109,7 +109,7 @@ static std::string StripIsUntyped(
 // The float_literal_id is not used during query execution and is not possible
 // for the Spangres transformer to match exactly. This method strips the
 // float_literal_id field  from a resolved AST debug string so that we can
-// compare debug strings between Spangres and ZetaSQL.
+// compare debug strings between Spangres and GoogleSQL.
 static std::string StripFloatLiteralId(
     absl::string_view original_debug_string) {
   const std::string kFloatLiteralRegex = ", float_literal_id=\\d+";

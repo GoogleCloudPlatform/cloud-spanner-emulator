@@ -19,8 +19,8 @@
 #include <cstdint>
 #include <vector>
 
-#include "zetasql/public/functions/string.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/functions/string.h"
+#include "googlesql/public/value.h"
 #include "absl/status/status.h"
 #include "absl/types/span.h"
 #include "backend/actions/context.h"
@@ -32,7 +32,7 @@
 #include "common/constants.h"
 #include "common/errors.h"
 #include "common/limits.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -41,7 +41,7 @@ namespace backend {
 
 absl::Status ColumnValueValidator::ValidateColumnValueType(
     const Table* table, const Column* const column,
-    const zetasql::Value& value) const {
+    const googlesql::Value& value) const {
   // Check that type is same for both column and the corresponding value.
   if (column->GetType()->kind() != value.type()->kind()) {
     return error::ColumnValueTypeMismatch(table->Name(),
@@ -79,12 +79,12 @@ absl::Status ColumnValueValidator::ValidateKeyNotNull(const Table* table,
 
 absl::Status ColumnValueValidator::ValidateColumnStringValue(
     const Table* table, const Column* column,
-    const zetasql::Value& value) const {
+    const googlesql::Value& value) const {
   // Validate that strings do not exceed max length.
   if (!value.is_null()) {
     absl::Status error;
     int64_t encoded_chars = 0;
-    if (!zetasql::functions::LengthUtf8(value.string_value(), &encoded_chars,
+    if (!googlesql::functions::LengthUtf8(value.string_value(), &encoded_chars,
                                           &error)) {
       return error::InvalidStringEncoding(table->Name(), column->Name());
     }
@@ -103,7 +103,7 @@ absl::Status ColumnValueValidator::ValidateColumnStringValue(
 
 absl::Status ColumnValueValidator::ValidateColumnBytesValue(
     const Table* table, const Column* column,
-    const zetasql::Value& value) const {
+    const googlesql::Value& value) const {
   // Validate that bytes do not exceed max length.
   if (!value.is_null()) {
     if (value.bytes_value().size() > column->effective_max_length()) {
@@ -117,7 +117,7 @@ absl::Status ColumnValueValidator::ValidateColumnBytesValue(
 
 absl::Status ColumnValueValidator::ValidateColumnArrayValue(
     const Table* table, const Column* column,
-    const zetasql::Value& value) const {
+    const googlesql::Value& value) const {
   // Validate the vector search array length.
   if (column->has_vector_length() && !value.is_null()) {
     int array_length = value.elements().size();
@@ -135,11 +135,11 @@ absl::Status ColumnValueValidator::ValidateColumnArrayValue(
   if (!value.is_null()) {
     if (value.type()->AsArray()->element_type()->IsString()) {
       for (const auto& element : value.elements()) {
-        ZETASQL_RETURN_IF_ERROR(ValidateColumnStringValue(table, column, element));
+        GOOGLESQL_RETURN_IF_ERROR(ValidateColumnStringValue(table, column, element));
       }
     } else if (value.type()->AsArray()->element_type()->IsBytes()) {
       for (const auto& element : value.elements()) {
-        ZETASQL_RETURN_IF_ERROR(ValidateColumnBytesValue(table, column, element));
+        GOOGLESQL_RETURN_IF_ERROR(ValidateColumnBytesValue(table, column, element));
       }
     }
     // Validate no element in vector search array is null.
@@ -157,7 +157,7 @@ absl::Status ColumnValueValidator::ValidateColumnArrayValue(
 }
 
 absl::Status ColumnValueValidator::ValidateColumnTimestampValue(
-    const Column* const column, const zetasql::Value& value,
+    const Column* const column, const googlesql::Value& value,
     Clock* clock) const {
   // Check that user provided timestamp value is not in future. Sentinel max
   // timestamp value for commit timestamp column can only be set internally.
@@ -181,22 +181,22 @@ absl::Status ColumnValueValidator::ValidateKeySize(const Table* table,
 
 absl::Status ColumnValueValidator::ValidateInsertUpdateOp(
     const Table* table, const std::vector<const Column*>& columns,
-    const std::vector<zetasql::Value>& values, Clock* clock) const {
+    const std::vector<googlesql::Value>& values, Clock* clock) const {
   for (int i = 0; i < columns.size(); i++) {
-    ZETASQL_RETURN_IF_ERROR(ValidateColumnValueType(table, columns[i], values[i]));
+    GOOGLESQL_RETURN_IF_ERROR(ValidateColumnValueType(table, columns[i], values[i]));
     switch (columns[i]->GetType()->kind()) {
-      case zetasql::TYPE_ARRAY:
-        ZETASQL_RETURN_IF_ERROR(ValidateColumnArrayValue(table, columns[i], values[i]));
+      case googlesql::TYPE_ARRAY:
+        GOOGLESQL_RETURN_IF_ERROR(ValidateColumnArrayValue(table, columns[i], values[i]));
         break;
-      case zetasql::TYPE_BYTES:
-        ZETASQL_RETURN_IF_ERROR(ValidateColumnBytesValue(table, columns[i], values[i]));
+      case googlesql::TYPE_BYTES:
+        GOOGLESQL_RETURN_IF_ERROR(ValidateColumnBytesValue(table, columns[i], values[i]));
         break;
-      case zetasql::TYPE_STRING:
-        ZETASQL_RETURN_IF_ERROR(
+      case googlesql::TYPE_STRING:
+        GOOGLESQL_RETURN_IF_ERROR(
             ValidateColumnStringValue(table, columns[i], values[i]));
         break;
-      case zetasql::TYPE_TIMESTAMP:
-        ZETASQL_RETURN_IF_ERROR(
+      case googlesql::TYPE_TIMESTAMP:
+        GOOGLESQL_RETURN_IF_ERROR(
             ValidateColumnTimestampValue(columns[i], values[i], clock));
         break;
       default:
@@ -208,7 +208,7 @@ absl::Status ColumnValueValidator::ValidateInsertUpdateOp(
 
 absl::Status ColumnValueValidator::Validate(const ActionContext* ctx,
                                             const InsertOp& op) const {
-  ZETASQL_RETURN_IF_ERROR(ValidateKeySize(op.table, op.key));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateKeySize(op.table, op.key));
   return ValidateInsertUpdateOp(op.table, op.columns, op.values, ctx->clock());
 }
 

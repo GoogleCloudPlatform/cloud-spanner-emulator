@@ -40,12 +40,12 @@ namespace backend {
 
 namespace {
 
-bool IsPendingCommitTimestampStringValue(zetasql::Value column_value) {
+bool IsPendingCommitTimestampStringValue(googlesql::Value column_value) {
   return (!column_value.is_null() && column_value.type()->IsString() &&
           column_value.string_value() == kCommitTimestampIdentifier);
 }
 
-bool IsPendingCommitTimestampSentinelValue(zetasql::Value column_value) {
+bool IsPendingCommitTimestampSentinelValue(googlesql::Value column_value) {
   return (!column_value.is_null() && column_value.type()->IsTimestamp() &&
           column_value.ToTime() == kCommitTimestampValueSentinel);
 }
@@ -57,7 +57,7 @@ absl::Status ValidateCommitTimestampKeyForDeleteOp(const Table* table,
   for (int i = 0; i < key.NumColumns(); ++i) {
     const Column* column = primary_key.at(i)->column();
     if (column->GetType()->IsTimestamp() && column->allows_commit_timestamp()) {
-      ZETASQL_RETURN_IF_ERROR(
+      GOOGLESQL_RETURN_IF_ERROR(
           ValidateCommitTimestampValueNotInFuture(key.ColumnValue(i), now));
     }
   }
@@ -105,14 +105,14 @@ absl::Status ValidateCommitTimestampEnabledInHeirarchy(const Column* column) {
   return absl::OkStatus();
 }
 
-absl::StatusOr<zetasql::Value> MaybeSetCommitTimestampSentinel(
-    const Column* column, zetasql::Value column_value) {
+absl::StatusOr<googlesql::Value> MaybeSetCommitTimestampSentinel(
+    const Column* column, googlesql::Value column_value) {
   if (!column->GetType()->IsTimestamp()) return column_value;
 
   if (column->allows_commit_timestamp()) {
     if (IsPendingCommitTimestampStringValue(column_value)) {
-      ZETASQL_RETURN_IF_ERROR(ValidateCommitTimestampEnabledInHeirarchy(column));
-      return zetasql::values::Timestamp(kCommitTimestampValueSentinel);
+      GOOGLESQL_RETURN_IF_ERROR(ValidateCommitTimestampEnabledInHeirarchy(column));
+      return googlesql::values::Timestamp(kCommitTimestampValueSentinel);
     } else if (IsPendingCommitTimestampSentinelValue(column_value)) {
       return error::CommitTimestampInFuture(column_value.ToTime());
     }
@@ -125,7 +125,7 @@ absl::StatusOr<zetasql::Value> MaybeSetCommitTimestampSentinel(
 absl::StatusOr<Key> MaybeSetCommitTimestampSentinel(
     absl::Span<const KeyColumn* const> primary_key, Key key) {
   for (int i = 0; i < key.NumColumns(); i++) {
-    ZETASQL_ASSIGN_OR_RETURN(zetasql::Value value,
+    GOOGLESQL_ASSIGN_OR_RETURN(googlesql::Value value,
                      MaybeSetCommitTimestampSentinel(primary_key[i]->column(),
                                                      key.ColumnValue(i)));
     key.SetColumnValue(i, value);
@@ -136,7 +136,7 @@ absl::StatusOr<Key> MaybeSetCommitTimestampSentinel(
 }  // namespace
 
 absl::Status ValidateCommitTimestampValueNotInFuture(
-    const zetasql::Value& value, absl::Time now) {
+    const googlesql::Value& value, absl::Time now) {
   if (!value.is_null() && value.type()->IsTimestamp() && value.ToTime() > now) {
     return error::CommitTimestampInFuture(value.ToTime());
   }
@@ -147,7 +147,7 @@ absl::Status ValidateCommitTimestampKeySetForDeleteOp(const Table* table,
                                                       const KeySet& set,
                                                       absl::Time now) {
   for (const Key& key : set.keys()) {
-    ZETASQL_RETURN_IF_ERROR(ValidateCommitTimestampKeyForDeleteOp(table, key, now));
+    GOOGLESQL_RETURN_IF_ERROR(ValidateCommitTimestampKeyForDeleteOp(table, key, now));
   }
 
   for (const KeyRange& key_range : set.ranges()) {
@@ -157,9 +157,9 @@ absl::Status ValidateCommitTimestampKeySetForDeleteOp(const Table* table,
       continue;
     }
 
-    ZETASQL_RETURN_IF_ERROR(ValidateCommitTimestampKeyForDeleteOp(
+    GOOGLESQL_RETURN_IF_ERROR(ValidateCommitTimestampKeyForDeleteOp(
         table, key_range.start_key(), now));
-    ZETASQL_RETURN_IF_ERROR(ValidateCommitTimestampKeyForDeleteOp(
+    GOOGLESQL_RETURN_IF_ERROR(ValidateCommitTimestampKeyForDeleteOp(
         table, key_range.limit_key(), now));
   }
   return absl::OkStatus();
@@ -170,7 +170,7 @@ absl::StatusOr<ValueList> MaybeSetCommitTimestampSentinel(
   if (row.empty()) return row;
   ValueList ret_val;
   for (int i = 0; i < row.size(); i++) {
-    ZETASQL_ASSIGN_OR_RETURN(ret_val.emplace_back(),
+    GOOGLESQL_ASSIGN_OR_RETURN(ret_val.emplace_back(),
                      MaybeSetCommitTimestampSentinel(columns[i], row[i]));
   }
   return ret_val;
@@ -178,14 +178,14 @@ absl::StatusOr<ValueList> MaybeSetCommitTimestampSentinel(
 
 absl::StatusOr<KeyRange> MaybeSetCommitTimestampSentinel(
     absl::Span<const KeyColumn* const> primary_key, const KeyRange& key_range) {
-  ZETASQL_RET_CHECK(key_range.IsClosedOpen());
+  GOOGLESQL_RET_CHECK(key_range.IsClosedOpen());
   if (key_range.start_key() >= key_range.limit_key()) {
     // Nothing to be done for empty key range.
     return key_range;
   }
-  ZETASQL_ASSIGN_OR_RETURN(Key start_key, MaybeSetCommitTimestampSentinel(
+  GOOGLESQL_ASSIGN_OR_RETURN(Key start_key, MaybeSetCommitTimestampSentinel(
                                       primary_key, key_range.start_key()));
-  ZETASQL_ASSIGN_OR_RETURN(Key limit_key, MaybeSetCommitTimestampSentinel(
+  GOOGLESQL_ASSIGN_OR_RETURN(Key limit_key, MaybeSetCommitTimestampSentinel(
                                       primary_key, key_range.limit_key()));
   return KeyRange(key_range.start_type(), start_key, key_range.limit_type(),
                   limit_key);
@@ -195,7 +195,7 @@ absl::StatusOr<KeyRange> MaybeSetCommitTimestampSentinel(
 // and column allows commit timestamp to be set automatically. Signals that
 // value should be replaced with commit timestamp of transaction during flush.
 bool IsPendingCommitTimestamp(const Column* column,
-                              const zetasql::Value& column_value) {
+                              const googlesql::Value& column_value) {
   if ((column->allows_commit_timestamp() ||
        (column->source_column() &&
         column->source_column()->allows_commit_timestamp())) &&
@@ -215,11 +215,11 @@ bool HasPendingCommitTimestampInKey(const Table* table, const Key& key) {
   return false;
 }
 
-zetasql::Value MaybeSetCommitTimestamp(const Column* column,
-                                         const zetasql::Value& column_value,
+googlesql::Value MaybeSetCommitTimestamp(const Column* column,
+                                         const googlesql::Value& column_value,
                                          absl::Time commit_timestamp) {
   if (IsPendingCommitTimestamp(column, column_value)) {
-    return zetasql::values::Timestamp(commit_timestamp);
+    return googlesql::values::Timestamp(commit_timestamp);
   }
   return column_value;
 }
@@ -236,7 +236,7 @@ Key MaybeSetCommitTimestamp(absl::Span<const KeyColumn* const> primary_key,
 
 absl::Status CommitTimestampTracker::CheckRead(
     const Table* table, absl::Span<const Column* const> columns) const {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   if (commit_ts_tables_.contains(table)) {
     return error::CannotReadPendingCommitTimestamp(
         absl::StrCat("Table ", table->Name()));
@@ -274,7 +274,7 @@ void CommitTimestampTracker::TrackTable(const Table* table, const Key& key) {
 }
 
 void CommitTimestampTracker::Track(absl::Span<const WriteOp> write_ops) {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   for (auto& op : write_ops) {
     if (std::holds_alternative<InsertOp>(op)) {
       const InsertOp& insert = std::get<InsertOp>(op);

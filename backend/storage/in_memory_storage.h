@@ -17,7 +17,7 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_STORAGE_IN_MEMORY_STORAGE_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_STORAGE_IN_MEMORY_STORAGE_H_
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/time/time.h"
 #include "backend/common/ids.h"
 #include "backend/datamodel/key.h"
@@ -37,14 +37,14 @@ namespace backend {
 // sorted in order of the timestamp written. Keys are never deleted, but are
 // marked deleted for multi-version lookup.
 //
-// Lookup and Read return invalid zetasql::Value(s) for non-existent columns.
+// Lookup and Read return invalid googlesql::Value(s) for non-existent columns.
 //
 // This class is thread-safe.
 class InMemoryStorage : public Storage {
  public:
   absl::Status Lookup(absl::Time timestamp, const TableID& table_id,
                       const Key& key, const std::vector<ColumnID>& column_ids,
-                      std::vector<zetasql::Value>* values) const override
+                      std::vector<googlesql::Value>* values) const override
       ABSL_LOCKS_EXCLUDED(mu_);
 
   absl::Status Read(absl::Time timestamp, const TableID& table_id,
@@ -55,7 +55,7 @@ class InMemoryStorage : public Storage {
 
   absl::Status Write(absl::Time timestamp, const TableID& table_id,
                      const Key& key, const std::vector<ColumnID>& column_ids,
-                     const std::vector<zetasql::Value>& values) override
+                     const std::vector<googlesql::Value>& values) override
       ABSL_LOCKS_EXCLUDED(mu_);
 
   absl::Status Delete(absl::Time timestamp, const TableID& table_id,
@@ -79,7 +79,7 @@ class InMemoryStorage : public Storage {
       ABSL_LOCKS_EXCLUDED(mu_);
 
  private:
-  using Cell = std::map<absl::Time, zetasql::Value>;
+  using Cell = std::map<absl::Time, googlesql::Value>;
   using Row = absl::flat_hash_map<ColumnID, Cell>;
   using Table = std::map<Key, Row>;
   using Tables = absl::flat_hash_map<TableID, Table>;
@@ -89,7 +89,7 @@ class InMemoryStorage : public Storage {
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
   // Returns the value for given row and column_id at the specified timestamp.
-  zetasql::Value GetCellValueAtTimestamp(const Row& row,
+  googlesql::Value GetCellValueAtTimestamp(const Row& row,
                                            const ColumnID& column_id,
                                            absl::Time timestamp) const
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);

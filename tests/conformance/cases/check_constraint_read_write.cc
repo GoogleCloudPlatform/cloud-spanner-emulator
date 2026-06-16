@@ -18,7 +18,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "tests/conformance/common/database_test_base.h"
@@ -29,7 +29,7 @@ namespace emulator {
 namespace test {
 namespace {
 
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 class CheckConstraintTest
     : public DatabaseTest,
@@ -54,13 +54,13 @@ INSTANTIATE_TEST_SUITE_P(
     });
 
 TEST_P(CheckConstraintTest, Insert) {
-  ZETASQL_ASSERT_OK(Insert("t", {"k", "v"}, {1, 10}));
+  GOOGLESQL_ASSERT_OK(Insert("t", {"k", "v"}, {1, 10}));
   EXPECT_THAT(Read("t", {"k", "v"}, Key(1)), IsOkAndHoldsRow({1, 10}));
 
-  ZETASQL_ASSERT_OK(Insert("t", {"k", "v_str"}, {2, "10"}));
+  GOOGLESQL_ASSERT_OK(Insert("t", {"k", "v_str"}, {2, "10"}));
   EXPECT_THAT(Read("t", {"k", "v_str"}, Key(2)), IsOkAndHoldsRow({2, "10"}));
 
-  ZETASQL_ASSERT_OK(Insert("t_gc", {"k", "v"}, {1, 10}));
+  GOOGLESQL_ASSERT_OK(Insert("t_gc", {"k", "v"}, {1, 10}));
 
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     // g2 is not defined in PG as generated columns cannot reference other
@@ -74,11 +74,11 @@ TEST_P(CheckConstraintTest, Insert) {
 }
 
 TEST_P(CheckConstraintTest, InsertNull) {
-  ZETASQL_ASSERT_OK(Insert("t", {"k", "v"}, {1, Null<std::int64_t>()}));
+  GOOGLESQL_ASSERT_OK(Insert("t", {"k", "v"}, {1, Null<std::int64_t>()}));
   EXPECT_THAT(Read("t", {"k", "v"}, Key(1)),
               IsOkAndHoldsRow({1, Null<std::int64_t>()}));
 
-  ZETASQL_ASSERT_OK(Insert("t_gc", {"k", "v"}, {1, Null<std::int64_t>()}));
+  GOOGLESQL_ASSERT_OK(Insert("t_gc", {"k", "v"}, {1, Null<std::int64_t>()}));
 
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     // g2 is not defined in PG as generated columns cannot reference other
@@ -94,8 +94,8 @@ TEST_P(CheckConstraintTest, InsertNull) {
 }
 
 TEST_P(CheckConstraintTest, InsertWithCoercion) {
-  // v_left_shift_gt_zero ZETASQL_VLOG ((v << 1) > 0) is OK.
-  ZETASQL_ASSERT_OK(Insert("t", {"k", "v"}, {1, (int32_t)1073741824}));
+  // v_left_shift_gt_zero GOOGLESQL_VLOG ((v << 1) > 0) is OK.
+  GOOGLESQL_ASSERT_OK(Insert("t", {"k", "v"}, {1, (int32_t)1073741824}));
   EXPECT_THAT(Read("t", {"k", "v"}, Key(1)),
               IsOkAndHoldsRow({1, (int64_t)1073741824}));
 }
@@ -118,16 +118,16 @@ TEST_P(CheckConstraintTest, InsertViolation) {
 }
 
 TEST_P(CheckConstraintTest, Update) {
-  ZETASQL_ASSERT_OK(Insert("t", {"k", "v"}, {1, 10}));
-  ZETASQL_ASSERT_OK(Update("t", {"k", "v"}, {1, 5}));
+  GOOGLESQL_ASSERT_OK(Insert("t", {"k", "v"}, {1, 10}));
+  GOOGLESQL_ASSERT_OK(Update("t", {"k", "v"}, {1, 5}));
   EXPECT_THAT(Read("t", {"k", "v"}, Key(1)), IsOkAndHoldsRow({1, 5}));
 
-  ZETASQL_ASSERT_OK(Insert("t", {"k", "v_str"}, {2, "10"}));
-  ZETASQL_ASSERT_OK(Update("t", {"k", "v_str"}, {2, "5"}));
+  GOOGLESQL_ASSERT_OK(Insert("t", {"k", "v_str"}, {2, "10"}));
+  GOOGLESQL_ASSERT_OK(Update("t", {"k", "v_str"}, {2, "5"}));
   EXPECT_THAT(Read("t", {"k", "v_str"}, Key(2)), IsOkAndHoldsRow({2, "5"}));
 
-  ZETASQL_ASSERT_OK(Insert("t_gc", {"k", "v"}, {1, 10}));
-  ZETASQL_ASSERT_OK(Update("t_gc", {"k", "v"}, {1, 15}));
+  GOOGLESQL_ASSERT_OK(Insert("t_gc", {"k", "v"}, {1, 10}));
+  GOOGLESQL_ASSERT_OK(Update("t_gc", {"k", "v"}, {1, 15}));
 
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     // g2 is not defined in PG as generated columns cannot reference other
@@ -141,13 +141,13 @@ TEST_P(CheckConstraintTest, Update) {
 }
 
 TEST_P(CheckConstraintTest, UpdateNull) {
-  ZETASQL_ASSERT_OK(Insert("t", {"k", "v"}, {1, 10}));
-  ZETASQL_ASSERT_OK(Update("t", {"k", "v"}, {1, Null<std::int64_t>()}));
+  GOOGLESQL_ASSERT_OK(Insert("t", {"k", "v"}, {1, 10}));
+  GOOGLESQL_ASSERT_OK(Update("t", {"k", "v"}, {1, Null<std::int64_t>()}));
   EXPECT_THAT(Read("t", {"k", "v"}, Key(1)),
               IsOkAndHoldsRow({1, Null<std::int64_t>()}));
 
-  ZETASQL_ASSERT_OK(Insert("t_gc", {"k", "v"}, {1, 10}));
-  ZETASQL_ASSERT_OK(Update("t_gc", {"k", "v"}, {1, Null<std::int64_t>()}));
+  GOOGLESQL_ASSERT_OK(Insert("t_gc", {"k", "v"}, {1, 10}));
+  GOOGLESQL_ASSERT_OK(Update("t_gc", {"k", "v"}, {1, Null<std::int64_t>()}));
 
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
     // g2 is not defined in PG as generated columns cannot reference other
@@ -161,26 +161,26 @@ TEST_P(CheckConstraintTest, UpdateNull) {
                                  Null<std::int64_t>(), Null<std::int64_t>()}));
   }
 
-  ZETASQL_ASSERT_OK(Insert("t", {"k", "v_str"}, {2, "10"}));
-  ZETASQL_ASSERT_OK(Update("t", {"k", "v_str"}, {2, Null<std::string>()}));
+  GOOGLESQL_ASSERT_OK(Insert("t", {"k", "v_str"}, {2, "10"}));
+  GOOGLESQL_ASSERT_OK(Update("t", {"k", "v_str"}, {2, Null<std::string>()}));
   EXPECT_THAT(Read("t", {"k", "v_str"}, Key(2)),
               IsOkAndHoldsRow({2, Null<std::string>()}));
 }
 
 TEST_P(CheckConstraintTest, UpdateViolation) {
-  ZETASQL_ASSERT_OK(Insert("t", {"k", "v"}, {1, 10}));
+  GOOGLESQL_ASSERT_OK(Insert("t", {"k", "v"}, {1, 10}));
   EXPECT_THAT(Update("t", {"k", "v"}, {1, -1}),
               StatusIs(absl::StatusCode::kOutOfRange,
                        testing::HasSubstr(
                            "Check constraint `t`.`v_gt_zero` is violated")));
 
-  ZETASQL_ASSERT_OK(Insert("t_gc", {"k", "v"}, {1, 10}));
+  GOOGLESQL_ASSERT_OK(Insert("t_gc", {"k", "v"}, {1, 10}));
   EXPECT_THAT(Update("t_gc", {"k", "v"}, {1, 1}),
               StatusIs(absl::StatusCode::kOutOfRange,
                        testing::HasSubstr(
                            "Check constraint `t_gc`.`g3_gt_ten` is violated")));
 
-  ZETASQL_ASSERT_OK(Insert("t", {"k", "v_str"}, {2, "10"}));
+  GOOGLESQL_ASSERT_OK(Insert("t", {"k", "v_str"}, {2, "10"}));
   EXPECT_THAT(
       Update("t", {"k", "v_str"}, {2, "-1"}),
       StatusIs(absl::StatusCode::kOutOfRange,
@@ -194,11 +194,11 @@ TEST_P(CheckConstraintTest, UpdateNonExistingKey) {
 }
 
 TEST_P(CheckConstraintTest, InsertOrUpdate) {
-  ZETASQL_ASSERT_OK(InsertOrUpdate("t", {"k", "v", "v_str"}, {1, 10, "10"}));
+  GOOGLESQL_ASSERT_OK(InsertOrUpdate("t", {"k", "v", "v_str"}, {1, 10, "10"}));
   EXPECT_THAT(Read("t", {"k", "v", "v_str"}, Key(1)),
               IsOkAndHoldsRow({1, 10, "10"}));
 
-  ZETASQL_ASSERT_OK(InsertOrUpdate("t", {"k", "v", "v_str"}, {1, 5, "5"}));
+  GOOGLESQL_ASSERT_OK(InsertOrUpdate("t", {"k", "v", "v_str"}, {1, 5, "5"}));
   EXPECT_THAT(Read("t", {"k", "v", "v_str"}, Key(1)),
               IsOkAndHoldsRow({1, 5, "5"}));
 }
@@ -217,14 +217,14 @@ TEST_P(CheckConstraintTest, InsertOrUpdateViolation) {
 }
 
 TEST_P(CheckConstraintTest, Replace) {
-  ZETASQL_ASSERT_OK(Insert("t", {"k", "v", "v_str"}, {1, 10, "10"}));
-  ZETASQL_ASSERT_OK(Replace("t", {"k", "v", "v_str"}, {1, 5, "5"}));
+  GOOGLESQL_ASSERT_OK(Insert("t", {"k", "v", "v_str"}, {1, 10, "10"}));
+  GOOGLESQL_ASSERT_OK(Replace("t", {"k", "v", "v_str"}, {1, 5, "5"}));
   EXPECT_THAT(Read("t", {"k", "v", "v_str"}, Key(1)),
               IsOkAndHoldsRow({1, 5, "5"}));
 }
 
 TEST_P(CheckConstraintTest, ReplaceViolation) {
-  ZETASQL_ASSERT_OK(Insert("t", {"k", "v", "v_str"}, {1, 10, "10"}));
+  GOOGLESQL_ASSERT_OK(Insert("t", {"k", "v", "v_str"}, {1, 10, "10"}));
   EXPECT_THAT(Replace("t", {"k", "v", "v_str"}, {1, -1, "10"}),
               StatusIs(absl::StatusCode::kOutOfRange,
                        testing::HasSubstr(
@@ -237,13 +237,13 @@ TEST_P(CheckConstraintTest, ReplaceViolation) {
 }
 
 TEST_P(CheckConstraintTest, DML) {
-  ZETASQL_ASSERT_OK(
+  GOOGLESQL_ASSERT_OK(
       CommitDml({SqlStatement("INSERT INTO t(k, v, v_str) VALUES (1, 1, '1')"),
                  SqlStatement("UPDATE t SET v = 2, v_str = '2' WHERE k = 1")}));
   EXPECT_THAT(Query("SELECT k, v, v_str FROM t"),
               IsOkAndHoldsRows({{1, 2, "2"}}));
 
-  ZETASQL_ASSERT_OK(CommitDml({SqlStatement("INSERT INTO t_gc(k, v) VALUES (1, 10)"),
+  GOOGLESQL_ASSERT_OK(CommitDml({SqlStatement("INSERT INTO t_gc(k, v) VALUES (1, 10)"),
                        SqlStatement("UPDATE t_gc SET v = 20 WHERE k = 1")}));
 
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
@@ -269,7 +269,7 @@ TEST_P(CheckConstraintTest, DMLViolation) {
 }
 
 TEST_P(CheckConstraintTest, MultipleMutationPerRow) {
-  ZETASQL_ASSERT_OK(Commit({
+  GOOGLESQL_ASSERT_OK(Commit({
       MakeInsert("t", {"k", "v", "v_str"}, 1, -1, "1"),
       MakeUpdate("t", {"k", "v", "v_str"}, 1, 1, "-2"),
       MakeUpdate("t", {"k", "v", "v_str"}, 1, 2, "2"),
@@ -284,7 +284,7 @@ TEST_P(CheckConstraintTest, MultipleMutationPerRow) {
                       }),
               IsOkAndHoldsRows({{1, 2, "2"}}));
 
-  ZETASQL_ASSERT_OK(Commit({
+  GOOGLESQL_ASSERT_OK(Commit({
       MakeInsert("t_gc", {"k", "v"}, 1, 0),
       MakeUpdate("t_gc", {"k", "v"}, 1, 10),
   }));

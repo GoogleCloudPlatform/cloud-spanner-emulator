@@ -17,7 +17,7 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_ML_ML_PREDICT_ROW_FUNCTION_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_ML_ML_PREDICT_ROW_FUNCTION_H_
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/status/statusor.h"
 #include "absl/types/span.h"
 
@@ -27,8 +27,8 @@ static constexpr char kMlPredictRowParamModelEndpoint[] = "model_endpoint";
 static constexpr char kMlPredictRowParamArgs[] = "args";
 
 // Implementation of scalar ML_PREDICT_ROW function.
-absl::StatusOr<zetasql::Value> EvalMlPredictRow(
-    absl::Span<const zetasql::Value> args);
+absl::StatusOr<googlesql::Value> EvalMlPredictRow(
+    absl::Span<const googlesql::Value> args);
 
 }  // namespace google::spanner::emulator::backend
 

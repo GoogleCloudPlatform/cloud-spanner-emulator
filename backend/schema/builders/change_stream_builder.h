@@ -198,6 +198,8 @@ class ChangeStream::Editor {
       instance_->exclude_delete_ = value_opt;
     } else if (option_name == ddl::kChangeStreamExcludeTtlDeletesOptionName) {
       instance_->exclude_ttl_deletes_ = value_opt;
+    } else if (option_name == ddl::kChangeStreamAllowTxnExclusionOptionName) {
+      instance_->allow_txn_exclusion_ = value_opt;
     }
     return *this;
   }

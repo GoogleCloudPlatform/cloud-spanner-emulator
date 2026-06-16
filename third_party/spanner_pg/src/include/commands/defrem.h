@@ -4,7 +4,7 @@
  *	  POSTGRES define and remove utility definitions.
  *
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/commands/defrem.h
@@ -29,6 +29,7 @@ extern ObjectAddress DefineIndex(Oid relationId,
 								 Oid indexRelationId,
 								 Oid parentIndexId,
 								 Oid parentConstraintId,
+								 int total_parts,
 								 bool is_alter_table,
 								 bool check_rights,
 								 bool check_not_in_use,
@@ -86,7 +87,7 @@ extern void RemoveOperatorById(Oid operOid);
 extern ObjectAddress AlterOperator(AlterOperatorStmt *stmt);
 
 /* commands/statscmds.c */
-extern ObjectAddress CreateStatistics(CreateStatsStmt *stmt);
+extern ObjectAddress CreateStatistics(CreateStatsStmt *stmt, bool check_rights);
 extern ObjectAddress AlterStatistics(AlterStatsStmt *stmt);
 extern void RemoveStatisticsById(Oid statsOid);
 extern void RemoveStatisticsDataById(Oid statsOid, bool inh);

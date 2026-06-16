@@ -38,7 +38,7 @@ LockHandle::LockHandle(LockManager* manager, TransactionID tid,
       priority_(priority) {}
 
 LockHandle::~LockHandle() {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   try_abort_transaction_fn_ = nullptr;
 }
 
@@ -50,43 +50,43 @@ void LockHandle::UnlockAll() { manager_->UnlockAll(this); }
 
 bool LockHandle::IsBlocked() {
   // The current implementation never blocks.
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   return false;
 }
 
 bool LockHandle::IsAborted() {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   return !status_.ok();
 }
 
 absl::Status LockHandle::Wait() {
   // The current implementation never blocks.
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   return status_;
 }
 
 void LockHandle::Abort(const absl::Status& status) {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   status_ = status;
 }
 
 absl::Status LockHandle::TryAbortTransaction(const absl::Status& status) {
-  if (mu_.TryLock()) {
+  if (mu_.try_lock()) {
     if (try_abort_transaction_fn_ != nullptr) {
       auto aborted = try_abort_transaction_fn_();
       if (aborted.ok()) {
         status_ = status;
-        mu_.Unlock();
+        mu_.unlock();
         return absl::OkStatus();
       }
     }
-    mu_.Unlock();
+    mu_.unlock();
   }
   return error::CouldNotObtainLockHandleMutex(tid_);
 }
 
 void LockHandle::Reset() {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   status_ = absl::OkStatus();
 }
 

@@ -17,9 +17,9 @@
 #include <memory>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
-#include "zetasql/public/options.pb.h"
+#include "googlesql/public/options.pb.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "backend/schema/updater/schema_updater_tests/base.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
@@ -37,7 +37,7 @@ using database_api::DatabaseDialect::POSTGRESQL;
 TEST_P(SchemaUpdaterTest, NonKeyColumns) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         schema,
         CreateSchema(
             {
@@ -53,7 +53,7 @@ TEST_P(SchemaUpdaterTest, NonKeyColumns) {
             database_api::DatabaseDialect::POSTGRESQL,
             /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         schema,
         CreateSchema({R"(
           CREATE TABLE T (
@@ -78,7 +78,7 @@ TEST_P(SchemaUpdaterTest, NonKeyColumns) {
   col = table->FindColumn("D1");
   ASSERT_NE(col, nullptr);
   EXPECT_EQ(col->Name(), "D1");
-  EXPECT_EQ(col->GetType()->kind(), zetasql::TYPE_INT64);
+  EXPECT_EQ(col->GetType()->kind(), googlesql::TYPE_INT64);
   EXPECT_FALSE(col->is_nullable());
   EXPECT_FALSE(col->is_generated());
   EXPECT_TRUE(col->has_default_value());
@@ -94,7 +94,7 @@ TEST_P(SchemaUpdaterTest, NonKeyColumns) {
   col = table->FindColumn("D2");
   ASSERT_NE(col, nullptr);
   EXPECT_EQ(col->Name(), "D2");
-  EXPECT_EQ(col->GetType()->kind(), zetasql::TYPE_INT64);
+  EXPECT_EQ(col->GetType()->kind(), googlesql::TYPE_INT64);
   EXPECT_TRUE(col->is_nullable());
   EXPECT_FALSE(col->is_generated());
   EXPECT_TRUE(col->has_default_value());
@@ -111,7 +111,7 @@ TEST_P(SchemaUpdaterTest, NonKeyColumns) {
 TEST_P(SchemaUpdaterTest, FunctionAsDefault) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
         CREATE TABLE "T" (
           "K" bigint primary key,
@@ -122,7 +122,7 @@ TEST_P(SchemaUpdaterTest, FunctionAsDefault) {
                                       database_api::DatabaseDialect::POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
           CREATE TABLE T (
             K INT64 NOT NULL,
             V TIMESTAMP DEFAULT (CURRENT_TIMESTAMP())
@@ -152,7 +152,7 @@ TEST_P(SchemaUpdaterTest, DISABLED_SQLInlinedFunctionAsDefault) {
   // instead of an evaluator.
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
         CREATE TABLE "T" (
           "K" bigint primary key,
@@ -163,7 +163,7 @@ TEST_P(SchemaUpdaterTest, DISABLED_SQLInlinedFunctionAsDefault) {
                                       database_api::DatabaseDialect::POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
           CREATE TABLE T (
             K INT64 NOT NULL,
             V BOOL DEFAULT (ARRAY_INCLUDES(ARRAY[1, 2], 2))
@@ -196,7 +196,7 @@ TEST_P(SchemaUpdaterTest, KeyColumn) {
   // The DDL translation from GSQL to PG does not support expressions. Skip it
   // for now and a hand-written PG DDL will be added.
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         schema,
         CreateSchema({R"(
         create table "T" (
@@ -212,7 +212,7 @@ TEST_P(SchemaUpdaterTest, KeyColumn) {
                      database_api::DatabaseDialect::POSTGRESQL,
                      /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         schema,
         CreateSchema({R"(
         CREATE TABLE T (
@@ -238,7 +238,7 @@ TEST_P(SchemaUpdaterTest, KeyColumn) {
   col = table->FindColumn("K2");
   ASSERT_NE(col, nullptr);
   EXPECT_EQ(col->Name(), "K2");
-  EXPECT_EQ(col->GetType()->kind(), zetasql::TYPE_INT64);
+  EXPECT_EQ(col->GetType()->kind(), googlesql::TYPE_INT64);
   EXPECT_FALSE(col->is_generated());
   EXPECT_TRUE(col->has_default_value());
   EXPECT_TRUE(col->expression().has_value());
@@ -253,7 +253,7 @@ TEST_P(SchemaUpdaterTest, KeyColumn) {
   col = table->FindColumn("K3");
   ASSERT_NE(col, nullptr);
   EXPECT_EQ(col->Name(), "K3");
-  EXPECT_EQ(col->GetType()->kind(), zetasql::TYPE_INT64);
+  EXPECT_EQ(col->GetType()->kind(), googlesql::TYPE_INT64);
   EXPECT_FALSE(col->is_generated());
   EXPECT_TRUE(col->has_default_value());
   EXPECT_TRUE(col->expression().has_value());
@@ -269,7 +269,7 @@ TEST_P(SchemaUpdaterTest, KeyColumn) {
 TEST_P(SchemaUpdaterTest, SetDropDefault) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         schema,
         CreateSchema(
             {
@@ -289,7 +289,7 @@ TEST_P(SchemaUpdaterTest, SetDropDefault) {
             database_api::DatabaseDialect::POSTGRESQL,
             /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         schema, CreateSchema({R"(
         CREATE TABLE T (
           K1 INT64 NOT NULL,
@@ -316,7 +316,7 @@ TEST_P(SchemaUpdaterTest, SetDropDefault) {
   col = table->FindColumn("K2");
   ASSERT_NE(col, nullptr);
   EXPECT_EQ(col->Name(), "K2");
-  EXPECT_EQ(col->GetType()->kind(), zetasql::TYPE_INT64);
+  EXPECT_EQ(col->GetType()->kind(), googlesql::TYPE_INT64);
   EXPECT_FALSE(col->is_generated());
   EXPECT_TRUE(col->has_default_value());
   EXPECT_TRUE(col->expression().has_value());
@@ -331,7 +331,7 @@ TEST_P(SchemaUpdaterTest, SetDropDefault) {
   col = table->FindColumn("K3");
   ASSERT_NE(col, nullptr);
   EXPECT_EQ(col->Name(), "K3");
-  EXPECT_EQ(col->GetType()->kind(), zetasql::TYPE_INT64);
+  EXPECT_EQ(col->GetType()->kind(), googlesql::TYPE_INT64);
   EXPECT_FALSE(col->is_generated());
   EXPECT_TRUE(col->has_default_value());
   EXPECT_TRUE(col->expression().has_value());
@@ -346,7 +346,7 @@ TEST_P(SchemaUpdaterTest, SetDropDefault) {
   col = table->FindColumn("V");
   ASSERT_NE(col, nullptr);
   EXPECT_EQ(col->Name(), "V");
-  EXPECT_EQ(col->GetType()->kind(), zetasql::TYPE_STRING);
+  EXPECT_EQ(col->GetType()->kind(), googlesql::TYPE_STRING);
   EXPECT_FALSE(col->is_generated());
   EXPECT_FALSE(col->has_default_value());
   EXPECT_FALSE(col->expression().has_value());
@@ -356,7 +356,7 @@ TEST_P(SchemaUpdaterTest, SetDropDefault) {
 TEST_P(SchemaUpdaterTest, NumericColumnDefault) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema(
                                      {
                                          R"(
         CREATE TABLE t (
@@ -369,7 +369,7 @@ TEST_P(SchemaUpdaterTest, NumericColumnDefault) {
                                      /*use_gsql_to_pg_translation=*/false));
     EXPECT_EQ(schema->dialect(), database_api::DatabaseDialect::POSTGRESQL);
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
         CREATE TABLE t (
           key INT64,
           value NUMERIC NOT NULL DEFAULT (0.0)
@@ -383,11 +383,11 @@ TEST_P(SchemaUpdaterTest, NumericColumnDefault) {
   const Column* col = table->FindColumn("value");
   if (GetParam() == POSTGRESQL) {
     EXPECT_EQ(
-        col->GetType()->TypeName(zetasql::PRODUCT_EXTERNAL),
+        col->GetType()->TypeName(googlesql::PRODUCT_EXTERNAL),
         postgres_translator::spangres::datatypes::GetPgNumericType()->TypeName(
-            zetasql::PRODUCT_EXTERNAL));
+            googlesql::PRODUCT_EXTERNAL));
   } else {
-    EXPECT_EQ(col->GetType()->kind(), zetasql::TYPE_NUMERIC);
+    EXPECT_EQ(col->GetType()->kind(), googlesql::TYPE_NUMERIC);
   }
   EXPECT_TRUE(col->has_default_value());
   EXPECT_TRUE(col->expression().has_value());

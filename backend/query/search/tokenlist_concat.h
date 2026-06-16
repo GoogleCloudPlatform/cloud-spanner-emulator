@@ -17,7 +17,7 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_SEARCH_TOKENLIST_CONCAT_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_QUERY_SEARCH_TOKENLIST_CONCAT_H_
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/status/statusor.h"
 #include "absl/types/span.h"
 
@@ -30,8 +30,8 @@ namespace google::spanner::emulator::backend::query::search {
 // not with CONCAT yet.
 class TokenlistConcat {
  public:
-  static absl::StatusOr<zetasql::Value> Concat(
-      absl::Span<const zetasql::Value> args);
+  static absl::StatusOr<googlesql::Value> Concat(
+      absl::Span<const googlesql::Value> args);
 };
 
 }  // namespace google::spanner::emulator::backend::query::search

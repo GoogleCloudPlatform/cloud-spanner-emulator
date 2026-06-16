@@ -19,24 +19,24 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_split.h"
 #include "absl/types/span.h"
 #include "backend/query/search/tokenizer.h"
 #include "common/errors.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google::spanner::emulator::backend::query::search {
 
-absl::StatusOr<zetasql::Value> TokenlistConcat::Concat(
-    absl::Span<const zetasql::Value> args) {
-  ZETASQL_RET_CHECK(args.size() == 1 && args[0].type()->IsArray());
+absl::StatusOr<googlesql::Value> TokenlistConcat::Concat(
+    absl::Span<const googlesql::Value> args) {
+  GOOGLESQL_RET_CHECK(args.size() == 1 && args[0].type()->IsArray());
   const auto& arg = args[0];
   if (arg.is_null()) {
     // TOKENLIST_CONCAT(NULL) should return NULL.
-    return zetasql::Value::Null(arg.type());
+    return googlesql::Value::Null(arg.type());
   }
   std::vector<std::string> result;
   std::vector<std::string> first_signature;
@@ -45,7 +45,7 @@ absl::StatusOr<zetasql::Value> TokenlistConcat::Concat(
       // NULL TOKENLIST inside array will just be skipped.
       continue;
     }
-    ZETASQL_ASSIGN_OR_RETURN(auto tokens, StringsFromTokenList(tokenlist));
+    GOOGLESQL_ASSIGN_OR_RETURN(auto tokens, StringsFromTokenList(tokenlist));
     if (first_signature.empty()) {
       first_signature = absl::StrSplit(tokens[0], '-');
     } else {

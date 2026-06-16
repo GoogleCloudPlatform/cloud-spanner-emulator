@@ -20,7 +20,7 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -31,8 +31,8 @@
 #include "backend/query/search/ngrams_tokenizer.h"
 #include "backend/query/search/tokenizer.h"
 #include "common/errors.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -49,14 +49,14 @@ namespace search {
 //   tokenlist_trigrams: the returned set of unique trigrams from the tokenlist.
 //   query_trigrams: the returned set of unique trigrams from the query.
 absl::Status ScoreNgramsEvaluator::BuildTrigrams(
-    const zetasql::Value& tokenlist, absl::string_view query,
+    const googlesql::Value& tokenlist, absl::string_view query,
     bool& source_is_null, absl::flat_hash_set<std::string>& tokenlist_trigrams,
     absl::flat_hash_set<std::string>& query_trigrams) {
   // substring and ngrams tokenizer signature indexes.
   constexpr int64_t kTokenizerSignatureArgumentSize = 4;
   constexpr int kIsNullIndex = 3;
 
-  ZETASQL_ASSIGN_OR_RETURN(auto tokens, StringsFromTokenList(tokenlist));
+  GOOGLESQL_ASSIGN_OR_RETURN(auto tokens, StringsFromTokenList(tokenlist));
   for (int i = 0; i < tokens.size(); ++i) {
     if (IsTokenizerSignature(tokens[i])) {
       // There will be multiple signatures when tokenlist is concatenated.
@@ -69,15 +69,15 @@ absl::Status ScoreNgramsEvaluator::BuildTrigrams(
       //   [substring|ngrams]-ngram_size_max-ngram_size_min-is_source_null
       std::vector<std::string> signature =
           absl::StrSplit(tokens[i], absl::ByChar('-'), absl::SkipEmpty());
-      ZETASQL_RET_CHECK(signature.size() == kTokenizerSignatureArgumentSize ||
+      GOOGLESQL_RET_CHECK(signature.size() == kTokenizerSignatureArgumentSize ||
                 signature.size() == kSubstringTokenizerSignatureArgumentSize);
       source_is_null = signature[kIsNullIndex] != "0";
 
-      std::vector<zetasql::Value> args{
-          zetasql::Value::String(query), zetasql::Value::Int64(kTrigrams),
-          zetasql::Value::Int64(kTrigrams), zetasql::Value::Bool(false)};
-      ZETASQL_ASSIGN_OR_RETURN(auto result, NgramsTokenizer::Tokenize(args));
-      ZETASQL_ASSIGN_OR_RETURN(auto ngrams, StringsFromTokenList(result));
+      std::vector<googlesql::Value> args{
+          googlesql::Value::String(query), googlesql::Value::Int64(kTrigrams),
+          googlesql::Value::Int64(kTrigrams), googlesql::Value::Bool(false)};
+      GOOGLESQL_ASSIGN_OR_RETURN(auto result, NgramsTokenizer::Tokenize(args));
+      GOOGLESQL_ASSIGN_OR_RETURN(auto ngrams, StringsFromTokenList(result));
       for (auto it = ngrams.begin() + 1; it != ngrams.end(); ++it) {
         query_trigrams.insert(*it);
       }
@@ -87,12 +87,12 @@ absl::Status ScoreNgramsEvaluator::BuildTrigrams(
       return error::TokenListNotMatchSearch(
           "SCORE_NGRAMS", "TOKENIZE_SUBSTRING or TOKENIZE_NGRAMS");
     } else {
-      std::vector<zetasql::Value> args{zetasql::Value::String(tokens[i]),
-                                         zetasql::Value::Int64(kTrigrams),
-                                         zetasql::Value::Int64(kTrigrams),
-                                         zetasql::Value::Bool(false)};
-      ZETASQL_ASSIGN_OR_RETURN(auto result, NgramsTokenizer::Tokenize(args));
-      ZETASQL_ASSIGN_OR_RETURN(auto ngrams, StringsFromTokenList(result));
+      std::vector<googlesql::Value> args{googlesql::Value::String(tokens[i]),
+                                         googlesql::Value::Int64(kTrigrams),
+                                         googlesql::Value::Int64(kTrigrams),
+                                         googlesql::Value::Bool(false)};
+      GOOGLESQL_ASSIGN_OR_RETURN(auto result, NgramsTokenizer::Tokenize(args));
+      GOOGLESQL_ASSIGN_OR_RETURN(auto ngrams, StringsFromTokenList(result));
       for (auto it = ngrams.begin() + 1; it != ngrams.end(); ++it) {
         tokenlist_trigrams.insert(*it);
       }
@@ -113,13 +113,13 @@ int64_t ScoreNgramsEvaluator::NumMatchingTrigrams(
   return num_matching_trigrams;
 }
 
-absl::StatusOr<zetasql::Value> ScoreNgramsEvaluator::Evaluate(
-    absl::Span<const zetasql::Value> args) {
-  const zetasql::Value& tokenlist = args[0];
-  const zetasql::Value& query = args[1];
+absl::StatusOr<googlesql::Value> ScoreNgramsEvaluator::Evaluate(
+    absl::Span<const googlesql::Value> args) {
+  const googlesql::Value& tokenlist = args[0];
+  const googlesql::Value& query = args[1];
 
   if (tokenlist.is_null() || query.is_null()) {
-    return zetasql::Value::Double(0.0);
+    return googlesql::Value::Double(0.0);
   }
 
   if (!tokenlist.type()->IsTokenList()) {
@@ -133,11 +133,11 @@ absl::StatusOr<zetasql::Value> ScoreNgramsEvaluator::Evaluate(
   absl::flat_hash_set<std::string> tokenlist_trigrams;
   absl::flat_hash_set<std::string> query_trigrams;
   bool source_is_null;
-  ZETASQL_RETURN_IF_ERROR(BuildTrigrams(tokenlist, query.string_value(), source_is_null,
+  GOOGLESQL_RETURN_IF_ERROR(BuildTrigrams(tokenlist, query.string_value(), source_is_null,
                                 tokenlist_trigrams, query_trigrams));
 
   if (source_is_null) {
-    return zetasql::Value::Double(0.0);
+    return googlesql::Value::Double(0.0);
   }
 
   int64_t match_count = NumMatchingTrigrams(tokenlist_trigrams, query_trigrams);
@@ -147,7 +147,7 @@ absl::StatusOr<zetasql::Value> ScoreNgramsEvaluator::Evaluate(
                   static_cast<double>(tokenlist_trigrams.size()) -
                   static_cast<double>(match_count));
 
-  return zetasql::Value::Double(score);
+  return googlesql::Value::Double(score);
 }
 
 }  // namespace search

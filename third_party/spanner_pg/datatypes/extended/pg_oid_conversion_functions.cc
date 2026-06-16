@@ -31,49 +31,49 @@
 
 #include "third_party/spanner_pg/datatypes/extended/pg_oid_conversion_functions.h"
 
-#include "zetasql/public/function.h"
-#include "zetasql/public/type.pb.h"
-#include "zetasql/base/no_destructor.h"
+#include "googlesql/public/function.h"
+#include "googlesql/public/type.pb.h"
+#include "googlesql/base/no_destructor.h"
 #include "third_party/spanner_pg/catalog/emulator_functions.h"
 
 namespace postgres_translator::spangres::datatypes {
 
-const zetasql::Function* GetPgOidToInt64Conversion() {
-  static const zetasql_base::NoDestructor<zetasql::Function*> kPgOidToInt64Conv(
-      new zetasql::Function("pg_oid_to_int64_conv", "spanner",
-                              zetasql::Function::SCALAR,
+const googlesql::Function* GetPgOidToInt64Conversion() {
+  static const googlesql_base::NoDestructor<googlesql::Function*> kPgOidToInt64Conv(
+      new googlesql::Function("pg_oid_to_int64_conv", "spanner",
+                              googlesql::Function::SCALAR,
                               /*function_signatures=*/{},
-                              zetasql::FunctionOptions().set_evaluator(
+                              googlesql::FunctionOptions().set_evaluator(
                                   postgres_translator::EvalCastOidToInt64)));
   return *kPgOidToInt64Conv;
 }
 
-const zetasql::Function* GetInt64ToPgOidConversion() {
-  static const zetasql_base::NoDestructor<zetasql::Function*> kInt64ToPgOidConv(
-      new zetasql::Function("int64_to_pg_oid_conv", "spanner",
-                              zetasql::Function::SCALAR,
+const googlesql::Function* GetInt64ToPgOidConversion() {
+  static const googlesql_base::NoDestructor<googlesql::Function*> kInt64ToPgOidConv(
+      new googlesql::Function("int64_to_pg_oid_conv", "spanner",
+                              googlesql::Function::SCALAR,
                               /*function_signatures=*/{},
-                              zetasql::FunctionOptions().set_evaluator(
+                              googlesql::FunctionOptions().set_evaluator(
                                   postgres_translator::EvalCastToOid)));
   return *kInt64ToPgOidConv;
 }
 
-const zetasql::Function* GetPgOidToStringConversion() {
-  static const zetasql_base::NoDestructor<zetasql::Function*> kPgOidToStringConv(
-      new zetasql::Function("pg_oid_to_string_conv", "spanner",
-                              zetasql::Function::SCALAR,
+const googlesql::Function* GetPgOidToStringConversion() {
+  static const googlesql_base::NoDestructor<googlesql::Function*> kPgOidToStringConv(
+      new googlesql::Function("pg_oid_to_string_conv", "spanner",
+                              googlesql::Function::SCALAR,
                               /*function_signatures=*/{},
-                              zetasql::FunctionOptions().set_evaluator(
+                              googlesql::FunctionOptions().set_evaluator(
                                   postgres_translator::EvalCastOidToString)));
   return *kPgOidToStringConv;
 }
 
-const zetasql::Function* GetStringToPgOidConversion() {
-  static const zetasql_base::NoDestructor<zetasql::Function*> kStringToPgOidConv(
-      new zetasql::Function("string_to_pg_oid_conv", "spanner",
-                              zetasql::Function::SCALAR,
+const googlesql::Function* GetStringToPgOidConversion() {
+  static const googlesql_base::NoDestructor<googlesql::Function*> kStringToPgOidConv(
+      new googlesql::Function("string_to_pg_oid_conv", "spanner",
+                              googlesql::Function::SCALAR,
                               /*function_signatures=*/{},
-                              zetasql::FunctionOptions().set_evaluator(
+                              googlesql::FunctionOptions().set_evaluator(
                                   postgres_translator::EvalCastToOid)));
   return *kStringToPgOidConv;
 }

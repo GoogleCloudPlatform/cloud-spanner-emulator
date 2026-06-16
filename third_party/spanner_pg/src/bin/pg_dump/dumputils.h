@@ -5,7 +5,7 @@
  * Basically this is stuff that is useful in both pg_dump and pg_dumpall.
  *
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/bin/pg_dump/dumputils.h
@@ -36,6 +36,7 @@
 #endif
 
 
+extern char *sanitize_line(const char *str, bool want_hyphen);
 extern bool buildACLCommands(const char *name, const char *subname, const char *nspname,
 							 const char *type, const char *acls, const char *baseacls,
 							 const char *owner, const char *prefix, int remoteVersion,
@@ -62,5 +63,8 @@ extern void makeAlterConfigCommand(PGconn *conn, const char *configitem,
 								   const char *type, const char *name,
 								   const char *type2, const char *name2,
 								   PQExpBuffer buf);
+
+extern char *generate_restrict_key(void);
+extern bool valid_restrict_key(const char *restrict_key);
 
 #endif							/* DUMPUTILS_H */

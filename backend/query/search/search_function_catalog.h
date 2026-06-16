@@ -20,8 +20,8 @@
 #include <memory>
 #include <string>
 
-#include "zetasql/public/function.h"
-#include "zetasql/public/types/type_factory.h"
+#include "googlesql/public/function.h"
+#include "googlesql/public/types/type_factory.h"
 #include "absl/container/flat_hash_map.h"
 #include "backend/schema/catalog/schema.h"
 
@@ -32,8 +32,8 @@ namespace backend {
 namespace query {
 namespace search {
 
-absl::flat_hash_map<std::string, std::unique_ptr<zetasql::Function>>
-GetSearchFunctions(zetasql::TypeFactory* type_factory,
+absl::flat_hash_map<std::string, std::unique_ptr<googlesql::Function>>
+GetSearchFunctions(googlesql::TypeFactory* type_factory,
                    const std::string& catalog_name,
                    database_api::DatabaseDialect dialect);
 

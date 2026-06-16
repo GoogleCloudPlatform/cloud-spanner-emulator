@@ -38,7 +38,7 @@
 #include <limits>
 #include <string>
 
-#include "zetasql/public/function.h"
+#include "googlesql/public/function.h"
 #include "absl/base/optimization.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -78,14 +78,14 @@ static absl::Status GetPgJsonbCastErrorMessage(char first_char,
 }
 
 absl::StatusOr<bool> GetBoolFromPgJsonb(const absl::Cord& jsonb) {
-  ZETASQL_RET_CHECK_GT(jsonb.size(), 0);
+  GOOGLESQL_RET_CHECK_GT(jsonb.size(), 0);
   if (jsonb == absl::string_view("true")) return true;
   if (jsonb == absl::string_view("false")) return false;
   return GetPgJsonbCastErrorMessage(jsonb[0], "boolean");
 }
 
 absl::StatusOr<int64_t> GetInt64FromPgJsonb(const absl::Cord& jsonb) {
-  ZETASQL_RET_CHECK_GT(jsonb.size(), 0);
+  GOOGLESQL_RET_CHECK_GT(jsonb.size(), 0);
   const char first_char = jsonb[0];
   if (!std::isdigit(first_char) && first_char != '-') {
     return GetPgJsonbCastErrorMessage(first_char, "bigint");
@@ -114,7 +114,7 @@ absl::StatusOr<int64_t> GetInt64FromPgJsonb(const absl::Cord& jsonb) {
   if (whole_part_size == number_size) return result;
 
   const char fractional_part = buffer[whole_part_size + 1];
-  ZETASQL_RET_CHECK(std::isdigit(fractional_part));
+  GOOGLESQL_RET_CHECK(std::isdigit(fractional_part));
   // If the first digit after decimal is greater than 4 then we round the
   // integer part down if it is a negative number else round the integer part
   // up.
@@ -169,7 +169,7 @@ inline absl::StatusOr<T> ParseFloatingPoint(absl::string_view input) {
 
 template <typename T, typename = std::enable_if_t<std::is_floating_point_v<T>>>
 absl::StatusOr<T> GetFloatingPointFromPgJsonb(const absl::Cord& jsonb) {
-  ZETASQL_RET_CHECK_GT(jsonb.size(), 0);
+  GOOGLESQL_RET_CHECK_GT(jsonb.size(), 0);
 
   // Check that value is actually a number.
   const char first_char = jsonb[0];
@@ -199,58 +199,58 @@ absl::StatusOr<T> GetFloatingPointFromPgJsonb(const absl::Cord& jsonb) {
   return ParseFloatingPoint<T>(input);
 }
 
-absl::StatusOr<zetasql::Value> PgJsonbToBoolConversion(
-    const absl::Span<const zetasql::Value> args) {
-  ZETASQL_RET_CHECK_EQ(args.size(), 1);
+absl::StatusOr<googlesql::Value> PgJsonbToBoolConversion(
+    const absl::Span<const googlesql::Value> args) {
+  GOOGLESQL_RET_CHECK_EQ(args.size(), 1);
   if (args[0].is_null()) {
-    return zetasql::Value::NullBool();
+    return googlesql::Value::NullBool();
   }
-  ZETASQL_ASSIGN_OR_RETURN(absl::Cord jsonb, GetPgJsonbNormalizedValue(args[0]));
-  ZETASQL_ASSIGN_OR_RETURN(bool bool_value, GetBoolFromPgJsonb(jsonb));
-  return zetasql::Value::Bool(bool_value);
+  GOOGLESQL_ASSIGN_OR_RETURN(absl::Cord jsonb, GetPgJsonbNormalizedValue(args[0]));
+  GOOGLESQL_ASSIGN_OR_RETURN(bool bool_value, GetBoolFromPgJsonb(jsonb));
+  return googlesql::Value::Bool(bool_value);
 }
 
-absl::StatusOr<zetasql::Value> PgJsonbToInt64Conversion(
-    const absl::Span<const zetasql::Value> args) {
-  ZETASQL_RET_CHECK_EQ(args.size(), 1);
+absl::StatusOr<googlesql::Value> PgJsonbToInt64Conversion(
+    const absl::Span<const googlesql::Value> args) {
+  GOOGLESQL_RET_CHECK_EQ(args.size(), 1);
   if (args[0].is_null()) {
-    return zetasql::Value::NullInt64();
+    return googlesql::Value::NullInt64();
   }
-  ZETASQL_ASSIGN_OR_RETURN(absl::Cord jsonb, GetPgJsonbNormalizedValue(args[0]));
-  ZETASQL_ASSIGN_OR_RETURN(int64_t rounded, GetInt64FromPgJsonb(jsonb));
-  return zetasql::Value::Int64(rounded);
+  GOOGLESQL_ASSIGN_OR_RETURN(absl::Cord jsonb, GetPgJsonbNormalizedValue(args[0]));
+  GOOGLESQL_ASSIGN_OR_RETURN(int64_t rounded, GetInt64FromPgJsonb(jsonb));
+  return googlesql::Value::Int64(rounded);
 }
 
-absl::StatusOr<zetasql::Value> PgJsonbToDoubleConversion(
-    const absl::Span<const zetasql::Value> args) {
-  ZETASQL_RET_CHECK_EQ(args.size(), 1);
+absl::StatusOr<googlesql::Value> PgJsonbToDoubleConversion(
+    const absl::Span<const googlesql::Value> args) {
+  GOOGLESQL_RET_CHECK_EQ(args.size(), 1);
   if (args[0].is_null()) {
-    return zetasql::Value::NullDouble();
+    return googlesql::Value::NullDouble();
   }
-  ZETASQL_ASSIGN_OR_RETURN(absl::Cord jsonb, GetPgJsonbNormalizedValue(args[0]));
-  ZETASQL_ASSIGN_OR_RETURN(double d, GetFloatingPointFromPgJsonb<double>(jsonb));
-  return zetasql::Value::Double(d);
+  GOOGLESQL_ASSIGN_OR_RETURN(absl::Cord jsonb, GetPgJsonbNormalizedValue(args[0]));
+  GOOGLESQL_ASSIGN_OR_RETURN(double d, GetFloatingPointFromPgJsonb<double>(jsonb));
+  return googlesql::Value::Double(d);
 }
 
-absl::StatusOr<zetasql::Value> PgJsonbToFloatConversion(
-    const absl::Span<const zetasql::Value> args) {
-  ZETASQL_RET_CHECK_EQ(args.size(), 1);
+absl::StatusOr<googlesql::Value> PgJsonbToFloatConversion(
+    const absl::Span<const googlesql::Value> args) {
+  GOOGLESQL_RET_CHECK_EQ(args.size(), 1);
   if (args[0].is_null()) {
-    return zetasql::Value::NullFloat();
+    return googlesql::Value::NullFloat();
   }
-  ZETASQL_ASSIGN_OR_RETURN(absl::Cord jsonb, GetPgJsonbNormalizedValue(args[0]));
-  ZETASQL_ASSIGN_OR_RETURN(float f, GetFloatingPointFromPgJsonb<float>(jsonb));
-  return zetasql::Value::Float(f);
+  GOOGLESQL_ASSIGN_OR_RETURN(absl::Cord jsonb, GetPgJsonbNormalizedValue(args[0]));
+  GOOGLESQL_ASSIGN_OR_RETURN(float f, GetFloatingPointFromPgJsonb<float>(jsonb));
+  return googlesql::Value::Float(f);
 }
 
-absl::StatusOr<zetasql::Value> PgJsonbToPgNumericConversion(
-    const absl::Span<const zetasql::Value> args) {
-  ZETASQL_RET_CHECK_EQ(args.size(), 1);
+absl::StatusOr<googlesql::Value> PgJsonbToPgNumericConversion(
+    const absl::Span<const googlesql::Value> args) {
+  GOOGLESQL_RET_CHECK_EQ(args.size(), 1);
   if (args[0].is_null()) {
-    return zetasql::values::Null(GetPgNumericType());
+    return googlesql::values::Null(GetPgNumericType());
   }
-  ZETASQL_ASSIGN_OR_RETURN(absl::Cord jsonb, GetPgJsonbNormalizedValue(args[0]));
-  ZETASQL_RET_CHECK_GT(jsonb.size(), 0);
+  GOOGLESQL_ASSIGN_OR_RETURN(absl::Cord jsonb, GetPgJsonbNormalizedValue(args[0]));
+  GOOGLESQL_RET_CHECK_GT(jsonb.size(), 0);
   const char first_char = jsonb[0];
   if (!std::isdigit(first_char) && first_char != '-') {
     return GetPgJsonbCastErrorMessage(first_char, "numeric");
@@ -258,27 +258,27 @@ absl::StatusOr<zetasql::Value> PgJsonbToPgNumericConversion(
   return CreatePgNumericValue(std::string(jsonb));
 }
 
-absl::StatusOr<zetasql::Value> PgJsonbToStringConversion(
-    const absl::Span<const zetasql::Value> args) {
-  ZETASQL_RET_CHECK_EQ(args.size(), 1);
+absl::StatusOr<googlesql::Value> PgJsonbToStringConversion(
+    const absl::Span<const googlesql::Value> args) {
+  GOOGLESQL_RET_CHECK_EQ(args.size(), 1);
   if (args[0].is_null()) {
-    return zetasql::Value::NullString();
+    return googlesql::Value::NullString();
   }
-  ZETASQL_ASSIGN_OR_RETURN(absl::Cord jsonb, GetPgJsonbNormalizedValue(args[0]));
-  return zetasql::Value::String(jsonb);
+  GOOGLESQL_ASSIGN_OR_RETURN(absl::Cord jsonb, GetPgJsonbNormalizedValue(args[0]));
+  return googlesql::Value::String(jsonb);
 }
 
-const zetasql::Function* GetStringToPgJsonbConversion() {
-  static const zetasql::Function* kStringToPgJsonbConv =
-      new zetasql::Function(
-          "string_to_pg_jsonb_conv", "spanner", zetasql::Function::SCALAR,
+const googlesql::Function* GetStringToPgJsonbConversion() {
+  static const googlesql::Function* kStringToPgJsonbConv =
+      new googlesql::Function(
+          "string_to_pg_jsonb_conv", "spanner", googlesql::Function::SCALAR,
           /*function_signatures=*/{},
-          zetasql::FunctionOptions().set_evaluator(
-              [](const absl::Span<const zetasql::Value> args)
-                  -> absl::StatusOr<zetasql::Value> {
-                ZETASQL_RET_CHECK_EQ(args.size(), 1);
+          googlesql::FunctionOptions().set_evaluator(
+              [](const absl::Span<const googlesql::Value> args)
+                  -> absl::StatusOr<googlesql::Value> {
+                GOOGLESQL_RET_CHECK_EQ(args.size(), 1);
                 if (args[0].is_null()) {
-                  return zetasql::Value::Null(GetPgJsonbType());
+                  return googlesql::Value::Null(GetPgJsonbType());
                 }
                 return datatypes::CreatePgJsonbValueWithMemoryContext(
                     args[0].string_value());
@@ -287,62 +287,62 @@ const zetasql::Function* GetStringToPgJsonbConversion() {
   return kStringToPgJsonbConv;
 }
 
-const zetasql::Function* GetPgJsonbToBoolConversion() {
-  static const zetasql::Function* kPgJsonbToBoolConv =
-      new zetasql::Function(
-          "pg_jsonb_to_bool_conv", "spanner", zetasql::Function::SCALAR,
+const googlesql::Function* GetPgJsonbToBoolConversion() {
+  static const googlesql::Function* kPgJsonbToBoolConv =
+      new googlesql::Function(
+          "pg_jsonb_to_bool_conv", "spanner", googlesql::Function::SCALAR,
           /*function_signatures=*/{},
-          zetasql::FunctionOptions().set_evaluator(
+          googlesql::FunctionOptions().set_evaluator(
               PGFunctionEvaluator(PgJsonbToBoolConversion)));
   return kPgJsonbToBoolConv;
 }
 
-const zetasql::Function* GetPgJsonbToInt64Conversion() {
-  static const zetasql::Function* kPgJsonbToInt64Conv =
-      new zetasql::Function(
-          "pg_jsonb_to_int64_conv", "spanner", zetasql::Function::SCALAR,
+const googlesql::Function* GetPgJsonbToInt64Conversion() {
+  static const googlesql::Function* kPgJsonbToInt64Conv =
+      new googlesql::Function(
+          "pg_jsonb_to_int64_conv", "spanner", googlesql::Function::SCALAR,
           /*function_signatures=*/{},
-          zetasql::FunctionOptions().set_evaluator(
+          googlesql::FunctionOptions().set_evaluator(
               PGFunctionEvaluator(PgJsonbToInt64Conversion)));
   return kPgJsonbToInt64Conv;
 }
 
-const zetasql::Function* GetPgJsonbToDoubleConversion() {
-  static const zetasql::Function* kPgJsonbToDoubleConv =
-      new zetasql::Function(
-          "pg_jsonb_to_double_conv", "spanner", zetasql::Function::SCALAR,
+const googlesql::Function* GetPgJsonbToDoubleConversion() {
+  static const googlesql::Function* kPgJsonbToDoubleConv =
+      new googlesql::Function(
+          "pg_jsonb_to_double_conv", "spanner", googlesql::Function::SCALAR,
           /*function_signatures=*/{},
-          zetasql::FunctionOptions().set_evaluator(
+          googlesql::FunctionOptions().set_evaluator(
               PGFunctionEvaluator(PgJsonbToDoubleConversion)));
   return kPgJsonbToDoubleConv;
 }
 
-const zetasql::Function* GetPgJsonbToFloatConversion() {
-  static const zetasql::Function* kPgJsonbToFloatConv =
-      new zetasql::Function(
-          "pg_jsonb_to_float_conv", "spanner", zetasql::Function::SCALAR,
+const googlesql::Function* GetPgJsonbToFloatConversion() {
+  static const googlesql::Function* kPgJsonbToFloatConv =
+      new googlesql::Function(
+          "pg_jsonb_to_float_conv", "spanner", googlesql::Function::SCALAR,
           /*function_signatures=*/{},
-          zetasql::FunctionOptions().set_evaluator(
+          googlesql::FunctionOptions().set_evaluator(
               PGFunctionEvaluator(PgJsonbToFloatConversion)));
   return kPgJsonbToFloatConv;
 }
 
-const zetasql::Function* GetPgJsonbToPgNumericConversion() {
-  static const zetasql::Function* kPgJsonbToPgNumericConv =
-      new zetasql::Function(
-          "pg_jsonb_to_pg_numeric_conv", "spanner", zetasql::Function::SCALAR,
+const googlesql::Function* GetPgJsonbToPgNumericConversion() {
+  static const googlesql::Function* kPgJsonbToPgNumericConv =
+      new googlesql::Function(
+          "pg_jsonb_to_pg_numeric_conv", "spanner", googlesql::Function::SCALAR,
           /*function_signatures=*/{},
-          zetasql::FunctionOptions().set_evaluator(
+          googlesql::FunctionOptions().set_evaluator(
               PGFunctionEvaluator(PgJsonbToPgNumericConversion)));
   return kPgJsonbToPgNumericConv;
 }
 
-const zetasql::Function* GetPgJsonbToStringConversion() {
-  static const zetasql::Function* kPgJsonbToStringConv =
-      new zetasql::Function(
-          "pg_jsonb_to_string_conv", "spanner", zetasql::Function::SCALAR,
+const googlesql::Function* GetPgJsonbToStringConversion() {
+  static const googlesql::Function* kPgJsonbToStringConv =
+      new googlesql::Function(
+          "pg_jsonb_to_string_conv", "spanner", googlesql::Function::SCALAR,
           /*function_signatures=*/{},
-          zetasql::FunctionOptions().set_evaluator(
+          googlesql::FunctionOptions().set_evaluator(
               PGFunctionEvaluator(PgJsonbToStringConversion)));
   return kPgJsonbToStringConv;
 }

@@ -32,6 +32,8 @@
 # Shim libraries and other support packages for linking PostgreSQL parser and
 # analyzer code to Spanner code for Spangres.
 
+load("@com_google_protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
+load("@com_google_protobuf//bazel:proto_library.bzl", "proto_library")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 
 package(
@@ -86,8 +88,8 @@ cc_library(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
-        "@com_google_zetasql//zetasql/base",
-        "@com_google_zetasql//zetasql/base:ret_check",
+        "@com_google_googlesql//googlesql/base",
+        "@com_google_googlesql//googlesql/base:ret_check",
     ],
 )
 
@@ -139,9 +141,9 @@ cc_test(
         "//third_party/spanner_pg/util:postgres",
         "//third_party/spanner_pg/util:valid_memory_context_fixture",
         "@com_google_absl//absl/status",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -161,7 +163,7 @@ cc_library(
     ],
     deps = [
         "//third_party/spanner_pg/interface:memory_reservation_manager",
-        "@com_google_zetasql//zetasql/base",
+        "//third_party/spanner_pg/util:integral_types",
     ],
 )
 
@@ -183,8 +185,8 @@ cc_library(
         "//third_party/spanner_pg/src/spangres:memory",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
-        "@com_google_zetasql//zetasql/base",
-        "@com_google_zetasql//zetasql/base:status",
+        "@com_google_googlesql//googlesql/base",
+        "@com_google_googlesql//googlesql/base:status",
     ],
 )
 
@@ -210,12 +212,13 @@ cc_test(
         "//third_party/spanner_pg/postgres_includes",
         "//third_party/spanner_pg/src/backend:backend_with_shims",
         "//third_party/spanner_pg/src/spangres:memory",
+        "//third_party/spanner_pg/util:integral_types",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/types:optional",
+        "@com_google_googlesql//googlesql/base:logging",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -235,14 +238,14 @@ cc_library(
     deps = [
         ":error_shim",
         "//third_party/spanner_pg/postgres_includes",
+        "//third_party/spanner_pg/util:integral_types",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/types:optional",
         "@com_google_absl//absl/utility",
-        "@com_google_zetasql//zetasql/base",
-        "@com_google_zetasql//zetasql/base:logging",
-        "@com_google_zetasql//zetasql/base:ret_check",
+        "@com_google_googlesql//googlesql/base:logging",
+        "@com_google_googlesql//googlesql/base:ret_check",
     ],
 )
 
@@ -290,9 +293,9 @@ cc_test(
         "//third_party/spanner_pg/src/spangres:memory",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/status",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -320,7 +323,7 @@ cc_library(
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
-        "@com_google_zetasql//zetasql/base:ret_check",
+        "@com_google_googlesql//googlesql/base:ret_check",
     ],
 )
 
@@ -345,9 +348,9 @@ cc_test(
         "//third_party/spanner_pg/interface:memory_reservation_manager",
         "//third_party/spanner_pg/postgres_includes",
         "//third_party/spanner_pg/src/backend:backend_with_stub_shims",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -367,9 +370,9 @@ cc_test(
     deps = [
         "//third_party/spanner_pg/postgres_includes",
         "//third_party/spanner_pg/src/backend:backend_with_stub_shims",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -391,7 +394,7 @@ cc_test(
         "//third_party/spanner_pg/test_catalog",
         "//third_party/spanner_pg/util:unittest_utils",
         "//third_party/spanner_pg/util:valid_memory_context_fixture",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )

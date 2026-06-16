@@ -27,20 +27,20 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/base/logging.h"
+#include "googlesql/base/logging.h"
 #include "google/spanner/admin/database/v1/common.pb.h"
-#include "zetasql/public/analyzer.h"
-#include "zetasql/public/analyzer_options.h"
-#include "zetasql/public/analyzer_output.h"
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/function.h"
-#include "zetasql/public/function.pb.h"
-#include "zetasql/public/function_signature.h"
-#include "zetasql/public/options.pb.h"
-#include "zetasql/public/simple_catalog.h"
-#include "zetasql/public/type.h"
-#include "zetasql/resolved_ast/resolved_ast.h"
-#include "zetasql/resolved_ast/resolved_node_kind.pb.h"
+#include "googlesql/public/analyzer.h"
+#include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/analyzer_output.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/function.h"
+#include "googlesql/public/function.pb.h"
+#include "googlesql/public/function_signature.h"
+#include "googlesql/public/options.pb.h"
+#include "googlesql/public/simple_catalog.h"
+#include "googlesql/public/type.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 #include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
@@ -70,7 +70,6 @@
 #include "backend/query/analyzer_options.h"
 #include "backend/query/catalog.h"
 #include "backend/query/function_catalog.h"
-#include "backend/query/prepare_property_graph_catalog.h"
 #include "backend/schema/backfills/change_stream_backfill.h"
 #include "backend/schema/backfills/column_value_backfill.h"
 #include "backend/schema/backfills/index_backfill.h"
@@ -125,6 +124,8 @@
 #include "common/limits.h"
 #include "third_party/spanner_pg/ddl/ddl_translator.h"
 #include "third_party/spanner_pg/ddl/pg_to_spanner_ddl_translator.h"
+#include "third_party/spanner_pg/ddl/spangres_direct_schema_printer_impl.h"
+#include "third_party/spanner_pg/ddl/spangres_schema_printer.h"
 #include "third_party/spanner_pg/interface/emulator_parser.h"
 #include "third_party/spanner_pg/interface/parser_output.h"
 #include "third_party/spanner_pg/interface/pg_arena.h"
@@ -132,10 +133,10 @@
 #include "third_party/spanner_pg/shims/error_shim.h"
 #include "third_party/spanner_pg/shims/memory_context_pg_arena.h"
 #include "google/protobuf/repeated_ptr_field.h"
-#include "zetasql/public/functions/uuid.h"
+#include "googlesql/public/functions/uuid.h"
 
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 ABSL_FLAG(bool, cloud_spanner_emulator_disable_cs_retention_check, false,
           "whether we want to check the retention limit when altering a change "
@@ -150,6 +151,7 @@ namespace {
 
 namespace database_api = ::google::spanner::admin::database::v1;
 using ::postgres_translator::interfaces::ExpressionTranslateResult;
+using ::postgres_translator::spangres::SpangresSchemaPrinter;
 typedef google::protobuf::RepeatedPtrField<ddl::SetOption> OptionList;
 
 // A struct that defines the columns used by an index.
@@ -216,7 +218,7 @@ class SchemaUpdaterImpl {
   SchemaUpdaterImpl& operator=(SchemaUpdaterImpl&&) = delete;
 
   absl::StatusOr<SchemaUpdaterImpl> static Build(
-      zetasql::TypeFactory* type_factory,
+      googlesql::TypeFactory* type_factory,
       TableIDGenerator* table_id_generator,
       ColumnIDGenerator* column_id_generator, Storage* storage,
       absl::Time schema_change_ts, PgOidAssigner* pg_oid_assigner,
@@ -224,7 +226,7 @@ class SchemaUpdaterImpl {
     SchemaUpdaterImpl impl(type_factory, table_id_generator,
                            column_id_generator, storage, schema_change_ts,
                            pg_oid_assigner, existing_schema, database_id);
-    ZETASQL_RETURN_IF_ERROR(impl.Init());
+    GOOGLESQL_RETURN_IF_ERROR(impl.Init());
     return impl;
   }
 
@@ -240,7 +242,7 @@ class SchemaUpdaterImpl {
   }
 
  private:
-  SchemaUpdaterImpl(zetasql::TypeFactory* type_factory,
+  SchemaUpdaterImpl(googlesql::TypeFactory* type_factory,
                     TableIDGenerator* table_id_generator,
                     ColumnIDGenerator* column_id_generator, Storage* storage,
                     absl::Time schema_change_ts, PgOidAssigner* pg_oid_assigner,
@@ -272,18 +274,18 @@ class SchemaUpdaterImpl {
 
   absl::Status InitColumnNameAndTypesFromTable(
       const Table* table, const ddl::CreateTable* ddl_create_table,
-      std::vector<zetasql::SimpleTable::NameAndType>* name_and_types);
+      std::vector<googlesql::SimpleTable::NameAndType>* name_and_types);
 
   absl::Status AnalyzeGeneratedColumn(
       absl::string_view expression, const std::string& column_name,
-      const zetasql::Type* column_type, const Table* table,
+      const googlesql::Type* column_type, const Table* table,
       const ddl::CreateTable* ddl_create_table,
       absl::flat_hash_set<std::string>* dependent_column_names,
       absl::flat_hash_set<const SchemaNode*>* udf_dependencies);
 
   absl::Status AnalyzeColumnDefaultValue(
       absl::string_view expression, const std::string& column_name,
-      const zetasql::Type* column_type, const Table* table,
+      const googlesql::Type* column_type, const Table* table,
       const ddl::CreateTable* ddl_create_table,
       absl::flat_hash_set<const SchemaNode*>* dependent_sequences,
       absl::flat_hash_set<const SchemaNode*>* udf_dependencies,
@@ -413,7 +415,8 @@ class SchemaUpdaterImpl {
   static Table::InterleaveType GetInterleaveType(
       const ddl::InterleaveClause& interleave);
   absl::Status CreateForeignKeyConstraint(
-      const ddl::ForeignKey& ddl_foreign_key, const Table* referencing_table);
+      const ddl::ForeignKey& ddl_foreign_key, const Table* referencing_table,
+      const database_api::DatabaseDialect& dialect);
   absl::StatusOr<const ForeignKey*> BuildForeignKeyConstraint(
       const ddl::ForeignKey& ddl_foreign_key, const Table* referencing_table);
   absl::Status EvaluateForeignKeyReferencedPrimaryKey(
@@ -426,7 +429,8 @@ class SchemaUpdaterImpl {
       const std::vector<int>& column_order, bool* index_required) const;
   absl::StatusOr<const Index*> CreateForeignKeyIndex(
       const ForeignKey* foreign_key, const Table* table,
-      const std::vector<std::string>& column_names, bool unique);
+      const std::vector<std::string>& column_names,
+      const database_api::DatabaseDialect& dialect, bool unique);
   bool CanInterleaveForeignKeyIndex(
       const Table* table, const std::vector<std::string>& column_names) const;
 
@@ -434,6 +438,8 @@ class SchemaUpdaterImpl {
       const Table* table, const ddl::CreateTable* ddl_create_table,
       absl::string_view expression);
   absl::StatusOr<ExpressionTranslateResult> TranslatePostgreSqlQueryInView(
+      absl::string_view query);
+  absl::StatusOr<ExpressionTranslateResult> TranslatePostgreSqlQueryInUdf(
       absl::string_view query);
 
   absl::Status CreateCheckConstraint(
@@ -482,14 +488,16 @@ class SchemaUpdaterImpl {
       const ChangeStream* change_stream);
   absl::StatusOr<const Column*> CreateChangeStreamTableColumn(
       const std::string& column_name, const Table* change_stream_table,
-      const zetasql::Type* type);
+      const googlesql::Type* type);
   absl::StatusOr<const KeyColumn*> CreateChangeStreamTablePKColumn(
       const std::string& pk_column_name, const Table* change_stream_table);
   absl::Status CreateChangeStreamTablePKConstraint(
       const std::string& pk_column_name, Table::Builder* builder);
 
   absl::StatusOr<const Index*> CreateIndex(
-      const ddl::CreateIndex& ddl_index, const Table* indexed_table = nullptr);
+      const ddl::CreateIndex& ddl_index,
+      const database_api::DatabaseDialect& dialect,
+      const Table* indexed_table = nullptr);
   absl::StatusOr<const Index*> CreateVectorIndex(
       const ddl::CreateVectorIndex& ddl_index,
       const Table* indexed_table = nullptr);
@@ -523,15 +531,16 @@ class SchemaUpdaterImpl {
   absl::Status AnalyzeFunctionDefinition(
       const ddl::CreateFunction& ddl_function, bool replace,
       absl::flat_hash_set<const SchemaNode*>* dependencies,
-      std::unique_ptr<zetasql::FunctionSignature>* function_signature,
-      Udf::Determinism* determinism_level);
+      std::unique_ptr<googlesql::FunctionSignature>* function_signature,
+      Udf::Determinism* determinism_level, std::optional<std::string>* endpoint,
+      std::optional<int64_t>* max_batching_rows);
   absl::Status AnalyzeFunctionDefinition(
       const ddl::CreateFunction& ddl_function, bool replace,
       std::vector<View::Column>* output_columns,
       absl::flat_hash_set<const SchemaNode*>* dependencies);
   absl::StatusOr<Udf::Builder> CreateFunctionBuilder(
       const ddl::CreateFunction& ddl_function,
-      std::unique_ptr<zetasql::FunctionSignature> function_signature,
+      std::unique_ptr<googlesql::FunctionSignature> function_signature,
       Udf::Determinism determinism_level,
       absl::flat_hash_set<const SchemaNode*> dependencies);
   absl::StatusOr<View::Builder> CreateFunctionBuilder(
@@ -598,12 +607,13 @@ class SchemaUpdaterImpl {
   absl::Status AlterProtoColumnType(const Column* column,
                                     const ProtoBundle* proto_bundle,
                                     Column::Editor* editor);
-  absl::StatusOr<const zetasql::Type*> GetProtoTypeFromBundle(
-      const zetasql::Type* type, const ProtoBundle* proto_bundle);
+  absl::StatusOr<const googlesql::Type*> GetProtoTypeFromBundle(
+      const googlesql::Type* type, const ProtoBundle* proto_bundle);
   absl::Status AddCheckConstraint(
       const ddl::CheckConstraint& ddl_check_constraint, const Table* table);
   absl::Status AddForeignKey(const ddl::ForeignKey& ddl_foreign_key,
-                             const Table* table);
+                             const Table* table,
+                             const database_api::DatabaseDialect& dialect);
   absl::Status DropConstraint(const std::string& constraint_name,
                               const Table* table);
   absl::Status RenameTo(const ddl::AlterTable::RenameTo& rename_to,
@@ -662,10 +672,10 @@ class SchemaUpdaterImpl {
 
   std::string GetTimeZone() const;
 
-  absl::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>>
+  absl::StatusOr<std::unique_ptr<const googlesql::AnalyzerOutput>>
   AnalyzeCreatePropertyGraph(
       const ddl::CreatePropertyGraph& ddl_create_property_graph,
-      const zetasql::AnalyzerOptions& analyzer_options, Catalog* catalog);
+      const googlesql::AnalyzerOptions& analyzer_options, Catalog* catalog);
   absl::Status CreatePropertyGraph(
       const ddl::CreatePropertyGraph& ddl_create_property_graph,
       const database_api::DatabaseDialect& dialect);
@@ -673,10 +683,10 @@ class SchemaUpdaterImpl {
       const ddl::DropPropertyGraph& ddl_drop_property_graph);
   absl::Status PopulatePropertyGraph(
       const ddl::CreatePropertyGraph& ddl_create_property_graph,
-      const zetasql::ResolvedCreatePropertyGraphStmt* graph_stmt,
+      const googlesql::ResolvedCreatePropertyGraphStmt* graph_stmt,
       PropertyGraph::Builder* property_graph_builder);
   absl::Status AddGraphElementTable(
-      const zetasql::ResolvedGraphElementTable* element, bool is_node,
+      const googlesql::ResolvedGraphElementTable* element, bool is_node,
       PropertyGraph::Builder* graph_builder);
 
   // Adds a new schema object `node` to the schema copy being edited by
@@ -692,8 +702,8 @@ class SchemaUpdaterImpl {
   template <typename T>
   absl::Status AlterNode(const T* node,
                          const SchemaGraphEditor::EditCallback<T>& alter_cb) {
-    ZETASQL_RET_CHECK_NE(node, nullptr);
-    ZETASQL_RETURN_IF_ERROR(editor_->EditNode<T>(node, alter_cb));
+    GOOGLESQL_RET_CHECK_NE(node, nullptr);
+    GOOGLESQL_RETURN_IF_ERROR(editor_->EditNode<T>(node, alter_cb));
     return absl::OkStatus();
   }
 
@@ -702,7 +712,7 @@ class SchemaUpdaterImpl {
       const SchemaGraphEditor::EditCallback<NamedSchema>& alter_cb);
 
   // Type factory for the database. Not owned.
-  zetasql::TypeFactory* const type_factory_;
+  googlesql::TypeFactory* const type_factory_;
 
   // Unique table ID generator for the database. Not owned.
   TableIDGenerator* const table_id_generator_;
@@ -754,7 +764,7 @@ absl::Status SchemaUpdaterImpl::Init() {
   for (const SchemaNode* node :
        latest_schema_->GetSchemaGraph()->GetSchemaNodes()) {
     if (auto name = node->GetSchemaNameInfo(); name && name.value().global) {
-      ZETASQL_RETURN_IF_ERROR(
+      GOOGLESQL_RETURN_IF_ERROR(
           global_names_.AddName(name.value().kind, name.value().name));
     }
   }
@@ -763,13 +773,13 @@ absl::Status SchemaUpdaterImpl::Init() {
 
 absl::Status SchemaUpdaterImpl::AddNode(
     std::unique_ptr<const SchemaNode> node) {
-  ZETASQL_RETURN_IF_ERROR(editor_->AddNode(std::move(node)));
+  GOOGLESQL_RETURN_IF_ERROR(editor_->AddNode(std::move(node)));
   return absl::OkStatus();
 }
 
 absl::Status SchemaUpdaterImpl::DropNode(const SchemaNode* node) {
-  ZETASQL_RET_CHECK_NE(node, nullptr);
-  ZETASQL_RETURN_IF_ERROR(editor_->DeleteNode(node));
+  GOOGLESQL_RET_CHECK_NE(node, nullptr);
+  GOOGLESQL_RETURN_IF_ERROR(editor_->DeleteNode(node));
   return absl::OkStatus();
 }
 
@@ -783,17 +793,46 @@ absl::Status SchemaUpdaterImpl::AlterInNamedSchema(
   if (named_schema == nullptr) {
     return error::NamedSchemaNotFound(schema_name);
   }
-  ZETASQL_RETURN_IF_ERROR(AlterNode<NamedSchema>(named_schema, alter_cb));
+  GOOGLESQL_RETURN_IF_ERROR(AlterNode<NamedSchema>(named_schema, alter_cb));
 
   return absl::OkStatus();
 }
 
 absl::Status ValidateDdlStatement(const ddl::DDLStatement& ddl,
                                   database_api::DatabaseDialect dialect) {
-  if ((ddl.has_create_function() || ddl.has_drop_function()) &&
-      !EmulatorFeatureFlags::instance().flags().enable_views) {
-    return error::ViewsNotSupported(ddl.has_create_function() ? "CREATE"
-                                                              : "DROP");
+  if (ddl.has_create_function() || ddl.has_drop_function()) {
+    auto function_kind = ddl.has_create_function()
+                             ? ddl.create_function().function_kind()
+                             : ddl.drop_function().function_kind();
+    if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
+      if (function_kind == ddl::Function::VIEW) {
+        if (!EmulatorFeatureFlags::instance().flags().enable_views) {
+          return error::ViewsNotSupported(ddl.has_create_function() ? "CREATE"
+                                                                    : "DROP");
+        }
+      } else {
+        // For PostgreSQL, any non-VIEW create/drop function is treated as a UDF
+        if (!EmulatorFeatureFlags::instance()
+                 .flags()
+                 .enable_user_defined_functions) {
+          return error::UdfsNotSupportedPostgreSQL(
+              ddl.has_create_function() ? "CREATE" : "DROP");
+        }
+      }
+    } else {
+      if (function_kind == ddl::Function::FUNCTION &&
+          !EmulatorFeatureFlags::instance()
+               .flags()
+               .enable_user_defined_functions) {
+        return error::UdfsNotSupported(
+            ddl.has_create_function() ? ddl.create_function().function_name()
+                                      : ddl.drop_function().function_name());
+      } else if (function_kind == ddl::Function::VIEW &&
+                 !EmulatorFeatureFlags::instance().flags().enable_views) {
+        return error::ViewsNotSupported(ddl.has_create_function() ? "CREATE"
+                                                                  : "DROP");
+      }
+    }
   }
 
   if ((ddl.has_create_sequence() || ddl.has_alter_sequence() ||
@@ -816,21 +855,21 @@ SchemaUpdaterImpl::ApplyDDLStatement(
     return error::EmptyDDLStatement();
   }
 
-  ZETASQL_RET_CHECK(!editor_->HasModifications());
-  ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<ddl::DDLStatement> ddl_statement,
+  GOOGLESQL_RET_CHECK(!editor_->HasModifications());
+  GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<ddl::DDLStatement> ddl_statement,
                    ParseDDLByDialect(statement, dialect));
-  ZETASQL_RETURN_IF_ERROR(ValidateDdlStatement(*ddl_statement, dialect));
+  GOOGLESQL_RETURN_IF_ERROR(ValidateDdlStatement(*ddl_statement, dialect));
   // Apply the statement to the schema graph.
   auto proto_bundle = latest_schema_->proto_bundle();
   switch (ddl_statement->statement_case()) {
     case ddl::DDLStatement::kCreateProtoBundle: {
-      ZETASQL_ASSIGN_OR_RETURN(proto_bundle,
+      GOOGLESQL_ASSIGN_OR_RETURN(proto_bundle,
                        CreateProtoBundle(ddl_statement->create_proto_bundle(),
                                          proto_descriptor_bytes));
       break;
     }
     case ddl::DDLStatement::kCreateTable: {
-      ZETASQL_RETURN_IF_ERROR(CreateTable(ddl_statement->create_table(), dialect));
+      GOOGLESQL_RETURN_IF_ERROR(CreateTable(ddl_statement->create_table(), dialect));
       break;
     }
     case ddl::DDLStatement::kCreateChangeStream: {
@@ -844,7 +883,7 @@ SchemaUpdaterImpl::ApplyDDLStatement(
         // would not cause any schema change.
         return nullptr;
       }
-      ZETASQL_RETURN_IF_ERROR(CreateChangeStream(create_cs, dialect).status());
+      GOOGLESQL_RETURN_IF_ERROR(CreateChangeStream(create_cs, dialect).status());
       break;
     }
     case ddl::DDLStatement::kCreateIndex: {
@@ -853,28 +892,55 @@ SchemaUpdaterImpl::ApplyDDLStatement(
               ddl::IF_NOT_EXISTS) {
         break;
       }
-      ZETASQL_RETURN_IF_ERROR(CreateIndex(ddl_statement->create_index()).status());
+      GOOGLESQL_RETURN_IF_ERROR(
+          CreateIndex(ddl_statement->create_index(), dialect).status());
       break;
     }
     case ddl::DDLStatement::kCreateFunction: {
       if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
+        absl::StatusOr<ExpressionTranslateResult> result;
         ddl::CreateFunction* create_function =
             ddl_statement->mutable_create_function();
-        ZETASQL_RET_CHECK(create_function->has_sql_body_origin() &&
-                  create_function->sql_body_origin().has_original_expression());
-        auto result = TranslatePostgreSqlQueryInView(absl::StripAsciiWhitespace(
-            create_function->sql_body_origin().original_expression()));
-        if (!result.ok()) {
-          return error::ViewBodyAnalysisError(create_function->function_name(),
-                                              result.status().message());
+        if (ddl_statement->create_function().function_kind() ==
+            ddl::Function::VIEW) {
+          GOOGLESQL_RET_CHECK(
+              create_function->has_sql_body_origin() &&
+              create_function->sql_body_origin().has_original_expression());
+
+          result = TranslatePostgreSqlQueryInView(absl::StripAsciiWhitespace(
+              create_function->sql_body_origin().original_expression()));
+          if (!result.ok()) {
+            return error::ViewBodyAnalysisError(
+                create_function->function_name(), result.status().message());
+          }
+        } else {
+          GOOGLESQL_RET_CHECK(
+              create_function->has_sql_body_origin() &&
+              create_function->sql_body_origin().has_original_expression());
+
+          absl::StatusOr<std::unique_ptr<SpangresSchemaPrinter>> printer =
+              postgres_translator::spangres::
+                  CreateSpangresDirectSchemaPrinter();
+          const ddl::DDLStatement& statement = *ddl_statement;
+          GOOGLESQL_ASSIGN_OR_RETURN(std::vector<std::string> pg_printed,
+                           (*printer)->PrintDDLStatementForEmulator(statement));
+          GOOGLESQL_RET_CHECK_EQ(pg_printed.size(), 1);
+
+          result = TranslatePostgreSqlQueryInUdf(
+              absl::StripAsciiWhitespace(pg_printed[0]));
+          if (!result.ok()) {
+            return error::FunctionBodyAnalysisError(
+                create_function->function_name(), result.status().message());
+          }
         }
         // Overwrite the original_expression to the deparsed (formalized) PG
-        // expression which can be different from the user-input PG expression.
+        // expression which can be different from the user-input PG
+        // expression.
         create_function->mutable_sql_body_origin()->set_original_expression(
             result->original_postgresql_expression);
         create_function->set_sql_body(result->translated_googlesql_expression);
       }
-      ZETASQL_RETURN_IF_ERROR(CreateFunction(ddl_statement->create_function()));
+      GOOGLESQL_RETURN_IF_ERROR(CreateFunction(ddl_statement->create_function()));
       break;
     }
     case ddl::DDLStatement::kCreateSequence: {
@@ -888,12 +954,12 @@ SchemaUpdaterImpl::ApplyDDLStatement(
         // would not cause any schema change.
         return nullptr;
       }
-      ZETASQL_RETURN_IF_ERROR(
+      GOOGLESQL_RETURN_IF_ERROR(
           CreateSequence(ddl_statement->create_sequence(), dialect).status());
       break;
     }
     case ddl::DDLStatement::kCreateSchema: {
-      ZETASQL_RETURN_IF_ERROR(CreateNamedSchema(ddl_statement->create_schema()));
+      GOOGLESQL_RETURN_IF_ERROR(CreateNamedSchema(ddl_statement->create_schema()));
       break;
     }
     case ddl::DDLStatement::kCreateVectorIndex: {
@@ -903,30 +969,30 @@ SchemaUpdaterImpl::ApplyDDLStatement(
               ddl::IF_NOT_EXISTS) {
         break;
       }
-      ZETASQL_RETURN_IF_ERROR(
+      GOOGLESQL_RETURN_IF_ERROR(
           CreateVectorIndex(ddl_statement->create_vector_index()).status());
       break;
     }
     case ddl::DDLStatement::kCreateSearchIndex: {
-      ZETASQL_RETURN_IF_ERROR(
+      GOOGLESQL_RETURN_IF_ERROR(
           CreateSearchIndex(ddl_statement->create_search_index()).status());
       break;
     }
     case ddl::DDLStatement::kCreateLocalityGroup: {
-      ZETASQL_RETURN_IF_ERROR(
+      GOOGLESQL_RETURN_IF_ERROR(
           CreateLocalityGroup(ddl_statement->create_locality_group()));
       break;
     }
     case ddl::DDLStatement::kAlterDatabase: {
-      ZETASQL_RETURN_IF_ERROR(AlterDatabase(ddl_statement->alter_database(), dialect));
+      GOOGLESQL_RETURN_IF_ERROR(AlterDatabase(ddl_statement->alter_database(), dialect));
       break;
     }
     case ddl::DDLStatement::kAlterTable: {
-      ZETASQL_RETURN_IF_ERROR(AlterTable(ddl_statement->alter_table(), dialect));
+      GOOGLESQL_RETURN_IF_ERROR(AlterTable(ddl_statement->alter_table(), dialect));
       break;
     }
     case ddl::DDLStatement::kAlterChangeStream: {
-      ZETASQL_RETURN_IF_ERROR(AlterChangeStream(ddl_statement->alter_change_stream()));
+      GOOGLESQL_RETURN_IF_ERROR(AlterChangeStream(ddl_statement->alter_change_stream()));
       break;
     }
     case ddl::DDLStatement::kAlterSequence: {
@@ -943,54 +1009,54 @@ SchemaUpdaterImpl::ApplyDDLStatement(
         }
         return error::SequenceNotFound(alter_sequence.sequence_name());
       }
-      ZETASQL_RETURN_IF_ERROR(AlterSequence(alter_sequence, current_sequence));
+      GOOGLESQL_RETURN_IF_ERROR(AlterSequence(alter_sequence, current_sequence));
       break;
     }
     case ddl::DDLStatement::kAlterIndex: {
-      ZETASQL_RETURN_IF_ERROR(AlterIndex(ddl_statement->alter_index()));
+      GOOGLESQL_RETURN_IF_ERROR(AlterIndex(ddl_statement->alter_index()));
       break;
     }
     case ddl::DDLStatement::kAlterVectorIndex: {
-      ZETASQL_RETURN_IF_ERROR(AlterVectorIndex(ddl_statement->alter_vector_index()));
+      GOOGLESQL_RETURN_IF_ERROR(AlterVectorIndex(ddl_statement->alter_vector_index()));
       break;
     }
     case ddl::DDLStatement::kAlterSchema: {
-      ZETASQL_RETURN_IF_ERROR(AlterNamedSchema(ddl_statement->alter_schema()));
+      GOOGLESQL_RETURN_IF_ERROR(AlterNamedSchema(ddl_statement->alter_schema()));
       break;
     }
     case ddl::DDLStatement::kAlterLocalityGroup: {
-      ZETASQL_RETURN_IF_ERROR(
+      GOOGLESQL_RETURN_IF_ERROR(
           AlterLocalityGroup(ddl_statement->alter_locality_group()));
       break;
     }
     case ddl::DDLStatement::kAlterProtoBundle: {
-      ZETASQL_ASSIGN_OR_RETURN(proto_bundle,
+      GOOGLESQL_ASSIGN_OR_RETURN(proto_bundle,
                        AlterProtoBundle(ddl_statement->alter_proto_bundle(),
                                         proto_descriptor_bytes));
       break;
     }
     case ddl::DDLStatement::kDropTable: {
-      ZETASQL_RETURN_IF_ERROR(DropTable(ddl_statement->drop_table()));
+      GOOGLESQL_RETURN_IF_ERROR(DropTable(ddl_statement->drop_table()));
       break;
     }
     case ddl::DDLStatement::kDropIndex: {
-      ZETASQL_RETURN_IF_ERROR(DropIndex(ddl_statement->drop_index()));
+      GOOGLESQL_RETURN_IF_ERROR(DropIndex(ddl_statement->drop_index()));
       break;
     }
     case ddl::DDLStatement::kDropSearchIndex: {
-      ZETASQL_RETURN_IF_ERROR(DropSearchIndex(ddl_statement->drop_search_index()));
+      GOOGLESQL_RETURN_IF_ERROR(DropSearchIndex(ddl_statement->drop_search_index()));
       break;
     }
     case ddl::DDLStatement::kDropVectorIndex: {
-      ZETASQL_RETURN_IF_ERROR(DropVectorIndex(ddl_statement->drop_vector_index()));
+      GOOGLESQL_RETURN_IF_ERROR(DropVectorIndex(ddl_statement->drop_vector_index()));
       break;
     }
     case ddl::DDLStatement::kDropChangeStream: {
-      ZETASQL_RETURN_IF_ERROR(DropChangeStream(ddl_statement->drop_change_stream()));
+      GOOGLESQL_RETURN_IF_ERROR(DropChangeStream(ddl_statement->drop_change_stream()));
       break;
     }
     case ddl::DDLStatement::kDropFunction: {
-      ZETASQL_RETURN_IF_ERROR(DropFunction(ddl_statement->drop_function()));
+      GOOGLESQL_RETURN_IF_ERROR(DropFunction(ddl_statement->drop_function()));
       break;
     }
     case ddl::DDLStatement::kDropSequence: {
@@ -1006,43 +1072,43 @@ SchemaUpdaterImpl::ApplyDDLStatement(
         }
         return error::SequenceNotFound(drop_sequence.sequence_name());
       }
-      ZETASQL_RETURN_IF_ERROR(DropSequence(current_sequence));
+      GOOGLESQL_RETURN_IF_ERROR(DropSequence(current_sequence));
       break;
     }
     case ddl::DDLStatement::kDropSchema: {
-      ZETASQL_RETURN_IF_ERROR(DropNamedSchema(ddl_statement->drop_schema()));
+      GOOGLESQL_RETURN_IF_ERROR(DropNamedSchema(ddl_statement->drop_schema()));
       break;
     }
     case ddl::DDLStatement::kDropLocalityGroup: {
-      ZETASQL_RETURN_IF_ERROR(DropLocalityGroup(ddl_statement->drop_locality_group()));
+      GOOGLESQL_RETURN_IF_ERROR(DropLocalityGroup(ddl_statement->drop_locality_group()));
       break;
     }
     case ddl::DDLStatement::kDropProtoBundle: {
-      ZETASQL_ASSIGN_OR_RETURN(proto_bundle, DropProtoBundle());
+      GOOGLESQL_ASSIGN_OR_RETURN(proto_bundle, DropProtoBundle());
       break;
     }
     case ddl::DDLStatement::kAnalyze:
       // Intentionally no=op.
       break;
     case ddl::DDLStatement::kSetColumnOptions:
-      ZETASQL_RETURN_IF_ERROR(ApplyImplSetColumnOptions(
+      GOOGLESQL_RETURN_IF_ERROR(ApplyImplSetColumnOptions(
           ddl_statement->set_column_options(), dialect));
       break;
     case ddl::DDLStatement::kCreateModel:
-      ZETASQL_RETURN_IF_ERROR(CreateModel(ddl_statement->create_model(), dialect));
+      GOOGLESQL_RETURN_IF_ERROR(CreateModel(ddl_statement->create_model(), dialect));
       break;
     case ddl::DDLStatement::kAlterModel:
-      ZETASQL_RETURN_IF_ERROR(AlterModel(ddl_statement->alter_model()));
+      GOOGLESQL_RETURN_IF_ERROR(AlterModel(ddl_statement->alter_model()));
       break;
     case ddl::DDLStatement::kDropModel:
-      ZETASQL_RETURN_IF_ERROR(DropModel(ddl_statement->drop_model()));
+      GOOGLESQL_RETURN_IF_ERROR(DropModel(ddl_statement->drop_model()));
       break;
     case ddl::DDLStatement::kCreatePropertyGraph:
-      ZETASQL_RETURN_IF_ERROR(
+      GOOGLESQL_RETURN_IF_ERROR(
           CreatePropertyGraph(ddl_statement->create_property_graph(), dialect));
       break;
     case ddl::DDLStatement::kDropPropertyGraph:
-      ZETASQL_RETURN_IF_ERROR(DropPropertyGraph(ddl_statement->drop_property_graph()));
+      GOOGLESQL_RETURN_IF_ERROR(DropPropertyGraph(ddl_statement->drop_property_graph()));
       break;
     case ddl::DDLStatement::kCreatePlacement: {
       const Placement* placement = latest_schema_->FindPlacement(
@@ -1057,14 +1123,14 @@ SchemaUpdaterImpl::ApplyDDLStatement(
 
       const auto& set_options = ddl_statement->create_placement().set_options();
       if (!set_options.empty()) {
-        ZETASQL_RETURN_IF_ERROR(AlterNode<Placement>(
+        GOOGLESQL_RETURN_IF_ERROR(AlterNode<Placement>(
             placement_builder.get(),
             [this, set_options](Placement::Editor* editor) -> absl::Status {
               // Set placement options
               return SetPlacementOptions(set_options, editor);
             }));
       }
-      ZETASQL_RETURN_IF_ERROR(AddNode(placement_builder.build()));
+      GOOGLESQL_RETURN_IF_ERROR(AddNode(placement_builder.build()));
       break;
     }
     case ddl::DDLStatement::kAlterPlacement: {
@@ -1076,7 +1142,7 @@ SchemaUpdaterImpl::ApplyDDLStatement(
       }
       const auto& set_options = ddl_statement->alter_placement().set_options();
       if (!set_options.empty()) {
-        ZETASQL_RETURN_IF_ERROR(AlterNode<Placement>(
+        GOOGLESQL_RETURN_IF_ERROR(AlterNode<Placement>(
             placement,
             [this, set_options](Placement::Editor* editor) -> absl::Status {
               // Set change stream options
@@ -1092,14 +1158,14 @@ SchemaUpdaterImpl::ApplyDDLStatement(
         return error::PlacementNotFound(
             ddl_statement->drop_placement().placement_name());
       }
-      ZETASQL_RETURN_IF_ERROR(DropNode(placement));
+      GOOGLESQL_RETURN_IF_ERROR(DropNode(placement));
       break;
     }
     case ddl::DDLStatement::kRenameTable: {
       if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
         return error::RenameTableNotSupportedInPostgreSQL();
       }
-      ZETASQL_RETURN_IF_ERROR(RenameTable(ddl_statement->rename_table()));
+      GOOGLESQL_RETURN_IF_ERROR(RenameTable(ddl_statement->rename_table()));
       break;
     }
     case ddl::DDLStatement::kCreateRole:
@@ -1113,7 +1179,7 @@ SchemaUpdaterImpl::ApplyDDLStatement(
       break;
     }
     default:
-      ZETASQL_RET_CHECK(false) << "Unsupported ddl statement: "
+      GOOGLESQL_RET_CHECK(false) << "Unsupported ddl statement: "
                        << ddl_statement->statement_case();
   }
   // Since Proto bundle needs to be used for column validation (via
@@ -1124,7 +1190,7 @@ SchemaUpdaterImpl::ApplyDDLStatement(
   // generation). If there is a need to access proto_bundle after
   // validation, please use schema->proto_bundle().
   statement_context_->set_proto_bundle(proto_bundle);
-  ZETASQL_ASSIGN_OR_RETURN(auto new_schema_graph, editor_->CanonicalizeGraph());
+  GOOGLESQL_ASSIGN_OR_RETURN(auto new_schema_graph, editor_->CanonicalizeGraph());
   return std::make_unique<const OwningSchema>(
       std::move(new_schema_graph), proto_bundle, dialect, database_id_);
 }
@@ -1135,7 +1201,7 @@ SchemaUpdaterImpl::ApplyDDLStatements(
   std::vector<SchemaValidationContext> pending_work;
 
   for (const auto& statement : schema_change_operation.statements) {
-    ZETASQL_VLOG(2) << "Applying statement " << statement;
+    GOOGLESQL_VLOG(2) << "Applying statement " << statement;
 
     // Set up the SchemaValidationContext before passing it to `editor_`. This
     // includes setting the old schema snapshot and a callback to construct
@@ -1165,7 +1231,7 @@ SchemaUpdaterImpl::ApplyDDLStatements(
         latest_schema_->GetSchemaGraph(), statement_context_);
 
     // If there is a semantic validation error, then we return right away.
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         auto new_schema,
         ApplyDDLStatement(statement,
                           schema_change_operation.proto_descriptor_bytes,
@@ -1210,9 +1276,9 @@ template <typename Modifier>
 absl::Status SchemaUpdaterImpl::ProcessLocalityGroupOption(
     const ddl::SetOption& option, Modifier* modifier) {
   if (option.has_string_value()) {
-    ZETASQL_RETURN_IF_ERROR(AssignNewLocalityGroup(option.string_value(), modifier));
+    GOOGLESQL_RETURN_IF_ERROR(AssignNewLocalityGroup(option.string_value(), modifier));
   } else {
-    ZETASQL_RET_CHECK(false) << "Option " << ddl::kLocalityGroupOptionName
+    GOOGLESQL_RET_CHECK(false) << "Option " << ddl::kLocalityGroupOptionName
                      << " can only take string_value.";
   }
   return absl::OkStatus();
@@ -1224,9 +1290,14 @@ absl::Status SchemaUpdaterImpl::SetTableOptions(
     TableModifier* modifier) {
   for (const ddl::SetOption& option : set_options) {
     if (option.option_name() == ddl::kLocalityGroupOptionName) {
-      ZETASQL_RETURN_IF_ERROR(ProcessLocalityGroupOption(option, modifier));
+      GOOGLESQL_RETURN_IF_ERROR(ProcessLocalityGroupOption(option, modifier));
+    } else if (option.option_name() == ddl::kColumnarPolicyOptionName) {
+      // Accept any value for columnar policy.
+      // TODO: Columnar Policy value should be exposed in table
+      // options, once they are exposed.
+      continue;
     } else {
-      ZETASQL_RET_CHECK(false) << "Invalid table option: " << option.option_name();
+      GOOGLESQL_RET_CHECK(false) << "Invalid table option: " << option.option_name();
     }
   }
   return absl::OkStatus();
@@ -1238,9 +1309,9 @@ absl::Status SchemaUpdaterImpl::SetIndexOptions(
     IndexModifier* modifier, bool allow_other_options) {
   for (const ddl::SetOption& option : set_options) {
     if (option.option_name() == ddl::kLocalityGroupOptionName) {
-      ZETASQL_RETURN_IF_ERROR(ProcessLocalityGroupOption(option, modifier));
+      GOOGLESQL_RETURN_IF_ERROR(ProcessLocalityGroupOption(option, modifier));
     } else {
-      ZETASQL_RET_CHECK(allow_other_options)
+      GOOGLESQL_RET_CHECK(allow_other_options)
           << "Invalid index option: " << option.option_name();
     }
   }
@@ -1254,7 +1325,7 @@ absl::Status SchemaUpdaterImpl::SetColumnOptions(
   std::optional<bool> allows_commit_timestamp = std::nullopt;
   std::string commit_timestamp_option_name = ddl::kCommitTimestampOptionName;
   if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
-    // PG uses spanner.commit_timestamp while in ZetaSQL, the default option
+    // PG uses spanner.commit_timestamp while in GoogleSQL, the default option
     // name is allow_commit_timestamp.
     commit_timestamp_option_name = ddl::kPGCommitTimestampOptionName;
   }
@@ -1265,14 +1336,14 @@ absl::Status SchemaUpdaterImpl::SetColumnOptions(
       } else if (option.has_null_value()) {
         allows_commit_timestamp = std::nullopt;
       } else {
-        ZETASQL_RET_CHECK(false) << "Option " << commit_timestamp_option_name
+        GOOGLESQL_RET_CHECK(false) << "Option " << commit_timestamp_option_name
                          << " can only take bool_value or null_value.";
       }
       modifier->set_allow_commit_timestamp(allows_commit_timestamp);
     } else if (option.option_name() == ddl::kLocalityGroupOptionName) {
-      ZETASQL_RETURN_IF_ERROR(ProcessLocalityGroupOption(option, modifier));
+      GOOGLESQL_RETURN_IF_ERROR(ProcessLocalityGroupOption(option, modifier));
     } else {
-      ZETASQL_RET_CHECK(false) << "Invalid column option: " << option.option_name();
+      GOOGLESQL_RET_CHECK(false) << "Invalid column option: " << option.option_name();
     }
   }
   return absl::OkStatus();
@@ -1301,6 +1372,15 @@ absl::Status SchemaUpdaterImpl::SetDatabaseOptions(
         modifier->set_default_time_zone(default_time_zone);
       } else if (option.has_null_value()) {
         modifier->set_default_time_zone(std::nullopt);
+      }
+    }
+    if (absl::StripPrefix(option.option_name(), "spanner.internal.cloud_") ==
+        ddl::kColumnarPolicyOptionName) {
+      if (option.has_string_value()) {
+        std::optional<std::string> columnar_policy = option.string_value();
+        modifier->set_columnar_policy(columnar_policy);
+      } else if (option.has_null_value()) {
+        modifier->set_columnar_policy(std::nullopt);
       }
     }
     if (absl::StripPrefix(option.option_name(), "spanner.internal.minimum_") ==
@@ -1418,14 +1498,14 @@ absl::Status SchemaUpdaterImpl::AssignNewLocalityGroup(
   }
   const LocalityGroup* old_locality_group = modifier->get()->locality_group();
   if (old_locality_group != nullptr) {
-    ZETASQL_RETURN_IF_ERROR(AlterNode<LocalityGroup>(
+    GOOGLESQL_RETURN_IF_ERROR(AlterNode<LocalityGroup>(
         old_locality_group, [](LocalityGroup::Editor* editor) -> absl::Status {
           editor->decrement_use_count();
           return absl::OkStatus();
         }));
   }
   modifier->set_locality_group(locality_group);
-  ZETASQL_RETURN_IF_ERROR(AlterNode<LocalityGroup>(
+  GOOGLESQL_RETURN_IF_ERROR(AlterNode<LocalityGroup>(
       locality_group, [](LocalityGroup::Editor* editor) -> absl::Status {
         editor->increment_use_count();
         return absl::OkStatus();
@@ -1468,7 +1548,7 @@ std::string SchemaUpdaterImpl::MakeChangeStreamTvfName(
 absl::Status SchemaUpdaterImpl::AlterColumnDefinition(
     const ddl::ColumnDefinition& ddl_column, const Table* table,
     const database_api::DatabaseDialect& dialect, Column::Editor* editor) {
-  ZETASQL_RETURN_IF_ERROR(SetColumnDefinition(ddl_column, table,
+  GOOGLESQL_RETURN_IF_ERROR(SetColumnDefinition(ddl_column, table,
                                       /*ddl_create_table=*/nullptr, dialect,
                                       /*is_alter=*/true, editor));
   return absl::OkStatus();
@@ -1480,7 +1560,7 @@ absl::Status SchemaUpdaterImpl::AlterColumnSetDropDefault(
     Column::Editor* editor) {
   const ddl::AlterTable::AlterColumn::AlterColumnOp type =
       alter_column.operation();
-  ZETASQL_RET_CHECK(type == ddl::AlterTable::AlterColumn::SET_DEFAULT ||
+  GOOGLESQL_RET_CHECK(type == ddl::AlterTable::AlterColumn::SET_DEFAULT ||
             type == ddl::AlterTable::AlterColumn::DROP_DEFAULT);
 
   const ddl::ColumnDefinition& new_column_def = alter_column.column();
@@ -1499,11 +1579,11 @@ absl::Status SchemaUpdaterImpl::AlterColumnSetDropDefault(
 
     std::string expression = new_column_def.column_default().expression();
     if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
-      ZETASQL_ASSIGN_OR_RETURN(expression, TranslatePGExpression(
+      GOOGLESQL_ASSIGN_OR_RETURN(expression, TranslatePGExpression(
                                        new_column_def.column_default(), table,
                                        /*ddl_create_table=*/nullptr, *editor));
     }
-    ZETASQL_RET_CHECK(new_column_def.has_column_default() && !expression.empty());
+    GOOGLESQL_RET_CHECK(new_column_def.has_column_default() && !expression.empty());
     absl::flat_hash_set<const SchemaNode*> udf_dependencies;
     bool is_pending_commit_timestamp = false;
     absl::Status s = AnalyzeColumnDefaultValue(
@@ -1568,7 +1648,7 @@ absl::Status SchemaUpdaterImpl::AlterColumnSetDropOnUpdate(
     const Column* column, Column::Editor* editor) {
   const ddl::AlterTable::AlterColumn::AlterColumnOp type =
       alter_column.operation();
-  ZETASQL_RET_CHECK(type == ddl::AlterTable::AlterColumn::SET_ON_UPDATE ||
+  GOOGLESQL_RET_CHECK(type == ddl::AlterTable::AlterColumn::SET_ON_UPDATE ||
             type == ddl::AlterTable::AlterColumn::DROP_ON_UPDATE);
 
   const ddl::ColumnDefinition& new_column_def = alter_column.column();
@@ -1601,13 +1681,13 @@ absl::Status SchemaUpdaterImpl::AlterColumnSetDropOnUpdate(
 
 absl::Status SchemaUpdaterImpl::InitColumnNameAndTypesFromTable(
     const Table* table, const ddl::CreateTable* ddl_create_table,
-    std::vector<zetasql::SimpleTable::NameAndType>* name_and_types) {
+    std::vector<googlesql::SimpleTable::NameAndType>* name_and_types) {
   if (ddl_create_table != nullptr) {
     // We are processing a CREATE TABLE statement, so 'const Table* table' may
     // not have all the columns yet. Add all columns from the ddl.
     for (const ddl::ColumnDefinition& ddl_column : ddl_create_table->column()) {
-      ZETASQL_ASSIGN_OR_RETURN(
-          const zetasql::Type* type,
+      GOOGLESQL_ASSIGN_OR_RETURN(
+          const googlesql::Type* type,
           DDLColumnTypeToGoogleSqlType(ddl_column, type_factory_,
                                        latest_schema_->proto_bundle().get()));
       name_and_types->emplace_back(ddl_column.column_name(), type);
@@ -1622,12 +1702,12 @@ absl::Status SchemaUpdaterImpl::InitColumnNameAndTypesFromTable(
 
 absl::Status SchemaUpdaterImpl::AnalyzeGeneratedColumn(
     absl::string_view expression, const std::string& column_name,
-    const zetasql::Type* column_type, const Table* table,
+    const googlesql::Type* column_type, const Table* table,
     const ddl::CreateTable* ddl_create_table,
     absl::flat_hash_set<std::string>* dependent_column_names,
     absl::flat_hash_set<const SchemaNode*>* udf_dependencies) {
-  std::vector<zetasql::SimpleTable::NameAndType> name_and_types;
-  ZETASQL_RETURN_IF_ERROR(InitColumnNameAndTypesFromTable(table, ddl_create_table,
+  std::vector<googlesql::SimpleTable::NameAndType> name_and_types;
+  GOOGLESQL_RETURN_IF_ERROR(InitColumnNameAndTypesFromTable(table, ddl_create_table,
                                                   &name_and_types));
 
   // For the case of adding a generated column in ALTER TABLE.
@@ -1646,13 +1726,13 @@ absl::Status SchemaUpdaterImpl::AnalyzeGeneratedColumn(
 
 absl::Status SchemaUpdaterImpl::AnalyzeColumnDefaultValue(
     absl::string_view expression, const std::string& column_name,
-    const zetasql::Type* column_type, const Table* table,
+    const googlesql::Type* column_type, const Table* table,
     const ddl::CreateTable* ddl_create_table,
     absl::flat_hash_set<const SchemaNode*>* dependent_sequences,
     absl::flat_hash_set<const SchemaNode*>* udf_dependencies,
     bool* is_pending_commit_timestamp) {
-  std::vector<zetasql::SimpleTable::NameAndType> name_and_types;
-  ZETASQL_RETURN_IF_ERROR(InitColumnNameAndTypesFromTable(table, ddl_create_table,
+  std::vector<googlesql::SimpleTable::NameAndType> name_and_types;
+  GOOGLESQL_RETURN_IF_ERROR(InitColumnNameAndTypesFromTable(table, ddl_create_table,
                                                   &name_and_types));
 
   // For the case of adding a default column in ALTER TABLE.
@@ -1661,7 +1741,7 @@ absl::Status SchemaUpdaterImpl::AnalyzeColumnDefaultValue(
     name_and_types.emplace_back(column_name, column_type);
   }
   absl::flat_hash_set<std::string> dependent_column_names;
-  ZETASQL_RETURN_IF_ERROR(AnalyzeColumnExpression(
+  GOOGLESQL_RETURN_IF_ERROR(AnalyzeColumnExpression(
       expression, column_type, table, latest_schema_, type_factory_,
       name_and_types, "column default", &dependent_column_names,
       dependent_sequences, /*allow_volatile_expression=*/true, udf_dependencies,
@@ -1678,12 +1758,12 @@ absl::Status SchemaUpdaterImpl::AnalyzeCheckConstraint(
     absl::flat_hash_set<std::string>* dependent_column_names,
     CheckConstraint::Builder* builder,
     absl::flat_hash_set<const SchemaNode*>* udf_dependencies) {
-  std::vector<zetasql::SimpleTable::NameAndType> name_and_types;
-  ZETASQL_RETURN_IF_ERROR(InitColumnNameAndTypesFromTable(table, ddl_create_table,
+  std::vector<googlesql::SimpleTable::NameAndType> name_and_types;
+  GOOGLESQL_RETURN_IF_ERROR(InitColumnNameAndTypesFromTable(table, ddl_create_table,
                                                   &name_and_types));
 
-  ZETASQL_RETURN_IF_ERROR(AnalyzeColumnExpression(
-      expression, zetasql::types::BoolType(), table, latest_schema_,
+  GOOGLESQL_RETURN_IF_ERROR(AnalyzeColumnExpression(
+      expression, googlesql::types::BoolType(), table, latest_schema_,
       type_factory_, name_and_types, "check constraints",
       dependent_column_names,
       /*dependent_sequences=*/nullptr,
@@ -1708,7 +1788,7 @@ absl::StatusOr<std::string> SchemaUpdaterImpl::TranslatePGExpression(
     const std::string original_unformalized_expression =
         std::string(absl::StripAsciiWhitespace(
             ddl_column.expression_origin().original_expression()));
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         ExpressionTranslateResult result,
         TranslatePostgreSqlExpression(table, ddl_create_table,
                                       original_unformalized_expression));
@@ -1733,8 +1813,8 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
   bool has_default_value = false;
   bool is_identity_column = false;
   // Process any changes in column definition.
-  ZETASQL_ASSIGN_OR_RETURN(
-      const zetasql::Type* column_type,
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      const googlesql::Type* column_type,
       DDLColumnTypeToGoogleSqlType(ddl_column, type_factory_,
                                    latest_schema_->proto_bundle().get()));
   modifier->set_type(column_type);
@@ -1774,7 +1854,7 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
   if (ddl_column.has_column_default()) {
     default_value_expression = ddl_column.column_default().expression();
     if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
-      ZETASQL_ASSIGN_OR_RETURN(default_value_expression,
+      GOOGLESQL_ASSIGN_OR_RETURN(default_value_expression,
                        TranslatePGExpression(ddl_column.column_default(), table,
                                              ddl_create_table, *modifier));
     }
@@ -1796,24 +1876,24 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
     // `GET_NEXT_SEQUENCE_VALUE(sequence_name)`
     has_default_value = true;
     std::vector<std::string> parts = absl::StrSplit(modifier->get()->id(), ':');
-    ZETASQL_RET_CHECK_GE(parts.size(), 2);
+    GOOGLESQL_RET_CHECK_GE(parts.size(), 2);
 
     std::string sequence_name = absl::StrFormat(
         "_identity_seq_%s", absl::StrReplaceAll(parts[0], {{".", "__"}}));
     const Sequence* existing_sequence =
         latest_schema_->FindSequence(sequence_name);
     if (is_alter) {
-      ZETASQL_RET_CHECK(existing_sequence != nullptr)
+      GOOGLESQL_RET_CHECK(existing_sequence != nullptr)
           << "sequence does not exist: " << sequence_name;
       ddl::AlterSequence alter_sequence;
       alter_sequence.set_sequence_name(sequence_name);
       SetSequenceOptionsForIdentityColumn(
           ddl_column.identity_column(),
           alter_sequence.mutable_set_options()->mutable_options());
-      ZETASQL_RETURN_IF_ERROR(AlterSequence(alter_sequence, existing_sequence));
+      GOOGLESQL_RETURN_IF_ERROR(AlterSequence(alter_sequence, existing_sequence));
       dependent_sequences.insert(existing_sequence);
     } else {
-      ZETASQL_RET_CHECK(existing_sequence == nullptr)
+      GOOGLESQL_RET_CHECK(existing_sequence == nullptr)
           << "sequence already exists: " << sequence_name;
       // Create the internal sequence.
       ddl::CreateSequence create_sequence;
@@ -1831,7 +1911,7 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
       }
       SetSequenceOptionsForIdentityColumn(
           ddl_column.identity_column(), create_sequence.mutable_set_options());
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           const Sequence* sequence,
           CreateSequence(create_sequence, dialect, /*is_internal_use=*/true));
 
@@ -1850,7 +1930,7 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
     std::string expression = ddl_column.generated_column().expression();
 
     if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
-      ZETASQL_ASSIGN_OR_RETURN(expression, TranslatePGExpression(
+      GOOGLESQL_ASSIGN_OR_RETURN(expression, TranslatePGExpression(
                                        ddl_column.generated_column(), table,
                                        ddl_create_table, *modifier));
     }
@@ -1912,7 +1992,7 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
     std::string on_update_expression =
         ddl_column.column_on_update().expression();
     if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           on_update_expression,
           TranslatePGExpression(ddl_column.column_on_update(), table,
                                 ddl_create_table, *modifier));
@@ -1932,7 +2012,7 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
     // column_validator.cc will block it.
     modifier->clear_expression();
   } else {
-    ZETASQL_RET_CHECK(is_generated != has_default_value);
+    GOOGLESQL_RET_CHECK(is_generated != has_default_value);
   }
 
   modifier->set_is_identity_column(is_identity_column);
@@ -1967,7 +2047,7 @@ absl::Status SchemaUpdaterImpl::SetColumnDefinition(
     }
   }
   if (!ddl_column.set_options().empty()) {
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         SetColumnOptions(ddl_column.set_options(), dialect, modifier));
   }
 
@@ -2006,7 +2086,7 @@ absl::StatusOr<const Column*> SchemaUpdaterImpl::CreateColumn(
       .set_id(column_id_generator_->NextId(
           absl::StrCat(table->Name(), ".", column_name)))
       .set_name(column_name);
-  ZETASQL_RETURN_IF_ERROR(SetColumnDefinition(ddl_column, table, ddl_table, dialect,
+  GOOGLESQL_RETURN_IF_ERROR(SetColumnDefinition(ddl_column, table, ddl_table, dialect,
                                       /*is_alter=*/false, &builder));
   builder.set_hidden(ddl_column.has_hidden() && ddl_column.hidden());
   builder.set_is_placement_key(ddl_column.has_placement_key() &&
@@ -2021,12 +2101,12 @@ absl::StatusOr<const Column*> SchemaUpdaterImpl::CreateColumn(
     std::optional<uint32_t> oid = pg_oid_assigner_->GetNextPostgresqlOid();
     builder.set_postgresql_oid(oid);
     if (oid.has_value()) {
-      ZETASQL_VLOG(2) << "Assigned oid " << oid.value() << " to column "
+      GOOGLESQL_VLOG(2) << "Assigned oid " << oid.value() << " to column "
               << table->Name() << "." << column->Name();
     }
   }
 
-  ZETASQL_RETURN_IF_ERROR(AddNode(builder.build()));
+  GOOGLESQL_RETURN_IF_ERROR(AddNode(builder.build()));
   return column;
 }
 
@@ -2094,7 +2174,7 @@ absl::Status SchemaUpdaterImpl::ValidateChangeStreamLimits(
     return absl::OkStatus();
   };
 
-  ZETASQL_RETURN_IF_ERROR(ValidateLimitsForTrackedObjects(
+  GOOGLESQL_RETURN_IF_ERROR(ValidateLimitsForTrackedObjects(
       change_stream_for_clause, validate_table, validate_column));
 
   return absl::OkStatus();
@@ -2110,7 +2190,7 @@ absl::Status SchemaUpdaterImpl::RegisterTrackedObjects(
       if (!table->is_trackable_by_change_stream()) {
         continue;
       }
-      ZETASQL_RETURN_IF_ERROR(AlterNode<Table>(table, table_cb));
+      GOOGLESQL_RETURN_IF_ERROR(AlterNode<Table>(table, table_cb));
       for (const auto& column : table->columns()) {
         // Skip all key columns when registering/unregistering change stream
         // tracking columns to prevent modifications on key columns with child
@@ -2118,7 +2198,7 @@ absl::Status SchemaUpdaterImpl::RegisterTrackedObjects(
         // populated in data change records no matter user specified or not.
         if (column->is_trackable_by_change_stream() &&
             !table->FindKeyColumn(column->Name())) {
-          ZETASQL_RETURN_IF_ERROR(AlterNode<Column>(column, column_cb));
+          GOOGLESQL_RETURN_IF_ERROR(AlterNode<Column>(column, column_cb));
         }
       }
     }
@@ -2127,21 +2207,21 @@ absl::Status SchemaUpdaterImpl::RegisterTrackedObjects(
 
   for (auto& entry : change_stream_for_clause.tracked_tables().table_entry()) {
     const Table* table = latest_schema_->FindTable(entry.table_name());
-    ZETASQL_RET_CHECK(table != nullptr);
+    GOOGLESQL_RET_CHECK(table != nullptr);
     if (!table->is_trackable_by_change_stream()) {
       return error::TrackUntrackableTables(entry.table_name());
     }
-    ZETASQL_RETURN_IF_ERROR(AlterNode<Table>(
+    GOOGLESQL_RETURN_IF_ERROR(AlterNode<Table>(
         table, [change_stream](Table::Editor* editor) -> absl::Status {
           editor->add_change_stream_explicitly_tracking_table(change_stream);
           return absl::OkStatus();
         }));
     if (entry.has_all_columns()) {
-      ZETASQL_RETURN_IF_ERROR(AlterNode<Table>(table, table_cb));
+      GOOGLESQL_RETURN_IF_ERROR(AlterNode<Table>(table, table_cb));
       for (auto& column : table->columns()) {
         if (column->is_trackable_by_change_stream() &&
             !table->FindKeyColumn(column->Name())) {
-          ZETASQL_RETURN_IF_ERROR(AlterNode<Column>(column, column_cb));
+          GOOGLESQL_RETURN_IF_ERROR(AlterNode<Column>(column, column_cb));
         }
       }
     } else if (entry.has_tracked_columns()) {
@@ -2151,9 +2231,9 @@ absl::Status SchemaUpdaterImpl::RegisterTrackedObjects(
         if (!column->is_trackable_by_change_stream()) {
           return error::TrackUntrackableColumns(column_name);
         }
-        ZETASQL_RET_CHECK(column != nullptr);
-        ZETASQL_RETURN_IF_ERROR(AlterNode<Column>(column, column_cb));
-        ZETASQL_RETURN_IF_ERROR(AlterNode<Column>(
+        GOOGLESQL_RET_CHECK(column != nullptr);
+        GOOGLESQL_RETURN_IF_ERROR(AlterNode<Column>(column, column_cb));
+        GOOGLESQL_RETURN_IF_ERROR(AlterNode<Column>(
             column, [change_stream](Column::Editor* editor) -> absl::Status {
               editor->add_change_stream_explicitly_tracking_column(
                   change_stream);
@@ -2174,12 +2254,12 @@ absl::Status SchemaUpdaterImpl::UnregisterChangeStreamFromTrackedObjects(
     std::vector<std::string> column_name_list = pair.second;
     const Table* table = latest_schema_->FindTable(table_name);
     if (table->FindChangeStream(change_stream->Name())) {
-      ZETASQL_RETURN_IF_ERROR(AlterNode(table, table_cb));
+      GOOGLESQL_RETURN_IF_ERROR(AlterNode(table, table_cb));
     }
     for (std::string& column_name : column_name_list) {
       const Column* column = table->FindColumn(column_name);
       if (!table->FindKeyColumn(column->Name())) {
-        ZETASQL_RETURN_IF_ERROR(AlterNode(column, column_cb));
+        GOOGLESQL_RETURN_IF_ERROR(AlterNode(column, column_cb));
       }
     }
   }
@@ -2215,7 +2295,7 @@ absl::Status SchemaUpdaterImpl::UnregisterChangeStreamFromTrackedObjects(
         column_editor->remove_change_stream(change_stream);
         return absl::OkStatus();
       };
-  ZETASQL_RETURN_IF_ERROR(UnregisterChangeStreamFromTrackedObjects(
+  GOOGLESQL_RETURN_IF_ERROR(UnregisterChangeStreamFromTrackedObjects(
       change_stream, unregister_tracked_table, unregister_tracked_column));
   return absl::OkStatus();
 }
@@ -2227,11 +2307,11 @@ absl::Status SchemaUpdaterImpl::ValidateLimitsForTrackedObjects(
   std::vector<std::string> tables_names_;
   if (change_stream_for_clause.all()) {
     for (const auto& table : latest_schema_->tables()) {
-      ZETASQL_RETURN_IF_ERROR(table_cb(table));
+      GOOGLESQL_RETURN_IF_ERROR(table_cb(table));
       for (const auto& column : table->columns()) {
         if (column->is_trackable_by_change_stream() &&
             !table->FindKeyColumn(column->Name())) {
-          ZETASQL_RETURN_IF_ERROR(column_cb(column));
+          GOOGLESQL_RETURN_IF_ERROR(column_cb(column));
         }
       }
     }
@@ -2239,22 +2319,22 @@ absl::Status SchemaUpdaterImpl::ValidateLimitsForTrackedObjects(
   }
   for (auto& entry : change_stream_for_clause.tracked_tables().table_entry()) {
     const Table* table = latest_schema_->FindTable(entry.table_name());
-    ZETASQL_RET_CHECK(table != nullptr);
+    GOOGLESQL_RET_CHECK(table != nullptr);
 
     if (entry.has_all_columns()) {
-      ZETASQL_RETURN_IF_ERROR(table_cb(table));
+      GOOGLESQL_RETURN_IF_ERROR(table_cb(table));
       for (const auto& column : table->columns()) {
         if (column->is_trackable_by_change_stream() &&
             !table->FindKeyColumn(column->Name())) {
-          ZETASQL_RETURN_IF_ERROR(column_cb(column));
+          GOOGLESQL_RETURN_IF_ERROR(column_cb(column));
         }
       }
     } else if (!entry.tracked_columns().column_name().empty()) {
       for (const std::string& column_name :
            entry.tracked_columns().column_name()) {
         const Column* column = table->FindColumn(column_name);
-        ZETASQL_RET_CHECK(column != nullptr);
-        ZETASQL_RETURN_IF_ERROR(column_cb(column));
+        GOOGLESQL_RET_CHECK(column != nullptr);
+        GOOGLESQL_RETURN_IF_ERROR(column_cb(column));
       }
     } else {
       // Only key columns are tracked implicitly, which doesn't count toward
@@ -2363,7 +2443,7 @@ absl::Status SchemaUpdaterImpl::ValidateChangeStreamForClause(
 
 absl::Status SchemaUpdaterImpl::CreateInterleaveConstraintForTable(
     const ddl::InterleaveClause& interleave, Table::Builder* builder) {
-  ZETASQL_ASSIGN_OR_RETURN(const Table* parent, GetInterleaveConstraintTable(
+  GOOGLESQL_ASSIGN_OR_RETURN(const Table* parent, GetInterleaveConstraintTable(
                                             interleave.table_name(), *builder));
   std::optional<Table::OnDeleteAction> on_delete =
       GetInterleaveConstraintOnDelete(interleave);
@@ -2379,7 +2459,7 @@ absl::Status SchemaUpdaterImpl::CreateInterleaveConstraintForTable(
 absl::Status SchemaUpdaterImpl::CreateInterleaveConstraint(
     const Table* parent, std::optional<Table::OnDeleteAction> on_delete,
     Table::InterleaveType interleave_type, Table::Builder* builder) {
-  ZETASQL_RET_CHECK_EQ(builder->get()->parent(), nullptr);
+  GOOGLESQL_RET_CHECK_EQ(builder->get()->parent(), nullptr);
 
   if (parent->row_deletion_policy().has_value() &&
       (interleave_type == Table::InterleaveType::kInParent &&
@@ -2389,7 +2469,7 @@ absl::Status SchemaUpdaterImpl::CreateInterleaveConstraint(
                                                parent->Name());
   }
 
-  ZETASQL_RETURN_IF_ERROR(AlterNode<Table>(
+  GOOGLESQL_RETURN_IF_ERROR(AlterNode<Table>(
       parent, [builder](Table::Editor* parent_editor) -> absl::Status {
         parent_editor->add_child_table(builder->get());
         builder->set_parent_table(parent_editor->get());
@@ -2447,12 +2527,12 @@ absl::Status SchemaUpdaterImpl::CreatePrimaryKeyConstraint(
     std::optional<uint32_t> oid = pg_oid_assigner_->GetNextPostgresqlOid();
     key_col_builder.set_postgresql_oid(oid);
     if (oid.has_value()) {
-      ZETASQL_VLOG(2) << "Assigned oid " << oid.value()
+      GOOGLESQL_VLOG(2) << "Assigned oid " << oid.value()
               << " for PRIMARY KEY constraint on table "
               << builder->get()->Name();
     }
   }
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       const KeyColumn* key_col,
       CreatePrimaryKeyColumn(ddl_key_part, builder->get(), &key_col_builder));
   builder->add_key_column(key_col);
@@ -2490,12 +2570,13 @@ absl::StatusOr<const KeyColumn*> SchemaUpdaterImpl::CreatePrimaryKeyColumn(
     builder->set_nulls_last(is_descending);
   }
   const KeyColumn* key_col = builder->get();
-  ZETASQL_RETURN_IF_ERROR(AddNode(builder->build()));
+  GOOGLESQL_RETURN_IF_ERROR(AddNode(builder->build()));
   return key_col;
 }
 
 absl::Status SchemaUpdaterImpl::CreateForeignKeyConstraint(
-    const ddl::ForeignKey& ddl_foreign_key, const Table* referencing_table) {
+    const ddl::ForeignKey& ddl_foreign_key, const Table* referencing_table,
+    const database_api::DatabaseDialect& dialect) {
   // Build and add the emulator foreign key before creating any of its backing
   // indexes. This ensures the foreign key is validated first which in turn
   // ensures better foreign key error messages instead of obscure index errors.
@@ -2504,7 +2585,7 @@ absl::Status SchemaUpdaterImpl::CreateForeignKeyConstraint(
   // checks, so the index on the referencing table is not created. Only the
   // unique index on the referenced table is created, because the definition of
   // foreign keys requires them to refer to unique identities.
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       const ForeignKey* foreign_key,
       BuildForeignKeyConstraint(ddl_foreign_key, referencing_table));
 
@@ -2521,19 +2602,20 @@ absl::Status SchemaUpdaterImpl::CreateForeignKeyConstraint(
 
   bool referenced_index_required = false;
   std::vector<int> index_column_order;
-  ZETASQL_RETURN_IF_ERROR(EvaluateForeignKeyReferencedPrimaryKey(
+  GOOGLESQL_RETURN_IF_ERROR(EvaluateForeignKeyReferencedPrimaryKey(
       foreign_key->referenced_table(), ddl_foreign_key.referenced_column_name(),
       &index_column_order, &referenced_index_required));
   if (referenced_index_required) {
     std::vector<std::string> column_names;
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         const Index* referenced_index,
         CreateForeignKeyIndex(
             foreign_key, foreign_key->referenced_table(),
             index_column_names(ddl_foreign_key.referenced_column_name(),
                                index_column_order),
+            dialect,
             /*unique=*/true));
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         AlterNode<ForeignKey>(foreign_key, [&](ForeignKey::Editor* editor) {
           editor->set_referenced_index(referenced_index);
           return absl::OkStatus();
@@ -2547,18 +2629,19 @@ absl::Status SchemaUpdaterImpl::CreateForeignKeyConstraint(
   }
 
   bool referencing_index_required = false;
-  ZETASQL_RETURN_IF_ERROR(EvaluateForeignKeyReferencingPrimaryKey(
+  GOOGLESQL_RETURN_IF_ERROR(EvaluateForeignKeyReferencingPrimaryKey(
       referencing_table, ddl_foreign_key.constrained_column_name(),
       index_column_order, &referencing_index_required));
   if (referencing_index_required) {
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         const Index* referencing_index,
         CreateForeignKeyIndex(
             foreign_key, referencing_table,
             index_column_names(ddl_foreign_key.constrained_column_name(),
                                index_column_order),
+            dialect,
             /*unique=*/false));
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         AlterNode<ForeignKey>(foreign_key, [&](ForeignKey::Editor* editor) {
           editor->set_referencing_index(referencing_index);
           return absl::OkStatus();
@@ -2589,12 +2672,12 @@ absl::StatusOr<const ForeignKey*> SchemaUpdaterImpl::BuildForeignKeyConstraint(
   std::optional<uint32_t> oid = pg_oid_assigner_->GetNextPostgresqlOid();
   builder.set_postgresql_oid(oid);
   if (oid.has_value()) {
-    ZETASQL_VLOG(2) << "Assigned oid " << oid.value() << " for FOREIGN KEY constraint "
+    GOOGLESQL_VLOG(2) << "Assigned oid " << oid.value() << " for FOREIGN KEY constraint "
             << ddl_foreign_key.constraint_name() << " on table "
             << referencing_table->Name();
   }
 
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       AlterNode<Table>(referencing_table, [&](Table::Editor* editor) {
         editor->add_foreign_key(builder.get());
         return absl::OkStatus();
@@ -2610,7 +2693,7 @@ absl::StatusOr<const ForeignKey*> SchemaUpdaterImpl::BuildForeignKeyConstraint(
     // Self-referencing foreign key.
     referenced_table = referencing_table;
   }
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       AlterNode<Table>(referenced_table, [&](Table::Editor* editor) {
         editor->add_referencing_foreign_key(builder.get());
         return absl::OkStatus();
@@ -2620,10 +2703,10 @@ absl::StatusOr<const ForeignKey*> SchemaUpdaterImpl::BuildForeignKeyConstraint(
   std::string foreign_key_name;
   if (ddl_foreign_key.has_constraint_name()) {
     foreign_key_name = ddl_foreign_key.constraint_name();
-    ZETASQL_RETURN_IF_ERROR(global_names_.AddName("Foreign Key", foreign_key_name));
+    GOOGLESQL_RETURN_IF_ERROR(global_names_.AddName("Foreign Key", foreign_key_name));
     builder.set_constraint_name(foreign_key_name);
   } else {
-    ZETASQL_ASSIGN_OR_RETURN(foreign_key_name,
+    GOOGLESQL_ASSIGN_OR_RETURN(foreign_key_name,
                      global_names_.GenerateForeignKeyName(
                          referencing_table->Name(), referenced_table->Name()));
     builder.set_generated_name(foreign_key_name);
@@ -2643,12 +2726,12 @@ absl::StatusOr<const ForeignKey*> SchemaUpdaterImpl::BuildForeignKeyConstraint(
         }
         return absl::OkStatus();
       };
-  ZETASQL_RETURN_IF_ERROR(add_columns(referencing_table,
+  GOOGLESQL_RETURN_IF_ERROR(add_columns(referencing_table,
                               ddl_foreign_key.constrained_column_name(),
                               [&builder](const Column* column) {
                                 builder.add_referencing_column(column);
                               }));
-  ZETASQL_RETURN_IF_ERROR(add_columns(referenced_table,
+  GOOGLESQL_RETURN_IF_ERROR(add_columns(referenced_table,
                               ddl_foreign_key.referenced_column_name(),
                               [&builder](const Column* column) {
                                 builder.add_referenced_column(column);
@@ -2675,7 +2758,7 @@ absl::StatusOr<const ForeignKey*> SchemaUpdaterImpl::BuildForeignKeyConstraint(
   }
 
   const ForeignKey* foreign_key = builder.get();
-  ZETASQL_RETURN_IF_ERROR(AddNode(builder.build()));
+  GOOGLESQL_RETURN_IF_ERROR(AddNode(builder.build()));
   return foreign_key;
 }
 
@@ -2750,7 +2833,7 @@ absl::Status SchemaUpdaterImpl::EvaluateForeignKeyReferencingPrimaryKey(
   }
 
   // Build a map of foreign key column names to their index positions.
-  ZETASQL_RET_CHECK_EQ(column_order.size(), column_names.size());
+  GOOGLESQL_RET_CHECK_EQ(column_order.size(), column_names.size());
   CaseInsensitiveStringMap<int> column_positions;
   for (int i = 0; i < column_names.size(); ++i) {
     column_positions[column_names[i]] = column_order[i];
@@ -2771,12 +2854,13 @@ absl::Status SchemaUpdaterImpl::EvaluateForeignKeyReferencingPrimaryKey(
 
 absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateForeignKeyIndex(
     const ForeignKey* foreign_key, const Table* table,
-    const std::vector<std::string>& column_names, bool unique) {
+    const std::vector<std::string>& column_names,
+    const database_api::DatabaseDialect& dialect, bool unique) {
   bool null_filtered =
       absl::c_any_of(column_names, [table](const std::string& column_name) {
         return table->FindColumn(column_name)->is_nullable();
       });
-  ZETASQL_ASSIGN_OR_RETURN(std::string index_name,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::string index_name,
                    global_names_.GenerateManagedIndexName(
                        table->Name(), column_names, null_filtered, unique));
   const Index* index = latest_schema_->FindIndex(index_name);
@@ -2808,9 +2892,9 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateForeignKeyIndex(
     if (CanInterleaveForeignKeyIndex(table, column_names)) {
       ddl_index.set_interleave_in_table(table->Name());
     }
-    ZETASQL_ASSIGN_OR_RETURN(index, CreateIndex(ddl_index, table));
+    GOOGLESQL_ASSIGN_OR_RETURN(index, CreateIndex(ddl_index, dialect, table));
   }
-  ZETASQL_RETURN_IF_ERROR(AlterNode<Index>(index, [&](Index::Editor* index_editor) {
+  GOOGLESQL_RETURN_IF_ERROR(AlterNode<Index>(index, [&](Index::Editor* index_editor) {
     index_editor->add_managing_node(foreign_key);
     return absl::OkStatus();
   }));
@@ -2859,7 +2943,7 @@ absl::Status MapSpangresDDLErrorToSpannerError(const absl::Status& status) {
 }
 
 // Translates Spangres SQL expression stored as a string in
-// `original_expression` field and returns a translated ZetaSQL expression.
+// `original_expression` field and returns a translated GoogleSQL expression.
 // When we first translate a Spangres DDL statement which contains an
 // expression, like check constraints, generated column, and column default,
 // we do not translate the expression. We translate it later when we have more
@@ -2868,24 +2952,24 @@ absl::StatusOr<ExpressionTranslateResult>
 SchemaUpdaterImpl::TranslatePostgreSqlExpression(
     const Table* table, const ddl::CreateTable* ddl_create_table,
     absl::string_view expression) {
-  std::vector<zetasql::SimpleTable::NameAndType> name_and_types;
-  ZETASQL_RETURN_IF_ERROR(InitColumnNameAndTypesFromTable(table, ddl_create_table,
+  std::vector<googlesql::SimpleTable::NameAndType> name_and_types;
+  GOOGLESQL_RETURN_IF_ERROR(InitColumnNameAndTypesFromTable(table, ddl_create_table,
                                                   &name_and_types));
-  zetasql::SimpleTable simple_table(table->Name(), name_and_types);
+  googlesql::SimpleTable simple_table(table->Name(), name_and_types);
   // Setup a catalog for PostgreSQL analyzer needed to resolve provided AST.
-  zetasql::SimpleCatalog catalog("pg simple catalog");
+  googlesql::SimpleCatalog catalog("pg simple catalog");
   catalog.AddTable(&simple_table);
 
-  // Setup zetasql::AnalyzerOptions needed for translation from PostgreSQL to
-  // ZetaSQL.
-  zetasql::AnalyzerOptions analyzer_options =
+  // Setup googlesql::AnalyzerOptions needed for translation from PostgreSQL to
+  // GoogleSQL.
+  googlesql::AnalyzerOptions analyzer_options =
       MakeGoogleSqlAnalyzerOptions(GetTimeZone());
   analyzer_options.CreateDefaultArenasIfNotSet();
 
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       std::unique_ptr<postgres_translator::interfaces::PGArena> arena,
       postgres_translator::spangres::MemoryContextPGArena::Init(nullptr));
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       ExpressionTranslateResult result,
       postgres_translator::spangres::TranslateTableLevelExpression(
           expression, simple_table.Name(), catalog, analyzer_options,
@@ -2900,7 +2984,7 @@ SchemaUpdaterImpl::TranslatePostgreSqlExpression(
 
 absl::StatusOr<ExpressionTranslateResult>
 SchemaUpdaterImpl::TranslatePostgreSqlQueryInView(absl::string_view query) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       MakeGoogleSqlAnalyzerOptionsForViewsAndFunctions(
           GetTimeZone(), admin::database::v1::POSTGRESQL);
   analyzer_options.CreateDefaultArenasIfNotSet();
@@ -2911,12 +2995,40 @@ SchemaUpdaterImpl::TranslatePostgreSqlQueryInView(absl::string_view query) {
   Catalog catalog(latest_schema_, &function_catalog, type_factory_,
                   analyzer_options);
 
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       std::unique_ptr<postgres_translator::interfaces::PGArena> arena,
       postgres_translator::spangres::MemoryContextPGArena::Init(nullptr));
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       ExpressionTranslateResult result,
       postgres_translator::spangres::TranslateQueryInView(
+          query, catalog, analyzer_options, type_factory_,
+          std::make_unique<FunctionCatalog>(
+              type_factory_,
+              /*catalog_name=*/kCloudSpannerEmulatorFunctionCatalogName,
+              /*schema=*/latest_schema_)),
+      _.With(MapSpangresDDLErrorToSpannerError));
+  return result;
+}
+
+absl::StatusOr<ExpressionTranslateResult>
+SchemaUpdaterImpl::TranslatePostgreSqlQueryInUdf(absl::string_view query) {
+  googlesql::AnalyzerOptions analyzer_options =
+      MakeGoogleSqlAnalyzerOptionsForViewsAndFunctions(
+          GetTimeZone(), admin::database::v1::POSTGRESQL);
+  analyzer_options.CreateDefaultArenasIfNotSet();
+  FunctionCatalog function_catalog(
+      type_factory_,
+      /*catalog_name=*/kCloudSpannerEmulatorFunctionCatalogName,
+      /*latest_schema=*/latest_schema_);
+  Catalog catalog(latest_schema_, &function_catalog, type_factory_,
+                  analyzer_options);
+
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      std::unique_ptr<postgres_translator::interfaces::PGArena> arena,
+      postgres_translator::spangres::MemoryContextPGArena::Init(nullptr));
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      ExpressionTranslateResult result,
+      postgres_translator::spangres::TranslateFunctionBody(
           query, catalog, analyzer_options, type_factory_,
           std::make_unique<FunctionCatalog>(
               type_factory_,
@@ -2933,11 +3045,11 @@ absl::Status SchemaUpdaterImpl::CreateCheckConstraint(
   std::optional<uint32_t> oid = pg_oid_assigner_->GetNextPostgresqlOid();
   builder.set_postgresql_oid(oid);
   if (oid.has_value()) {
-    ZETASQL_VLOG(2) << "Assigned oid " << oid.value() << " for CHECK CONSTRAINT "
+    GOOGLESQL_VLOG(2) << "Assigned oid " << oid.value() << " for CHECK CONSTRAINT "
             << ddl_check_constraint.name() << " on table " << table->Name();
   }
 
-  ZETASQL_RETURN_IF_ERROR(AlterNode<Table>(table, [&](Table::Editor* editor) {
+  GOOGLESQL_RETURN_IF_ERROR(AlterNode<Table>(table, [&](Table::Editor* editor) {
     editor->add_check_constraint(builder.get());
     return absl::OkStatus();
   }));
@@ -2947,10 +3059,10 @@ absl::Status SchemaUpdaterImpl::CreateCheckConstraint(
   bool is_generated_name = false;
   if (ddl_check_constraint.has_name()) {
     check_constraint_name = ddl_check_constraint.name();
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         global_names_.AddName("Check Constraint", check_constraint_name));
   } else {
-    ZETASQL_ASSIGN_OR_RETURN(check_constraint_name,
+    GOOGLESQL_ASSIGN_OR_RETURN(check_constraint_name,
                      global_names_.GenerateCheckConstraintName(table->Name()));
     is_generated_name = true;
   }
@@ -2981,7 +3093,7 @@ absl::Status SchemaUpdaterImpl::CreateCheckConstraint(
       [check_constraint](const SchemaValidationContext* context) {
         return VerifyCheckConstraintData(check_constraint, context);
       });
-  ZETASQL_RETURN_IF_ERROR(AddNode(builder.build()));
+  GOOGLESQL_RETURN_IF_ERROR(AddNode(builder.build()));
   return absl::OkStatus();
 }
 
@@ -2996,7 +3108,7 @@ absl::StatusOr<std::shared_ptr<const ProtoBundle>>
 SchemaUpdaterImpl::CreateProtoBundle(
     const ddl::CreateProtoBundle& ddl_proto_bundle,
     absl::string_view proto_descriptor_bytes) {
-  ZETASQL_ASSIGN_OR_RETURN(auto proto_bundle_builder,
+  GOOGLESQL_ASSIGN_OR_RETURN(auto proto_bundle_builder,
                    ProtoBundle::Builder::New(proto_descriptor_bytes));
   auto insert_types = ddl_proto_bundle.insert_type();
   std::vector<std::string> insert_type_names;
@@ -3004,7 +3116,7 @@ SchemaUpdaterImpl::CreateProtoBundle(
   for (int i = 0; i < insert_types.size(); ++i) {
     insert_type_names.push_back(insert_types.at(i).source_name());
   }
-  ZETASQL_RETURN_IF_ERROR(proto_bundle_builder->InsertTypes(insert_type_names));
+  GOOGLESQL_RETURN_IF_ERROR(proto_bundle_builder->InsertTypes(insert_type_names));
   return proto_bundle_builder->Build();
 }
 
@@ -3021,20 +3133,20 @@ absl::Status SchemaUpdaterImpl::CreateTable(
     return absl::OkStatus();
   }
 
-  ZETASQL_RETURN_IF_ERROR(global_names_.AddName("Table", ddl_table.table_name()));
+  GOOGLESQL_RETURN_IF_ERROR(global_names_.AddName("Table", ddl_table.table_name()));
 
   Table::Builder builder;
   std::optional<uint32_t> oid = pg_oid_assigner_->GetNextPostgresqlOid();
   builder.set_postgresql_oid(oid);
   if (oid.has_value()) {
-    ZETASQL_VLOG(2) << "Assigned oid " << oid.value() << " to table "
+    GOOGLESQL_VLOG(2) << "Assigned oid " << oid.value() << " to table "
             << ddl_table.table_name();
   }
   builder.set_id(table_id_generator_->NextId(ddl_table.table_name()))
       .set_name(ddl_table.table_name());
 
   for (const ddl::ColumnDefinition& ddl_column : ddl_table.column()) {
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         const Column* column,
         CreateColumn(ddl_column, builder.get(), &ddl_table, dialect));
     builder.add_column(column);
@@ -3048,29 +3160,30 @@ absl::Status SchemaUpdaterImpl::CreateTable(
 
   // Some constraints have a dependency on the primary key, so create it first.
   for (const ddl::KeyPartClause& ddl_key_part : ddl_table.primary_key()) {
-    ZETASQL_RETURN_IF_ERROR(CreatePrimaryKeyConstraint(ddl_key_part, &builder,
+    GOOGLESQL_RETURN_IF_ERROR(CreatePrimaryKeyConstraint(ddl_key_part, &builder,
                                                /*with_oid=*/true));
   }
   // Assign OID for PRIMARY KEY index.
   oid = pg_oid_assigner_->GetNextPostgresqlOid();
   builder.set_primary_key_index_postgresql_oid(oid);
   if (oid.has_value()) {
-    ZETASQL_VLOG(2) << "Assigned oid " << oid.value()
+    GOOGLESQL_VLOG(2) << "Assigned oid " << oid.value()
             << " for PRIMARY KEY index on table " << ddl_table.table_name();
   }
 
   for (const ddl::ForeignKey& ddl_foreign_key : ddl_table.foreign_key()) {
-    ZETASQL_RETURN_IF_ERROR(CreateForeignKeyConstraint(ddl_foreign_key, builder.get()));
+    GOOGLESQL_RETURN_IF_ERROR(
+        CreateForeignKeyConstraint(ddl_foreign_key, builder.get(), dialect));
   }
   if (ddl_table.has_interleave_clause()) {
-    ZETASQL_RETURN_IF_ERROR(CreateInterleaveConstraintForTable(
+    GOOGLESQL_RETURN_IF_ERROR(CreateInterleaveConstraintForTable(
         ddl_table.interleave_clause(), &builder));
     if (ddl_table.interleave_clause().type() ==
         ddl::InterleaveClause::IN_PARENT) {
       oid = pg_oid_assigner_->GetNextPostgresqlOid();
       builder.set_interleave_in_parent_postgresql_oid(oid);
       if (oid.has_value()) {
-        ZETASQL_VLOG(2) << "Assigned oid " << oid.value()
+        GOOGLESQL_VLOG(2) << "Assigned oid " << oid.value()
                 << " for IN_PARENT interleave on table "
                 << ddl_table.table_name();
       }
@@ -3081,8 +3194,8 @@ absl::Status SchemaUpdaterImpl::CreateTable(
     const Table* table = builder.get();
     if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
       ddl::CheckConstraint mutable_check_constraint = ddl_check_constraint;
-      ZETASQL_RET_CHECK(mutable_check_constraint.has_expression_origin());
-      ZETASQL_ASSIGN_OR_RETURN(ExpressionTranslateResult result,
+      GOOGLESQL_RET_CHECK(mutable_check_constraint.has_expression_origin());
+      GOOGLESQL_ASSIGN_OR_RETURN(ExpressionTranslateResult result,
                        TranslatePostgreSqlExpression(
                            table, &ddl_table,
                            mutable_check_constraint.expression_origin()
@@ -3091,20 +3204,20 @@ absl::Status SchemaUpdaterImpl::CreateTable(
           ->set_original_expression(result.original_postgresql_expression);
       mutable_check_constraint.set_expression(
           result.translated_googlesql_expression);
-      ZETASQL_RETURN_IF_ERROR(
+      GOOGLESQL_RETURN_IF_ERROR(
           CreateCheckConstraint(mutable_check_constraint, table, &ddl_table));
     } else {
-      ZETASQL_RETURN_IF_ERROR(
+      GOOGLESQL_RETURN_IF_ERROR(
           CreateCheckConstraint(ddl_check_constraint, table, &ddl_table));
     }
   }
 
   if (ddl_table.has_row_deletion_policy()) {
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         CreateRowDeletionPolicy(ddl_table.row_deletion_policy(), &builder));
   }
   if (ddl_table.has_synonym()) {
-    ZETASQL_RETURN_IF_ERROR(global_names_.AddName("Table", ddl_table.synonym()));
+    GOOGLESQL_RETURN_IF_ERROR(global_names_.AddName("Table", ddl_table.synonym()));
     builder.set_synonym(ddl_table.synonym());
   }
   if (builder.get()->is_trackable_by_change_stream()) {
@@ -3118,7 +3231,7 @@ absl::Status SchemaUpdaterImpl::CreateTable(
               !column->table()->FindKeyColumn(column->Name())) {
             // Register the trackable columns of the newly added table to the
             // list of change streams implicitly tracking the entire database
-            ZETASQL_RETURN_IF_ERROR(AlterNode<Column>(
+            GOOGLESQL_RETURN_IF_ERROR(AlterNode<Column>(
                 column,
                 [change_stream](Column::Editor* editor) -> absl::Status {
                   editor->add_change_stream(change_stream);
@@ -3128,7 +3241,7 @@ absl::Status SchemaUpdaterImpl::CreateTable(
         }
         // Register the newly added table to the list of change streams
         // implicitly tracking the entire database
-        ZETASQL_RETURN_IF_ERROR(AlterNode<ChangeStream>(
+        GOOGLESQL_RETURN_IF_ERROR(AlterNode<ChangeStream>(
             change_stream,
             [ddl_table, columns](
                 ChangeStream::Editor* change_stream_editor) -> absl::Status {
@@ -3144,7 +3257,7 @@ absl::Status SchemaUpdaterImpl::CreateTable(
   }
 
   if (!ddl_table.set_options().empty()) {
-    ZETASQL_RETURN_IF_ERROR(AlterNode<Table>(
+    GOOGLESQL_RETURN_IF_ERROR(AlterNode<Table>(
         builder.get(),
         [this, &ddl_table](Table::Editor* editor) -> absl::Status {
           return SetTableOptions(ddl_table.set_options(), editor);
@@ -3160,7 +3273,7 @@ absl::Status SchemaUpdaterImpl::CreateTable(
       return error::NamedSchemaNotFound(schema_name);
     }
 
-    ZETASQL_RETURN_IF_ERROR(AlterNode<NamedSchema>(
+    GOOGLESQL_RETURN_IF_ERROR(AlterNode<NamedSchema>(
         named_schema, [&](NamedSchema::Editor* editor) -> absl::Status {
           editor->add_table(builder.get());
           if (ddl_table.has_synonym()) {
@@ -3170,7 +3283,7 @@ absl::Status SchemaUpdaterImpl::CreateTable(
         }));
   }
 
-  ZETASQL_RETURN_IF_ERROR(AddNode(builder.build()));
+  GOOGLESQL_RETURN_IF_ERROR(AddNode(builder.build()));
   return absl::OkStatus();
 }
 
@@ -3202,7 +3315,7 @@ absl::StatusOr<const Column*> SchemaUpdaterImpl::CreateIndexDataTableColumn(
   }
 
   const Column* column = builder.get();
-  ZETASQL_RETURN_IF_ERROR(AddNode(builder.build()));
+  GOOGLESQL_RETURN_IF_ERROR(AddNode(builder.build()));
   return column;
 }
 
@@ -3213,7 +3326,7 @@ absl::Status SchemaUpdaterImpl::AddIndexColumnsByName(
   const Column* column = builder.get()->FindColumn(column_name);
   // Skip already added columns
   if (column == nullptr) {
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         column, CreateIndexDataTableColumn(indexed_table, column_name,
                                            builder.get(), is_null_filtered));
     builder.add_column(column);
@@ -3229,7 +3342,7 @@ absl::Status SchemaUpdaterImpl::AddSearchIndexColumns(
     std::vector<const Column*>& columns, Table::Builder& builder) {
   for (const ddl::KeyPartClause& ddl_key_part : key_parts) {
     const std::string& column_name = ddl_key_part.key_name();
-    ZETASQL_RETURN_IF_ERROR(AddIndexColumnsByName(column_name, indexed_table,
+    GOOGLESQL_RETURN_IF_ERROR(AddIndexColumnsByName(column_name, indexed_table,
                                           is_null_filtered, columns, builder));
   }
 
@@ -3246,37 +3359,37 @@ SchemaUpdaterImpl::CreateChangeStreamPartitionTable(
       .set_id(table_id_generator_->NextId(partition_table_name))
       .set_owner_change_stream(change_stream);
   // Create columns in table _ChangeStream_Partition_${ChangeStreamName}
-  ZETASQL_ASSIGN_OR_RETURN(const Column* column, CreateChangeStreamTableColumn(
+  GOOGLESQL_ASSIGN_OR_RETURN(const Column* column, CreateChangeStreamTableColumn(
                                              "partition_token", builder.get(),
                                              type_factory_->get_string()));
   builder.add_column(column);
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       column, CreateChangeStreamTableColumn("start_time", builder.get(),
                                             type_factory_->get_timestamp()));
   builder.add_column(column);
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       column, CreateChangeStreamTableColumn("end_time", builder.get(),
                                             type_factory_->get_timestamp()));
   builder.add_column(column);
-  const zetasql::Type* updated_string_array_type;
-  ZETASQL_RETURN_IF_ERROR(type_factory_->MakeArrayType(type_factory_->get_string(),
+  const googlesql::Type* updated_string_array_type;
+  GOOGLESQL_RETURN_IF_ERROR(type_factory_->MakeArrayType(type_factory_->get_string(),
                                                &updated_string_array_type));
-  ZETASQL_ASSIGN_OR_RETURN(column,
+  GOOGLESQL_ASSIGN_OR_RETURN(column,
                    CreateChangeStreamTableColumn("parents", builder.get(),
                                                  updated_string_array_type));
   builder.add_column(column);
-  ZETASQL_ASSIGN_OR_RETURN(column,
+  GOOGLESQL_ASSIGN_OR_RETURN(column,
                    CreateChangeStreamTableColumn("children", builder.get(),
                                                  updated_string_array_type));
   builder.add_column(column);
 
-  ZETASQL_ASSIGN_OR_RETURN(column,
+  GOOGLESQL_ASSIGN_OR_RETURN(column,
                    CreateChangeStreamTableColumn("next_churn", builder.get(),
                                                  type_factory_->get_string()));
   builder.add_column(column);
 
   // Set the partition_token as primary key column
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       CreateChangeStreamTablePKConstraint("partition_token", &builder));
   return builder.build();
 }
@@ -3292,102 +3405,102 @@ SchemaUpdaterImpl::CreateChangeStreamDataTable(
       .set_id(table_id_generator_->NextId(data_table_name))
       .set_owner_change_stream(change_stream);
   // Create columns in table _ChangeStream_Data_${ChangeStreamName}
-  ZETASQL_ASSIGN_OR_RETURN(const Column* column, CreateChangeStreamTableColumn(
+  GOOGLESQL_ASSIGN_OR_RETURN(const Column* column, CreateChangeStreamTableColumn(
                                              "partition_token", builder.get(),
                                              type_factory_->get_string()));
   builder.add_column(column);
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       column, CreateChangeStreamTableColumn("commit_timestamp", builder.get(),
                                             type_factory_->get_timestamp()));
   builder.add_column(column);
-  ZETASQL_ASSIGN_OR_RETURN(column, CreateChangeStreamTableColumn(
+  GOOGLESQL_ASSIGN_OR_RETURN(column, CreateChangeStreamTableColumn(
                                "server_transaction_id", builder.get(),
                                type_factory_->get_string()));
   builder.add_column(column);
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       column, CreateChangeStreamTableColumn("record_sequence", builder.get(),
                                             type_factory_->get_string()));
   builder.add_column(column);
-  ZETASQL_ASSIGN_OR_RETURN(column, CreateChangeStreamTableColumn(
+  GOOGLESQL_ASSIGN_OR_RETURN(column, CreateChangeStreamTableColumn(
                                "is_last_record_in_transaction_in_partition",
                                builder.get(), type_factory_->get_bool()));
   builder.add_column(column);
-  ZETASQL_ASSIGN_OR_RETURN(column,
+  GOOGLESQL_ASSIGN_OR_RETURN(column,
                    CreateChangeStreamTableColumn("table_name", builder.get(),
                                                  type_factory_->get_string()));
   builder.add_column(column);
-  const zetasql::Type* updated_string_array_type;
-  ZETASQL_RETURN_IF_ERROR(type_factory_->MakeArrayType(type_factory_->get_string(),
+  const googlesql::Type* updated_string_array_type;
+  GOOGLESQL_RETURN_IF_ERROR(type_factory_->MakeArrayType(type_factory_->get_string(),
                                                &updated_string_array_type));
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       column, CreateChangeStreamTableColumn("column_types_name", builder.get(),
                                             updated_string_array_type));
   builder.add_column(column);
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       column, CreateChangeStreamTableColumn("column_types_type", builder.get(),
                                             updated_string_array_type));
   builder.add_column(column);
-  const zetasql::Type* updated_bool_array_type;
-  ZETASQL_RETURN_IF_ERROR(type_factory_->MakeArrayType(type_factory_->get_bool(),
+  const googlesql::Type* updated_bool_array_type;
+  GOOGLESQL_RETURN_IF_ERROR(type_factory_->MakeArrayType(type_factory_->get_bool(),
                                                &updated_bool_array_type));
-  ZETASQL_ASSIGN_OR_RETURN(column, CreateChangeStreamTableColumn(
+  GOOGLESQL_ASSIGN_OR_RETURN(column, CreateChangeStreamTableColumn(
                                "column_types_is_primary_key", builder.get(),
                                updated_bool_array_type));
   builder.add_column(column);
-  const zetasql::Type* updated_int64_array_type;
-  ZETASQL_RETURN_IF_ERROR(type_factory_->MakeArrayType(type_factory_->get_int64(),
+  const googlesql::Type* updated_int64_array_type;
+  GOOGLESQL_RETURN_IF_ERROR(type_factory_->MakeArrayType(type_factory_->get_int64(),
                                                &updated_int64_array_type));
-  ZETASQL_ASSIGN_OR_RETURN(column, CreateChangeStreamTableColumn(
+  GOOGLESQL_ASSIGN_OR_RETURN(column, CreateChangeStreamTableColumn(
                                "column_types_ordinal_position", builder.get(),
                                updated_int64_array_type));
   builder.add_column(column);
-  ZETASQL_ASSIGN_OR_RETURN(column,
+  GOOGLESQL_ASSIGN_OR_RETURN(column,
                    CreateChangeStreamTableColumn("mods_keys", builder.get(),
                                                  updated_string_array_type));
   builder.add_column(column);
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       column, CreateChangeStreamTableColumn("mods_new_values", builder.get(),
                                             updated_string_array_type));
   builder.add_column(column);
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       column, CreateChangeStreamTableColumn("mods_old_values", builder.get(),
                                             updated_string_array_type));
   builder.add_column(column);
-  ZETASQL_ASSIGN_OR_RETURN(column,
+  GOOGLESQL_ASSIGN_OR_RETURN(column,
                    CreateChangeStreamTableColumn("mod_type", builder.get(),
                                                  type_factory_->get_string()));
   builder.add_column(column);
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       column, CreateChangeStreamTableColumn("value_capture_type", builder.get(),
                                             type_factory_->get_string()));
   builder.add_column(column);
-  ZETASQL_ASSIGN_OR_RETURN(column, CreateChangeStreamTableColumn(
+  GOOGLESQL_ASSIGN_OR_RETURN(column, CreateChangeStreamTableColumn(
                                "number_of_records_in_transaction",
                                builder.get(), type_factory_->get_int64()));
   builder.add_column(column);
-  ZETASQL_ASSIGN_OR_RETURN(column, CreateChangeStreamTableColumn(
+  GOOGLESQL_ASSIGN_OR_RETURN(column, CreateChangeStreamTableColumn(
                                "number_of_partitions_in_transaction",
                                builder.get(), type_factory_->get_int64()));
   builder.add_column(column);
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       column, CreateChangeStreamTableColumn("transaction_tag", builder.get(),
                                             type_factory_->get_string()));
   builder.add_column(column);
-  ZETASQL_ASSIGN_OR_RETURN(column, CreateChangeStreamTableColumn(
+  GOOGLESQL_ASSIGN_OR_RETURN(column, CreateChangeStreamTableColumn(
                                "is_system_transaction", builder.get(),
                                type_factory_->get_bool()));
   builder.add_column(column);
   // Set primary key columns
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       CreateChangeStreamTablePKConstraint("partition_token", &builder));
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       CreateChangeStreamTablePKConstraint("commit_timestamp", &builder));
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       CreateChangeStreamTablePKConstraint("server_transaction_id", &builder));
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       CreateChangeStreamTablePKConstraint("record_sequence", &builder));
   // Set _ChangeStream_Partition_${ChangeStreamName} as interleaved parent table
-  ZETASQL_RETURN_IF_ERROR(CreateInterleaveConstraint(
+  GOOGLESQL_RETURN_IF_ERROR(CreateInterleaveConstraint(
       change_stream_partition_table,
       /*on_delete=*/Table::OnDeleteAction::kNoAction,
       /*interleave_type=*/Table::InterleaveType::kInParent, &builder));
@@ -3396,7 +3509,7 @@ SchemaUpdaterImpl::CreateChangeStreamDataTable(
 
 absl::StatusOr<const Column*> SchemaUpdaterImpl::CreateChangeStreamTableColumn(
     const std::string& column_name, const Table* change_stream_table,
-    const zetasql::Type* type) {
+    const googlesql::Type* type) {
   Column::Builder builder;
   builder.set_name(column_name)
       .set_id(column_id_generator_->NextId(
@@ -3408,7 +3521,7 @@ absl::StatusOr<const Column*> SchemaUpdaterImpl::CreateChangeStreamTableColumn(
     builder.set_allow_commit_timestamp(true);
   }
   const Column* column = builder.get();
-  ZETASQL_RETURN_IF_ERROR(AddNode(builder.build()));
+  GOOGLESQL_RETURN_IF_ERROR(AddNode(builder.build()));
   return column;
 }
 
@@ -3428,13 +3541,13 @@ SchemaUpdaterImpl::CreateChangeStreamTablePKColumn(
   }
   builder.set_column(column).set_descending(is_descending);
   const KeyColumn* key_col = builder.get();
-  ZETASQL_RETURN_IF_ERROR(AddNode(builder.build()));
+  GOOGLESQL_RETURN_IF_ERROR(AddNode(builder.build()));
   return key_col;
 }
 
 absl::Status SchemaUpdaterImpl::CreateChangeStreamTablePKConstraint(
     const std::string& pk_column_name, Table::Builder* builder) {
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       const KeyColumn* key_col,
       CreateChangeStreamTablePKColumn(pk_column_name, builder->get()));
   builder->add_key_column(key_col);
@@ -3475,11 +3588,13 @@ SchemaUpdaterImpl::CreateIndexDataTable(
     data_table_pk.reserve(index_pk.size());
     // First create columns for the specified primary key.
 
+    int num_declared_keys = 0;
     for (const ddl::KeyPartClause& ddl_key_part : index_pk) {
+      ++num_declared_keys;
       data_table_pk.push_back(ddl_key_part);
 
       const std::string& column_name = ddl_key_part.key_name();
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           const Column* column,
           CreateIndexDataTableColumn(
               indexed_table, column_name, builder.get(),
@@ -3495,7 +3610,7 @@ SchemaUpdaterImpl::CreateIndexDataTable(
         continue;
       }
       std::string key_col_name = key_col->column()->Name();
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           const Column* column,
           CreateIndexDataTableColumn(
               indexed_table, key_col_name, builder.get(),
@@ -3518,10 +3633,9 @@ SchemaUpdaterImpl::CreateIndexDataTable(
 
     for (const ddl::KeyPartClause& ddl_key_part : data_table_pk) {
       // The data table is a hidden table so don't assign oids to to the PKs.
-      ZETASQL_RETURN_IF_ERROR(CreatePrimaryKeyConstraint(ddl_key_part, &builder,
+      GOOGLESQL_RETURN_IF_ERROR(CreatePrimaryKeyConstraint(ddl_key_part, &builder,
                                                  /*with_oid=*/false));
     }
-    int num_declared_keys = index_pk.size();
     auto data_table_key_cols = builder.get()->primary_key();
     for (int i = 0; i < num_declared_keys; ++i) {
       columns_used_by_index->index_key_columns.push_back(
@@ -3531,7 +3645,7 @@ SchemaUpdaterImpl::CreateIndexDataTable(
   if (interleave_in_table != nullptr) {
     const Table* parent_table = indexed_table;
     if (!absl::EqualsIgnoreCase(parent_table->Name(), *interleave_in_table)) {
-      ZETASQL_ASSIGN_OR_RETURN(parent_table, GetInterleaveConstraintTable(
+      GOOGLESQL_ASSIGN_OR_RETURN(parent_table, GetInterleaveConstraintTable(
                                          *interleave_in_table, builder));
     }
     // When an index is interleaved into a parent, we consider it a remote
@@ -3570,12 +3684,12 @@ SchemaUpdaterImpl::CreateIndexDataTable(
         return error::IndexKeysNotInterleavePrefix(index_name,
                                                    parent_table->Name());
       }
-      ZETASQL_RETURN_IF_ERROR(CreateInterleaveConstraint(
+      GOOGLESQL_RETURN_IF_ERROR(CreateInterleaveConstraint(
           parent_table,
           /*on_delete=*/std::nullopt,
           /*interleave_type=*/Table::InterleaveType::kIn, &builder));
     } else {
-      ZETASQL_RETURN_IF_ERROR(CreateInterleaveConstraint(
+      GOOGLESQL_RETURN_IF_ERROR(CreateInterleaveConstraint(
           parent_table,
           /*on_delete=*/Table::OnDeleteAction::kCascade,
           /*interleave_type=*/Table::InterleaveType::kInParent, &builder));
@@ -3585,7 +3699,7 @@ SchemaUpdaterImpl::CreateIndexDataTable(
   // Add stored columns to index data table.
   for (const ddl::StoredColumnDefinition& ddl_column : stored_columns) {
     const std::string& column_name = ddl_column.name();
-    ZETASQL_ASSIGN_OR_RETURN(const Column* column,
+    GOOGLESQL_ASSIGN_OR_RETURN(const Column* column,
                      CreateIndexDataTableColumn(
                          indexed_table, column_name, builder.get(),
                          /*is_null_filtered=*/
@@ -3598,7 +3712,7 @@ SchemaUpdaterImpl::CreateIndexDataTable(
   if (null_filtered_columns != nullptr) {
     // Add null filtered columns to index data table.
     for (const std::string& column_name : *null_filtered_columns) {
-      ZETASQL_RETURN_IF_ERROR(AddIndexColumnsByName(
+      GOOGLESQL_RETURN_IF_ERROR(AddIndexColumnsByName(
           column_name, indexed_table, /*is_null_filtered=*/true,
           columns_used_by_index->null_filtered_columns, builder));
     }
@@ -3606,7 +3720,7 @@ SchemaUpdaterImpl::CreateIndexDataTable(
 
   if (partition_by != nullptr) {
     // Add partition by columns to index data table
-    ZETASQL_RETURN_IF_ERROR(AddSearchIndexColumns(
+    GOOGLESQL_RETURN_IF_ERROR(AddSearchIndexColumns(
         *partition_by, indexed_table, index->is_null_filtered(),
         columns_used_by_index->partition_by_columns, builder));
   }
@@ -3616,7 +3730,7 @@ SchemaUpdaterImpl::CreateIndexDataTable(
       const std::string& column_name = ddl_key_part.key_name();
       std::vector<const Column*> columns;
       // Add column to index data table.
-      ZETASQL_RETURN_IF_ERROR(AddIndexColumnsByName(column_name, indexed_table,
+      GOOGLESQL_RETURN_IF_ERROR(AddIndexColumnsByName(column_name, indexed_table,
                                             index->is_null_filtered(), columns,
                                             builder));
 
@@ -3629,7 +3743,7 @@ SchemaUpdaterImpl::CreateIndexDataTable(
 
       // Create KeyColumn to preserve ordering metadata.
       KeyColumn::Builder key_builder;
-      ZETASQL_ASSIGN_OR_RETURN(
+      GOOGLESQL_ASSIGN_OR_RETURN(
           const KeyColumn* order_by_column,
           CreatePrimaryKeyColumn(ddl_key_part, builder.get(), &key_builder));
       columns_used_by_index->order_by_columns.push_back(order_by_column);
@@ -3640,12 +3754,13 @@ SchemaUpdaterImpl::CreateIndexDataTable(
 }
 
 absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateIndex(
-    const ddl::CreateIndex& ddl_index, const Table* indexed_table) {
+    const ddl::CreateIndex& ddl_index,
+    const database_api::DatabaseDialect& dialect, const Table* indexed_table) {
   const std::string* interleave_in_table =
       ddl_index.has_interleave_in_table() ? &ddl_index.interleave_in_table()
                                           : nullptr;
-  const auto& index_pk = std::vector<ddl::KeyPartClause>(
-      ddl_index.key().begin(), ddl_index.key().end());
+  auto index_pk = std::vector<ddl::KeyPartClause>(ddl_index.key().begin(),
+                                                  ddl_index.key().end());
   bool is_unique = ddl_index.unique();
   bool is_null_filtered = ddl_index.null_filtered();
 
@@ -3901,14 +4016,14 @@ absl::StatusOr<const ChangeStream*> SchemaUpdaterImpl::CreateChangeStream(
   }
 
   // Validate the change stream name in global_names_
-  ZETASQL_RETURN_IF_ERROR(global_names_.AddName(
+  GOOGLESQL_RETURN_IF_ERROR(global_names_.AddName(
       "Change Stream", ddl_change_stream.change_stream_name()));
 
   ChangeStream::Builder builder;
   std::optional<uint32_t> oid = pg_oid_assigner_->GetNextPostgresqlOid();
   builder.set_postgresql_oid(oid);
   if (oid.has_value()) {
-    ZETASQL_VLOG(2) << "Assigned oid " << oid.value() << " on change stream "
+    GOOGLESQL_VLOG(2) << "Assigned oid " << oid.value() << " on change stream "
             << ddl_change_stream.change_stream_name();
   }
   builder.set_name(ddl_change_stream.change_stream_name());
@@ -3919,13 +4034,13 @@ absl::StatusOr<const ChangeStream*> SchemaUpdaterImpl::CreateChangeStream(
   std::optional<uint32_t> tvf_oid = pg_oid_assigner_->GetNextPostgresqlOid();
   builder.set_tvf_postgresql_oid(tvf_oid);
   if (tvf_oid.has_value()) {
-    ZETASQL_VLOG(2) << "Assigned oid " << tvf_oid.value() << " to TVF " << tvf_name
+    GOOGLESQL_VLOG(2) << "Assigned oid " << tvf_oid.value() << " to TVF " << tvf_name
             << " on change stream " << ddl_change_stream.change_stream_name();
   }
   // Validate the change stream tvf name in global_names_
-  ZETASQL_RETURN_IF_ERROR(global_names_.AddName("Change Stream", tvf_name));
+  GOOGLESQL_RETURN_IF_ERROR(global_names_.AddName("Change Stream", tvf_name));
   // Set up _ChangeStream_Partition_${ChangeStreamName}
-  ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<const Table> change_stream_partition_table,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<const Table> change_stream_partition_table,
                    CreateChangeStreamPartitionTable(change_stream));
   builder.set_change_stream_partition_table(
       change_stream_partition_table.get());
@@ -3935,18 +4050,18 @@ absl::StatusOr<const ChangeStream*> SchemaUpdaterImpl::CreateChangeStream(
         return BackfillChangeStream(change_stream, context);
       });
   // Set up _ChangeStream_Data_${ChangeStreamName}
-  ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<const Table> change_stream_data_table,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<const Table> change_stream_data_table,
                    CreateChangeStreamDataTable(
                        change_stream, change_stream_partition_table.get()));
   builder.set_change_stream_data_table(change_stream_data_table.get());
   // Set up for clause
   if (ddl_change_stream.has_for_clause()) {
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         ValidateChangeStreamForClause(ddl_change_stream.for_clause(),
                                       ddl_change_stream.change_stream_name()));
     builder.set_for_clause(ddl_change_stream.for_clause());
     builder.set_track_all(ddl_change_stream.for_clause().all());
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         ValidateChangeStreamLimits(ddl_change_stream.for_clause(),
                                    ddl_change_stream.change_stream_name()));
   }
@@ -3954,8 +4069,8 @@ absl::StatusOr<const ChangeStream*> SchemaUpdaterImpl::CreateChangeStream(
   // Validate and set change stream options.
   const auto& set_options = ddl_change_stream.set_options();
   if (!set_options.empty()) {
-    ZETASQL_RETURN_IF_ERROR(ValidateChangeStreamOptions(set_options));
-    ZETASQL_RETURN_IF_ERROR(AlterNode<ChangeStream>(
+    GOOGLESQL_RETURN_IF_ERROR(ValidateChangeStreamOptions(set_options));
+    GOOGLESQL_RETURN_IF_ERROR(AlterNode<ChangeStream>(
         change_stream,
         [this, set_options](ChangeStream::Editor* editor) -> absl::Status {
           // Set change stream options
@@ -3965,17 +4080,17 @@ absl::StatusOr<const ChangeStream*> SchemaUpdaterImpl::CreateChangeStream(
   // Add the current change stream to the change stream lists of tracked table
   // and column.
   if (ddl_change_stream.has_for_clause()) {
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         RegisterTrackedObjects(ddl_change_stream.for_clause(), change_stream));
-    ZETASQL_RETURN_IF_ERROR(BuildChangeStreamTrackedObjects(
+    GOOGLESQL_RETURN_IF_ERROR(BuildChangeStreamTrackedObjects(
         ddl_change_stream.for_clause(), change_stream, &builder));
   }
   // Set the creation time to now
   builder.set_creation_time(absl::Now());
 
-  ZETASQL_RETURN_IF_ERROR(AddNode(builder.build()));
-  ZETASQL_RETURN_IF_ERROR(AddNode(std::move(change_stream_partition_table)));
-  ZETASQL_RETURN_IF_ERROR(AddNode(std::move(change_stream_data_table)));
+  GOOGLESQL_RETURN_IF_ERROR(AddNode(builder.build()));
+  GOOGLESQL_RETURN_IF_ERROR(AddNode(std::move(change_stream_partition_table)));
+  GOOGLESQL_RETURN_IF_ERROR(AddNode(std::move(change_stream_data_table)));
   return change_stream;
 }
 
@@ -4032,7 +4147,7 @@ absl::Status SchemaUpdaterImpl::EditChangeStreamTrackedObjects(
       if (!table->is_trackable_by_change_stream()) {
         continue;
       }
-      ZETASQL_RETURN_IF_ERROR(AlterNode<ChangeStream>(
+      GOOGLESQL_RETURN_IF_ERROR(AlterNode<ChangeStream>(
           change_stream, [table](ChangeStream::Editor* editor) -> absl::Status {
             editor->add_tracked_tables_columns(table->Name(),
                                                table->trackable_columns());
@@ -4044,7 +4159,7 @@ absl::Status SchemaUpdaterImpl::EditChangeStreamTrackedObjects(
   if (!change_stream_for_clause.has_tracked_tables()) {
     return absl::OkStatus();
   }
-  ZETASQL_RETURN_IF_ERROR(AlterNode<ChangeStream>(
+  GOOGLESQL_RETURN_IF_ERROR(AlterNode<ChangeStream>(
       change_stream, [](ChangeStream::Editor* editor) -> absl::Status {
         editor->clear_tracked_tables_columns();
         return absl::OkStatus();
@@ -4068,7 +4183,7 @@ absl::Status SchemaUpdaterImpl::EditChangeStreamTrackedObjects(
         columns.push_back(column_name);
       }
     }
-    ZETASQL_RETURN_IF_ERROR(AlterNode<ChangeStream>(
+    GOOGLESQL_RETURN_IF_ERROR(AlterNode<ChangeStream>(
         change_stream,
         [&, entry, columns](ChangeStream::Editor* editor) -> absl::Status {
           editor->add_tracked_tables_columns(entry.table_name(), columns);
@@ -4103,25 +4218,24 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateIndexHelper(
   }
 
   // Tables and indexes share a namespace.
-  ZETASQL_RETURN_IF_ERROR(global_names_.AddName("Index", index_name));
+  GOOGLESQL_RETURN_IF_ERROR(global_names_.AddName("Index", index_name));
 
   Index::Builder builder;
   std::optional<uint32_t> oid = pg_oid_assigner_->GetNextPostgresqlOid();
   builder.set_postgresql_oid(oid);
   if (oid.has_value()) {
-    ZETASQL_VLOG(2) << "Assigned oid " << oid.value() << " to index " << index_name;
+    GOOGLESQL_VLOG(2) << "Assigned oid " << oid.value() << " to index " << index_name;
   }
   builder.set_name(index_name);
   builder.set_unique(is_unique);
   builder.set_null_filtered(is_null_filtered);
   ColumnsUsedByIndex columns_used_by_index;
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       std::unique_ptr<const Table> data_table,
       CreateIndexDataTable(index_name, table_pk, interleave_in_table,
                            stored_columns, partition_by, order_by,
                            null_filtered_columns, builder.get(), indexed_table,
                            &columns_used_by_index));
-
   builder.set_index_data_table(data_table.get());
 
   for (const KeyColumn* key_col : columns_used_by_index.index_key_columns) {
@@ -4144,14 +4258,14 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateIndexHelper(
     for (const KeyColumn* col : columns_used_by_index.order_by_columns) {
       builder.add_order_by_column(col);
     }
-    ZETASQL_RETURN_IF_ERROR(SetSearchIndexOptions(index_name, *set_options, &builder));
+    GOOGLESQL_RETURN_IF_ERROR(SetSearchIndexOptions(index_name, *set_options, &builder));
   }
   if (is_vector_index) {
     builder.set_vector_index_type(is_vector_index);
-    ZETASQL_RETURN_IF_ERROR(SetVectorIndexOptions(index_name, *set_options, &builder));
+    GOOGLESQL_RETURN_IF_ERROR(SetVectorIndexOptions(index_name, *set_options, &builder));
   }
 
-  ZETASQL_RETURN_IF_ERROR(AlterNode<Table>(
+  GOOGLESQL_RETURN_IF_ERROR(AlterNode<Table>(
       indexed_table, [&builder](Table::Editor* table_editor) -> absl::Status {
         table_editor->add_index(builder.get());
         builder.set_indexed_table(table_editor->get());
@@ -4168,7 +4282,7 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateIndexHelper(
   }
 
   if (SDLObjectName::IsFullyQualifiedName(index_name)) {
-    ZETASQL_RETURN_IF_ERROR(AlterInNamedSchema(
+    GOOGLESQL_RETURN_IF_ERROR(AlterInNamedSchema(
         index_name, [&builder](NamedSchema::Editor* editor) -> absl::Status {
           editor->add_index(builder.get());
           return absl::OkStatus();
@@ -4176,14 +4290,14 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateIndexHelper(
   }
 
   if (set_options != nullptr && !set_options->empty()) {
-    ZETASQL_RETURN_IF_ERROR(SetIndexOptions(*set_options, &builder,
+    GOOGLESQL_RETURN_IF_ERROR(SetIndexOptions(*set_options, &builder,
                                     (is_vector_index || is_search_index)));
   }
 
   // The data table must be added after the index for correct order of
   // validation.
-  ZETASQL_RETURN_IF_ERROR(AddNode(builder.build()));
-  ZETASQL_RETURN_IF_ERROR(AddNode(std::move(data_table)));
+  GOOGLESQL_RETURN_IF_ERROR(AddNode(builder.build()));
+  GOOGLESQL_RETURN_IF_ERROR(AddNode(std::move(data_table)));
   return index;
 }
 
@@ -4225,7 +4339,7 @@ bool SchemaUpdaterImpl::IsBuiltInFunction(const std::string& function_name) {
   FunctionCatalog function_catalog(
       type_factory_, /*catalog_name=*/kCloudSpannerEmulatorFunctionCatalogName,
       /*latest_schema=*/latest_schema_);
-  const zetasql::Function* function = nullptr;
+  const googlesql::Function* function = nullptr;
   function_catalog.GetFunction({function_name}, &function);
   return function != nullptr;
 }
@@ -4264,8 +4378,9 @@ std::string SchemaUpdaterImpl::GetFunctionKindAsString(
 absl::Status SchemaUpdaterImpl::AnalyzeFunctionDefinition(
     const ddl::CreateFunction& ddl_function, bool replace,
     absl::flat_hash_set<const SchemaNode*>* dependencies,
-    std::unique_ptr<zetasql::FunctionSignature>* function_signature,
-    Udf::Determinism* determinism_level) {
+    std::unique_ptr<googlesql::FunctionSignature>* function_signature,
+    Udf::Determinism* determinism_level, std::optional<std::string>* endpoint,
+    std::optional<int64_t>* max_batching_rows) {
   std::string param_list = "";
   for (int i = 0; i < ddl_function.param_size(); i++) {
     param_list += ddl_function.param(i).name() + " " +
@@ -4277,25 +4392,36 @@ absl::Status SchemaUpdaterImpl::AnalyzeFunctionDefinition(
       param_list += ", ";
     }
   }
-  std::optional<std::string> endpoint;
-  std::optional<int> max_batching_rows;
-  if (ddl_function.is_remote() ||
-      ddl_function.language() == ddl::Function::REMOTE) {
-    for (const auto& option : ddl_function.options()) {
-      if (option.option_name() == "endpoint") {
-        endpoint = option.string_value();
-      }
-      if (option.option_name() == "max_batching_rows") {
-        max_batching_rows = option.int64_value();
-      }
+
+  std::string options = "";
+  if (!ddl_function.sql_options().empty()) {
+    absl::StrAppend(&options, " OPTIONS (");
+    bool first = true;
+    for (const auto& option : ddl_function.sql_options()) {
+      absl::StrAppend(&options, first ? "" : ", ", option.name(), " = ",
+                      option.sql_value());
+      first = false;
     }
+    absl::StrAppend(&options, ")");
   }
+
+  std::string language = "";
+  switch (ddl_function.language()) {
+    case ddl::Function::SQL:
+      language = "SQL";
+      break;
+    case ddl::Function::REMOTE:
+      language = "REMOTE";
+      break;
+    default:
+      break;
+  }
+
   auto status = AnalyzeUdfDefinition(
       ddl_function.function_name(), param_list, ddl_function.sql_body(),
-      endpoint, max_batching_rows, ddl_function.is_remote(),
-      ddl_function.language() == ddl::Function::REMOTE,
-      ddl_function.return_typename(), latest_schema_, type_factory_,
-      dependencies, function_signature, determinism_level);
+      ddl_function.is_remote(), language, ddl_function.return_typename(),
+      options, latest_schema_, type_factory_, dependencies, function_signature,
+      determinism_level, endpoint, max_batching_rows);
 
   if (!status.ok()) {
     return replace ? error::FunctionReplaceError(ddl_function.function_name(),
@@ -4324,14 +4450,14 @@ absl::Status SchemaUpdaterImpl::AnalyzeFunctionDefinition(
 
 absl::StatusOr<Udf::Builder> SchemaUpdaterImpl::CreateFunctionBuilder(
     const ddl::CreateFunction& ddl_function,
-    std::unique_ptr<zetasql::FunctionSignature> function_signature,
+    std::unique_ptr<googlesql::FunctionSignature> function_signature,
     Udf::Determinism determinism_level,
     absl::flat_hash_set<const SchemaNode*> dependencies) {
   Udf::Builder builder;
   std::optional<uint32_t> oid = pg_oid_assigner_->GetNextPostgresqlOid();
   builder.set_postgresql_oid(oid);
   if (oid.has_value()) {
-    ZETASQL_VLOG(2) << "Assigned oid " << oid.value() << " to function "
+    GOOGLESQL_VLOG(2) << "Assigned oid " << oid.value() << " to function "
             << ddl_function.function_name();
   }
   builder.set_name(ddl_function.function_name())
@@ -4357,11 +4483,11 @@ absl::StatusOr<Udf::Builder> SchemaUpdaterImpl::CreateFunctionBuilder(
   if (ddl_function.has_return_typename() &&
       ddl_function.return_typename() !=
           function_signature->result_type().type()->TypeName(
-              zetasql::PRODUCT_EXTERNAL)) {
+              googlesql::PRODUCT_EXTERNAL)) {
     return error::FunctionTypeMismatch(
         ddl_function.function_name(), ddl_function.return_typename(),
         function_signature->result_type().type()->TypeName(
-            zetasql::PRODUCT_EXTERNAL));
+            googlesql::PRODUCT_EXTERNAL));
   }
   builder.set_signature(std::move(function_signature));
 
@@ -4369,22 +4495,6 @@ absl::StatusOr<Udf::Builder> SchemaUpdaterImpl::CreateFunctionBuilder(
 
   for (auto dependency : dependencies) {
     builder.add_dependency(dependency);
-  }
-
-  for (const auto& option : ddl_function.options()) {
-    if (option.option_name() == "max_batching_rows") {
-      if (!option.has_int64_value()) {
-        return error::InvalidOptionValueForFunction(
-            option.DebugString(), option.option_name(),
-            ddl_function.function_name());
-      }
-      builder.set_max_batching_rows(option.int64_value());
-    } else if (option.option_name() == "endpoint") {
-      builder.set_endpoint(option.string_value());
-    } else {
-      return error::InvalidOptionForFunction(option.option_name(),
-                                             ddl_function.function_name());
-    }
   }
 
   return builder;
@@ -4398,7 +4508,7 @@ absl::StatusOr<View::Builder> SchemaUpdaterImpl::CreateFunctionBuilder(
   std::optional<uint32_t> oid = pg_oid_assigner_->GetNextPostgresqlOid();
   builder.set_postgresql_oid(oid);
   if (oid.has_value()) {
-    ZETASQL_VLOG(2) << "Assigned oid " << oid.value() << " to view "
+    GOOGLESQL_VLOG(2) << "Assigned oid " << oid.value() << " to view "
             << ddl_function.function_name();
   }
   builder.set_name(ddl_function.function_name())
@@ -4459,7 +4569,7 @@ absl::Status SchemaUpdaterImpl::CreateFunction(
   }
 
   if (!replace) {
-    ZETASQL_RETURN_IF_ERROR(global_names_.AddName(GetFunctionKindAsString(ddl_function),
+    GOOGLESQL_RETURN_IF_ERROR(global_names_.AddName(GetFunctionKindAsString(ddl_function),
                                           ddl_function.function_name()));
   }
 
@@ -4472,15 +4582,39 @@ absl::Status SchemaUpdaterImpl::CreateFunction(
   absl::Status error;
   absl::flat_hash_set<const SchemaNode*> dependencies;
   if (ddl_function.function_kind() == ddl::Function::FUNCTION) {
-    std::unique_ptr<zetasql::FunctionSignature> function_signature;
-    Udf::Determinism determinism_level = Udf::Determinism::DETERMINISTIC;
-    ZETASQL_RETURN_IF_ERROR(
-        AnalyzeFunctionDefinition(ddl_function, replace, &dependencies,
-                                  &function_signature, &determinism_level));
-    ZETASQL_ASSIGN_OR_RETURN(
+    std::unique_ptr<googlesql::FunctionSignature> function_signature;
+    Udf::Determinism determinism_level;
+    switch (ddl_function.determinism()) {
+      case ddl::Function::DETERMINISTIC:
+        determinism_level = Udf::Determinism::DETERMINISTIC;
+        break;
+      case ddl::Function::NOT_DETERMINISTIC_STABLE:
+        determinism_level = Udf::Determinism::NOT_DETERMINISTIC_STABLE;
+        break;
+      case ddl::Function::NOT_DETERMINISTIC_VOLATILE:
+        determinism_level = Udf::Determinism::NOT_DETERMINISTIC_VOLATILE;
+        break;
+      default:
+        determinism_level = Udf::Determinism::DETERMINISM_UNSPECIFIED;
+    }
+
+    std::optional<std::string> endpoint;
+    std::optional<int64_t> max_batching_rows;
+    GOOGLESQL_RETURN_IF_ERROR(AnalyzeFunctionDefinition(
+        ddl_function, replace, &dependencies, &function_signature,
+        &determinism_level, &endpoint, &max_batching_rows));
+    GOOGLESQL_ASSIGN_OR_RETURN(
         Udf::Builder builder,
         CreateFunctionBuilder(ddl_function, std::move(function_signature),
                               determinism_level, dependencies));
+
+    if (endpoint.has_value()) {
+      builder.set_endpoint(endpoint.value());
+    }
+    if (max_batching_rows.has_value()) {
+      builder.set_max_batching_rows(max_batching_rows.value());
+    }
+
     if (replace) {
       const Udf* existing_udf =
           latest_schema_->FindUdf(ddl_function.function_name());
@@ -4507,7 +4641,7 @@ absl::Status SchemaUpdaterImpl::CreateFunction(
     }
 
     if (SDLObjectName::IsFullyQualifiedName(ddl_function.function_name())) {
-      ZETASQL_RETURN_IF_ERROR(AlterInNamedSchema(
+      GOOGLESQL_RETURN_IF_ERROR(AlterInNamedSchema(
           ddl_function.function_name(),
           [&builder](NamedSchema::Editor* editor) -> absl::Status {
             editor->add_udf(builder.get());
@@ -4518,9 +4652,9 @@ absl::Status SchemaUpdaterImpl::CreateFunction(
     return AddNode(builder.build());
   } else if (ddl_function.function_kind() == ddl::Function::VIEW) {
     std::vector<View::Column> output_columns;
-    ZETASQL_RETURN_IF_ERROR(AnalyzeFunctionDefinition(ddl_function, replace,
+    GOOGLESQL_RETURN_IF_ERROR(AnalyzeFunctionDefinition(ddl_function, replace,
                                               &output_columns, &dependencies));
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         View::Builder builder,
         CreateFunctionBuilder(ddl_function, std::move(output_columns),
                               dependencies));
@@ -4551,7 +4685,7 @@ absl::Status SchemaUpdaterImpl::CreateFunction(
     }
     // No need to account for the named schema in the replace case.
     if (SDLObjectName::IsFullyQualifiedName(ddl_function.function_name())) {
-      ZETASQL_RETURN_IF_ERROR(AlterInNamedSchema(
+      GOOGLESQL_RETURN_IF_ERROR(AlterInNamedSchema(
           ddl_function.function_name(),
           [&builder](NamedSchema::Editor* editor) -> absl::Status {
             editor->add_view(builder.get());
@@ -4713,21 +4847,21 @@ absl::StatusOr<const Sequence*> SchemaUpdaterImpl::CreateSequence(
     const ddl::CreateSequence& create_sequence,
     const database_api::DatabaseDialect& dialect, bool is_internal_use) {
   // Validate the sequence name in global_names_
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       global_names_.AddName("Sequence", create_sequence.sequence_name()));
 
   Sequence::Builder builder;
   std::optional<uint32_t> oid = pg_oid_assigner_->GetNextPostgresqlOid();
   builder.set_postgresql_oid(oid);
   if (oid.has_value()) {
-    ZETASQL_VLOG(2) << "Assigned oid " << oid.value() << " to sequence "
+    GOOGLESQL_VLOG(2) << "Assigned oid " << oid.value() << " to sequence "
             << create_sequence.sequence_name();
   }
   builder.set_name(create_sequence.sequence_name());
   absl::BitGen bitgen;
   builder.set_id(absl::StrCat(
       "seq_",
-      zetasql::functions::GenerateUuid(bitgen)
+      googlesql::functions::GenerateUuid(bitgen)
       ));
   ::google::protobuf::RepeatedPtrField<ddl::SetOption> clause_options;
   if (dialect == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
@@ -4757,9 +4891,9 @@ absl::StatusOr<const Sequence*> SchemaUpdaterImpl::CreateSequence(
   // Validate and set sequence options.
   const auto& set_options =
       clause_options.empty() ? create_sequence.set_options() : clause_options;
-  ZETASQL_RETURN_IF_ERROR(ValidateSequenceOptions(set_options,
+  GOOGLESQL_RETURN_IF_ERROR(ValidateSequenceOptions(set_options,
                                           /*current_sequence=*/nullptr));
-  ZETASQL_RETURN_IF_ERROR(AlterNode<Sequence>(
+  GOOGLESQL_RETURN_IF_ERROR(AlterNode<Sequence>(
       sequence, [this, set_options](Sequence::Editor* editor) -> absl::Status {
         bool has_sequence_kind_option = false;
         for (const ddl::SetOption& option : set_options) {
@@ -4781,7 +4915,7 @@ absl::StatusOr<const Sequence*> SchemaUpdaterImpl::CreateSequence(
       }));
 
   if (SDLObjectName::IsFullyQualifiedName(create_sequence.sequence_name())) {
-    ZETASQL_RETURN_IF_ERROR(AlterInNamedSchema(
+    GOOGLESQL_RETURN_IF_ERROR(AlterInNamedSchema(
         create_sequence.sequence_name(),
         [&sequence](NamedSchema::Editor* editor) -> absl::Status {
           editor->add_sequence(sequence);
@@ -4789,7 +4923,7 @@ absl::StatusOr<const Sequence*> SchemaUpdaterImpl::CreateSequence(
         }));
   }
 
-  ZETASQL_RETURN_IF_ERROR(AddNode(builder.build()));
+  GOOGLESQL_RETURN_IF_ERROR(AddNode(builder.build()));
   return sequence;
 }
 
@@ -4800,17 +4934,17 @@ absl::Status SchemaUpdaterImpl::CreateNamedSchema(
     return absl::OkStatus();
   }
   // Validate the named schema name in global_names_
-  ZETASQL_RETURN_IF_ERROR(global_names_.AddName("Schema", create_schema.schema_name()));
+  GOOGLESQL_RETURN_IF_ERROR(global_names_.AddName("Schema", create_schema.schema_name()));
 
   NamedSchema::Builder builder;
   builder.set_name(create_schema.schema_name());
   std::optional<uint32_t> oid = pg_oid_assigner_->GetNextPostgresqlOid();
   builder.set_postgresql_oid(oid);
   if (oid.has_value()) {
-    ZETASQL_VLOG(2) << "Assigned oid " << oid.value() << " to named schema "
+    GOOGLESQL_VLOG(2) << "Assigned oid " << oid.value() << " to named schema "
             << create_schema.schema_name();
   }
-  ZETASQL_RETURN_IF_ERROR(AddNode(builder.build()));
+  GOOGLESQL_RETURN_IF_ERROR(AddNode(builder.build()));
   return absl::OkStatus();
 }
 
@@ -4830,7 +4964,7 @@ absl::Status SchemaUpdaterImpl::CreateLocalityGroup(
   }
 
   // Validate the locality group name in global_names_
-  ZETASQL_RETURN_IF_ERROR(global_names_.AddName(
+  GOOGLESQL_RETURN_IF_ERROR(global_names_.AddName(
       "LocalityGroup", create_locality_group.locality_group_name()));
 
   LocalityGroup::Builder builder;
@@ -4841,7 +4975,7 @@ absl::Status SchemaUpdaterImpl::CreateLocalityGroup(
   // Validate and set locality group options.
   const auto& set_options = create_locality_group.set_options();
   if (!set_options.empty()) {
-    ZETASQL_RETURN_IF_ERROR(AlterNode<LocalityGroup>(
+    GOOGLESQL_RETURN_IF_ERROR(AlterNode<LocalityGroup>(
         locality_group,
         [this, set_options](LocalityGroup::Editor* editor) -> absl::Status {
           // Set locality group options
@@ -4849,7 +4983,7 @@ absl::Status SchemaUpdaterImpl::CreateLocalityGroup(
         }));
   }
   // Add the locality group to the schema.
-  ZETASQL_RETURN_IF_ERROR(AddNode(builder.build()));
+  GOOGLESQL_RETURN_IF_ERROR(AddNode(builder.build()));
 
   return absl::OkStatus();
 }
@@ -4919,6 +5053,11 @@ absl::Status SchemaUpdaterImpl::ValidateAlterDatabaseOptions(
       }
 
       return error::UnsupportedVersionRetentionPeriodOptionValues();
+    } else if (option_name == ddl::kColumnarPolicyOptionName) {
+      if (option.has_string_value() || option.has_null_value()) {
+        continue;
+      }
+      return error::UnsupportedVersionRetentionPeriodOptionValues();
     } else {
       return error::UnsupportedAlterDatabaseOption(option_name);
     }
@@ -4928,11 +5067,11 @@ absl::Status SchemaUpdaterImpl::ValidateAlterDatabaseOptions(
 
 absl::Status SchemaUpdaterImpl::RenameTo(
     const ddl::AlterTable::RenameTo& rename_to, const Table* table) {
-  ZETASQL_RETURN_IF_ERROR(global_names_.AddName("Table", rename_to.name()));
+  GOOGLESQL_RETURN_IF_ERROR(global_names_.AddName("Table", rename_to.name()));
   global_names_.RemoveName(table->Name());
 
   const Table* updated_table = nullptr;
-  ZETASQL_RETURN_IF_ERROR(AlterNode(table, [&](Table::Editor* editor) {
+  GOOGLESQL_RETURN_IF_ERROR(AlterNode(table, [&](Table::Editor* editor) {
     editor->set_name(rename_to.name());
     updated_table = editor->get();
     return absl::OkStatus();
@@ -4940,7 +5079,7 @@ absl::Status SchemaUpdaterImpl::RenameTo(
 
   // Handle synonyms.
   if (!rename_to.synonym().empty()) {
-    ZETASQL_RETURN_IF_ERROR(AddSynonym(rename_to.synonym(), updated_table));
+    GOOGLESQL_RETURN_IF_ERROR(AddSynonym(rename_to.synonym(), updated_table));
   }
 
   return absl::OkStatus();
@@ -4955,11 +5094,11 @@ absl::Status SchemaUpdaterImpl::RenameTable(
       return error::TableNotFound(from_name);
     }
     const std::string& to_name = op.to_name();
-    ZETASQL_RETURN_IF_ERROR(global_names_.AddName("Table", to_name));
+    GOOGLESQL_RETURN_IF_ERROR(global_names_.AddName("Table", to_name));
     global_names_.RemoveName(from_name);
 
     const Table* updated_table = nullptr;
-    ZETASQL_RETURN_IF_ERROR(AlterNode(from_table, [&](Table::Editor* editor) {
+    GOOGLESQL_RETURN_IF_ERROR(AlterNode(from_table, [&](Table::Editor* editor) {
       editor->set_name(to_name);
       updated_table = editor->get();
       return absl::OkStatus();
@@ -4970,15 +5109,15 @@ absl::Status SchemaUpdaterImpl::RenameTable(
 
 absl::Status SchemaUpdaterImpl::AddSynonym(const std::string& synonym,
                                            const Table* table) {
-  ZETASQL_RETURN_IF_ERROR(global_names_.AddName("Table", synonym));
+  GOOGLESQL_RETURN_IF_ERROR(global_names_.AddName("Table", synonym));
   const Table* updated_table = nullptr;
-  ZETASQL_RETURN_IF_ERROR(AlterNode(table, [&](Table::Editor* editor) {
+  GOOGLESQL_RETURN_IF_ERROR(AlterNode(table, [&](Table::Editor* editor) {
     editor->set_synonym(synonym);
     updated_table = editor->get();
     return absl::OkStatus();
   }));
   if (SDLObjectName::IsFullyQualifiedName(synonym)) {
-    ZETASQL_RETURN_IF_ERROR(AlterInNamedSchema(
+    GOOGLESQL_RETURN_IF_ERROR(AlterInNamedSchema(
         synonym, [&updated_table](NamedSchema::Editor* editor) -> absl::Status {
           editor->add_synonym(updated_table);
           return absl::OkStatus();
@@ -4991,7 +5130,7 @@ absl::Status SchemaUpdaterImpl::AddSynonym(const std::string& synonym,
 absl::Status SchemaUpdaterImpl::DropSynonym(
     const ddl::AlterTable::DropSynonym& drop_synonym, const Table* table) {
   if (SDLObjectName::IsFullyQualifiedName(drop_synonym.synonym())) {
-    ZETASQL_RETURN_IF_ERROR(AlterInNamedSchema(
+    GOOGLESQL_RETURN_IF_ERROR(AlterInNamedSchema(
         drop_synonym.synonym(),
         [&table](NamedSchema::Editor* editor) -> absl::Status {
           editor->drop_synonym(table);
@@ -5011,18 +5150,18 @@ absl::Status SchemaUpdaterImpl::AlterDatabase(
     const database_api::DatabaseDialect& dialect) {
   const auto& set_options = alter_database.set_options();
   if (!set_options.options().empty()) {
-    ZETASQL_RETURN_IF_ERROR(ValidateAlterDatabaseOptions(set_options.options()));
+    GOOGLESQL_RETURN_IF_ERROR(ValidateAlterDatabaseOptions(set_options.options()));
     const DatabaseOptions* database_options = latest_schema_->options();
     if (database_options == nullptr) {
       DatabaseOptions::Builder builder;
       builder.set_db_name(alter_database.db_name());
-      ZETASQL_RETURN_IF_ERROR(
+      GOOGLESQL_RETURN_IF_ERROR(
           SetDatabaseOptions(set_options.options(), dialect, &builder));
-      ZETASQL_RETURN_IF_ERROR(AddNode(builder.build()));
+      GOOGLESQL_RETURN_IF_ERROR(AddNode(builder.build()));
     } else {
       const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& repeated_set_options =
           set_options.options();
-      ZETASQL_RETURN_IF_ERROR(AlterNode<DatabaseOptions>(
+      GOOGLESQL_RETURN_IF_ERROR(AlterNode<DatabaseOptions>(
           database_options,
           [this, repeated_set_options,
            dialect](DatabaseOptions::Editor* editor) -> absl::Status {
@@ -5045,7 +5184,7 @@ absl::Status SchemaUpdaterImpl::AlterChangeStream(
   std::string change_stream_name = change_stream->Name();
   switch (alter_change_stream.alter_type_case()) {
     case ddl::AlterChangeStream::kSetForClause: {
-      ZETASQL_RETURN_IF_ERROR(AlterChangeStreamForClause(
+      GOOGLESQL_RETURN_IF_ERROR(AlterChangeStreamForClause(
           alter_change_stream.set_for_clause(), change_stream));
       return absl::OkStatus();
     }
@@ -5053,8 +5192,8 @@ absl::Status SchemaUpdaterImpl::AlterChangeStream(
       const auto& set_options = alter_change_stream.set_options();
       const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& repeated_set_options =
           set_options.options();
-      ZETASQL_RETURN_IF_ERROR(ValidateChangeStreamOptions(repeated_set_options));
-      ZETASQL_RETURN_IF_ERROR(AlterNode<ChangeStream>(
+      GOOGLESQL_RETURN_IF_ERROR(ValidateChangeStreamOptions(repeated_set_options));
+      GOOGLESQL_RETURN_IF_ERROR(AlterNode<ChangeStream>(
           change_stream,
           [this,
            repeated_set_options](ChangeStream::Editor* editor) -> absl::Status {
@@ -5064,13 +5203,13 @@ absl::Status SchemaUpdaterImpl::AlterChangeStream(
       return absl::OkStatus();
     }
     case ddl::AlterChangeStream::kDropForClause: {
-      ZETASQL_RET_CHECK(alter_change_stream.drop_for_clause().all());
+      GOOGLESQL_RET_CHECK(alter_change_stream.drop_for_clause().all());
       if (!change_stream->for_clause()) {
         return error::AlterChangeStreamDropNonexistentForClause(
             change_stream->Name());
       }
-      ZETASQL_RETURN_IF_ERROR(UnregisterChangeStreamFromTrackedObjects(change_stream));
-      ZETASQL_RETURN_IF_ERROR(AlterNode<ChangeStream>(
+      GOOGLESQL_RETURN_IF_ERROR(UnregisterChangeStreamFromTrackedObjects(change_stream));
+      GOOGLESQL_RETURN_IF_ERROR(AlterNode<ChangeStream>(
           change_stream, [](ChangeStream::Editor* editor) -> absl::Status {
             editor->clear_for_clause();
             editor->clear_tracked_tables_columns();
@@ -5089,21 +5228,21 @@ absl::Status SchemaUpdaterImpl::AlterChangeStream(
 absl::Status SchemaUpdaterImpl::AlterChangeStreamForClause(
     const ddl::ChangeStreamForClause& ddl_change_stream_for_clause,
     const ChangeStream* change_stream) {
-  ZETASQL_RETURN_IF_ERROR(ValidateChangeStreamForClause(ddl_change_stream_for_clause,
+  GOOGLESQL_RETURN_IF_ERROR(ValidateChangeStreamForClause(ddl_change_stream_for_clause,
                                                 change_stream->Name()));
-  ZETASQL_RETURN_IF_ERROR(ValidateChangeStreamLimits(ddl_change_stream_for_clause,
+  GOOGLESQL_RETURN_IF_ERROR(ValidateChangeStreamLimits(ddl_change_stream_for_clause,
                                              change_stream->Name()));
-  ZETASQL_RETURN_IF_ERROR(UnregisterChangeStreamFromTrackedObjects(change_stream));
-  ZETASQL_RETURN_IF_ERROR(AlterNode<ChangeStream>(
+  GOOGLESQL_RETURN_IF_ERROR(UnregisterChangeStreamFromTrackedObjects(change_stream));
+  GOOGLESQL_RETURN_IF_ERROR(AlterNode<ChangeStream>(
       change_stream, [&](ChangeStream::Editor* editor) -> absl::Status {
         editor->set_for_clause(ddl_change_stream_for_clause);
         editor->set_track_all(ddl_change_stream_for_clause.all());
         return absl::OkStatus();
       }));
 
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       RegisterTrackedObjects(ddl_change_stream_for_clause, change_stream));
-  ZETASQL_RETURN_IF_ERROR(EditChangeStreamTrackedObjects(ddl_change_stream_for_clause,
+  GOOGLESQL_RETURN_IF_ERROR(EditChangeStreamTrackedObjects(ddl_change_stream_for_clause,
                                                  change_stream));
   return absl::OkStatus();
 }
@@ -5158,9 +5297,9 @@ absl::Status SchemaUpdaterImpl::AlterSequence(
         alter_sequence.set_start_with_counter().counter_value());
     set_from_syntax = true;
   }
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       ValidateSequenceOptions(repeated_set_options, current_sequence));
-  ZETASQL_RETURN_IF_ERROR(AlterNode<Sequence>(
+  GOOGLESQL_RETURN_IF_ERROR(AlterNode<Sequence>(
       current_sequence,
       [this, set_from_syntax,
        repeated_set_options](Sequence::Editor* editor) -> absl::Status {
@@ -5211,8 +5350,8 @@ absl::Status SchemaUpdaterImpl::AlterTable(
       if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
         ddl::CheckConstraint mutable_check_constraint =
             alter_table.add_check_constraint().check_constraint();
-        ZETASQL_RET_CHECK(mutable_check_constraint.has_expression_origin());
-        ZETASQL_ASSIGN_OR_RETURN(ExpressionTranslateResult result,
+        GOOGLESQL_RET_CHECK(mutable_check_constraint.has_expression_origin());
+        GOOGLESQL_ASSIGN_OR_RETURN(ExpressionTranslateResult result,
                          TranslatePostgreSqlExpression(
                              table, /*ddl_create_table=*/nullptr,
                              mutable_check_constraint.expression_origin()
@@ -5227,7 +5366,8 @@ absl::Status SchemaUpdaterImpl::AlterTable(
           alter_table.add_check_constraint().check_constraint(), table);
     }
     case ddl::AlterTable::kAddForeignKey: {
-      return AddForeignKey(alter_table.add_foreign_key().foreign_key(), table);
+      return AddForeignKey(alter_table.add_foreign_key().foreign_key(), table,
+                           dialect);
     }
     case ddl::AlterTable::kDropConstraint: {
       return DropConstraint(alter_table.drop_constraint().name(), table);
@@ -5239,7 +5379,7 @@ absl::Status SchemaUpdaterImpl::AlterTable(
           alter_table.add_column().existence_modifier() == ddl::IF_NOT_EXISTS) {
         return absl::OkStatus();
       }
-      ZETASQL_ASSIGN_OR_RETURN(const Column* new_column,
+      GOOGLESQL_ASSIGN_OR_RETURN(const Column* new_column,
                        CreateColumn(column_def, table, /*ddl_table=*/
                                     nullptr, dialect));
       if (new_column->is_generated()) {
@@ -5251,7 +5391,7 @@ absl::Status SchemaUpdaterImpl::AlterTable(
         // stream implicitly/explicitly tracking the entire table this column
         // belongs to
         for (const ChangeStream* change_stream : table->change_streams()) {
-          ZETASQL_RETURN_IF_ERROR(AlterNode<ChangeStream>(
+          GOOGLESQL_RETURN_IF_ERROR(AlterNode<ChangeStream>(
               change_stream,
               [table, new_column](
                   ChangeStream::Editor* change_stream_editor) -> absl::Status {
@@ -5261,7 +5401,7 @@ absl::Status SchemaUpdaterImpl::AlterTable(
               }));
         }
         // Populate the list of change streams tracking this column
-        ZETASQL_RETURN_IF_ERROR(AlterNode<Column>(
+        GOOGLESQL_RETURN_IF_ERROR(AlterNode<Column>(
             new_column, [table](Column::Editor* column_editor) -> absl::Status {
               for (const ChangeStream* change_stream :
                    table->change_streams()) {
@@ -5271,7 +5411,7 @@ absl::Status SchemaUpdaterImpl::AlterTable(
             }));
       }
 
-      ZETASQL_RETURN_IF_ERROR(AlterNode<Table>(
+      GOOGLESQL_RETURN_IF_ERROR(AlterNode<Table>(
           table, [new_column](Table::Editor* editor) -> absl::Status {
             editor->add_column(new_column);
             return absl::OkStatus();
@@ -5292,7 +5432,7 @@ absl::Status SchemaUpdaterImpl::AlterTable(
           if (!column->is_identity_column()) {
             return error::ColumnIsNotIdentityColumn(table->Name(), column_name);
           }
-          ZETASQL_RET_CHECK(column->sequences_used().size() == 1);
+          GOOGLESQL_RET_CHECK(column->sequences_used().size() == 1);
           const Sequence* sequence =
               static_cast<const Sequence*>(column->sequences_used().at(0));
           const auto& column_def = alter_column.column();
@@ -5322,12 +5462,12 @@ absl::Status SchemaUpdaterImpl::AlterTable(
               skip_range_max->set_null_value(true);
             }
           }
-          ZETASQL_RETURN_IF_ERROR(AlterSequence(alter_sequence, sequence));
+          GOOGLESQL_RETURN_IF_ERROR(AlterSequence(alter_sequence, sequence));
         } else if (alter_column.operation() ==
                        ddl::AlterTable::AlterColumn::SET_ON_UPDATE ||
                    alter_column.operation() ==
                        ddl::AlterTable::AlterColumn::DROP_ON_UPDATE) {
-          ZETASQL_RETURN_IF_ERROR(AlterNode<Column>(
+          GOOGLESQL_RETURN_IF_ERROR(AlterNode<Column>(
               column,
               [this, &alter_column, &column,
                &table](Column::Editor* editor) -> absl::Status {
@@ -5335,7 +5475,7 @@ absl::Status SchemaUpdaterImpl::AlterTable(
                                                   editor);
               }));
         } else {
-          ZETASQL_RETURN_IF_ERROR(AlterNode<Column>(
+          GOOGLESQL_RETURN_IF_ERROR(AlterNode<Column>(
               column,
               [this, &alter_column, &column, &table,
                &dialect](Column::Editor* editor) -> absl::Status {
@@ -5345,7 +5485,7 @@ absl::Status SchemaUpdaterImpl::AlterTable(
         }
       } else {
         const auto& column_def = alter_column.column();
-        ZETASQL_RETURN_IF_ERROR(AlterNode<Column>(
+        GOOGLESQL_RETURN_IF_ERROR(AlterNode<Column>(
             column,
             [this, &column_def, &table,
              dialect](Column::Editor* editor) -> absl::Status {
@@ -5371,16 +5511,16 @@ absl::Status SchemaUpdaterImpl::AlterTable(
             table->Name(), column->Name(), change_stream_names_list.size(),
             change_stream_names);
       }
-      ZETASQL_RETURN_IF_ERROR(DropNode(column));
+      GOOGLESQL_RETURN_IF_ERROR(DropNode(column));
       if (column->is_identity_column()) {
-        ZETASQL_RET_CHECK(column->sequences_used().size() == 1);
+        GOOGLESQL_RET_CHECK(column->sequences_used().size() == 1);
         const Sequence* sequence =
             static_cast<const Sequence*>(column->sequences_used().at(0));
-        ZETASQL_RETURN_IF_ERROR(DropSequence(sequence));
+        GOOGLESQL_RETURN_IF_ERROR(DropSequence(sequence));
       }
 
       if (column->locality_group() != nullptr) {
-        ZETASQL_RETURN_IF_ERROR(AlterNode<LocalityGroup>(
+        GOOGLESQL_RETURN_IF_ERROR(AlterNode<LocalityGroup>(
             column->locality_group(),
             [](LocalityGroup::Editor* editor) -> absl::Status {
               editor->decrement_use_count();
@@ -5436,7 +5576,7 @@ absl::Status SchemaUpdaterImpl::AlterTable(
       }
     }
     case ddl::AlterTable::kSetOptions: {
-      ZETASQL_RETURN_IF_ERROR(AlterNode<Table>(
+      GOOGLESQL_RETURN_IF_ERROR(AlterNode<Table>(
           table, [this, &alter_table](Table::Editor* editor) -> absl::Status {
             return SetTableOptions(alter_table.set_options().options(), editor);
           }));
@@ -5458,9 +5598,9 @@ absl::Status SchemaUpdaterImpl::AlterIndex(const ddl::AlterIndex& alter_index) {
 
   const Table* indexed_table = index->indexed_table();
   const Table* indexed_data_table = index->index_data_table();
-  ZETASQL_RET_CHECK(indexed_table != nullptr)
+  GOOGLESQL_RET_CHECK(indexed_table != nullptr)
       << "No indexed table found for the index ";
-  ZETASQL_RET_CHECK(indexed_data_table != nullptr)
+  GOOGLESQL_RET_CHECK(indexed_data_table != nullptr)
       << "No index data table found for the index ";
 
   switch (alter_index.alter_type_case()) {
@@ -5476,17 +5616,17 @@ absl::Status SchemaUpdaterImpl::AlterIndex(const ddl::AlterIndex& alter_index) {
         return error::ColumnInIndexAlreadyExists(index->Name(), column_name);
       }
 
-      ZETASQL_ASSIGN_OR_RETURN(const Column* new_index_data_table_column,
+      GOOGLESQL_ASSIGN_OR_RETURN(const Column* new_index_data_table_column,
                        CreateIndexDataTableColumn(indexed_table, column_name,
                                                   indexed_data_table, false));
 
-      ZETASQL_RETURN_IF_ERROR(AlterNode<Table>(
+      GOOGLESQL_RETURN_IF_ERROR(AlterNode<Table>(
           indexed_data_table,
           [new_index_data_table_column](Table::Editor* editor) -> absl::Status {
             editor->add_column(new_index_data_table_column);
             return absl::OkStatus();
           }));
-      ZETASQL_RETURN_IF_ERROR(AlterNode<Index>(
+      GOOGLESQL_RETURN_IF_ERROR(AlterNode<Index>(
           index,
           [new_index_data_table_column](Index::Editor* editor) -> absl::Status {
             editor->add_stored_column(new_index_data_table_column);
@@ -5516,14 +5656,14 @@ absl::Status SchemaUpdaterImpl::AlterIndex(const ddl::AlterIndex& alter_index) {
       break;
     }
     case ddl::AlterIndex::kSetOptions: {
-      ZETASQL_RETURN_IF_ERROR(AlterNode<Index>(
+      GOOGLESQL_RETURN_IF_ERROR(AlterNode<Index>(
           index, [this, &alter_index](Index::Editor* editor) -> absl::Status {
             return SetIndexOptions(alter_index.set_options().options(), editor);
           }));
       return absl::OkStatus();
     }
     default:
-      ZETASQL_RET_CHECK_FAIL() << "Invalid alter index type: "
+      GOOGLESQL_RET_CHECK_FAIL() << "Invalid alter index type: "
                        << absl::StrCat(alter_index);
   }
   return absl::OkStatus();
@@ -5539,9 +5679,9 @@ absl::Status SchemaUpdaterImpl::AlterVectorIndex(
 
   const Table* indexed_table = index->indexed_table();
   const Table* indexed_data_table = index->index_data_table();
-  ZETASQL_RET_CHECK(indexed_table != nullptr)
+  GOOGLESQL_RET_CHECK(indexed_table != nullptr)
       << "No indexed table found for the index ";
-  ZETASQL_RET_CHECK(indexed_data_table != nullptr)
+  GOOGLESQL_RET_CHECK(indexed_data_table != nullptr)
       << "No index data table found for the index ";
 
   switch (alter_index.alter_type_case()) {
@@ -5568,17 +5708,17 @@ absl::Status SchemaUpdaterImpl::AlterVectorIndex(
             alter_index.index_name(), column_name);
       }
 
-      ZETASQL_ASSIGN_OR_RETURN(const Column* new_index_data_table_column,
+      GOOGLESQL_ASSIGN_OR_RETURN(const Column* new_index_data_table_column,
                        CreateIndexDataTableColumn(indexed_table, column_name,
                                                   indexed_data_table, false));
 
-      ZETASQL_RETURN_IF_ERROR(AlterNode<Table>(
+      GOOGLESQL_RETURN_IF_ERROR(AlterNode<Table>(
           indexed_data_table,
           [new_index_data_table_column](Table::Editor* editor) -> absl::Status {
             editor->add_column(new_index_data_table_column);
             return absl::OkStatus();
           }));
-      ZETASQL_RETURN_IF_ERROR(AlterNode<Index>(
+      GOOGLESQL_RETURN_IF_ERROR(AlterNode<Index>(
           index,
           [new_index_data_table_column](Index::Editor* editor) -> absl::Status {
             editor->add_stored_column(new_index_data_table_column);
@@ -5617,7 +5757,7 @@ absl::Status SchemaUpdaterImpl::AlterVectorIndex(
       return error::AlterVectorIndexStoredColumnUnsupported();
     }
     default:
-      ZETASQL_RET_CHECK_FAIL() << "Invalid alter index type: "
+      GOOGLESQL_RET_CHECK_FAIL() << "Invalid alter index type: "
                        << absl::StrCat(alter_index);
   }
   return absl::OkStatus();
@@ -5670,7 +5810,7 @@ absl::Status SchemaUpdaterImpl::AlterSetInterleave(
   }
   const Table* parent = table->parent();
   if (new_interleave_clause.type() == ddl::InterleaveClause::IN_PARENT) {
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         IsOnDeleteValid(table->Name(), parent, new_interleave_clause));
   }
 
@@ -5727,10 +5867,10 @@ absl::Status SchemaUpdaterImpl::AlterInterleaveAction(
   });
 }
 
-absl::StatusOr<const zetasql::Type*>
-SchemaUpdaterImpl::GetProtoTypeFromBundle(const zetasql::Type* type,
+absl::StatusOr<const googlesql::Type*>
+SchemaUpdaterImpl::GetProtoTypeFromBundle(const googlesql::Type* type,
                                           const ProtoBundle* proto_bundle) {
-  ZETASQL_RET_CHECK(type->IsProto() || type->IsEnum());
+  GOOGLESQL_RET_CHECK(type->IsProto() || type->IsEnum());
   auto ddl_type = GoogleSqlTypeToDDLColumnType(type);
   return DDLColumnTypeToGoogleSqlType(ddl_type, type_factory_, proto_bundle);
 }
@@ -5738,23 +5878,23 @@ SchemaUpdaterImpl::GetProtoTypeFromBundle(const zetasql::Type* type,
 absl::Status SchemaUpdaterImpl::AlterProtoColumnType(
     const Column* column, const ProtoBundle* proto_bundle,
     Column::Editor* editor) {
-  const zetasql::Type* type = column->GetType();
-  ZETASQL_RET_CHECK(proto_bundle != nullptr &&
+  const googlesql::Type* type = column->GetType();
+  GOOGLESQL_RET_CHECK(proto_bundle != nullptr &&
             (type->IsProto() || type->IsEnum() || type->IsArray()));
 
   if (type->IsArray()) {
-    const zetasql::Type* element_type = type->AsArray()->element_type();
-    ZETASQL_RET_CHECK(element_type->IsProto() || element_type->IsEnum());
-    ZETASQL_ASSIGN_OR_RETURN(auto updated_element_type,
+    const googlesql::Type* element_type = type->AsArray()->element_type();
+    GOOGLESQL_RET_CHECK(element_type->IsProto() || element_type->IsEnum());
+    GOOGLESQL_ASSIGN_OR_RETURN(auto updated_element_type,
                      GetProtoTypeFromBundle(element_type, proto_bundle));
-    const zetasql::Type* updated_array_type;
-    ZETASQL_RETURN_IF_ERROR(type_factory_->MakeArrayType(updated_element_type,
+    const googlesql::Type* updated_array_type;
+    GOOGLESQL_RETURN_IF_ERROR(type_factory_->MakeArrayType(updated_element_type,
                                                  &updated_array_type));
     editor->set_type(updated_array_type);
     return absl::OkStatus();
   }
 
-  ZETASQL_ASSIGN_OR_RETURN(auto updated_type,
+  GOOGLESQL_ASSIGN_OR_RETURN(auto updated_type,
                    GetProtoTypeFromBundle(type, proto_bundle));
   editor->set_type(updated_type);
   return absl::OkStatus();
@@ -5763,7 +5903,7 @@ absl::Status SchemaUpdaterImpl::AlterProtoColumnType(
 absl::Status SchemaUpdaterImpl::AlterProtoColumnTypes(
     const ProtoBundle* proto_bundle,
     const ddl::AlterProtoBundle& ddl_alter_proto_bundle) {
-  ZETASQL_RET_CHECK_NE(proto_bundle, nullptr);
+  GOOGLESQL_RET_CHECK_NE(proto_bundle, nullptr);
   // Return if no types are being updated
   if (ddl_alter_proto_bundle.update_type().empty()) return absl::OkStatus();
   absl::flat_hash_set<std::string> update_types;
@@ -5774,7 +5914,7 @@ absl::Status SchemaUpdaterImpl::AlterProtoColumnTypes(
   for (const auto& table : tables) {
     auto columns = table->columns();
     for (const Column* column : columns) {
-      const zetasql::Type* column_type = column->GetType();
+      const googlesql::Type* column_type = column->GetType();
       if (column_type->IsArray()) {
         column_type = column_type->AsArray()->element_type();
       }
@@ -5787,7 +5927,7 @@ absl::Status SchemaUpdaterImpl::AlterProtoColumnTypes(
       if (!update_types.contains(type_name)) {
         continue;
       }
-      ZETASQL_RETURN_IF_ERROR(AlterNode<Column>(
+      GOOGLESQL_RETURN_IF_ERROR(AlterNode<Column>(
           column,
           [this, &column,
            &proto_bundle](Column::Editor* editor) -> absl::Status {
@@ -5807,7 +5947,7 @@ SchemaUpdaterImpl::AlterProtoBundle(
         "Proto bundle does not yet exist; cannot alter it");
   }
 
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       auto proto_bundle_builder,
       ProtoBundle::Builder::New(proto_descriptor_bytes,
                                 latest_schema_->proto_bundle().get()));
@@ -5817,7 +5957,7 @@ SchemaUpdaterImpl::AlterProtoBundle(
   for (int i = 0; i < insert_types.size(); ++i) {
     insert_type_names.push_back(insert_types.at(i).source_name());
   }
-  ZETASQL_RETURN_IF_ERROR(proto_bundle_builder->InsertTypes(insert_type_names));
+  GOOGLESQL_RETURN_IF_ERROR(proto_bundle_builder->InsertTypes(insert_type_names));
 
   auto update_types = ddl_alter_proto_bundle.update_type();
   std::vector<std::string> update_type_names;
@@ -5825,14 +5965,14 @@ SchemaUpdaterImpl::AlterProtoBundle(
   for (int i = 0; i < update_types.size(); ++i) {
     update_type_names.push_back(update_types.at(i).source_name());
   }
-  ZETASQL_RETURN_IF_ERROR(proto_bundle_builder->UpdateTypes(update_type_names));
+  GOOGLESQL_RETURN_IF_ERROR(proto_bundle_builder->UpdateTypes(update_type_names));
 
   auto delete_types = ddl_alter_proto_bundle.delete_type();
-  ZETASQL_RETURN_IF_ERROR(proto_bundle_builder->DeleteTypes(
+  GOOGLESQL_RETURN_IF_ERROR(proto_bundle_builder->DeleteTypes(
       std::vector(delete_types.begin(), delete_types.end())));
 
-  ZETASQL_ASSIGN_OR_RETURN(auto proto_bundle, proto_bundle_builder->Build());
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_ASSIGN_OR_RETURN(auto proto_bundle, proto_bundle_builder->Build());
+  GOOGLESQL_RETURN_IF_ERROR(
       AlterProtoColumnTypes(proto_bundle.get(), ddl_alter_proto_bundle));
   return proto_bundle;
 }
@@ -5848,7 +5988,7 @@ absl::Status SchemaUpdaterImpl::AlterLocalityGroup(
         ddl::kDefaultLocalityGroupName) {
       builder.set_name(ddl::kDefaultLocalityGroupName);
       locality_group = builder.get();
-      ZETASQL_RETURN_IF_ERROR(AddNode(builder.build()));
+      GOOGLESQL_RETURN_IF_ERROR(AddNode(builder.build()));
     } else if (alter_locality_group.existence_modifier() == ddl::IF_EXISTS) {
       return absl::OkStatus();
     } else {
@@ -5860,7 +6000,7 @@ absl::Status SchemaUpdaterImpl::AlterLocalityGroup(
   // Validate and set locality group options.
   const auto& set_options = alter_locality_group.set_options();
   if (!set_options.options().empty()) {
-    ZETASQL_RETURN_IF_ERROR(AlterNode<LocalityGroup>(
+    GOOGLESQL_RETURN_IF_ERROR(AlterNode<LocalityGroup>(
         locality_group,
         [this, &set_options](LocalityGroup::Editor* editor) -> absl::Status {
           // Set locality group options
@@ -5882,9 +6022,10 @@ absl::Status SchemaUpdaterImpl::AddCheckConstraint(
 }
 
 absl::Status SchemaUpdaterImpl::AddForeignKey(
-    const ddl::ForeignKey& ddl_foreign_key, const Table* table) {
+    const ddl::ForeignKey& ddl_foreign_key, const Table* table,
+    const database_api::DatabaseDialect& dialect) {
   return AlterNode<Table>(table, [&](Table::Editor* editor) -> absl::Status {
-    return CreateForeignKeyConstraint(ddl_foreign_key, table);
+    return CreateForeignKeyConstraint(ddl_foreign_key, table, dialect);
   });
 }
 
@@ -5931,7 +6072,7 @@ absl::Status SchemaUpdaterImpl::DropTable(const ddl::DropTable& drop_table) {
   }
 
   if (table->locality_group() != nullptr) {
-    ZETASQL_RETURN_IF_ERROR(AlterNode<LocalityGroup>(
+    GOOGLESQL_RETURN_IF_ERROR(AlterNode<LocalityGroup>(
         table->locality_group(),
         [](LocalityGroup::Editor* editor) -> absl::Status {
           editor->decrement_use_count();
@@ -5945,14 +6086,14 @@ absl::Status SchemaUpdaterImpl::DropTable(const ddl::DropTable& drop_table) {
     // Drop dependent sequences.
     for (const Column* column : table->columns()) {
       if (column->is_identity_column()) {
-        ZETASQL_RET_CHECK(column->sequences_used().size() == 1);
+        GOOGLESQL_RET_CHECK(column->sequences_used().size() == 1);
         const Sequence* sequence =
             static_cast<const Sequence*>(column->sequences_used().at(0));
-        ZETASQL_RETURN_IF_ERROR(DropSequence(sequence));
+        GOOGLESQL_RETURN_IF_ERROR(DropSequence(sequence));
       }
 
       if (column->locality_group() != nullptr) {
-        ZETASQL_RETURN_IF_ERROR(AlterNode<LocalityGroup>(
+        GOOGLESQL_RETURN_IF_ERROR(AlterNode<LocalityGroup>(
             column->locality_group(),
             [](LocalityGroup::Editor* editor) -> absl::Status {
               editor->decrement_use_count();
@@ -5976,7 +6117,7 @@ absl::Status SchemaUpdaterImpl::DropIndex(const ddl::DropIndex& drop_index) {
   }
 
   if (index->locality_group() != nullptr) {
-    ZETASQL_RETURN_IF_ERROR(AlterNode<LocalityGroup>(
+    GOOGLESQL_RETURN_IF_ERROR(AlterNode<LocalityGroup>(
         index->locality_group(),
         [](LocalityGroup::Editor* editor) -> absl::Status {
           editor->decrement_use_count();
@@ -6032,7 +6173,7 @@ absl::Status SchemaUpdaterImpl::DropChangeStream(
 absl::Status SchemaUpdaterImpl::DropSequence(const Sequence* drop_sequence) {
   global_names_.RemoveName(drop_sequence->Name());
   drop_sequence->RemoveSequenceFromLastValuesMap();
-  ZETASQL_RETURN_IF_ERROR(DropNode(drop_sequence));
+  GOOGLESQL_RETURN_IF_ERROR(DropNode(drop_sequence));
   return absl::OkStatus();
 }
 
@@ -6088,7 +6229,7 @@ absl::Status SchemaUpdaterImpl::ApplyImplSetColumnOptions(
     if (column == nullptr) {
       return error::ColumnNotFound(path.table_name(), path.column_name());
     }
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         AlterNode<Column>(column,
                           [this, &set_column_options,
                            dialect](Column::Editor* editor) -> absl::Status {
@@ -6129,8 +6270,8 @@ absl::StatusOr<Model::ModelColumn> SchemaUpdaterImpl::CreateModelColumn(
     const ddl::CreateModel* ddl_model,
     const database_api::DatabaseDialect& dialect) {
   const std::string& column_name = ddl_column.column_name();
-  ZETASQL_ASSIGN_OR_RETURN(
-      const zetasql::Type* column_type,
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      const googlesql::Type* column_type,
       DDLColumnTypeToGoogleSqlType(ddl_column, type_factory_,
                                    latest_schema_->proto_bundle().get()));
   if (ddl_column.not_null()) {
@@ -6155,13 +6296,13 @@ absl::StatusOr<Model::ModelColumn> SchemaUpdaterImpl::CreateModelColumn(
       if (option.has_null_value()) {
         is_required = std::nullopt;
       } else {
-        ZETASQL_RET_CHECK(option.has_bool_value())
+        GOOGLESQL_RET_CHECK(option.has_bool_value())
             << "Option " << ddl::kModelColumnRequiredOptionName
             << " can only take bool value";
         is_required = option.bool_value();
       }
     } else {
-      ZETASQL_RET_CHECK_FAIL() << "Invalid column option: " << option.option_name();
+      GOOGLESQL_RET_CHECK_FAIL() << "Invalid column option: " << option.option_name();
     }
   }
 
@@ -6174,22 +6315,22 @@ absl::StatusOr<Model::ModelColumn> SchemaUpdaterImpl::CreateModelColumn(
   };
 }
 
-absl::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>>
+absl::StatusOr<std::unique_ptr<const googlesql::AnalyzerOutput>>
 SchemaUpdaterImpl::AnalyzeCreatePropertyGraph(
     const ddl::CreatePropertyGraph& ddl_create_property_graph,
-    const zetasql::AnalyzerOptions& analyzer_options, Catalog* catalog) {
-  std::unique_ptr<const zetasql::AnalyzerOutput> analyzer_output;
+    const googlesql::AnalyzerOptions& analyzer_options, Catalog* catalog) {
+  std::unique_ptr<const googlesql::AnalyzerOutput> analyzer_output;
 
-  // Delegate to ZetaSQL for DDL parsing and analysis.
-  ZETASQL_RETURN_IF_ERROR(zetasql::AnalyzeStatement(
+  // Delegate to GoogleSQL for DDL parsing and analysis.
+  GOOGLESQL_RETURN_IF_ERROR(googlesql::AnalyzeStatement(
       ddl_create_property_graph.ddl_body(), analyzer_options, catalog,
       type_factory_, &analyzer_output));
 
   // Confirm that the analyzed statement is a valid CREATE PROPERTY GRAPH
   // statement.
-  const zetasql::ResolvedStatement* stmt =
+  const googlesql::ResolvedStatement* stmt =
       analyzer_output->resolved_statement();
-  ZETASQL_RET_CHECK(stmt->Is<zetasql::ResolvedCreatePropertyGraphStmt>())
+  GOOGLESQL_RET_CHECK(stmt->Is<googlesql::ResolvedCreatePropertyGraphStmt>())
       << "Failed to analyze DDL. Expects a CREATE [OR REPLACE] PROPERTY "
          "GRAPH statement, actual is: "
       << stmt->DebugString();
@@ -6225,18 +6366,18 @@ absl::Status SchemaUpdaterImpl::CreatePropertyGraph(
           limits::kMaxPropertyGraphsPerDatabase);
     }
 
-    ZETASQL_RETURN_IF_ERROR(global_names_.AddName("Property Graph",
+    GOOGLESQL_RETURN_IF_ERROR(global_names_.AddName("Property Graph",
                                           ddl_create_property_graph.name()));
   }
 
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       MakeGoogleSqlAnalyzerOptions(GetTimeZone());
   analyzer_options.mutable_language()->set_name_resolution_mode(
-      zetasql::NAME_RESOLUTION_DEFAULT);
+      googlesql::NAME_RESOLUTION_DEFAULT);
   analyzer_options.mutable_language()->EnableLanguageFeature(
-      zetasql::FEATURE_SQL_GRAPH);
+      googlesql::FEATURE_SQL_GRAPH);
   analyzer_options.mutable_language()->AddSupportedStatementKind(
-      zetasql::RESOLVED_CREATE_PROPERTY_GRAPH_STMT);
+      googlesql::RESOLVED_CREATE_PROPERTY_GRAPH_STMT);
   FunctionCatalog function_catalog(
       type_factory_,
       /*catalog_name=*/kCloudSpannerEmulatorFunctionCatalogName,
@@ -6244,19 +6385,19 @@ absl::Status SchemaUpdaterImpl::CreatePropertyGraph(
 
   // Create a catalog based on 'latest_schema_'for property graph DDL parsing
   // and analysis.
-  PreparePropertyGraphCatalog catalog(latest_schema_, &function_catalog,
-                                      type_factory_, analyzer_options);
-  ZETASQL_ASSIGN_OR_RETURN(
-      std::unique_ptr<const zetasql::AnalyzerOutput> analyzer_output,
+  Catalog catalog(latest_schema_, &function_catalog, type_factory_,
+                  analyzer_options);
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      std::unique_ptr<const googlesql::AnalyzerOutput> analyzer_output,
       AnalyzeCreatePropertyGraph(ddl_create_property_graph, analyzer_options,
                                  &catalog));
 
-  const zetasql::ResolvedCreatePropertyGraphStmt* graph_stmt =
+  const googlesql::ResolvedCreatePropertyGraphStmt* graph_stmt =
       analyzer_output->resolved_statement()
-          ->GetAs<zetasql::ResolvedCreatePropertyGraphStmt>();
+          ->GetAs<googlesql::ResolvedCreatePropertyGraphStmt>();
 
   PropertyGraph::Builder property_graph_builder;
-  ZETASQL_RETURN_IF_ERROR(PopulatePropertyGraph(ddl_create_property_graph, graph_stmt,
+  GOOGLESQL_RETURN_IF_ERROR(PopulatePropertyGraph(ddl_create_property_graph, graph_stmt,
                                         &property_graph_builder));
 
   const PropertyGraph* graph = property_graph_builder.get();
@@ -6272,12 +6413,12 @@ absl::Status SchemaUpdaterImpl::CreatePropertyGraph(
 }
 
 absl::StatusOr<std::string> GetColumnNameFromExpr(
-    const zetasql::ResolvedExpr* expr) {
-  if (expr->Is<zetasql::ResolvedColumnRef>()) {
-    return expr->GetAs<zetasql::ResolvedColumnRef>()->column().name();
+    const googlesql::ResolvedExpr* expr) {
+  if (expr->Is<googlesql::ResolvedColumnRef>()) {
+    return expr->GetAs<googlesql::ResolvedColumnRef>()->column().name();
   }
-  if (expr->Is<zetasql::ResolvedCatalogColumnRef>()) {
-    return expr->GetAs<zetasql::ResolvedCatalogColumnRef>()->column()->Name();
+  if (expr->Is<googlesql::ResolvedCatalogColumnRef>()) {
+    return expr->GetAs<googlesql::ResolvedCatalogColumnRef>()->column()->Name();
   }
   return absl::InvalidArgumentError(
       absl::StrCat("Expected ResolvedColumnRef or ResolvedCatalogColumnRef."
@@ -6286,15 +6427,15 @@ absl::StatusOr<std::string> GetColumnNameFromExpr(
 }
 
 absl::Status SetNodeReference(
-    const zetasql::ResolvedGraphNodeTableReference* node_reference,
+    const googlesql::ResolvedGraphNodeTableReference* node_reference,
     bool is_source, PropertyGraph::GraphElementTable* new_element_table) {
   std::vector<std::string> node_table_column_names;
   std::vector<std::string> edge_table_column_names;
   for (int i = 0; i < node_reference->edge_table_column_list_size(); ++i) {
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         std::string edge_column_name,
         GetColumnNameFromExpr(node_reference->edge_table_column_list(i)));
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         std::string node_column_name,
         GetColumnNameFromExpr(node_reference->node_table_column_list(i)));
     edge_table_column_names.push_back(std::move(edge_column_name));
@@ -6313,16 +6454,16 @@ absl::Status SetNodeReference(
 }
 
 absl::Status SchemaUpdaterImpl::AddGraphElementTable(
-    const zetasql::ResolvedGraphElementTable* element, bool is_node,
+    const googlesql::ResolvedGraphElementTable* element, bool is_node,
     PropertyGraph::Builder* graph_builder) {
-  const zetasql::ResolvedTableScan* table_scan =
-      element->input_scan()->GetAs<zetasql::ResolvedTableScan>();
+  const googlesql::ResolvedTableScan* table_scan =
+      element->input_scan()->GetAs<googlesql::ResolvedTableScan>();
   PropertyGraph::GraphElementTable new_element_table;
   new_element_table.set_name(table_scan->table()->Name());
   new_element_table.set_alias(element->alias());
 
   for (const auto& key : element->key_list()) {
-    ZETASQL_ASSIGN_OR_RETURN(std::string key_column_name,
+    GOOGLESQL_ASSIGN_OR_RETURN(std::string key_column_name,
                      GetColumnNameFromExpr(key.get()));
     new_element_table.add_key_clause_column(std::move(key_column_name));
   }
@@ -6336,89 +6477,89 @@ absl::Status SchemaUpdaterImpl::AddGraphElementTable(
   }
   if (element->dynamic_label() != nullptr) {
     auto* label_expr = element->dynamic_label()->label_expr();
-    ZETASQL_RET_CHECK(label_expr != nullptr);
-    ZETASQL_RET_CHECK(label_expr->Is<zetasql::ResolvedColumnRef>() ||
-              label_expr->Is<zetasql::ResolvedCatalogColumnRef>())
+    GOOGLESQL_RET_CHECK(label_expr != nullptr);
+    GOOGLESQL_RET_CHECK(label_expr->Is<googlesql::ResolvedColumnRef>() ||
+              label_expr->Is<googlesql::ResolvedCatalogColumnRef>())
         << "Dynamic label expression must be a ResolvedColumnRef or "
            "ResolvedCatalogColumnRef. Got element "
            "table AST: "
         << element->DebugString();
-    if (label_expr->Is<zetasql::ResolvedColumnRef>()) {
-      ZETASQL_RET_CHECK(label_expr->GetAs<zetasql::ResolvedColumnRef>()
+    if (label_expr->Is<googlesql::ResolvedColumnRef>()) {
+      GOOGLESQL_RET_CHECK(label_expr->GetAs<googlesql::ResolvedColumnRef>()
                     ->column()
                     .type()
                     ->IsString())
           << "Dynamic label expression should reference to a STRING type "
              "column. Got type: "
-          << label_expr->GetAs<zetasql::ResolvedColumnRef>()
+          << label_expr->GetAs<googlesql::ResolvedColumnRef>()
                  ->column()
                  .type()
                  ->DebugString();
       new_element_table.set_dynamic_label_expression(
-          label_expr->GetAs<zetasql::ResolvedColumnRef>()->column().name());
+          label_expr->GetAs<googlesql::ResolvedColumnRef>()->column().name());
     } else {
-      ZETASQL_RET_CHECK(label_expr->GetAs<zetasql::ResolvedCatalogColumnRef>()
+      GOOGLESQL_RET_CHECK(label_expr->GetAs<googlesql::ResolvedCatalogColumnRef>()
                     ->column()
                     ->GetType()
                     ->IsString())
           << "Dynamic label expression should reference to a STRING type "
              "column. Got type: "
-          << label_expr->GetAs<zetasql::ResolvedCatalogColumnRef>()
+          << label_expr->GetAs<googlesql::ResolvedCatalogColumnRef>()
                  ->column()
                  ->GetType()
                  ->DebugString();
       new_element_table.set_dynamic_label_expression(
-          label_expr->GetAs<zetasql::ResolvedCatalogColumnRef>()
+          label_expr->GetAs<googlesql::ResolvedCatalogColumnRef>()
               ->column()
               ->Name());
     }
   }
   if (element->dynamic_properties() != nullptr) {
     const auto* dynamic_properties_ptr = element->dynamic_properties();
-    ZETASQL_RET_CHECK(dynamic_properties_ptr->property_expr() != nullptr);
-    ZETASQL_RET_CHECK(dynamic_properties_ptr->property_expr()
-                  ->Is<zetasql::ResolvedColumnRef>() ||
+    GOOGLESQL_RET_CHECK(dynamic_properties_ptr->property_expr() != nullptr);
+    GOOGLESQL_RET_CHECK(dynamic_properties_ptr->property_expr()
+                  ->Is<googlesql::ResolvedColumnRef>() ||
               dynamic_properties_ptr->property_expr()
-                  ->Is<zetasql::ResolvedCatalogColumnRef>())
+                  ->Is<googlesql::ResolvedCatalogColumnRef>())
         << "Dynamic properties expression must be a ResolvedColumnRef or "
            "ResolvedCatalogColumnRef "
            "type. Got element table AST: "
         << element->DebugString();
     if (dynamic_properties_ptr->property_expr()
-            ->Is<zetasql::ResolvedColumnRef>()) {
-      ZETASQL_RET_CHECK(dynamic_properties_ptr->property_expr()
-                    ->GetAs<zetasql::ResolvedColumnRef>()
+            ->Is<googlesql::ResolvedColumnRef>()) {
+      GOOGLESQL_RET_CHECK(dynamic_properties_ptr->property_expr()
+                    ->GetAs<googlesql::ResolvedColumnRef>()
                     ->column()
                     .type()
                     ->IsJsonType())
           << "Dynamic properties expression should reference to a JSON type "
              "column. Got type: "
           << dynamic_properties_ptr->property_expr()
-                 ->GetAs<zetasql::ResolvedColumnRef>()
+                 ->GetAs<googlesql::ResolvedColumnRef>()
                  ->column()
                  .type()
                  ->DebugString();
       new_element_table.set_dynamic_properties_expression(
           dynamic_properties_ptr->property_expr()
-              ->GetAs<zetasql::ResolvedColumnRef>()
+              ->GetAs<googlesql::ResolvedColumnRef>()
               ->column()
               .name());
     } else {
-      ZETASQL_RET_CHECK(dynamic_properties_ptr->property_expr()
-                    ->GetAs<zetasql::ResolvedCatalogColumnRef>()
+      GOOGLESQL_RET_CHECK(dynamic_properties_ptr->property_expr()
+                    ->GetAs<googlesql::ResolvedCatalogColumnRef>()
                     ->column()
                     ->GetType()
                     ->IsJsonType())
           << "Dynamic properties expression should reference to a JSON type "
              "column. Got type: "
           << dynamic_properties_ptr->property_expr()
-                 ->GetAs<zetasql::ResolvedCatalogColumnRef>()
+                 ->GetAs<googlesql::ResolvedCatalogColumnRef>()
                  ->column()
                  ->GetType()
                  ->DebugString();
       new_element_table.set_dynamic_properties_expression(
           dynamic_properties_ptr->property_expr()
-              ->GetAs<zetasql::ResolvedCatalogColumnRef>()
+              ->GetAs<googlesql::ResolvedCatalogColumnRef>()
               ->column()
               ->Name());
     }
@@ -6431,9 +6572,9 @@ absl::Status SchemaUpdaterImpl::AddGraphElementTable(
   }
 
   new_element_table.set_element_kind(PropertyGraph::GraphElementKind::EDGE);
-  ZETASQL_RETURN_IF_ERROR(SetNodeReference(element->source_node_reference(),
+  GOOGLESQL_RETURN_IF_ERROR(SetNodeReference(element->source_node_reference(),
                                    /*is_source=*/true, &new_element_table));
-  ZETASQL_RETURN_IF_ERROR(SetNodeReference(element->dest_node_reference(),
+  GOOGLESQL_RETURN_IF_ERROR(SetNodeReference(element->dest_node_reference(),
                                    /*is_source=*/false, &new_element_table));
 
   graph_builder->add_edge_table(new_element_table);
@@ -6443,7 +6584,7 @@ absl::Status SchemaUpdaterImpl::AddGraphElementTable(
 absl::Status CheckDynamicLabelElementCardinality(
     absl::string_view property_graph_name,
     const std::vector<
-        std::unique_ptr<const zetasql::ResolvedGraphElementTable>>&
+        std::unique_ptr<const googlesql::ResolvedGraphElementTable>>&
         element_tables,
     bool is_node) {
   const auto dynamic_label_count = absl::c_count_if(
@@ -6464,7 +6605,7 @@ absl::Status CheckDynamicLabelElementCardinality(
 
 absl::Status SchemaUpdaterImpl::PopulatePropertyGraph(
     const ddl::CreatePropertyGraph& ddl_create_property_graph,
-    const zetasql::ResolvedCreatePropertyGraphStmt* const graph_stmt,
+    const googlesql::ResolvedCreatePropertyGraphStmt* const graph_stmt,
     PropertyGraph::Builder* graph_builder) {
   // Property graph name and ddl body.
   graph_builder->set_name(ddl_create_property_graph.name());
@@ -6475,7 +6616,7 @@ absl::Status SchemaUpdaterImpl::PopulatePropertyGraph(
     PropertyGraph::PropertyDeclaration property_declaration;
     property_declaration.name = property->name();
     property_declaration.type = property->type()->TypeName(
-        zetasql::PRODUCT_EXTERNAL, /*use_external_float32_unused=*/true);
+        googlesql::PRODUCT_EXTERNAL, /*use_external_float32_unused=*/true);
     graph_builder->add_property_declaration(property_declaration);
   }
 
@@ -6491,19 +6632,19 @@ absl::Status SchemaUpdaterImpl::PopulatePropertyGraph(
   }
   // Node tables.
   for (const auto& node_table : graph_stmt->node_table_list()) {
-    ZETASQL_RETURN_IF_ERROR(AddGraphElementTable(node_table.get(), /*is_node=*/true,
+    GOOGLESQL_RETURN_IF_ERROR(AddGraphElementTable(node_table.get(), /*is_node=*/true,
                                          graph_builder));
   }
-  ZETASQL_RETURN_IF_ERROR(CheckDynamicLabelElementCardinality(
+  GOOGLESQL_RETURN_IF_ERROR(CheckDynamicLabelElementCardinality(
       ddl_create_property_graph.name(), graph_stmt->node_table_list(),
       /*is_node=*/true));
 
   // Edge tables.
   for (const auto& edge_table : graph_stmt->edge_table_list()) {
-    ZETASQL_RETURN_IF_ERROR(AddGraphElementTable(edge_table.get(), /*is_node=*/false,
+    GOOGLESQL_RETURN_IF_ERROR(AddGraphElementTable(edge_table.get(), /*is_node=*/false,
                                          graph_builder));
   }
-  ZETASQL_RETURN_IF_ERROR(CheckDynamicLabelElementCardinality(
+  GOOGLESQL_RETURN_IF_ERROR(CheckDynamicLabelElementCardinality(
       ddl_create_property_graph.name(), graph_stmt->edge_table_list(),
       /*is_node=*/false));
 
@@ -6528,26 +6669,26 @@ absl::Status SchemaUpdaterImpl::CreateModel(
                                              limits::kMaxModelsPerDatabase);
     }
 
-    ZETASQL_RETURN_IF_ERROR(global_names_.AddName("Model", ddl_model.model_name()));
+    GOOGLESQL_RETURN_IF_ERROR(global_names_.AddName("Model", ddl_model.model_name()));
   }
 
   Model::Builder builder;
   builder.set_name(ddl_model.model_name());
   for (const ddl::ColumnDefinition& input_column : ddl_model.input()) {
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         Model::ModelColumn column,
         CreateModelColumn(input_column, builder.get(), &ddl_model, dialect));
     builder.add_input_column(column);
   }
 
   for (const ddl::ColumnDefinition& output_column : ddl_model.output()) {
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         Model::ModelColumn column,
         CreateModelColumn(output_column, builder.get(), &ddl_model, dialect));
     builder.add_output_column(column);
   }
   builder.set_remote(ddl_model.remote());
-  ZETASQL_RETURN_IF_ERROR(SetModelOptions(ddl_model.set_options(), &builder));
+  GOOGLESQL_RETURN_IF_ERROR(SetModelOptions(ddl_model.set_options(), &builder));
   const Model* model = builder.get();
 
   if (replace) {
@@ -6572,7 +6713,7 @@ absl::Status SchemaUpdaterImpl::AlterModel(const ddl::AlterModel& alter_model) {
 
   const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& options =
       alter_model.set_options().options();
-  ZETASQL_RETURN_IF_ERROR(AlterNode<Model>(
+  GOOGLESQL_RETURN_IF_ERROR(AlterNode<Model>(
       model, [this, options](Model::Editor* editor) -> absl::Status {
         return SetModelOptions(options, editor);
       }));
@@ -6588,7 +6729,7 @@ absl::Status SchemaUpdaterImpl::SetModelOptions(
       if (option.has_null_value()) {
         modifier->set_default_batch_size(std::nullopt);
       } else {
-        ZETASQL_RET_CHECK(option.has_int64_value())
+        GOOGLESQL_RET_CHECK(option.has_int64_value())
             << "Option " << ddl::kModelDefaultBatchSizeOptionName
             << " can only take int64_t value";
         modifier->set_default_batch_size(option.int64_value());
@@ -6597,7 +6738,7 @@ absl::Status SchemaUpdaterImpl::SetModelOptions(
       if (option.has_null_value()) {
         modifier->set_endpoint(std::nullopt);
       } else {
-        ZETASQL_RET_CHECK(option.has_string_value())
+        GOOGLESQL_RET_CHECK(option.has_string_value())
             << "Option " << ddl::kModelEndpointOptionName
             << " can only take string value";
         modifier->set_endpoint(option.string_value());
@@ -6606,14 +6747,14 @@ absl::Status SchemaUpdaterImpl::SetModelOptions(
       if (option.has_null_value()) {
         modifier->set_endpoints({});
       } else {
-        ZETASQL_RET_CHECK(!option.string_list_value().empty())
+        GOOGLESQL_RET_CHECK(!option.string_list_value().empty())
             << "Option " << ddl::kModelEndpointsOptionName
             << " can only take string list value";
         modifier->set_endpoints({option.string_list_value().begin(),
                                  option.string_list_value().end()});
       }
     } else {
-      ZETASQL_RET_CHECK_FAIL() << "Invalid column option: " << option.option_name();
+      GOOGLESQL_RET_CHECK_FAIL() << "Invalid column option: " << option.option_name();
     }
   }
   return absl::OkStatus();
@@ -6674,21 +6815,21 @@ SchemaUpdater::ValidateSchemaFromDDL(
     existing_schema = EmptySchema(context.database_id,
                                   schema_change_operation.database_dialect);
   }
-  ZETASQL_ASSIGN_OR_RETURN(SchemaUpdaterImpl updater,
+  GOOGLESQL_ASSIGN_OR_RETURN(SchemaUpdaterImpl updater,
                    SchemaUpdaterImpl::Build(
                        context.type_factory, context.table_id_generator,
                        context.column_id_generator, context.storage,
                        context.schema_change_timestamp, context.pg_oid_assigner,
                        existing_schema, context.database_id));
   context.pg_oid_assigner->BeginAssignment();
-  ZETASQL_ASSIGN_OR_RETURN(pending_work_,
+  GOOGLESQL_ASSIGN_OR_RETURN(pending_work_,
                    updater.ApplyDDLStatements(schema_change_operation));
   intermediate_schemas_ = updater.GetIntermediateSchemas();
 
   std::unique_ptr<const Schema> new_schema = nullptr;
   if (!intermediate_schemas_.empty()) {
     new_schema = std::move(*intermediate_schemas_.rbegin());
-    ZETASQL_RETURN_IF_ERROR(context.pg_oid_assigner->EndAssignment());
+    GOOGLESQL_RETURN_IF_ERROR(context.pg_oid_assigner->EndAssignment());
   }
   pending_work_.clear();
   intermediate_schemas_.clear();
@@ -6699,7 +6840,7 @@ SchemaUpdater::ValidateSchemaFromDDL(
 // capability so that changes to the database can be reversed.
 absl::Status SchemaUpdater::RunPendingActions(int* num_succesful) {
   for (const auto& pending_statement : pending_work_) {
-    ZETASQL_RETURN_IF_ERROR(pending_statement.RunSchemaChangeActions());
+    GOOGLESQL_RETURN_IF_ERROR(pending_statement.RunSchemaChangeActions());
     ++(*num_succesful);
   }
   return absl::OkStatus();
@@ -6709,14 +6850,14 @@ absl::StatusOr<SchemaChangeResult> SchemaUpdater::UpdateSchemaFromDDL(
     const Schema* existing_schema,
     const SchemaChangeOperation& schema_change_operation,
     const SchemaChangeContext& context) {
-  ZETASQL_ASSIGN_OR_RETURN(SchemaUpdaterImpl updater,
+  GOOGLESQL_ASSIGN_OR_RETURN(SchemaUpdaterImpl updater,
                    SchemaUpdaterImpl::Build(
                        context.type_factory, context.table_id_generator,
                        context.column_id_generator, context.storage,
                        context.schema_change_timestamp, context.pg_oid_assigner,
                        existing_schema, context.database_id));
   context.pg_oid_assigner->BeginAssignment();
-  ZETASQL_ASSIGN_OR_RETURN(pending_work_,
+  GOOGLESQL_ASSIGN_OR_RETURN(pending_work_,
                    updater.ApplyDDLStatements(schema_change_operation));
   intermediate_schemas_ = updater.GetIntermediateSchemas();
 
@@ -6727,10 +6868,10 @@ absl::StatusOr<SchemaChangeResult> SchemaUpdater::UpdateSchemaFromDDL(
   absl::Status backfill_status = RunPendingActions(&num_successful);
   if (num_successful > 0) {
     new_schema = std::move(intermediate_schemas_[num_successful - 1]);
-    ZETASQL_RETURN_IF_ERROR(context.pg_oid_assigner->EndAssignmentAtIntermediateSchema(
+    GOOGLESQL_RETURN_IF_ERROR(context.pg_oid_assigner->EndAssignmentAtIntermediateSchema(
         num_successful - 1));
   }
-  ZETASQL_RET_CHECK_LE(num_successful, intermediate_schemas_.size());
+  GOOGLESQL_RET_CHECK_LE(num_successful, intermediate_schemas_.size());
   return SchemaChangeResult{
       .num_successful_statements = num_successful,
       .updated_schema = std::move(new_schema),
@@ -6742,27 +6883,27 @@ absl::StatusOr<std::unique_ptr<const Schema>>
 SchemaUpdater::CreateSchemaFromDDL(
     const SchemaChangeOperation& schema_change_operation,
     const SchemaChangeContext& context) {
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       SchemaChangeResult result,
       UpdateSchemaFromDDL(EmptySchema(context.database_id,
                                       schema_change_operation.database_dialect),
                           schema_change_operation, context));
-  ZETASQL_RETURN_IF_ERROR(result.backfill_status);
+  GOOGLESQL_RETURN_IF_ERROR(result.backfill_status);
   return std::move(result.updated_schema);
 }
 
 absl::StatusOr<std::unique_ptr<ddl::DDLStatement>> ParseDDLByDialect(
     absl::string_view statement, database_api::DatabaseDialect dialect) {
   if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         std::unique_ptr<postgres_translator::interfaces::PGArena> arena,
         postgres_translator::spangres::MemoryContextPGArena::Init(nullptr));
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         postgres_translator::interfaces::ParserOutput parser_output,
         postgres_translator::CheckedPgRawParserFullOutput(
             std::string(statement).c_str()),
         _ << "failed to parse the DDL statements.");
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         std::unique_ptr<
             postgres_translator::spangres::PostgreSQLToSpannerDDLTranslator>
             translator,
@@ -6781,6 +6922,9 @@ absl::StatusOr<std::unique_ptr<ddl::DDLStatement>> ParseDDLByDialect(
             EmulatorFeatureFlags::instance().flags().enable_default_time_zone,
         .enable_jsonb_type = true,
         .enable_array_jsonb_type = true,
+        .enable_create_function = EmulatorFeatureFlags::instance()
+                                      .flags()
+                                      .enable_user_defined_functions,
         .enable_create_view = true,
         // This enables Spangres ddl translator to record the original
         // expression in PG.
@@ -6789,9 +6933,11 @@ absl::StatusOr<std::unique_ptr<ddl::DDLStatement>> ParseDDLByDialect(
         .enable_change_streams = true,
         .enable_change_streams_mod_type_filter_options = true,
         .enable_change_streams_ttl_deletes_filter_option = true,
+        .enable_change_streams_allow_txn_exclusion_option = true,
         .enable_change_streams_if_not_exists = true,
         .enable_search_index =
             EmulatorFeatureFlags::instance().flags().enable_search_index,
+        .enable_columnar_policy = true,
         .enable_sequence = true,
         .enable_virtual_generated_column = true,
         .enable_hidden_column =
@@ -6802,13 +6948,13 @@ absl::StatusOr<std::unique_ptr<ddl::DDLStatement>> ParseDDLByDialect(
         .enable_uuid_type = true,
         // TODO: Remove this tag after the feature is enabled.
     };
-    ZETASQL_ASSIGN_OR_RETURN(ddl::DDLStatementList ddl_statement_list,
+    GOOGLESQL_ASSIGN_OR_RETURN(ddl::DDLStatementList ddl_statement_list,
                      translator->TranslateForEmulator(parser_output, options));
-    ZETASQL_RET_CHECK_EQ(ddl_statement_list.statement_size(), 1);
+    GOOGLESQL_RET_CHECK_EQ(ddl_statement_list.statement_size(), 1);
     return std::make_unique<ddl::DDLStatement>(ddl_statement_list.statement(0));
   } else {
     auto ddl_statement = std::make_unique<ddl::DDLStatement>();
-    ZETASQL_RETURN_IF_ERROR(ddl::ParseDDLStatement(statement, ddl_statement.get()));
+    GOOGLESQL_RETURN_IF_ERROR(ddl::ParseDDLStatement(statement, ddl_statement.get()));
     return std::move(ddl_statement);
   }
 }

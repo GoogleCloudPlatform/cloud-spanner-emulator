@@ -3,7 +3,7 @@
  * parse_agg.c
  *	  handle aggregates and window functions in parser
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -14,6 +14,7 @@
  */
 #include "postgres.h"
 
+#include "access/htup_details.h"
 #include "catalog/pg_aggregate.h"
 #include "catalog/pg_constraint.h"
 #include "catalog/pg_type.h"
@@ -28,6 +29,7 @@
 #include "rewrite/rewriteManip.h"
 #include "utils/builtins.h"
 #include "utils/lsyscache.h"
+#include "utils/syscache.h"
 
 typedef struct
 {
@@ -782,6 +784,32 @@ check_agg_arguments_walker(Node *node,
 					 parser_errposition(context->pstate,
 										((WindowFunc *) node)->location)));
 	}
+
+	if (IsA(node, RangeTblEntry))
+	{
+		/*
+		 * CTE references act similarly to Vars of the CTE's level.  Without
+		 * this we might conclude that the Agg can be evaluated above the CTE,
+		 * leading to trouble.
+		 */
+		RangeTblEntry *rte = (RangeTblEntry *) node;
+
+		if (rte->rtekind == RTE_CTE)
+		{
+			int			ctelevelsup = rte->ctelevelsup;
+
+			/* convert levelsup to frame of reference of original query */
+			ctelevelsup -= context->sublevels_up;
+			/* ignore local CTEs of subqueries */
+			if (ctelevelsup >= 0)
+			{
+				if (context->min_varlevel < 0 ||
+					context->min_varlevel > ctelevelsup)
+					context->min_varlevel = ctelevelsup;
+			}
+		}
+		return false;			/* allow range_table_walker to continue */
+	}
 	if (IsA(node, Query))
 	{
 		/* Recurse into subselects */
@@ -791,7 +819,7 @@ check_agg_arguments_walker(Node *node,
 		result = query_tree_walker((Query *) node,
 								   check_agg_arguments_walker,
 								   (void *) context,
-								   0);
+								   QTW_EXAMINE_RTES_BEFORE);
 		context->sublevels_up--;
 		return result;
 	}
@@ -1032,6 +1060,10 @@ transformWindowFuncCall(ParseState *pstate, WindowFunc *wfunc,
 				 /* matched, no refname */ ;
 			else
 				continue;
+
+			/*
+			 * Also see similar de-duplication code in optimize_window_clauses
+			 */
 			if (equal(refwin->partitionClause, windef->partitionClause) &&
 				equal(refwin->orderClause, windef->orderClause) &&
 				refwin->frameOptions == windef->frameOptions &&
@@ -1169,7 +1201,7 @@ parseCheckAggregates(ParseState *pstate, Query *qry)
 	 * entries are RTE_JOIN kind.
 	 */
 	if (hasJoinRTEs)
-		groupClauses = (List *) flatten_join_alias_vars(qry,
+		groupClauses = (List *) flatten_join_alias_vars(NULL, qry,
 														(Node *) groupClauses);
 
 	/*
@@ -1213,7 +1245,7 @@ parseCheckAggregates(ParseState *pstate, Query *qry)
 							groupClauses, hasJoinRTEs,
 							have_non_var_grouping);
 	if (hasJoinRTEs)
-		clause = flatten_join_alias_vars(qry, clause);
+		clause = flatten_join_alias_vars(NULL, qry, clause);
 	check_ungrouped_columns(clause, pstate, qry,
 							groupClauses, groupClauseCommonVars,
 							have_non_var_grouping,
@@ -1224,7 +1256,7 @@ parseCheckAggregates(ParseState *pstate, Query *qry)
 							groupClauses, hasJoinRTEs,
 							have_non_var_grouping);
 	if (hasJoinRTEs)
-		clause = flatten_join_alias_vars(qry, clause);
+		clause = flatten_join_alias_vars(NULL, qry, clause);
 	check_ungrouped_columns(clause, pstate, qry,
 							groupClauses, groupClauseCommonVars,
 							have_non_var_grouping,
@@ -1553,7 +1585,7 @@ finalize_grouping_exprs_walker(Node *node,
 				Index		ref = 0;
 
 				if (context->hasJoinRTEs)
-					expr = flatten_join_alias_vars(context->qry, expr);
+					expr = flatten_join_alias_vars(NULL, context->qry, expr);
 
 				/*
 				 * Each expression must match a grouping entry at the current
@@ -1948,6 +1980,49 @@ resolve_aggregate_transtype(Oid aggfuncid,
 		pfree(declaredArgTypes);
 	}
 	return aggtranstype;
+}
+
+/*
+ * agg_args_support_sendreceive
+ *		Returns true if all non-byval types of aggref's args have send and
+ *		receive functions.
+ */
+bool
+agg_args_support_sendreceive(Aggref *aggref)
+{
+	ListCell   *lc;
+
+	foreach(lc, aggref->args)
+	{
+		HeapTuple	typeTuple;
+		Form_pg_type pt;
+		TargetEntry *tle = (TargetEntry *) lfirst(lc);
+		Oid			type = exprType((Node *) tle->expr);
+
+		/*
+		 * RECORD is a special case: it has typsend/typreceive functions, but
+		 * record_recv only works if passed the correct typmod to identify the
+		 * specific anonymous record type.  array_agg_deserialize cannot do
+		 * that, so we have to disclaim support for the case.
+		 */
+		if (type == RECORDOID)
+			return false;
+
+		typeTuple = SearchSysCache1(TYPEOID, ObjectIdGetDatum(type));
+		if (!HeapTupleIsValid(typeTuple))
+			elog(ERROR, "cache lookup failed for type %u", type);
+
+		pt = (Form_pg_type) GETSTRUCT(typeTuple);
+
+		if (!pt->typbyval &&
+			(!OidIsValid(pt->typsend) || !OidIsValid(pt->typreceive)))
+		{
+			ReleaseSysCache(typeTuple);
+			return false;
+		}
+		ReleaseSysCache(typeTuple);
+	}
+	return true;
 }
 
 /*

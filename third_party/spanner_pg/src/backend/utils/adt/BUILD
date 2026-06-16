@@ -29,9 +29,9 @@
 # MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 #------------------------------------------------------------------------------
 
-load("@com_google_zetasql//bazel:bison.bzl", "genyacc")
-load("@com_google_zetasql//bazel:flex.bzl", "genlex")
+load("@com_google_googlesql//bazel:bison.bzl", "genyacc")
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+load("@rules_hdl//dependency_support/com_github_westes_flex:flex.bzl", "genlex")
 
 
 
@@ -173,10 +173,13 @@ cc_library(
         "levenshtein.c",
         "like_match.c",
         "jsonpath_gram.h",
+        "jsonpath_internal.h",
     ],
     deps = [
         "//third_party/spanner_pg/interface:catalog_wrappers",
         "//third_party/spanner_pg/src/backend/utils:generated_headers",
+        "//third_party/spanner_pg/src/backend/utils/activity",
+        "//third_party/spanner_pg/src/backend/utils/sort",
         "//third_party/spanner_pg/src/include",
         "//third_party/spanner_pg/util:nodetag_to_string",
     ],
@@ -188,8 +191,8 @@ cc_test(
     srcs = ["pg_locale_test.cc"],
     deps = [
         "//third_party/spanner_pg/src/backend:backend_with_stub_shims",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 

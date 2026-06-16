@@ -32,16 +32,28 @@
 #ifndef CATALOG_SPANGRES_SYSTEM_CATALOG_H_
 #define CATALOG_SPANGRES_SYSTEM_CATALOG_H_
 
+#include <memory>
+#include <optional>
+#include <utility>
 #include <vector>
 
-#include "zetasql/public/language_options.h"
-#include "zetasql/public/types/type.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/input_argument_type.h"
+#include "googlesql/public/language_options.h"
+#include "googlesql/public/types/type.h"
+#include "absl/base/attributes.h"
+#include "absl/base/const_init.h"
+#include "absl/base/thread_annotations.h"
+#include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
+#include "absl/synchronization/mutex.h"
 #include "third_party/spanner_pg/catalog/builtin_function.h"
 #include "third_party/spanner_pg/catalog/engine_system_catalog.h"
 #include "third_party/spanner_pg/catalog/function.h"
+#include "third_party/spanner_pg/catalog/function_identifier.h"
+#include "third_party/spanner_pg/catalog/type.h"
 #include "third_party/spanner_pg/interface/engine_builtin_function_catalog.h"
 
 namespace postgres_translator {
@@ -50,17 +62,29 @@ namespace spangres {
 constexpr absl::string_view kSpangresSystemCatalogName = "pg";
 constexpr char kDefaultFunctionNamespace[] = "pg_catalog";
 
+ABSL_CONST_INIT static absl::Mutex spangres_system_catalog_mutex(
+    absl::kConstInit);
+
 // A derived class of EngineSystemCatalog which represents the PostgreSQL types
 // and functions supported in Spanner through the PostgreSQL dialect.
 class SpangresSystemCatalog : public EngineSystemCatalog {
  public:
+  static SpangresSystemCatalog* GetSpangresSystemCatalog() {
+    absl::ReaderMutexLock l(&spangres_system_catalog_mutex);
+    SpangresSystemCatalog** spangres_system_catalog =
+        GetSpangresSystemCatalogPtr();
+    ABSL_DCHECK(*spangres_system_catalog != nullptr)
+        << "SpangresSystemCatalog accessed before it was initialized";
+    return *spangres_system_catalog;
+  }
+
   // Attempt to initialize the EngineSystemCatalog singleton with a
   // SpangresSystemCatalog.
   // Returns true if successful, false if EngineSystemCatalog was already
   // initialized, and an error if there was a problem initializing the catalog.
   static absl::StatusOr<bool> TryInitializeEngineSystemCatalog(
       std::unique_ptr<EngineBuiltinFunctionCatalog> builtin_function_catalog,
-      const zetasql::LanguageOptions& language_options);
+      const googlesql::LanguageOptions& language_options);
 
   // Reset the EngineSystemCatalog. The PG evaluators are defined with a time
   // zone. When we change the default time zone for a database, we need to reset
@@ -72,49 +96,49 @@ class SpangresSystemCatalog : public EngineSystemCatalog {
   absl::Status GetCustomErrorForProc(Oid proc_oid) const override;
 
   absl::StatusOr<FunctionAndSignature> GetPgNumericCastFunction(
-      const zetasql::Type* source_type, const zetasql::Type* target_type,
-      const zetasql::LanguageOptions& language_options) override;
+      const googlesql::Type* source_type, const googlesql::Type* target_type,
+      const googlesql::LanguageOptions& language_options) override;
 
   bool IsTransformationRequiredForComparison(
-      const zetasql::ResolvedExpr& gsql_expr) override;
+      const googlesql::ResolvedExpr& gsql_expr) override;
 
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedExpr>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedExpr>>
   GetResolvedExprForComparison(
-      std::unique_ptr<zetasql::ResolvedExpr> gsql_expr,
-      const zetasql::LanguageOptions& language_options) override;
+      std::unique_ptr<googlesql::ResolvedExpr> gsql_expr,
+      const googlesql::LanguageOptions& language_options) override;
 
   virtual bool IsResolvedExprForComparison(
-      const zetasql::ResolvedExpr& gsql_expr) const override;
+      const googlesql::ResolvedExpr& gsql_expr) const override;
 
-  virtual absl::StatusOr<const zetasql::ResolvedExpr*>
+  virtual absl::StatusOr<const googlesql::ResolvedExpr*>
   GetOriginalExprFromComparisonExpr(
-      const zetasql::ResolvedExpr& mapped_gsql_expr) const override;
+      const googlesql::ResolvedExpr& mapped_gsql_expr) const override;
 
   virtual std::optional<Oid> GetMappedOidForComparisonFuncid(
       Oid funcid) const override;
 
-  absl::StatusOr<zetasql::TypeListView> GetExtendedTypeSuperTypes(
-      const zetasql::Type* type) override;
+  absl::StatusOr<googlesql::TypeListView> GetExtendedTypeSuperTypes(
+      const googlesql::Type* type) override;
 
-  absl::Status FindConversion(const zetasql::Type* from_type,
-                              const zetasql::Type* to_type,
+  absl::Status FindConversion(const googlesql::Type* from_type,
+                              const googlesql::Type* to_type,
                               const FindConversionOptions& options,
-                              zetasql::Conversion* conversion) override;
+                              googlesql::Conversion* conversion) override;
 
   // Get the matching function and signature for this oid and set of input
   // argument types. Returns an error if the function call is not supported.
   absl::StatusOr<FunctionAndSignature> GetFunctionAndSignature(
       Oid proc_oid,
-      const std::vector<zetasql::InputArgumentType>& input_argument_types,
-      const zetasql::LanguageOptions& language_options) override;
+      const std::vector<googlesql::InputArgumentType>& input_argument_types,
+      const googlesql::LanguageOptions& language_options) override;
 
   // Get the matching function and signature for this expr identifier and set of
   // input argument types. Returns an error if the function call is not
   // supported.
   absl::StatusOr<FunctionAndSignature> GetFunctionAndSignature(
       const PostgresExprIdentifier& expr_id,
-      const std::vector<zetasql::InputArgumentType>& input_argument_types,
-      const zetasql::LanguageOptions& language_options) override;
+      const std::vector<googlesql::InputArgumentType>& input_argument_types,
+      const googlesql::LanguageOptions& language_options) override;
 
  private:
 
@@ -123,13 +147,22 @@ class SpangresSystemCatalog : public EngineSystemCatalog {
       : EngineSystemCatalog(kSpangresSystemCatalogName,
                             std::move(builtin_function_catalog)) {}
 
+  // Defines the SpangresSystemCatalog singleton.
+  // Used to read the singleton.
+  static SpangresSystemCatalog** GetSpangresSystemCatalogPtr()
+    ABSL_SHARED_LOCKS_REQUIRED(spangres_system_catalog_mutex) {
+    static SpangresSystemCatalog* spangres_system_catalog ABSL_GUARDED_BY(
+        spangres_system_catalog_mutex) = nullptr;
+    return &spangres_system_catalog;
+  }
+
   // Add PostgreSQL types for Spanner.
   absl::Status AddTypes(
-      const zetasql::LanguageOptions& language_options) override;
+      const googlesql::LanguageOptions& language_options) override;
 
   // Add PostgreSQL functions for Spanner.
   absl::Status AddFunctions(
-      const zetasql::LanguageOptions& language_options) override;
+      const googlesql::LanguageOptions& language_options) override;
 
   absl::Status AddFunctionRegistryFunctions(
       std::vector<PostgresFunctionArguments>& functions);
@@ -137,18 +170,18 @@ class SpangresSystemCatalog : public EngineSystemCatalog {
   // If the input `gsql_expr` returns a double type, wraps it in a call to
   // PG.MapDoubleToInt or PG.MapFloatToInt in order to preserve float8/float4
   // ordering and equality semantics.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedExpr>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedExpr>>
   GetResolvedExprForFloatingPointComparison(
-      std::unique_ptr<zetasql::ResolvedExpr> gsql_expr,
-      const zetasql::LanguageOptions& language_options);
+      std::unique_ptr<googlesql::ResolvedExpr> gsql_expr,
+      const googlesql::LanguageOptions& language_options);
 
   // MapDoubleToInt and MapFloatToInt functions are necessary because Spanner
   // has different sort semantics for FLOAT4 and FLOAT8 types compared to
   // Postgres. Wrapping ResolvedExprs which return FLOAT4 or FLOAT8 with these
   // function allows sort and comparison semantics to be equivalent.
   absl::StatusOr<FunctionAndSignature> GetMapFloatingPointToIntFunction(
-      const zetasql::Type* source_type,
-      const zetasql::LanguageOptions& language_options);
+      const googlesql::Type* source_type,
+      const googlesql::LanguageOptions& language_options);
 };
 
 }  // namespace spangres

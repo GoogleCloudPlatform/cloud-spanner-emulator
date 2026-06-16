@@ -16,7 +16,7 @@
 
 #include "backend/schema/parser/ddl_token_validation_utils.h"
 
-#include "zetasql/public/strings.h"
+#include "googlesql/public/strings.h"
 #include "absl/status/status.h"
 #include "absl/strings/match.h"
 
@@ -39,7 +39,7 @@ absl::Status ValidateBytesLiteralImage(const std::string& image,
                                        std::string* error) {
   std::string unused_out;
   int unused_error_position;
-  return zetasql::ParseBytesLiteral(image, &unused_out, error,
+  return googlesql::ParseBytesLiteral(image, &unused_out, error,
                                       &unused_error_position);
 }
 
@@ -48,7 +48,7 @@ absl::Status ValidateStringLiteralImage(const std::string& image, bool force,
   std::string unused_out;
   int unused_error_position;
   if (force) {
-    return zetasql::ParseStringLiteral(image, &unused_out, error,
+    return googlesql::ParseStringLiteral(image, &unused_out, error,
                                          &unused_error_position);
   }
   return absl::OkStatus();

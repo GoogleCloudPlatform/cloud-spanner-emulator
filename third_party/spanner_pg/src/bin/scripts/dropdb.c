@@ -2,7 +2,7 @@
  *
  * dropdb
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/bin/scripts/dropdb.c
@@ -65,12 +65,21 @@ main(int argc, char *argv[])
 
 	handle_help_version_opts(argc, argv, "dropdb", help);
 
-	while ((c = getopt_long(argc, argv, "h:p:U:wWeif", long_options, &optindex)) != -1)
+	while ((c = getopt_long(argc, argv, "efh:ip:U:wW", long_options, &optindex)) != -1)
 	{
 		switch (c)
 		{
+			case 'e':
+				echo = true;
+				break;
+			case 'f':
+				force = true;
+				break;
 			case 'h':
 				host = pg_strdup(optarg);
+				break;
+			case 'i':
+				interactive = true;
 				break;
 			case 'p':
 				port = pg_strdup(optarg);
@@ -83,15 +92,6 @@ main(int argc, char *argv[])
 				break;
 			case 'W':
 				prompt_password = TRI_YES;
-				break;
-			case 'e':
-				echo = true;
-				break;
-			case 'i':
-				interactive = true;
-				break;
-			case 'f':
-				force = true;
 				break;
 			case 0:
 				/* this covers the long options */
@@ -129,13 +129,6 @@ main(int argc, char *argv[])
 			exit(0);
 	}
 
-	initPQExpBuffer(&sql);
-
-	appendPQExpBuffer(&sql, "DROP DATABASE %s%s%s;",
-					  (if_exists ? "IF EXISTS " : ""),
-					  fmtId(dbname),
-					  force ? " WITH (FORCE)" : "");
-
 	/* Avoid trying to drop postgres db while we are connected to it. */
 	if (maintenance_db == NULL && strcmp(dbname, "postgres") == 0)
 		maintenance_db = "template1";
@@ -148,6 +141,12 @@ main(int argc, char *argv[])
 	cparams.override_dbname = NULL;
 
 	conn = connectMaintenanceDatabase(&cparams, progname, echo);
+
+	initPQExpBuffer(&sql);
+	appendPQExpBuffer(&sql, "DROP DATABASE %s%s%s;",
+					  (if_exists ? "IF EXISTS " : ""),
+					  fmtIdEnc(dbname, PQclientEncoding(conn)),
+					  force ? " WITH (FORCE)" : "");
 
 	if (echo)
 		printf("%s\n", sql.data);

@@ -22,7 +22,7 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -34,8 +34,8 @@
 #include "backend/query/search/ngrams_tokenizer.h"
 #include "backend/query/search/tokenizer.h"
 #include "common/errors.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -56,7 +56,7 @@ namespace search {
 //   tokenlist_ngrams: the returned set of unique ngrams from the tokenlist.
 //   query_ngrams: the returned set of unique ngrams from the query.
 absl::Status SearchNgramsEvaluator::BuildTokenLists(
-    const zetasql::Value& tokenlist, absl::string_view query,
+    const googlesql::Value& tokenlist, absl::string_view query,
     bool& source_is_null, std::vector<std::string>& tokenlist_ngrams,
     absl::flat_hash_set<std::string>& query_ngrams) {
   // substring and ngrams tokenizer signature indexes.
@@ -65,7 +65,7 @@ absl::Status SearchNgramsEvaluator::BuildTokenLists(
   constexpr int64_t kNgramMinSizeIndex = 2;
   constexpr int kIsNullIndex = 3;
 
-  ZETASQL_ASSIGN_OR_RETURN(auto tokens, StringsFromTokenList(tokenlist));
+  GOOGLESQL_ASSIGN_OR_RETURN(auto tokens, StringsFromTokenList(tokenlist));
   int64_t ngram_max_size = -1;
   int64_t ngram_min_size = -1;
   bool is_substring_tokenizer = false;
@@ -83,7 +83,7 @@ absl::Status SearchNgramsEvaluator::BuildTokenLists(
       //   [substring|ngrams]-ngram_size_max-ngram_size_min-is_source_null
       std::vector<std::string> signature =
           absl::StrSplit(tokens[i], absl::ByChar('-'), absl::SkipEmpty());
-      ZETASQL_RET_CHECK(
+      GOOGLESQL_RET_CHECK(
           (signature.size() == kTokenizerSignatureArgumentSize ||
            signature.size() == kSubstringTokenizerSignatureArgumentSize) &&
           absl::SimpleAtoi(signature[kNgramMaxSizeIndex], &ngram_max_size) &&
@@ -96,14 +96,14 @@ absl::Status SearchNgramsEvaluator::BuildTokenLists(
       for (const auto& substring : substrings) {
         // Query n-grams are generated with length `ngram_max_size` of the
         // original tokenlist provided to SEARCH_NGRAMS.
-        std::vector<zetasql::Value> args{
-            zetasql::Value::String(substring),
-            zetasql::Value::Int64(ngram_max_size),
-            zetasql::Value::Int64(std::min(
+        std::vector<googlesql::Value> args{
+            googlesql::Value::String(substring),
+            googlesql::Value::Int64(ngram_max_size),
+            googlesql::Value::Int64(std::min(
                 static_cast<int64_t>(substring.size()), ngram_max_size)),
-            zetasql::Value::Bool(false)};
-        ZETASQL_ASSIGN_OR_RETURN(auto result, NgramsTokenizer::Tokenize(args));
-        ZETASQL_ASSIGN_OR_RETURN(auto ngrams, StringsFromTokenList(result));
+            googlesql::Value::Bool(false)};
+        GOOGLESQL_ASSIGN_OR_RETURN(auto result, NgramsTokenizer::Tokenize(args));
+        GOOGLESQL_ASSIGN_OR_RETURN(auto ngrams, StringsFromTokenList(result));
         for (auto it = ngrams.begin() + 1; it != ngrams.end(); ++it) {
           query_ngrams.insert(*it);
         }
@@ -114,14 +114,14 @@ absl::Status SearchNgramsEvaluator::BuildTokenLists(
       return error::TokenListNotMatchSearch(
           "SEARCH_NGRAMS", "TOKENIZE_SUBSTRING or TOKENIZE_NGRAMS");
     } else if (is_substring_tokenizer) {
-      ZETASQL_RETURN_IF_ERROR(TokenizeSubstring(tokens[i], tokenlist_substring));
+      GOOGLESQL_RETURN_IF_ERROR(TokenizeSubstring(tokens[i], tokenlist_substring));
     } else {
       tokenlist_ngrams.push_back(tokens[i]);
     }
   }
   if (is_substring_tokenizer) {
     for (const auto& token : tokenlist_substring) {
-      ZETASQL_RETURN_IF_ERROR(TokenizeNgrams(token, ngram_min_size, ngram_max_size,
+      GOOGLESQL_RETURN_IF_ERROR(TokenizeNgrams(token, ngram_min_size, ngram_max_size,
                                      tokenlist_ngrams));
     }
   }
@@ -141,22 +141,22 @@ int64_t SearchNgramsEvaluator::NumMatchingNgrams(
   return num_matching_ngrams;
 }
 
-absl::StatusOr<zetasql::Value> SearchNgramsEvaluator::Evaluate(
-    absl::Span<const zetasql::Value> args) {
+absl::StatusOr<googlesql::Value> SearchNgramsEvaluator::Evaluate(
+    absl::Span<const googlesql::Value> args) {
   // argument indexes
   constexpr int64_t kTokenlist = 0;
   constexpr int64_t kQuery = 1;
   constexpr int64_t kNgramMin = 2;
   constexpr int64_t kNgramMinPercent = 3;
 
-  const zetasql::Value& tokenlist = args[kTokenlist];
-  const zetasql::Value& query = args[kQuery];
+  const googlesql::Value& tokenlist = args[kTokenlist];
+  const googlesql::Value& query = args[kQuery];
   int64_t min_ngrams = GetIntParameterValue(args, kNgramMin, kDefaultMinNgrams);
   double min_ngrams_percent =
       GetDoubleParameterValue(args, kNgramMinPercent, 0);
 
   if (tokenlist.is_null() || query.is_null()) {
-    return zetasql::Value::NullBool();
+    return googlesql::Value::NullBool();
   }
 
   if (!tokenlist.type()->IsTokenList()) {
@@ -170,12 +170,12 @@ absl::StatusOr<zetasql::Value> SearchNgramsEvaluator::Evaluate(
   std::vector<std::string> tokenlist_ngrams;
   absl::flat_hash_set<std::string> query_ngrams;
   bool source_is_null;
-  ZETASQL_RETURN_IF_ERROR(BuildTokenLists(tokenlist, query.string_value(),
+  GOOGLESQL_RETURN_IF_ERROR(BuildTokenLists(tokenlist, query.string_value(),
                                   source_is_null, tokenlist_ngrams,
                                   query_ngrams));
 
   if (source_is_null) {
-    return zetasql::Value::NullBool();
+    return googlesql::Value::NullBool();
   }
 
   int64_t matching_ngrams = NumMatchingNgrams(tokenlist_ngrams, query_ngrams);
@@ -193,7 +193,7 @@ absl::StatusOr<zetasql::Value> SearchNgramsEvaluator::Evaluate(
           std::ceil(query_ngrams.size() * min_ngrams_percent / 100.0))) {
     matches = false;
   }
-  return zetasql::Value::Bool(matches);
+  return googlesql::Value::Bool(matches);
 }
 
 }  // namespace search

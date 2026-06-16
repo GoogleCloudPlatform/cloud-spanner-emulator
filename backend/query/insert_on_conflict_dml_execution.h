@@ -24,11 +24,11 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/types/type.h"
-#include "zetasql/resolved_ast/resolved_ast.h"
-#include "zetasql/resolved_ast/resolved_ast_deep_copy_visitor.h"
-#include "zetasql/resolved_ast/resolved_column.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_ast_deep_copy_visitor.h"
+#include "googlesql/resolved_ast/resolved_column.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
@@ -46,13 +46,13 @@ namespace emulator {
 namespace backend {
 
 class InsertOnConflictDoUpdateRewriter
-    : public zetasql::ResolvedASTDeepCopyVisitor {
+    : public googlesql::ResolvedASTDeepCopyVisitor {
  public:
   explicit InsertOnConflictDoUpdateRewriter(
-      const absl::flat_hash_map<int, std::pair<const zetasql::Type*, int>>&
+      const absl::flat_hash_map<int, std::pair<const googlesql::Type*, int>>&
           column_ids_referenced_from_insert_row,
       const absl::flat_hash_set<int>& column_ids_with_commit_timestamp_value,
-      const zetasql::ResolvedColumn* struct_column_holder)
+      const googlesql::ResolvedColumn* struct_column_holder)
       : column_ids_referenced_from_insert_row_(
             column_ids_referenced_from_insert_row),
         column_ids_with_commit_timestamp_value_(
@@ -60,7 +60,9 @@ class InsertOnConflictDoUpdateRewriter
         struct_column_holder_(struct_column_holder) {}
 
   absl::Status VisitResolvedColumnRef(
-      const zetasql::ResolvedColumnRef* node) override;
+      const googlesql::ResolvedColumnRef* node) override;
+  absl::Status VisitResolvedSubqueryExpr(
+      const googlesql::ResolvedSubqueryExpr* node) override;
 
  private:
   // Map of column id(s) of columns referenced from the insert row (i.e. of the
@@ -68,21 +70,21 @@ class InsertOnConflictDoUpdateRewriter
   // source STRUCT column.
   // Used to build the expression to extract the column value from the source
   // STRUCT column `struct_column_`.
-  absl::flat_hash_map<int, std::pair<const zetasql::Type*, int>>
+  absl::flat_hash_map<int, std::pair<const googlesql::Type*, int>>
       column_ids_referenced_from_insert_row_;
   // Set of column ids of columns referenced from the insert row (i.e. of the
   // form `excluded.<column_name>`) and having commit timestamp value.
   absl::flat_hash_set<int> column_ids_with_commit_timestamp_value_;
   // Column containing the source STRUCT having the column values from the
   // insert row.
-  const zetasql::ResolvedColumn* struct_column_holder_;
+  const googlesql::ResolvedColumn* struct_column_holder_;
 };
 
 class InsertOnConflictToInsertOrIgnoreRewriter
-    : public zetasql::ResolvedASTDeepCopyVisitor {
+    : public googlesql::ResolvedASTDeepCopyVisitor {
  public:
   absl::Status VisitResolvedInsertStmt(
-      const zetasql::ResolvedInsertStmt* node) override;
+      const googlesql::ResolvedInsertStmt* node) override;
 };
 
 // Resolves the conflict target from the ON CONFLICT clause.
@@ -90,7 +92,7 @@ class InsertOnConflictToInsertOrIgnoreRewriter
 // unique index key columns) and the unique constraint name.
 absl::Status ResolveConflictTarget(
     const Table* table,
-    const zetasql::ResolvedOnConflictClause* on_conflict_clause,
+    const googlesql::ResolvedOnConflictClause* on_conflict_clause,
     std::vector<std::string>& conflict_target_key_columns,
     std::string* conflict_target_unique_constraint_name);
 
@@ -100,19 +102,19 @@ absl::Status ResolveConflictTarget(
 // "INSERT INTO t1 (key, val) VALUES (1, 2) ON CONFLICT(c1) ...",
 // then this function will return an AST equivalent to the SQL
 // "INSERT OR IGNORE INTO t1 (key, val) VALUES (1, 2)"
-absl::StatusOr<std::unique_ptr<const zetasql::ResolvedInsertStmt>>
+absl::StatusOr<std::unique_ptr<const googlesql::ResolvedInsertStmt>>
 BuildInsertOrIgnoreStmtFromInsertOnConflictStmt(
-    const zetasql::ResolvedInsertStmt* insert_on_conflict_stmt);
+    const googlesql::ResolvedInsertStmt* insert_on_conflict_stmt);
 
 // Given the insert statement and insert row column information, populate the
 // column information required to build and execute the insert or update action
 // in INSERT ON CONFLICT DML.
 absl::Status ExtractColumnInfoAndRowsForInsertOrUpdateAction(
-    const zetasql::ResolvedInsertStmt* insert_stmt,
+    const googlesql::ResolvedInsertStmt* insert_stmt,
     const std::vector<std::string>& conflict_target_key_columns,
     const ExecuteUpdateResult& all_insert_rows_in_dml,
     const std::set<Key>& original_table_row_keys,
-    std::map<Key, std::vector<zetasql::Value>>* insert_row_map,
+    std::map<Key, std::vector<googlesql::Value>>* insert_row_map,
     std::vector<Key>* existing_rows, std::vector<Key>* new_rows,
     std::vector<std::string>* columns_in_mutation,
     absl::flat_hash_set<int>* insert_column_index_in_mutation_for_insert,
@@ -171,12 +173,12 @@ absl::StatusOr<std::set<Key>> GetOriginalTableRows(
 //
 // Output INSERT statement:
 // INSERT INTO t1 (c1, c2) VALUES (1, 10), (3, 30)
-absl::StatusOr<std::unique_ptr<const zetasql::ResolvedInsertStmt>>
+absl::StatusOr<std::unique_ptr<const googlesql::ResolvedInsertStmt>>
 BuildInsertDMLForNewRows(
-    const zetasql::ResolvedInsertStmt* insert_stmt,
-    zetasql::TypeFactory& type_factory, zetasql::Catalog& catalog,
+    const googlesql::ResolvedInsertStmt* insert_stmt,
+    googlesql::TypeFactory& type_factory, googlesql::Catalog& catalog,
     const std::vector<Key>& new_rows,
-    const std::map<Key, std::vector<zetasql::Value>>& insert_rows_map,
+    const std::map<Key, std::vector<googlesql::Value>>& insert_rows_map,
     const std::vector<std::string>& mutation_column_names,
     const absl::flat_hash_set<int>& insert_column_index_in_row);
 
@@ -233,12 +235,12 @@ BuildInsertDMLForNewRows(
 //              STRUCT(3 AS c1, 30 AS c2, 300 AS c3)]) as a
 // WHERE t1.c1 = a.c1   // Join condition from conflict target key columns
 //   AND t1.c3 > a.c3;  // condition from ON CONFLICT DO UPDATE WHERE clause
-absl::StatusOr<std::unique_ptr<const zetasql::ResolvedUpdateStmt>>
+absl::StatusOr<std::unique_ptr<const googlesql::ResolvedUpdateStmt>>
 BuildUpdateDMLForExistingRows(
-    const zetasql::ResolvedInsertStmt* insert_stmt,
-    zetasql::TypeFactory& type_factory, zetasql::Catalog& catalog,
+    const googlesql::ResolvedInsertStmt* insert_stmt,
+    googlesql::TypeFactory& type_factory, googlesql::Catalog& catalog,
     const std::vector<Key>& existing_rows,
-    const std::map<Key, std::vector<zetasql::Value>>& insert_rows_map,
+    const std::map<Key, std::vector<googlesql::Value>>& insert_rows_map,
     const std::vector<std::string>& mutation_column_names,
     const absl::flat_hash_set<int>& insert_column_index_in_row,
     const std::vector<std::string>& conflict_target_key_columns);
@@ -249,15 +251,15 @@ absl::Status CollectReturningRows(
 
 // This is required for backward compatibility in PostgreSQL dialect.
 absl::StatusOr<bool> CanTranslateToInsertOrUpdateMode(
-    const zetasql::ResolvedInsertStmt& insert_stmt);
+    const googlesql::ResolvedInsertStmt& insert_stmt);
 
 // If INSERT ON CONFLICT DO UPDATE DML can be translated to INSERT OR UPDATE
 // DML, analyze in the query into OR_UPDATE mode in PG forward transformer by
 // disabling the feature FEATURE_INSERT_ON_CONFLICT_CLAUSE.
-absl::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>>
+absl::StatusOr<std::unique_ptr<const googlesql::AnalyzerOutput>>
 AnalyzeAsInsertOrUpdateDML(const std::string& sql, Catalog* catalog,
-                           zetasql::AnalyzerOptions& analyzer_options,
-                           zetasql::TypeFactory* type_factory,
+                           googlesql::AnalyzerOptions& analyzer_options,
+                           googlesql::TypeFactory* type_factory,
                            const FunctionCatalog* function_catalog);
 
 }  // namespace backend

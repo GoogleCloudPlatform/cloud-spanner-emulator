@@ -21,7 +21,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
 #include "backend/query/search/tokenizer.h"
 
@@ -32,17 +32,17 @@ namespace backend {
 namespace query {
 namespace search {
 
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
-void ValidateResult(absl::StatusOr<zetasql::Value>& result) {
-  ZETASQL_EXPECT_OK(result.status());
+void ValidateResult(absl::StatusOr<googlesql::Value>& result) {
+  GOOGLESQL_EXPECT_OK(result.status());
 
-  zetasql::Value token_list = result.value();
+  googlesql::Value token_list = result.value();
   EXPECT_TRUE(token_list.type()->IsTokenList());
 
   // For exact_match tokenized column, since no operation is supported on the
   // column, we don't store original text but only the tokenizer information.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto tokens, StringsFromTokenList(token_list));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto tokens, StringsFromTokenList(token_list));
   ASSERT_EQ(tokens.size(), 1);
   EXPECT_EQ(tokens[0], "exact_match");
 }
@@ -57,34 +57,34 @@ TEST(ExactMatchTokenizerTest, TestTokenize) {
                                             {""}};
 
   for (auto& s : original_strs) {
-    absl::StatusOr<zetasql::Value> result =
-        ExactMatchTokenizer::Tokenize({zetasql::Value::String(s)});
+    absl::StatusOr<googlesql::Value> result =
+        ExactMatchTokenizer::Tokenize({googlesql::Value::String(s)});
 
     ValidateResult(result);
   }
 }
 
 TEST(ExactMatchTokenizerTest, TestArgNotString) {
-  EXPECT_THAT(ExactMatchTokenizer::Tokenize({zetasql::Value::Int64(64)}),
+  EXPECT_THAT(ExactMatchTokenizer::Tokenize({googlesql::Value::Int64(64)}),
               StatusIs(absl::StatusCode::kInternal));
 }
 
 TEST(ExactMatchTokenizerTest, TestTokenizeNull) {
-  absl::StatusOr<zetasql::Value> result =
-      ExactMatchTokenizer::Tokenize({zetasql::Value::NullString()});
+  absl::StatusOr<googlesql::Value> result =
+      ExactMatchTokenizer::Tokenize({googlesql::Value::NullString()});
 
   ValidateResult(result);
 }
 
 TEST(ExactMatchTokenizerTest, TestTokenizeArray) {
-  std::vector<zetasql::Value> values = {zetasql::Value::String("Hello"),
-                                          zetasql::Value::String("World!")};
-  absl::StatusOr<zetasql::Value> make_array_result =
-      zetasql::Value::MakeArray(zetasql::types::StringArrayType(), values);
-  ZETASQL_ASSERT_OK(make_array_result.status());
+  std::vector<googlesql::Value> values = {googlesql::Value::String("Hello"),
+                                          googlesql::Value::String("World!")};
+  absl::StatusOr<googlesql::Value> make_array_result =
+      googlesql::Value::MakeArray(googlesql::types::StringArrayType(), values);
+  GOOGLESQL_ASSERT_OK(make_array_result.status());
 
-  zetasql::Value array_val = make_array_result.value();
-  absl::StatusOr<zetasql::Value> result =
+  googlesql::Value array_val = make_array_result.value();
+  absl::StatusOr<googlesql::Value> result =
       ExactMatchTokenizer::Tokenize({array_val});
   ValidateResult(result);
 }

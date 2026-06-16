@@ -22,8 +22,8 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
-#include "zetasql/base/no_destructor.h"
+#include "googlesql/base/testing/status_matchers.h"
+#include "googlesql/base/no_destructor.h"
 
 namespace google::spanner::emulator::backend {
 
@@ -31,14 +31,14 @@ namespace {
 
 TEST(AddTablesFromMetadata, EmptyMetadata) {
   std::vector<ColumnsMetaEntry> metadata;
-  absl::flat_hash_map<std::string, const zetasql::Type*> type_map;
+  absl::flat_hash_map<std::string, const googlesql::Type*> type_map;
   absl::flat_hash_set<std::string> supported_tables;
 
   EXPECT_EQ(AddTablesFromMetadata(metadata, type_map, supported_tables).size(),
             0);
 }
 
-static const zetasql_base::NoDestructor<std::vector<ColumnsMetaEntry>> kMetadata({
+static const googlesql_base::NoDestructor<std::vector<ColumnsMetaEntry>> kMetadata({
     {"SCHEMATA", "CATALOG_NAME", "NO", "STRING(MAX)"},
     {"SCHEMATA", "SCHEMA_NAME", "NO", "STRING(MAX)"},
     {"SCHEMATA", "EFFECTIVE_TIMESTAMP", "YES", "INT64"},
@@ -50,15 +50,15 @@ static const zetasql_base::NoDestructor<std::vector<ColumnsMetaEntry>> kMetadata
     {"TABLES", "TABLE_NAME", "NO", "STRING(MAX)"},
 });
 
-static const zetasql_base::NoDestructor<
-    absl::flat_hash_map<std::string, const zetasql::Type*>>
+static const googlesql_base::NoDestructor<
+    absl::flat_hash_map<std::string, const googlesql::Type*>>
     kTypeMap{{
-        {"BOOL", zetasql::types::BoolType()},
-        {"INT64", zetasql::types::Int64Type()},
-        {"STRING(MAX)", zetasql::types::StringType()},
+        {"BOOL", googlesql::types::BoolType()},
+        {"INT64", googlesql::types::Int64Type()},
+        {"STRING(MAX)", googlesql::types::StringType()},
     }};
 
-static const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
+static const googlesql_base::NoDestructor<absl::flat_hash_set<std::string>>
     kSupportedTables{{
         "SCHEMATA",
         "SPANNER_STATISTICS",
@@ -66,7 +66,7 @@ static const zetasql_base::NoDestructor<absl::flat_hash_set<std::string>>
     }};
 
 TEST(AddTablesFromMetadata, AllTablesSupported) {
-  absl::flat_hash_map<std::string, std::unique_ptr<zetasql::SimpleTable>>
+  absl::flat_hash_map<std::string, std::unique_ptr<googlesql::SimpleTable>>
       result = AddTablesFromMetadata(*kMetadata, *kTypeMap, *kSupportedTables);
   absl::flat_hash_set<std::string> result_table_names;
   for (auto it = result.begin(); it != result.end(); ++it) {
@@ -80,7 +80,7 @@ class AddTablesFromMetadataForSomeTables
 
 TEST_P(AddTablesFromMetadataForSomeTables, SomeTablesSupported) {
   absl::flat_hash_set<std::string> supported_tables{std::string(GetParam())};
-  absl::flat_hash_map<std::string, std::unique_ptr<zetasql::SimpleTable>>
+  absl::flat_hash_map<std::string, std::unique_ptr<googlesql::SimpleTable>>
       result = AddTablesFromMetadata(*kMetadata, *kTypeMap, supported_tables);
   absl::flat_hash_set<std::string> result_table_names;
   for (auto it = result.begin(); it != result.end(); ++it) {

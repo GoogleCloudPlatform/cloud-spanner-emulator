@@ -2861,6 +2861,141 @@ functions {
 }
 functions {
   mapped_name_path {
+    name_path: "ai"
+    name_path: "classify"
+  }
+  postgresql_name_paths {
+    name_path: "ai"
+    name_path: "classify"
+  }
+  signatures {
+    return_type {
+      oid: 25
+      name: "text"
+    }
+    arguments {
+      type {
+        oid: 25
+        name: "text"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "prompt"
+    }
+    arguments {
+      type {
+        oid: 1009
+        name: "_text"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "categories"
+    }
+    oid: 50086
+    postgresql_name_paths {
+      name_path: "ai"
+      name_path: "classify"
+    }
+    deprecated: false
+  }
+  signatures {
+    return_type {
+      oid: 25
+      name: "text"
+    }
+    arguments {
+      type {
+        oid: 25
+        name: "text"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "prompt"
+    }
+    arguments {
+      type {
+        oid: 3802
+        name: "jsonb"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "categories"
+    }
+    oid: 50087
+    postgresql_name_paths {
+      name_path: "ai"
+      name_path: "classify"
+    }
+    deprecated: false
+  }
+  mode: SCALAR
+}
+functions {
+  mapped_name_path {
+    name_path: "ai"
+    name_path: "if"
+  }
+  postgresql_name_paths {
+    name_path: "ai"
+    name_path: "if"
+  }
+  signatures {
+    return_type {
+      oid: 16
+      name: "bool"
+    }
+    arguments {
+      type {
+        oid: 25
+        name: "text"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "prompt"
+    }
+    oid: 50084
+    postgresql_name_paths {
+      name_path: "ai"
+      name_path: "if"
+    }
+    deprecated: false
+  }
+  mode: SCALAR
+}
+functions {
+  mapped_name_path {
+    name_path: "ai"
+    name_path: "score"
+  }
+  postgresql_name_paths {
+    name_path: "ai"
+    name_path: "score"
+  }
+  signatures {
+    return_type {
+      oid: 701
+      name: "float8"
+    }
+    arguments {
+      type {
+        oid: 25
+        name: "text"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_OR_NAMED
+      name: "prompt"
+    }
+    oid: 50085
+    postgresql_name_paths {
+      name_path: "ai"
+      name_path: "score"
+    }
+    deprecated: false
+  }
+  mode: SCALAR
+}
+functions {
+  mapped_name_path {
     name_path: "array_concat"
   }
   postgresql_name_paths {

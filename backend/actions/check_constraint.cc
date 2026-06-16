@@ -20,11 +20,11 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/analyzer_options.h"
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/evaluator.h"
-#include "zetasql/public/types/type_factory.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/evaluator.h"
+#include "googlesql/public/types/type_factory.h"
+#include "googlesql/public/value.h"
 #include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "absl/types/span.h"
@@ -38,8 +38,8 @@
 #include "backend/schema/catalog/table.h"
 #include "backend/storage/iterator.h"
 #include "common/errors.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -48,27 +48,27 @@ namespace backend {
 
 absl::Status CheckConstraintVerifier::PrepareExpression(
     const CheckConstraint* check_constraint,
-    const zetasql::AnalyzerOptions& analyzer_options,
-    zetasql::Catalog* function_catalog) {
+    const googlesql::AnalyzerOptions& analyzer_options,
+    googlesql::Catalog* function_catalog) {
   // Prepare an execuatable expression given a check constraint expression.
-  auto expr = std::make_unique<zetasql::PreparedExpression>(
+  auto expr = std::make_unique<googlesql::PreparedExpression>(
       check_constraint->expression());
-  zetasql::AnalyzerOptions options = analyzer_options;
+  googlesql::AnalyzerOptions options = analyzer_options;
   for (const Column* dep : check_constraint->dependent_columns()) {
-    ZETASQL_RETURN_IF_ERROR(options.AddExpressionColumn(dep->Name(), dep->GetType()));
+    GOOGLESQL_RETURN_IF_ERROR(options.AddExpressionColumn(dep->Name(), dep->GetType()));
   }
-  ZETASQL_RETURN_IF_ERROR(expr->Prepare(options, function_catalog));
-  ZETASQL_RET_CHECK(expr->output_type()->Equals(zetasql::types::BoolType()));
+  GOOGLESQL_RETURN_IF_ERROR(expr->Prepare(options, function_catalog));
+  GOOGLESQL_RET_CHECK(expr->output_type()->Equals(googlesql::types::BoolType()));
   expression_ = std::move(expr);
   return absl::OkStatus();
 }
 
 absl::Status CheckConstraintVerifier::VerifyRow(
-    const zetasql::ParameterValueMap& column_values, const Key& key) const {
-  ZETASQL_ASSIGN_OR_RETURN(zetasql::Value value, expression_->Execute(column_values));
+    const googlesql::ParameterValueMap& column_values, const Key& key) const {
+  GOOGLESQL_ASSIGN_OR_RETURN(googlesql::Value value, expression_->Execute(column_values));
   // The value could be True, False, or Null. The check constraint is violated
   // if the value is False.
-  if (value.Equals(zetasql::values::False())) {
+  if (value.Equals(googlesql::values::False())) {
     return error::CheckConstraintViolated(check_constraint_->Name(),
                                           check_constraint_->table()->Name(),
                                           key.DebugString());
@@ -78,8 +78,8 @@ absl::Status CheckConstraintVerifier::VerifyRow(
 
 CheckConstraintVerifier::CheckConstraintVerifier(
     const CheckConstraint* check_constraint,
-    const zetasql::AnalyzerOptions& analyzer_options,
-    zetasql::Catalog* function_catalog)
+    const googlesql::AnalyzerOptions& analyzer_options,
+    googlesql::Catalog* function_catalog)
     : check_constraint_(check_constraint) {
   absl::Status s =
       PrepareExpression(check_constraint, analyzer_options, function_catalog);
@@ -89,18 +89,18 @@ CheckConstraintVerifier::CheckConstraintVerifier(
 absl::Status CheckConstraintVerifier::VerifyInsertUpdateOp(
     const ActionContext* ctx, const Table* table,
     const std::vector<const Column*>& columns,
-    const std::vector<zetasql::Value>& values, const Key& key) const {
+    const std::vector<googlesql::Value>& values, const Key& key) const {
   absl::Span<const Column* const> dependent_columns =
       check_constraint_->dependent_columns();
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       std::unique_ptr<StorageIterator> itr,
       ctx->store()->Read(table, KeyRange::Point(key), dependent_columns));
-  ZETASQL_RET_CHECK(itr->Next());
-  ZETASQL_RETURN_IF_ERROR(itr->Status());
-  ZETASQL_RET_CHECK_EQ(columns.size(), values.size());
-  ZETASQL_RET_CHECK_EQ(dependent_columns.size(), itr->NumColumns());
+  GOOGLESQL_RET_CHECK(itr->Next());
+  GOOGLESQL_RETURN_IF_ERROR(itr->Status());
+  GOOGLESQL_RET_CHECK_EQ(columns.size(), values.size());
+  GOOGLESQL_RET_CHECK_EQ(dependent_columns.size(), itr->NumColumns());
 
-  zetasql::ParameterValueMap column_values;
+  googlesql::ParameterValueMap column_values;
   for (int i = 0; i < dependent_columns.size(); ++i) {
     column_values[dependent_columns[i]->Name()] = itr->ColumnValue(i);
   }
@@ -112,7 +112,7 @@ absl::Status CheckConstraintVerifier::VerifyInsertUpdateOp(
     column_values[columns[i]->Name()] = values[i];
   }
 
-  ZETASQL_RETURN_IF_ERROR(VerifyRow(column_values, key));
+  GOOGLESQL_RETURN_IF_ERROR(VerifyRow(column_values, key));
   return absl::OkStatus();
 }
 

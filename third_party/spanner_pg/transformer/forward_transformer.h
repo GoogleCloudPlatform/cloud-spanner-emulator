@@ -32,20 +32,21 @@
 #ifndef TRANSFORMER_FORWARD_TRANSFORMER_H_
 #define TRANSFORMER_FORWARD_TRANSFORMER_H_
 
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "zetasql/base/logging.h"
-#include "zetasql/public/analyzer_options.h"
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/coercer.h"
-#include "zetasql/public/id_string.h"
-#include "zetasql/public/types/type.h"
-#include "zetasql/resolved_ast/resolved_ast.h"
-#include "zetasql/resolved_ast/resolved_column.h"
+#include "googlesql/base/logging.h"
+#include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/coercer.h"
+#include "googlesql/public/id_string.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_column.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/flags/declare.h"
 #include "absl/log/check.h"
@@ -69,11 +70,11 @@ ABSL_DECLARE_FLAG(bool, spangres_use_emulator_ordinality_transformer);
 
 namespace postgres_translator {
 
-using ObjectAccess = ::zetasql::ResolvedStatement::ObjectAccess;
+using ObjectAccess = ::googlesql::ResolvedStatement::ObjectAccess;
 using ::postgres_translator::CatalogAdapter;
-// A type of different ZetaSQL joins. This is used to distinguish ZetaSQL
+// A type of different GoogleSQL joins. This is used to distinguish GoogleSQL
 // from PostgreSQL join types below.
-using GsqlJoinType = ::zetasql::ResolvedJoinScan::JoinType;
+using GsqlJoinType = ::googlesql::ResolvedJoinScan::JoinType;
 // A type of different PostgreSQL joins.
 using PgJoinType = JoinType;
 
@@ -102,9 +103,9 @@ class ForwardTransformer {
     const TargetEntry* target_entry;
   };
 
-  // Modeled after the ZetaSQL SetOperationResolver::ResolvedInputResult.
+  // Modeled after the GoogleSQL SetOperationResolver::ResolvedInputResult.
   struct SetOperationInput {
-    std::unique_ptr<zetasql::ResolvedSetOperationItem> node;
+    std::unique_ptr<googlesql::ResolvedSetOperationItem> node;
     std::vector<std::string> output_column_names;
   };
 
@@ -121,7 +122,7 @@ class ForwardTransformer {
       ABSL_CHECK(catalog_adapter_->GetEngineSystemCatalog() != nullptr);
       ABSL_CHECK(catalog_adapter_->GetEngineSystemCatalog()->type_factory() !=
             nullptr);
-      coercer_ = std::make_unique<zetasql::Coercer>(
+      coercer_ = std::make_unique<googlesql::Coercer>(
           catalog_adapter_->GetEngineSystemCatalog()->type_factory(),
           &catalog_adapter_->analyzer_options().language(),
           catalog_adapter_->GetEngineSystemCatalog());
@@ -135,23 +136,23 @@ class ForwardTransformer {
 
   CatalogAdapter& catalog_adapter() { return *catalog_adapter_; }
 
-  std::map<std::string, const zetasql::Type*>& query_parameter_types() {
+  std::map<std::string, const googlesql::Type*>& query_parameter_types() {
     return query_parameter_types_;
   }
 
-  std::map<std::string, const zetasql::Type*>& create_func_arg_types() {
+  std::map<std::string, const googlesql::Type*>& create_func_arg_types() {
     return create_func_arg_types_;
   }
 
   // Query =====================================================================
 
-  absl::StatusOr<const zetasql::Table*> GetTableFromRTE(
+  absl::StatusOr<const googlesql::Table*> GetTableFromRTE(
       const RangeTblEntry& rte);
 
   // Builds a `ResolvedTableScan` from the `rte` by querying the catalog.
   // Requires that `rte.rtekind` is RTE_RELATION.
   // `rtindex` is used for MapVarIndexToColumn.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedTableScan>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedTableScan>>
   BuildGsqlResolvedTableScan(const RangeTblEntry& rte,
                              const TransformerInfo* transformer_info,
                              int rtindex, VarIndexScope* output_scope);
@@ -159,72 +160,72 @@ class ForwardTransformer {
   // Builds a `ResolvedFilterScan` object. `where_clause` is taken from the
   // `quals` node in a PostgreSQL query's `jointree`. `current_scan` should
   // already be built by call sites.
-  // Modeled after ZetaSQL's ResolveWhereClauseAndCreateScan function.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedFilterScan>>
+  // Modeled after GoogleSQL's ResolveWhereClauseAndCreateScan function.
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedFilterScan>>
   BuildGsqlResolvedFilterScan(
       const Node& where_clause, const VarIndexScope* from_scan_scope,
-      std::unique_ptr<zetasql::ResolvedScan> current_scan);
+      std::unique_ptr<googlesql::ResolvedScan> current_scan);
 
   // Builds a `ResolvedLimitOffsetScan` object.`limit_clause` is taken from
   // query.limitCount, while `offset_clause` is taken from query.limitOffset.
-  // The function is modeled after ZetaSQL's ResolveLimitOffsetScan. In
+  // The function is modeled after GoogleSQL's ResolveLimitOffsetScan. In
   // addition, this function adds logic that allows LIMIT/OFFSET to assume
   // PostgreSQL behavior such as allowing OFFSET to be used on its own and
   // allowing the usage of input types other than integers.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedLimitOffsetScan>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedLimitOffsetScan>>
   BuildGsqlResolvedLimitOffsetScan(
       const Node* limit_clause, const Node* offset_clause,
-      std::unique_ptr<const zetasql::ResolvedScan> current_scan);
+      std::unique_ptr<const googlesql::ResolvedScan> current_scan);
 
   // Builds a `ResolvedLockMode` object. `row_mark_clause` is taken from
   // query.rowMarks. Currently we only support FOR UPDATE as the only lock
   // strength. If support for other lock strengths or associated options are
   // supported later, this function can be modified to populate the LockMode
   // node appropriately.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedLockMode>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedLockMode>>
   BuildGsqlResolvedLockMode(const RowMarkClause* row_mark_clause);
 
   // Same as above, except creates a copy of the given lock mode.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedLockMode>>
-  BuildGsqlResolvedLockMode(const zetasql::ResolvedLockMode* lock_mode);
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedLockMode>>
+  BuildGsqlResolvedLockMode(const googlesql::ResolvedLockMode* lock_mode);
 
   // Builds a nested `ResolvedScan` object for the FROM clause of this query.
   // Returns a SingleRowScan if there is no FROM  clause.
-  // Modeled after the ZetaSQL ResolveFromClauseAndCreateScan function.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedScan>>
+  // Modeled after the GoogleSQL ResolveFromClauseAndCreateScan function.
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedScan>>
   BuildGsqlResolvedScanForFromClause(const Query& query,
                                      const TransformerInfo* transformer_info,
                                      const VarIndexScope* external_scope,
                                      VarIndexScope* output_scope);
 
   // Builds a nested `ResolvedScan` for this query or subquery.
-  // Modeled after the ZetaSQL ResolveQueryExpression and
+  // Modeled after the GoogleSQL ResolveQueryExpression and
   // ResolveQueryAfterWith functions.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedScan>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedScan>>
   BuildGsqlResolvedScanForQueryExpression(
       const Query& query, bool is_top_level_query, const VarIndexScope* scope,
       absl::string_view alias, std::vector<NamedColumn>* output_name_list);
 
   // Builds a `ResolvedArrayScan` for UNNEST.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedArrayScan>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedArrayScan>>
   BuildGsqlResolvedArrayScan(const RangeTblEntry& rte, int rtindex,
                              const VarIndexScope* external_scope,
                              VarIndexScope* output_scope);
 
   // Builds a `ResolvedArrayScan` for Set Returning Functions (SRF).
   // Currently only `jsonb_object_keys` is supported.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedArrayScan>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedArrayScan>>
   BuildGsqlResolvedArrayScanForSetReturningFunction(
       const RangeTblEntry& rte, FuncExpr* func_expr, int rtindex,
       const VarIndexScope* external_scope, VarIndexScope* output_scope);
 
   // Builds a `ResolvedTVFScan` for a TVF in the FROM clause.
   // Currently this is just the Change Streams TVF.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedTVFScan>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedTVFScan>>
   BuildGsqlResolvedTVFScan(
       const RangeTblEntry& rte, int rtindex,
       const VarIndexScope* external_scope,
-      const zetasql::TableValuedFunction* tvf_catalog_entry,
+      const googlesql::TableValuedFunction* tvf_catalog_entry,
       VarIndexScope* output_scope);
 
   // Builds a nested `ResolvedScan` object for this SELECT `query` or subquery.
@@ -232,8 +233,8 @@ class ForwardTransformer {
   // information on `query->targetList` can be stored in the resulted
   // `ResolvedScan`.
   // `alias` is used as the table name for computed columns.
-  // Modeled after the ZetaSQL ResolveSelect function.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedScan>>
+  // Modeled after the GoogleSQL ResolveSelect function.
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedScan>>
   BuildGsqlResolvedScanForSelect(const Query& query, bool is_top_level_query,
                                  const VarIndexScope* external_scope,
                                  absl::string_view alias,
@@ -243,13 +244,13 @@ class ForwardTransformer {
   // information on `query->targetList` can be stored on a `ResolvedScan`.
   //
   // `query->targetList` can be stored on a ResolvedQueryStmt object.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedScan>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedScan>>
   BuildGsqlResolvedScan(const Query& query);
 
   // Maps the WITH clause alias to the WITH clause metadata.
   absl::Status MapWithClauseAliasToMetadata(
       const std::string& with_alias,
-      const std::vector<zetasql::ResolvedColumn>& column_list,
+      const std::vector<googlesql::ResolvedColumn>& column_list,
       const std::vector<NamedColumn>& with_column_aliases);
 
   // Get the metadata for a WITH clause subquery.
@@ -257,31 +258,31 @@ class ForwardTransformer {
       absl::string_view with_alias);
 
   absl::StatusOr<
-      std::vector<std::unique_ptr<const zetasql::ResolvedWithEntry>>>
+      std::vector<std::unique_ptr<const googlesql::ResolvedWithEntry>>>
   BuildGsqlWithEntriesIfPresent(const Query& query, bool is_top_level_query);
 
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedWithScan>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedWithScan>>
   BuildGsqlResolvedWithScan(
       const Query& query,
-      std::vector<std::unique_ptr<const zetasql::ResolvedWithEntry>>
+      std::vector<std::unique_ptr<const googlesql::ResolvedWithEntry>>
           with_entries,
-      std::unique_ptr<zetasql::ResolvedScan> input_scan);
+      std::unique_ptr<googlesql::ResolvedScan> input_scan);
 
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedQueryStmt>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedQueryStmt>>
   BuildPartialGsqlResolvedQueryStmt(const Query& query, bool is_top_level_query,
                                     const VarIndexScope* scope,
                                     const std::string& query_alias);
 
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedStatement>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedStatement>>
   BuildGsqlResolvedStatement(const Query& query);
 
   // Builds a list of generated column expressions rewritten to replace the
   // ResolvedExpressionColumns to corresponding ResolvedColumnRefs.
-  // This is modeled after the ZetaSQL function
+  // This is modeled after the GoogleSQL function
   // RewriteGeneratedColumnExpressions.
-  absl::StatusOr<std::vector<std::unique_ptr<const zetasql::ResolvedExpr>>>
+  absl::StatusOr<std::vector<std::unique_ptr<const googlesql::ResolvedExpr>>>
   BuildRewrittenGsqlGeneratedColumnResolvedExprList(
-      const zetasql::Table& table, const VarIndexScope& target_table_scope,
+      const googlesql::Table& table, const VarIndexScope& target_table_scope,
       std::vector<int>* out_generated_column_ids);
 
   // Returns an unimplemented error if a query feature is not yet supported.
@@ -297,38 +298,38 @@ class ForwardTransformer {
 
   // Builds a list of ResolvedColumn objects from the argument list of
   // `function_call`.
-  std::vector<zetasql::ResolvedColumn> BuildGsqlSelectedColumnList(
-      const zetasql::ResolvedFunctionCall& function_call);
+  std::vector<googlesql::ResolvedColumn> BuildGsqlSelectedColumnList(
+      const googlesql::ResolvedFunctionCall& function_call);
 
  private:
-  // Copied from ZetaSQL's Resolver::RecordColumnAccess.
+  // Copied from GoogleSQL's Resolver::RecordColumnAccess.
   void RecordColumnAccess(
-      const zetasql::ResolvedColumn& column,
-      zetasql::ResolvedStatement::ObjectAccess access_flags =
-          zetasql::ResolvedStatement::READ);
+      const googlesql::ResolvedColumn& column,
+      googlesql::ResolvedStatement::ObjectAccess access_flags =
+          googlesql::ResolvedStatement::READ);
 
-  // Copied from ZetaSQL's Resolver::RecordColumnAccess.
+  // Copied from GoogleSQL's Resolver::RecordColumnAccess.
   void RecordColumnAccess(
-      const std::vector<zetasql::ResolvedColumn>& columns,
-      zetasql::ResolvedStatement::ObjectAccess access_flags =
-          zetasql::ResolvedStatement::READ);
+      const std::vector<googlesql::ResolvedColumn>& columns,
+      googlesql::ResolvedStatement::ObjectAccess access_flags =
+          googlesql::ResolvedStatement::READ);
 
-  // Copied from ZetaSQL's Resolver::SetColumnAccessList.
-  absl::Status SetColumnAccessList(zetasql::ResolvedStatement* statement);
+  // Copied from GoogleSQL's Resolver::SetColumnAccessList.
+  absl::Status SetColumnAccessList(googlesql::ResolvedStatement* statement);
 
-  // Modeled off of ZetaSQL's Resolver::PruneColumnLists.
-  absl::Status PruneColumnLists(const zetasql::ResolvedNode* node);
+  // Modeled off of GoogleSQL's Resolver::PruneColumnLists.
+  absl::Status PruneColumnLists(const googlesql::ResolvedNode* node);
 
   // Helper function to instantiate a new `ResolvedColumn`. A new column ID will
   // be allocated and assigned to the returned `ResolvedColumn`.
-  absl::StatusOr<zetasql::ResolvedColumn> BuildNewGsqlResolvedColumn(
+  absl::StatusOr<googlesql::ResolvedColumn> BuildNewGsqlResolvedColumn(
       absl::string_view table_name, absl::string_view column_name,
-      const zetasql::Type* column_type,
-      const zetasql::AnnotationMap* annotation_map);
+      const googlesql::Type* column_type,
+      const googlesql::AnnotationMap* annotation_map);
 
-  // Given a Postgres Node, builds a corresponding ZetaSQL ResolvedScan
-  // object. Modeled after the ZetaSQL ResolveTableExpression function.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedScan>>
+  // Given a Postgres Node, builds a corresponding GoogleSQL ResolvedScan
+  // object. Modeled after the GoogleSQL ResolveTableExpression function.
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedScan>>
   BuildGsqlResolvedScanForTableExpression(
       const Node& node, const List& rtable,
       const TransformerInfo* transformer_info,
@@ -338,7 +339,7 @@ class ForwardTransformer {
   // Helper to BuildGsqlResolvedScanForTableExpression for validating and
   // dispatching the various RTE_FUNCTION cases. Currently supported are:
   // UNNEST, Change Stream TVF.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedScan>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedScan>>
   BuildGsqlResolvedScanForFunctionCall(const RangeTblEntry* rte,
                                        const Index rtindex,
                                        const VarIndexScope* external_scope,
@@ -347,36 +348,36 @@ class ForwardTransformer {
   // This function converts a zero-based "offset" column to a one-based
   // "ordinality" column by wrapping the ResolvedArrayScan in a ProjectScan that
   // adds one to the offset column.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedProjectScan>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedProjectScan>>
   ConvertZeroBasedOffsetToOneBasedOrdinal(
-      std::unique_ptr<zetasql::ResolvedArrayScan> array_scan,
+      std::unique_ptr<googlesql::ResolvedArrayScan> array_scan,
       const int rtindex, VarIndexScope* output_scope);
 
-  // Simplified version of the ZetaSQL analyzer function of the same name.
+  // Simplified version of the GoogleSQL analyzer function of the same name.
   // This version only supports scalar arguments, which eliminates the need for
   // the permissive TVFFunctionArg wrapper, which exists to support Scans, etc.
   // This version also skips signature matching since that was performed by the
   // Postgres analyzer.
   absl::Status PrepareTVFInputArguments(
       const FuncExpr& func_expr,
-      const zetasql::TableValuedFunction* tvf_catalog_entry,
+      const googlesql::TableValuedFunction* tvf_catalog_entry,
       const VarIndexScope* external_scope,
-      std::unique_ptr<zetasql::FunctionSignature>* result_signature,
-      std::vector<std::unique_ptr<const zetasql::ResolvedFunctionArgument>>*
+      std::unique_ptr<googlesql::FunctionSignature>* result_signature,
+      std::vector<std::unique_ptr<const googlesql::ResolvedFunctionArgument>>*
           resolved_tvf_args,
-      std::vector<zetasql::TVFInputArgumentType>* tvf_input_arguments);
+      std::vector<googlesql::TVFInputArgumentType>* tvf_input_arguments);
 
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedWithRefScan>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedWithRefScan>>
   BuildGsqlResolvedWithRefScan(absl::string_view with_alias, int rtindex,
                                VarIndexScope* output_scope);
 
-  // Returns a ZetaSQL join type corresponding to the input PostgreSQL
+  // Returns a GoogleSQL join type corresponding to the input PostgreSQL
   // join type.
   absl::StatusOr<GsqlJoinType> BuildGsqlJoinType(PgJoinType pg_join_type);
 
-  // Given a PostgreSQL JoinExpr object, builds a corresponding ZetaSQL
+  // Given a PostgreSQL JoinExpr object, builds a corresponding GoogleSQL
   // ResolvedScan object that's either a ResolvedJoinScan or ResolvedArrayScan.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedScan>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedScan>>
   BuildGsqlResolvedJoinScan(const JoinExpr& join_expr, const List& rtable,
                             const TransformerInfo* transformer_info,
                             const VarIndexScope* external_scope,
@@ -384,20 +385,20 @@ class ForwardTransformer {
                             VarIndexScope* output_scope,
                             bool has_using = false);
 
-  // Builds a ZetaSQL ResolvedJoinScan object based on the ZetaSQL inputs.
+  // Builds a GoogleSQL ResolvedJoinScan object based on the GoogleSQL inputs.
   // The resulted ResolvedJoinScan has type INNER and does not have any join
   // expression.
   // Call sites don't have to build a ResolvedColumn list and call
   // MakeResolvedJoinScan() directly.
-  std::unique_ptr<zetasql::ResolvedJoinScan>
+  std::unique_ptr<googlesql::ResolvedJoinScan>
   BuildGsqlCommaJoinResolvedJoinScan(
-      std::unique_ptr<zetasql::ResolvedScan> left_scan,
-      std::unique_ptr<zetasql::ResolvedScan> right_scan);
+      std::unique_ptr<googlesql::ResolvedScan> left_scan,
+      std::unique_ptr<googlesql::ResolvedScan> right_scan);
 
-  // Builds ZetaSQL `ResolvedJoinScan` objects from items in `fromlist`.
+  // Builds GoogleSQL `ResolvedJoinScan` objects from items in `fromlist`.
   // Calls BuildGsqlResolvedScanForTableExpression on each item in the
   // `fromlist` and joins them in a left deep tree.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedScan>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedScan>>
   BuildGsqlResolvedScanForFromList(const List& fromlist, const List& rtable,
                                    const TransformerInfo* transformer_info,
                                    const VarIndexScope* external_scope,
@@ -409,10 +410,10 @@ class ForwardTransformer {
   // This function should only be used to add an intermediate (not top-level)
   // ProjectScan for computed columns. It should not be used to build the
   // top-level ProjectScan for a query or subquery.
-  std::unique_ptr<zetasql::ResolvedProjectScan>
+  std::unique_ptr<googlesql::ResolvedProjectScan>
   AddGsqlProjectScanForComputedColumns(
-      std::unique_ptr<const zetasql::ResolvedScan> input_scan,
-      std::vector<std::unique_ptr<const zetasql::ResolvedComputedColumn>>
+      std::unique_ptr<const googlesql::ResolvedScan> input_scan,
+      std::vector<std::unique_ptr<const googlesql::ResolvedComputedColumn>>
           expr_list);
 
   // Wrap the subquery in another ProjectScan. For each column in the subquery,
@@ -421,51 +422,51 @@ class ForwardTransformer {
   // `select comparison_function(x) FROM (select x FROM t)`.
   // For now, only supports single column subqueries whose SELECT column
   // requires a comparison expression.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedProjectScan>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedProjectScan>>
   AddGsqlProjectScanForInSubqueries(
-      std::unique_ptr<const zetasql::ResolvedScan> subquery);
+      std::unique_ptr<const googlesql::ResolvedScan> subquery);
 
   // Transform the expr for each SELECT column.
-  // Modeled off of ZetaSQL's ResolveSelectListExprsFirstPass.
+  // Modeled off of GoogleSQL's ResolveSelectListExprsFirstPass.
   absl::Status BuildGsqlSelectListResolvedExprsFirstPass(
       const List* targetList, const VarIndexScope* from_scan_scope,
       TransformerInfo* transformer_info);
 
   // Add aggregate functions to the aggregate_computed_columns list.
-  // In ZetaSQL, this happens when resolving an expression so that aggregate
+  // In GoogleSQL, this happens when resolving an expression so that aggregate
   // functions that are nested inside of non-aggregate functions are supported.
   // However, Spangres does not support this yet because TransformerInfo is not
   // passed into BuildGsqlResolvedExpr.
   // TODO: add support for nested aggregate functions.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedColumnRef>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedColumnRef>>
   BuildGsqlAggregateColumnRef(
-      zetasql::IdString column_name, const Aggref* aggregate_func_expr,
-      std::unique_ptr<const zetasql::ResolvedExpr> aggregate_expr,
+      googlesql::IdString column_name, const Aggref* aggregate_func_expr,
+      std::unique_ptr<const googlesql::ResolvedExpr> aggregate_expr,
       TransformerInfo* transformer_info);
 
   // Transform select columns that must be pre-computed before aggregation.
-  // Modeled off of ZetaSQL's
+  // Modeled off of GoogleSQL's
   // AnalyzeSelectColumnsToPrecomputeBeforeAggregation.
   absl::Status BuildGsqlSelectColumnsToPrecomputeBeforeAggregation(
       TransformerInfo* transformer_info);
 
   // Finalize the select column list -- each column reference will have a
   // ResolvedColumn and each computed column will have a ResolvedComputedColumn.
-  // Modeled off of ZetaSQL's FinalizeSelectColumnStateList.
+  // Modeled off of GoogleSQL's FinalizeSelectColumnStateList.
   absl::Status FinalizeSelectListTransformState(
       absl::string_view query_alias, TransformerInfo* transformer_info,
       SelectListTransformState* select_list_transform_state);
 
   // Re-transform the select column list so that GROUP BY column dependencies
   // in the SELECT list are accounted for.
-  // Modeled off of ZetaSQL's ResolveSelectListExprsSecondPass.
+  // Modeled off of GoogleSQL's ResolveSelectListExprsSecondPass.
   absl::Status BuildGsqlSelectListResolvedExprsSecondPass(
       const List* targetList, absl::string_view query_alias,
       const VarIndexScope* group_by_scope,
       std::vector<NamedColumn>* final_project_name_list,
       TransformerInfo* transformer_info);
 
-  // Modeled off of ZetaSQL's ResolveSelectColumnSecondPass, but does not
+  // Modeled off of GoogleSQL's ResolveSelectColumnSecondPass, but does not
   // update final_project_name_list -- that work is done by
   // BuildGsqlSelectListResolvedExprsSecondPass.
   absl::Status BuildGsqlSelectColumnSecondPass(
@@ -474,42 +475,42 @@ class ForwardTransformer {
       TransformerInfo* transformer_info);
 
   // Transform the expr for each GROUP BY column.
-  // Modeled off of ZetaSQL's ResolveGroupByExprs.
+  // Modeled off of GoogleSQL's ResolveGroupByExprs.
   absl::Status BuildGsqlGroupByList(List* groupClause,
                                     const VarIndexScope* from_clause_scope,
                                     TransformerInfo* transformer_info);
 
   // Transform a GROUP BY column that is also a SELECT column.
-  // Modeled off of part of ZetaSQL's HandleGroupBySelectColumn, but does not
+  // Modeled off of part of GoogleSQL's HandleGroupBySelectColumn, but does not
   // compute the ResolvedExpr or update the column state.
-  absl::StatusOr<zetasql::ResolvedColumn> BuildGsqlGroupBySelectColumn(
+  absl::StatusOr<googlesql::ResolvedColumn> BuildGsqlGroupBySelectColumn(
       const SelectColumnTransformState* select_column_state,
       TransformerInfo* transformer_info);
 
   // Update the SelectColumnTransformState for a GROUP BY column that is also a
   // SELECT column.
-  // Modeled off of part of ZetaSQL's HandleGroupBySelectColumn, but does not
+  // Modeled off of part of GoogleSQL's HandleGroupBySelectColumn, but does not
   // compute the ResolvedColumn or ResolvedExpr.
   absl::Status UpdateGroupBySelectColumnTransformState(
-      const zetasql::ResolvedColumn& group_by_column,
+      const googlesql::ResolvedColumn& group_by_column,
       SelectColumnTransformState* select_column_state);
 
   // Transform a GROUP BY column that is not a SELECT column.
   // May overwrite resolved_expr.
-  // Modeled off of ZetaSQL's HandleGroupByExpression.
-  absl::StatusOr<zetasql::ResolvedColumn> BuildGsqlGroupByColumn(
-      const TargetEntry* entry, const zetasql::ResolvedExpr* resolved_expr,
+  // Modeled off of GoogleSQL's HandleGroupByExpression.
+  absl::StatusOr<googlesql::ResolvedColumn> BuildGsqlGroupByColumn(
+      const TargetEntry* entry, const googlesql::ResolvedExpr* resolved_expr,
       const VarIndexScope* from_clause_scope,
       TransformerInfo* transformer_info);
 
-  absl::StatusOr<std::unique_ptr<const zetasql::ResolvedExpr>>
+  absl::StatusOr<std::unique_ptr<const googlesql::ResolvedExpr>>
   BuildGsqlHavingClause(const Expr& having_expr,
                         const VarIndexScope* having_and_order_by_scope,
                         const VarIndexScope* select_list_and_from_scan_scope,
                         TransformerInfo* transformer_info);
 
   // Transform the ORDER BY list.
-  // Modeled off of ZetaSQL's ResolveOrderByExprs.
+  // Modeled off of GoogleSQL's ResolveOrderByExprs.
   absl::Status BuildGsqlOrderByList(
       const List* sortClause, const VarIndexScope* having_and_order_by_scope,
       const VarIndexScope* select_list_and_from_scan_scope,
@@ -517,7 +518,7 @@ class ForwardTransformer {
 
   // Transform the expr, null order, and sort direction for the ORDER BY
   // item.
-  // Modeled off of ZetaSQL's ResolveOrderingExprs.
+  // Modeled off of GoogleSQL's ResolveOrderingExprs.
   absl::StatusOr<OrderByItemTransformInfo> BuildGsqlOrderByItem(
       const SortGroupClause& sort_item,
       ExprTransformerInfo* expr_transformer_info);
@@ -525,57 +526,57 @@ class ForwardTransformer {
   // Finalize the sort order list -- each column reference will have a
   // ResolvedColumn and each computed column will have a ResolvedComputedColumn.
   // For now, only column references are supported.
-  // Modeled off of ZetaSQL's AddColumnsForOrderByExprs.
+  // Modeled off of GoogleSQL's AddColumnsForOrderByExprs.
   absl::Status FinalizeOrderByTransformState(
       std::vector<OrderByItemTransformInfo>* order_by_info,
-      std::vector<std::unique_ptr<const zetasql::ResolvedComputedColumn>>*
+      std::vector<std::unique_ptr<const googlesql::ResolvedComputedColumn>>*
           computed_columns);
 
   // Build the remaining scans for this query.
-  // Modeled off of ZetaSQL's AddRemainingScansForSelect.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedScan>>
+  // Modeled off of GoogleSQL's AddRemainingScansForSelect.
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedScan>>
   BuildGsqlRemainingScansForSelect(
       const List* sort_clause, const Node* limit_clause,
       const Node* offset_clause, const VarIndexScope* having_and_order_by_scope,
-      std::unique_ptr<const zetasql::ResolvedExpr> resolved_having_expr,
-      std::unique_ptr<zetasql::ResolvedScan> current_scan,
+      std::unique_ptr<const googlesql::ResolvedExpr> resolved_having_expr,
+      std::unique_ptr<googlesql::ResolvedScan> current_scan,
       TransformerInfo* transformer_info,
       std::vector<NamedColumn>* output_name_list);
 
   // Build a ResolvedAggregateScan.
-  // Modeled off of ZetaSQL's AddAggregateScan.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedAggregateScan>>
+  // Modeled off of GoogleSQL's AddAggregateScan.
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedAggregateScan>>
   BuildGsqlResolvedAggregateScan(
-      std::unique_ptr<zetasql::ResolvedScan> current_scan,
+      std::unique_ptr<googlesql::ResolvedScan> current_scan,
       TransformerInfo* transformer_info);
 
   // Resolve the 'SELECT DISTINCT ...' part of the query.
-  // Modeled off of ZetaSQL's ResolveSelectDistinct.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedAggregateScan>>
+  // Modeled off of GoogleSQL's ResolveSelectDistinct.
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedAggregateScan>>
   BuildGsqlResolvedSelectDistinct(
-      std::unique_ptr<zetasql::ResolvedScan> current_scan,
+      std::unique_ptr<googlesql::ResolvedScan> current_scan,
       TransformerInfo* transformer_info,
       std::vector<NamedColumn>* output_name_list);
 
   // Build a ResolvedOrderByScan.
-  // Modeled off of ZetaSQL's MakeResolvedOrderByScan and ResolveOrderByItems.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedOrderByScan>>
+  // Modeled off of GoogleSQL's MakeResolvedOrderByScan and ResolveOrderByItems.
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedOrderByScan>>
   BuildGsqlResolvedOrderByScan(
-      zetasql::ResolvedColumnList output_column_list,
-      std::unique_ptr<zetasql::ResolvedScan> current_scan,
+      googlesql::ResolvedColumnList output_column_list,
+      std::unique_ptr<googlesql::ResolvedScan> current_scan,
       TransformerInfo* transformer_info);
 
   // Build a ResolvedOrderByScan after a set operation.
-  // Modeled off of ZetaSQL's ResolveOrderByAfterSetOperation
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedOrderByScan>>
+  // Modeled off of GoogleSQL's ResolveOrderByAfterSetOperation
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedOrderByScan>>
   BuildGsqlResolvedOrderByScanAfterSetOperation(
       List* sortClause, const VarIndexScope* scope,
-      std::unique_ptr<zetasql::ResolvedScan> current_scan);
+      std::unique_ptr<googlesql::ResolvedScan> current_scan);
 
   // Build a ResolvedSetOperationScan.
   // `is_top_level_query` is used to run CheckForUnsupportedFeatures since some
   // features are only disallowed in subqueries.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedScan>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedScan>>
   BuildGsqlResolvedSetOperationScan(const Query& query,
                                     const VarIndexScope* scope,
                                     bool is_top_level_query,
@@ -583,24 +584,24 @@ class ForwardTransformer {
                                     VarIndexScope* output_scope);
 
   // Build a ResolvedSetOperationScan
-  // Modeled off of ZetaSQL's SetOperationResolver::Resolve.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedScan>>
+  // Modeled off of GoogleSQL's SetOperationResolver::Resolve.
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedScan>>
   BuildGsqlResolvedSetOperationScan(const SetOperationStmt& set_operation,
                                     const List& rtable,
                                     const VarIndexScope* scope,
                                     VarIndexScope* output_scope);
 
-  // Transform a PostgreSQL set operation type to ZetaSQL.
-  absl::StatusOr<zetasql::ResolvedSetOperationScan::SetOperationType>
+  // Transform a PostgreSQL set operation type to GoogleSQL.
+  absl::StatusOr<googlesql::ResolvedSetOperationScan::SetOperationType>
   BuildGsqlSetOperationType(SetOperation set_op, bool all);
 
   // Get the set operation query alias.
-  // Modeled off of ZetaSQL's SetOperationResolver constructor.
+  // Modeled off of GoogleSQL's SetOperationResolver constructor.
   std::string BuildGsqlSetOperationString(
-      zetasql::ResolvedSetOperationScan::SetOperationType set_op) const;
+      googlesql::ResolvedSetOperationScan::SetOperationType set_op) const;
 
   // Transform a PostgreSQL set operation input.
-  // Modeled off of ZetaSQL's SetOperationResolver::ResolveInputQuery but
+  // Modeled off of GoogleSQL's SetOperationResolver::ResolveInputQuery but
   // returns the Transformer::SetOperationInput instead of the
   // SetOperationResolver::ResolvedInputResult.
   absl::StatusOr<SetOperationInput> BuildGsqlSetOperationInput(
@@ -614,97 +615,99 @@ class ForwardTransformer {
 
  public:
   // DML =======================================================================
-  absl::flat_hash_map<int, const zetasql::Column*> GetUnwritableColumns(
-      const zetasql::Table* table);
+  absl::flat_hash_map<int, const googlesql::Column*> GetUnwritableColumns(
+      const googlesql::Table* table);
 
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedInsertStmt>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedInsertStmt>>
   BuildPartialGsqlResolvedInsertStmt(const Query& query);
 
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedUpdateStmt>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedUpdateStmt>>
   BuildPartialGsqlResolvedUpdateStmt(const Query& query);
 
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedDMLDefault>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedDMLDefault>>
   BuildGsqlResolvedDMLDefault(const SetToDefault& set_to_default);
 
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedDeleteStmt>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedDeleteStmt>>
   BuildPartialGsqlResolvedDeleteStmt(const Query& query);
 
   // CALL ======================================================================
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedCallStmt>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedCallStmt>>
   BuildPartialGsqlResolvedCallStmt(const FuncExpr& func);
 
  private:
-  // Builds a list of ZetaSQL ResolvedDMLValue from a PostgreSQL list of
+  // Builds a list of GoogleSQL ResolvedDMLValue from a PostgreSQL list of
   // Expr objects
   absl::StatusOr<
-      std::vector<std::unique_ptr<const zetasql::ResolvedDMLValue>>>
+      std::vector<std::unique_ptr<const googlesql::ResolvedDMLValue>>>
   BuildGsqlResolvedDMLValueList(
       List* expr_list,
-      const absl::flat_hash_map<int, const zetasql::Column*>&
+      const absl::flat_hash_map<int, const googlesql::Column*>&
           unwritable_insert_list_columns,
       const VarIndexScope* var_index_scope);
 
-  // Builds a ZetaSQL ResolvedDMLValue from a PostgreSQL Expr object.
-  absl::StatusOr<std::unique_ptr<const zetasql::ResolvedDMLValue>>
+  // Builds a GoogleSQL ResolvedDMLValue from a PostgreSQL Expr object.
+  absl::StatusOr<std::unique_ptr<const googlesql::ResolvedDMLValue>>
   BuildGsqlResolvedDMLValue(Expr& expr, const VarIndexScope* var_index_scope,
                             const char* clause_name);
 
-  // Builds a ZetaSQL ResolvedExpr for the WHERE clause of UPDATE and DELETE
+  // Builds a GoogleSQL ResolvedExpr for the WHERE clause of UPDATE and DELETE
   // statements, using the input PostgreSQL `pg_quals`. If the input is nullptr,
   // the function builds a ResolvedExpr representing the "WHERE true" clause.
   // The transformer needs to build such a clause during forward transformation
   // of UPDATE and DELETE statements because PostgreSQL doesn't require a WHERE
-  // clause, but ZetaSQL does.
-  absl::StatusOr<std::unique_ptr<const zetasql::ResolvedExpr>>
+  // clause, but GoogleSQL does.
+  absl::StatusOr<std::unique_ptr<const googlesql::ResolvedExpr>>
   BuildGsqlWhereClauseExprForDML(Node* pg_where_clause,
                                  const VarIndexScope* var_index_scope);
 
-  // Builds a ZetaSQL ResolvedReturningClause for the DML statements, using
+  // Builds a GoogleSQL ResolvedReturningClause for the DML statements, using
   // the input PostgreSQL query `returningList`. If the input is nullptr, the
   // function return a null value for ResolvedReturningClause. It's modeled
-  // after the ZetaSQL analyzer's ResolveReturningClause function.
-  absl::StatusOr<std::unique_ptr<const zetasql::ResolvedReturningClause>>
+  // after the GoogleSQL analyzer's ResolveReturningClause function.
+  absl::StatusOr<std::unique_ptr<const googlesql::ResolvedReturningClause>>
   BuildGsqlReturningClauseForDML(const List* pg_returning_list,
                                  absl::string_view table_alias,
                                  const VarIndexScope* target_table_scope);
 
-  // Builds a list of ZetaSQL ResolvedUpdateItem from a PostgreSQL list of
+  // Builds a list of GoogleSQL ResolvedUpdateItem from a PostgreSQL list of
   // TargetEntry objects for UPDATE SET clause in UPDATE DML or
   // INSERT ON CONFLICT DO UPDATE DML.
   absl::Status PopulateUpdateSetItemListFromUpdateSetClause(
-      const zetasql::Table& table, Index table_rtindex,
+      const googlesql::Table& table, Index table_rtindex,
       const List* update_set_clause, const VarIndexScope& update_column_scope,
       const VarIndexScope& update_value_scope, const std::string& clause_name,
-      std::vector<std::unique_ptr<const zetasql::ResolvedUpdateItem>>&
+      std::vector<std::unique_ptr<const googlesql::ResolvedUpdateItem>>&
           update_item_list);
 
-  // Builds a ZetaSQL ResolvedOnConflictClause for the INSERT DML statements,
+  // Builds a GoogleSQL ResolvedOnConflictClause for the INSERT DML statements,
   // using the input PostgreSQL `OnConflictExpr`. `pg_on_conflict` must be a
   // non-null pointer.
   // `rte_for_excluded_alias` is the RangeTblEntry node for the excluded alias
   // in the ON CONFLICT DO UPDATE DML
   // `target_table_scope` is the VarIndexScope for the target table used to
   // resolve ON CONFLICT DO UPDATE SET and WHERE expressions.
-  absl::StatusOr<std::unique_ptr<const zetasql::ResolvedOnConflictClause>>
+  absl::StatusOr<std::unique_ptr<const googlesql::ResolvedOnConflictClause>>
   BuildGsqlOnConflictClauseForInsertDML(
-      const zetasql::Table& table, const OnConflictExpr* pg_on_conflict,
+      const googlesql::Table& table, const OnConflictExpr* pg_on_conflict,
       RangeTblEntry* rte_for_excluded_alias, Index insert_table_rtindex,
-      Index excluded_alias_rtindex, const VarIndexScope* target_table_scope);
+      Index excluded_alias_rtindex, const List* rteperminfos,
+      const VarIndexScope* target_table_scope);
+
 
   // Expression ================================================================
  public:
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedLiteral>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedLiteral>>
   BuildGsqlResolvedLiteral(const Const& _const);
 
   // Builds a new PG Const from the const_type, const_value, and const_is_null,
-  // and then transforms it into a ZetaSQL literal.
+  // and then transforms it into a GoogleSQL literal.
   // Only used when transforming casts from the PG Query*.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedLiteral>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedLiteral>>
   BuildGsqlResolvedLiteral(Oid const_type, Datum const_value,
                            bool const_is_null, CoercionForm cast_format);
 
-  // Builds a zetasql::Value from a string and then transforms it into a
-  // ZetaSQL literal. The string should be in the format:
+  // Builds a googlesql::Value from a string and then transforms it into a
+  // GoogleSQL literal. The string should be in the format:
   // 1) 'value'::type for literals that require quotes.
   //    (e.g. '{}'::jsonb or 'literal'::text)
   // 2) value::type for numeric types that don't require quotes.
@@ -712,27 +715,27 @@ class ForwardTransformer {
   // 3) null::type for null literals.
   //    (e.g. null::text or null::bigint)
   // The type name should be the formatted output type name.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedLiteral>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedLiteral>>
   BuildGsqlResolvedLiteralForDefaultArgument(Oid arg_type,
                                              const std::string& default_value);
 
-  // Transforms an ArrayExpr (array literal) to the appropriate ZetaSQL
+  // Transforms an ArrayExpr (array literal) to the appropriate GoogleSQL
   // ResolvedExpr depending on array contents:
   //   Const-only arrays transform to ResolvedLiterals like other Const types.
   //   Arrays that have non-const values (like vars or other exprs) transform to
   //   a make_array function call.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedExpr>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedExpr>>
   BuildGsqlResolvedExpr(const ArrayExpr& expr,
                         ExprTransformerInfo* expr_transformer_info);
 
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedParameter>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedParameter>>
   BuildGsqlResolvedParameter(const Param& pg_param);
 
   // Transform a PostgreSQL SubLink.
   // Returns a ResolvedExpr instead of a ResolvedSubqueryExpr because
   // `x != ALL (select y)` is transformed into `NOT(x IN (select y))` and
   // NOT(...) is a ResolvedFunctionCall.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedExpr>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedExpr>>
   BuildGsqlResolvedSubqueryExpr(const SubLink& pg_sublink,
                                 ExprTransformerInfo* expr_transformer_info);
 
@@ -740,30 +743,30 @@ class ForwardTransformer {
   // otherwise.
   // hint_list may be populated for IN subquery expressions. It is nullptr for
   // other expressions.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedSubqueryExpr>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedSubqueryExpr>>
   BuildGsqlResolvedSubqueryExpr(
       const Query& pg_subquery, const Expr* in_testexpr, const List* hint_list,
-      const zetasql::Type* output_type,
-      zetasql::ResolvedSubqueryExpr::SubqueryType subquery_type,
+      const googlesql::Type* output_type,
+      googlesql::ResolvedSubqueryExpr::SubqueryType subquery_type,
       ExprTransformerInfo* expr_transformer_info);
 
   absl::StatusOr<
-      std::vector<std::unique_ptr<const zetasql::ResolvedColumnRef>>>
+      std::vector<std::unique_ptr<const googlesql::ResolvedColumnRef>>>
   BuildGsqlCorrelatedSubqueryParameters(
       const CorrelatedColumnsSet& correlated_columns_set);
 
   // Transform an expr without support for aggregate functions.
-  // Modeled after the ZetaSQL ResolveScalarExpr function.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedExpr>>
+  // Modeled after the GoogleSQL ResolveScalarExpr function.
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedExpr>>
   BuildGsqlResolvedScalarExpr(const Expr& expr,
                               const VarIndexScope* var_index_scope,
                               const char* clause_name);
 
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedExpr>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedExpr>>
   BuildGsqlResolvedExpr(const Expr& expr,
                         ExprTransformerInfo* expr_transformer_info);
 
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedExpr>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedExpr>>
   BuildGsqlResolvedExpr(const FuncExpr& func_expr,
                         ExprTransformerInfo* expr_transformer_info);
 
@@ -772,7 +775,7 @@ class ForwardTransformer {
   // The typmod and explicit_cast are optional values.
   // This function should not be used to cast literals with supported types
   // since those can be cast during query execution.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedLiteral>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedLiteral>>
   BuildGsqlResolvedLiteralFromCast(Oid cast_function,
                                    const Const& input_literal,
                                    const Const* typmod,
@@ -781,19 +784,19 @@ class ForwardTransformer {
 
   // Constructs either a ResolvedCast or a ResolvedFunctionCall that performs
   // the casting operation.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedExpr>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedExpr>>
   BuildGsqlCastExpression(Oid result_type, const Expr& input, int32_t typmod,
                           ExprTransformerInfo* expr_transformer_info);
 
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedExpr>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedExpr>>
   BuildGsqlResolvedExpr(const CoerceViaIO& coerce_via_io,
                         ExprTransformerInfo* expr_transformer_info);
 
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedExpr>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedExpr>>
   BuildGsqlResolvedExpr(const RelabelType& relabel_type,
                         ExprTransformerInfo* expr_transformer_info);
 
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedExpr>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedExpr>>
   BuildGsqlResolvedExpr(const NamedArgExpr& named_arg,
                         ExprTransformerInfo* expr_transformer_info);
 
@@ -802,25 +805,25 @@ class ForwardTransformer {
   // Transforms a list of DefElem nodes containing query hints into a vector of
   // equivalent ResolvedOption nodes. This list can then be consumed by
   // ResolvedScan::set_hint_list() or similar.
-  absl::StatusOr<std::vector<std::unique_ptr<const zetasql::ResolvedOption>>>
+  absl::StatusOr<std::vector<std::unique_ptr<const googlesql::ResolvedOption>>>
   BuildGsqlResolvedOptionList(const List& pg_hint_list,
                               const VarIndexScope* var_index_scope);
 
-  zetasql::IdString GetColumnAliasForTopLevelExpression(
+  googlesql::IdString GetColumnAliasForTopLevelExpression(
       ExprTransformerInfo* expr_transformer_info, const Expr* ast_expr);
 
   // Function ==================================================================
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedFunctionCall>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedFunctionCall>>
   BuildGsqlResolvedFunctionCall(Oid funcid, List* args,
                                 ExprTransformerInfo* expr_transformer_info);
 
   // Transform a PG function into a built in function.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedFunctionCall>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedFunctionCall>>
   BuildGsqlResolvedFunctionCall(const FuncExpr& func,
                                 ExprTransformerInfo* expr_transformer_info);
 
   // Transform a PG operator into a built in function.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedFunctionCall>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedFunctionCall>>
   BuildGsqlResolvedFunctionCall(const OpExpr& op,
                                 ExprTransformerInfo* expr_transformer_info);
 
@@ -828,31 +831,31 @@ class ForwardTransformer {
   // If the aggregate function is a SELECT column and also appears in the HAVING
   // or ORDER BY clause, returns a column reference the second time this is
   // called.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedExpr>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedExpr>>
   BuildGsqlResolvedAggregateFunctionCall(
       const Aggref& agg_function, ExprTransformerInfo* expr_transformer_info);
 
   // Transform a PG expression into a built in function.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedFunctionCall>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedFunctionCall>>
   BuildGsqlResolvedFunctionCall(NodeTag expr_node_tag, List* args,
                                 ExprTransformerInfo* expr_transformer_info);
 
   // Build a substr function call with position = 0. Should only be used to
   // transform casts to varchar(<length>).
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedFunctionCall>>
-  BuildGsqlSubstrFunctionCall(std::unique_ptr<zetasql::ResolvedExpr> value,
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedFunctionCall>>
+  BuildGsqlSubstrFunctionCall(std::unique_ptr<googlesql::ResolvedExpr> value,
                               int length);
 
   // Transform a PG Case expression into a built in function.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedFunctionCall>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedFunctionCall>>
   BuildGsqlResolvedCaseFunctionCall(const CaseExpr& case_expr,
                                     ExprTransformerInfo* expr_transformer_info);
 
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedFunctionCall>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedFunctionCall>>
   BuildGsqlResolvedCaseNoValueFunctionCall(
       const CaseExpr& case_expr, ExprTransformerInfo* expr_transformer_info);
 
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedFunctionCall>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedFunctionCall>>
   BuildGsqlResolvedCaseWithValueFunctionCall(
       const CaseExpr& case_expr, ExprTransformerInfo* expr_transformer_info);
 
@@ -860,20 +863,20 @@ class ForwardTransformer {
   // Special cased because there isn't a single built in function for all
   // BoolExprs. The BoolExprType on the BoolExpr must be examined to find the
   // matching builtin function.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedFunctionCall>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedFunctionCall>>
   BuildGsqlResolvedBoolFunctionCall(const BoolExpr& bool_expr,
                                     ExprTransformerInfo* expr_transformer_info);
 
   // Wrap a NOT function around the provided argument.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedFunctionCall>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedFunctionCall>>
   BuildGsqlResolvedNotFunctionCall(
-      std::unique_ptr<zetasql::ResolvedExpr> arg);
+      std::unique_ptr<googlesql::ResolvedExpr> arg);
 
   // Transform a PG min max expression into a built in function.
   // Special cased because there isn't a single built in function for all
   // MixMaxExpr. The MinMaxOp in the MixMaxExpr must be examined to find the
   // matching builtin function.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedFunctionCall>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedFunctionCall>>
   BuildGsqlResolvedGreatestLeastFunctionCall(
       const MinMaxExpr& min_max_expr,
       ExprTransformerInfo* expr_transformer_info);
@@ -881,15 +884,15 @@ class ForwardTransformer {
   // Transform a PG NullTest expression into a builtin function.
   // Special cased because the NullTestType on the NulLTest must be examined to
   // find the matching builtin function.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedFunctionCall>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedFunctionCall>>
   BuildGsqlResolvedNullTestFunctionCall(
       const NullTest& null_test, ExprTransformerInfo* expr_transformer_info);
 
-  // Transform a PG BooleanTest expression into a ZetaSQL IS TRUE/IS FALSE
+  // Transform a PG BooleanTest expression into a GoogleSQL IS TRUE/IS FALSE
   // function call. This may be an expression -- GoogeSQL doesn't have "X IS NOT
   // TRUE" as an atomic function, so that's turned into the expression
   // "NOT (X IS TRUE)".
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedExpr>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedExpr>>
   BuildGsqlResolvedBooleanTestExpr(const BooleanTest& boolean_test,
                                    ExprTransformerInfo* expr_transformer_info);
 
@@ -897,43 +900,43 @@ class ForwardTransformer {
   // named or default arguments. It should only be used for expression function
   // calls (e.g. operators) and aggregate functions as these cannot support
   // named or default arguments.
-  absl::StatusOr<std::vector<std::unique_ptr<zetasql::ResolvedExpr>>>
+  absl::StatusOr<std::vector<std::unique_ptr<googlesql::ResolvedExpr>>>
   BuildGsqlFunctionArgumentList(List* args,
                                 ExprTransformerInfo* expr_transformer_info);
 
   // Construct a list of arguments for a built-in function call. This supports
   // named and default arguments by parsing information from PostgreSQL's
   // `pg_proc` data.
-  absl::StatusOr<std::vector<std::unique_ptr<zetasql::ResolvedExpr>>>
+  absl::StatusOr<std::vector<std::unique_ptr<googlesql::ResolvedExpr>>>
   BuildGsqlFunctionArgumentList(const PgProcData& proc_data, List* args,
                                 ExprTransformerInfo* expr_transformer_info);
 
   // Construct a list of arguments for a user-defined function (UDF) call. This
   // supports named and default arguments by using default values from the
-  // ZetaSQL function signature.
-  absl::StatusOr<std::vector<std::unique_ptr<zetasql::ResolvedExpr>>>
+  // GoogleSQL function signature.
+  absl::StatusOr<std::vector<std::unique_ptr<googlesql::ResolvedExpr>>>
   BuildGsqlFunctionArgumentList(const FormData_pg_proc* pg_proc,
-                                const zetasql::FunctionSignature* signature,
+                                const googlesql::FunctionSignature* signature,
                                 List* args,
                                 ExprTransformerInfo* expr_transformer_info);
 
   // Construct a list of order by items for an aggregate function call. For
   // example, `y DESC` in `ARRAY_AGG(x ORDER BY y DESC)`.
   absl::StatusOr<
-      std::vector<std::unique_ptr<const zetasql::ResolvedOrderByItem>>>
+      std::vector<std::unique_ptr<const googlesql::ResolvedOrderByItem>>>
   BuildGsqlAggregateOrderByList(
       List* sortClause,
-      const std::vector<std::unique_ptr<zetasql::ResolvedExpr>>& arguments,
+      const std::vector<std::unique_ptr<googlesql::ResolvedExpr>>& arguments,
       ExprTransformerInfo* expr_transformer_info);
 
-  std::vector<zetasql::InputArgumentType> GetInputArgumentTypes(
-      const std::vector<std::unique_ptr<zetasql::ResolvedExpr>>&
+  std::vector<googlesql::InputArgumentType> GetInputArgumentTypes(
+      const std::vector<std::unique_ptr<googlesql::ResolvedExpr>>&
           argument_list) const;
 
   // Transform a ScalarOpExpr into a built in function. Currently only supports
   // the IN  and NOT IN function. Postgres uses ScalarOpExpr for IN, NOT IN,
   // ANY/SAME and ALL.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedFunctionCall>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedFunctionCall>>
   BuildGsqlResolvedScalarArrayFunctionCall(
       const ScalarArrayOpExpr& scalar_array,
       ExprTransformerInfo* expr_transformer_info);
@@ -941,13 +944,13 @@ class ForwardTransformer {
   // Transform a SQLValueFunction into a built in function.
   // Special cased because the SQLValueFunctionOp on the SQLValueFunction must
   // be examined to find the matching builtin function.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedExpr>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedExpr>>
   BuildGsqlResolvedSQLValueFunctionCall(const SQLValueFunction& function);
 
   // Transform a SubscriptingRef into a function call for array element
   // accesses (e.g., array_value[4]) and array slicing (e.g., array_value[1:4]).
   // Supports only read-only accesses (SELECT), not writable accesses (UPDATE).
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedExpr>> BuildGsqlArrayAccess(
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedExpr>> BuildGsqlArrayAccess(
       const SubscriptingRef& subscripting_ref,
       ExprTransformerInfo* expr_transformer_info);
 
@@ -958,7 +961,7 @@ class ForwardTransformer {
   // We use safe_array_at_ordinal to match two PostgreSQL behaviors: 1-based
   // indexing (ordinal), and NULL return values for out-of-bounds accesses
   // (safe).
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedExpr>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedExpr>>
   BuildGsqlResolvedSafeArrayAtOrdinalFunctionCall(
       const SubscriptingRef& subscripting_ref,
       ExprTransformerInfo* expr_transformer_info);
@@ -966,44 +969,44 @@ class ForwardTransformer {
   // Transform a SubscriptingRef into a function call for array slicing:
   // array_value[1:4]. Supports only read-only accesses (SELECT), not writable
   // accesses (UPDATE).
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedExpr>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedExpr>>
   BuildGsqlResolvedArraySliceFunctionCall(
       const SubscriptingRef& subscripting_ref,
       ExprTransformerInfo* expr_transformer_info);
 
   // Transform an ArrayExpr into a $make_array function call after recursively
   // transforming the element expressions. This supports any kind of
-  // otherwise-supported element expression. To match ZetaSQL's analyzer, this
+  // otherwise-supported element expression. To match GoogleSQL's analyzer, this
   // should only be called when the elements are not all Const.
   // BuildGsqlResolvedExpr(const ArrayExpr& expr) makes this determination.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedExpr>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedExpr>>
   BuildGsqlResolvedMakeArrayFunctionCall(
       const ArrayExpr& array_expr, ExprTransformerInfo* expr_transformer_info);
 
-  // Transform the postgres NOT IN operation into two ZetaSQL functions (NOT
+  // Transform the postgres NOT IN operation into two GoogleSQL functions (NOT
   // function and IN function). The NOT function wraps around the IN function.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedFunctionCall>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedFunctionCall>>
   BuildGsqlInFunctionCall(const ScalarArrayOpExpr& scalar_array,
                           ExprTransformerInfo* expr_transformer_info);
 
-  // Transform the postgres `a IS DISTINCT FROM b` expression into ZetaSQL
+  // Transform the postgres `a IS DISTINCT FROM b` expression into GoogleSQL
   // $is_distinct_from(a, b) function call.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedFunctionCall>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedFunctionCall>>
   BuildGsqlIsDistinctFromFunctionCall(
       const DistinctExpr& distinct_expr,
       ExprTransformerInfo* expr_transformer_info);
 
   // Append the array expressions for the googlesql function call to the
-  // argument list. Returns true if the caller should invoke ZetaSQL's
+  // argument list. Returns true if the caller should invoke GoogleSQL's
   // $in_array function instead of $in i.e., if this function appends an array
   // argument instead of appending the array values individually.
   absl::StatusOr<bool> AppendGsqlInFunctionCallArrayArg(
       void* array_argument, ExprTransformerInfo* expr_transformer_info,
-      std::vector<std::unique_ptr<zetasql::ResolvedExpr>>& argument_list);
+      std::vector<std::unique_ptr<googlesql::ResolvedExpr>>& argument_list);
 
   // Transform postgres ScalarArrayOpExpr that represent ALL into an
-  // appropriate ZetaSQL function call.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedFunctionCall>>
+  // appropriate GoogleSQL function call.
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedFunctionCall>>
   BuildGsqlAllFunctionCall(const ScalarArrayOpExpr& scalar_array,
                            ExprTransformerInfo* expr_transformer_info);
 
@@ -1011,12 +1014,12 @@ class ForwardTransformer {
   // argument list.
   absl::Status AppendGsqlAllFunctionCallArrayArg(
       void* array_argument, ExprTransformerInfo* expr_transformer_info,
-      std::vector<std::unique_ptr<zetasql::ResolvedExpr>>& argument_list);
+      std::vector<std::unique_ptr<googlesql::ResolvedExpr>>& argument_list);
 
   // Type ======================================================================
   // If the result PostgresTypeMapping has mapped_type, returns the
   // mapped_type. Otherwise returns a PostgresTypeMapping.
-  absl::StatusOr<const zetasql::Type*> BuildGsqlType(const Oid pg_type_oid);
+  absl::StatusOr<const googlesql::Type*> BuildGsqlType(const Oid pg_type_oid);
 
   // Other =====================================================================
   // Populates `ressortgroupref_to_target_entry_maps_` from the inputs.
@@ -1032,36 +1035,36 @@ class ForwardTransformer {
   // Rewrites the OrderByScan with transformations on ORDER BY columns if
   // needed. The transformations are applied on the ORDER BY columns to make
   // sure that they follow Postgres' comparison semantics.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedOrderByScan>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedOrderByScan>>
   RewriteResolvedOrderByScanIfNeeded(
-      std::unique_ptr<zetasql::ResolvedOrderByScan> order_by_scan);
+      std::unique_ptr<googlesql::ResolvedOrderByScan> order_by_scan);
 
   // Checks if any of the column in ORDER BY clause requires transformation for
   // comparison.
   bool IsTransformationRequiredForOrderByScan(
-      const zetasql::ResolvedOrderByScan& order_by_scan);
+      const googlesql::ResolvedOrderByScan& order_by_scan);
 
   // Adds transformations on the `order_by_items` and build a
   // ResolvedOrderByScan.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedOrderByScan>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedOrderByScan>>
   BuildGsqlResolvedOrderByScanWithTransformations(
-      const std::vector<zetasql::ResolvedColumn>& column_list,
-      std::unique_ptr<const zetasql::ResolvedScan> input_scan,
-      std::vector<std::unique_ptr<const zetasql::ResolvedOrderByItem>>
+      const std::vector<googlesql::ResolvedColumn>& column_list,
+      std::unique_ptr<const googlesql::ResolvedScan> input_scan,
+      std::vector<std::unique_ptr<const googlesql::ResolvedOrderByItem>>
           order_by_items);
 
   // Builds a computed column by wrapping `order_by_column`
   // with appropriate transformation.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedComputedColumn>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedComputedColumn>>
   BuildGsqlResolvedComputedColumnForOrderByClause(
-      const zetasql::ResolvedColumn& order_by_column, int column_index);
+      const googlesql::ResolvedColumn& order_by_column, int column_index);
 
   // Check if the insert or update query is supported by Spangres.
   // This is done by inspecting alias tables and onConflict expressions in the
   // parsed tree `query`.
   absl::Status CheckForUnsupportedOnConflictClause(
-      const Query& query, Index rte_index, const zetasql::Table& table,
-      const std::vector<zetasql::ResolvedColumn>& insert_column_list,
+      const Query& query, Index rte_index, const googlesql::Table& table,
+      const std::vector<googlesql::ResolvedColumn>& insert_column_list,
       VarIndexScope* scope, bool is_ignore_mode);
 
  private:
@@ -1072,7 +1075,7 @@ class ForwardTransformer {
   //   literal is *not* supported. Supported literals can be casted by the
   //   storage engine during query execution and should not use this function
   //   because it will return an error.
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedLiteral>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedLiteral>>
   InternalBuildGsqlResolvedLiteralFromCast(
       Oid cast_function, const Const& input_literal, const Const* typmod,
       const Const* explicit_cast, Oid output_type, CoercionForm cast_format,
@@ -1083,24 +1086,24 @@ class ForwardTransformer {
   // Returns if the `func_expr` is a cast function.
   absl::StatusOr<bool> IsCastFunction(const FuncExpr& func_expr);
 
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedColumnRef>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedColumnRef>>
   BuildGsqlResolvedColumnRef(const Var& var,
                              const VarIndexScope& var_index_scope);
 
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedColumnRef>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedColumnRef>>
   BuildGsqlResolvedColumnRefWithCorrelation(
-      const zetasql::ResolvedColumn& column,
+      const googlesql::ResolvedColumn& column,
       const CorrelatedColumnsSetList& correlated_columns_sets,
-      zetasql::ResolvedStatement::ObjectAccess access_flags =
-          zetasql::ResolvedStatement::READ);
+      googlesql::ResolvedStatement::ObjectAccess access_flags =
+          googlesql::ResolvedStatement::READ);
 
-  absl::StatusOr<std::unique_ptr<zetasql::ResolvedColumnRef>>
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedColumnRef>>
   BuildGsqlResolvedColumnRef(
-      const zetasql::ResolvedColumn& column, bool is_correlated = false,
-      zetasql::ResolvedStatement::ObjectAccess access_flags =
-          zetasql::ResolvedStatement::READ);
+      const googlesql::ResolvedColumn& column, bool is_correlated = false,
+      googlesql::ResolvedStatement::ObjectAccess access_flags =
+          googlesql::ResolvedStatement::READ);
 
-  // Maps `VarIndex` to corresponding `zetasql::ResolvedColumn` for the given
+  // Maps `VarIndex` to corresponding `googlesql::ResolvedColumn` for the given
   // `scan`.
   //
   // When a ResolvedColumn transformed from a Var is built either because the
@@ -1111,7 +1114,7 @@ class ForwardTransformer {
   // object.
   //
   // This is used for the forward transformation.
-  absl::Status MapVarIndexToColumn(const zetasql::ResolvedScan& scan,
+  absl::Status MapVarIndexToColumn(const googlesql::ResolvedScan& scan,
                                    int rtindex,
                                    VarIndexScope* var_index_scope);
   // Builds a synthetic limit node from a provided offset
@@ -1122,7 +1125,7 @@ class ForwardTransformer {
   absl::Status ValidateLimitOffset(const Node* limitoffset_node,
                                    absl::string_view clause) const;
 
-  // Maps `VarIndex` to corresponding `zetasql::ResolvedColumn` for the
+  // Maps `VarIndex` to corresponding `googlesql::ResolvedColumn` for the
   // given RangeTblEntry object representing a join. `rtindex` should be the
   // index of of `rte` in its containing rtable.
   //
@@ -1134,7 +1137,7 @@ class ForwardTransformer {
                                           VarIndexScope* var_index_scope);
 
   // This is used for the forward transformation.
-  absl::StatusOr<zetasql::ResolvedColumn> GetResolvedColumn(
+  absl::StatusOr<googlesql::ResolvedColumn> GetResolvedColumn(
       const VarIndexScope& var_index_scope, int varno, AttrNumber varattno,
       int var_levels_up,
       CorrelatedColumnsSetList* correlated_columns_sets = nullptr);
@@ -1147,7 +1150,7 @@ class ForwardTransformer {
   const std::vector<std::string> create_func_arg_names_;
   // Types of input arguments keyed by name. Set during the forward
   // transformation.
-  std::map<std::string, const zetasql::Type*> create_func_arg_types_;
+  std::map<std::string, const googlesql::Type*> create_func_arg_types_;
 
   const VarIndexScope empty_var_index_scope_;
 
@@ -1180,14 +1183,14 @@ class ForwardTransformer {
       named_subquery_map_;
 
   // Track the parameter names and types in the statement.
-  std::map<std::string, const zetasql::Type*> query_parameter_types_;
+  std::map<std::string, const googlesql::Type*> query_parameter_types_;
 
   // Store how columns have actually been referenced in the query.
   // Once we transform the full query, this will be used to prune column_lists
   // of unreferenced columns. It is also used to populate column_access_list,
   // which indicates whether columns were read and/or written.
-  std::map<zetasql::ResolvedColumn,
-           zetasql::ResolvedStatement::ObjectAccess>
+  std::map<googlesql::ResolvedColumn,
+           googlesql::ResolvedStatement::ObjectAccess>
       referenced_column_access_;
 
   // Space for streamz flags
@@ -1196,7 +1199,7 @@ class ForwardTransformer {
 
   // The coercer defines common supertypes for individual types (including
   // n-ary supertypes) and whether one type can be coerced to another type.
-  std::unique_ptr<zetasql::Coercer> coercer_;
+  std::unique_ptr<googlesql::Coercer> coercer_;
 };
 }  // namespace postgres_translator
 

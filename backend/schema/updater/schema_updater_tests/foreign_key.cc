@@ -22,7 +22,7 @@
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/algorithm/container.h"
 #include "absl/log/log.h"
@@ -255,7 +255,7 @@ MATCHER_P2(IsForeignKeyOf, table, expected, Print(expected)) {
 }
 
 TEST_P(ForeignKeyTest, CreateTableWithForeignKey) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T (
         X INT64,
@@ -280,7 +280,7 @@ TEST_P(ForeignKeyTest, CreateTableWithForeignKey) {
 }
 
 TEST_P(ForeignKeyTest, CreateTableWithForeignKeyAction) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T (
         X INT64,
@@ -305,7 +305,7 @@ TEST_P(ForeignKeyTest, CreateTableWithForeignKeyAction) {
 }
 
 TEST_P(ForeignKeyTest, CreateTableWithForeignKeyOnDeleteNoAction) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T (
         X INT64,
@@ -353,7 +353,7 @@ TEST_P(ForeignKeyTest, CreateTableWithForeignKeyActionWhenFlagDisabled) {
 
 TEST_P(SchemaUpdaterTest,
        CreateTableWithForeignKeyOnDeleteNoActionWhenFlagDisabled) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T (
         X INT64,
@@ -401,7 +401,7 @@ TEST_P(SchemaUpdaterTest,
 }
 
 TEST_P(ForeignKeyTest, CreateTableWithUnnamedForeignKey) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T (
         X INT64,
@@ -424,7 +424,7 @@ TEST_P(ForeignKeyTest, CreateTableWithUnnamedForeignKey) {
 }
 
 TEST_P(ForeignKeyTest, CreateTableWithSelfReferencingForeignKey) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE U (
         A INT64,
@@ -441,7 +441,7 @@ TEST_P(ForeignKeyTest, CreateTableWithSelfReferencingForeignKey) {
 }
 
 TEST_P(ForeignKeyTest, AddForeignKey) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T (
         X INT64,
@@ -466,7 +466,7 @@ TEST_P(ForeignKeyTest, AddForeignKey) {
 }
 
 TEST_P(ForeignKeyTest, DropForeignKey) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T (
         X INT64,
@@ -490,7 +490,7 @@ TEST_P(ForeignKeyTest, DropForeignKey) {
 }
 
 TEST_P(ForeignKeyTest, AddForeignKeyAction) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T (
         X INT64,
@@ -519,7 +519,7 @@ TEST_P(ForeignKeyTest, AddForeignKeyEnforcementOption) {
   if (GetParam() != GOOGLE_STANDARD_SQL) {
     return;
   }
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T (
         X INT64,
@@ -566,7 +566,7 @@ TEST_P(ForeignKeyTest, CannotAddForeignKeyEnforcementOptionWithoutFlag) {
           REFERENCES T (X, Y) NOT ENFORCED,
       ) PRIMARY KEY (A)
     )"}),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument,
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument,
                                         testing::HasSubstr("not supported")));
 }
 
@@ -581,7 +581,7 @@ std::vector<std::string> SchemaForCaseSensitivityTests() {
 }
 
 TEST_P(ForeignKeyTest, TableNameIsCaseSensitive) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(SchemaForCaseSensitivityTests()));
 
   EXPECT_THAT(UpdateSchema(schema.get(), {R"(
@@ -594,7 +594,7 @@ TEST_P(ForeignKeyTest, TableNameIsCaseSensitive) {
 }
 
 TEST_P(ForeignKeyTest, ReferencedColumnNameIsCaseSensitive) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(SchemaForCaseSensitivityTests()));
 
   EXPECT_THAT(UpdateSchema(schema.get(), {R"(
@@ -618,7 +618,7 @@ TEST_P(ForeignKeyTest, ReferencedColumnNameIsCaseSensitive) {
 }
 
 TEST_P(ForeignKeyTest, ReferencingColumnNameIsCaseSensitive) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(SchemaForCaseSensitivityTests()));
 
   EXPECT_THAT(UpdateSchema(schema.get(), {R"(
@@ -642,10 +642,10 @@ TEST_P(ForeignKeyTest, ReferencingColumnNameIsCaseSensitive) {
 }
 
 TEST_P(ForeignKeyTest, ConstraintNameIsCaseInsensitive) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(SchemaForCaseSensitivityTests()));
 
-  ZETASQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(
       CREATE TABLE T2 (
         A INT64,
       ) PRIMARY KEY (A)

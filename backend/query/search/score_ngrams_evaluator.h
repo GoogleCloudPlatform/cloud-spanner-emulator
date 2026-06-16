@@ -20,7 +20,7 @@
 #include <cstdint>
 #include <string>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -36,14 +36,14 @@ namespace search {
 
 class ScoreNgramsEvaluator {
  public:
-  static absl::StatusOr<zetasql::Value> Evaluate(
-      absl::Span<const zetasql::Value> args);
+  static absl::StatusOr<googlesql::Value> Evaluate(
+      absl::Span<const googlesql::Value> args);
 
  private:
   static constexpr int64_t kTrigrams = 3;
 
   static absl::Status BuildTrigrams(
-      const zetasql::Value& tokenlist, absl::string_view query_string,
+      const googlesql::Value& tokenlist, absl::string_view query_string,
       bool& source_is_null,
       absl::flat_hash_set<std::string>& tokenlist_trigrams,
       absl::flat_hash_set<std::string>& query_trigrams);

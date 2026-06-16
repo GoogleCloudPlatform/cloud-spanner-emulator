@@ -14,9 +14,12 @@
 // limitations under the License.
 //
 
+#include <vector>
+
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
@@ -29,19 +32,42 @@ namespace test {
 
 namespace {
 
-class SpannerSysTest : public DatabaseTest {
+class SpannerSysTest
+    : public DatabaseTest,
+      public testing::WithParamInterface<database_api::DatabaseDialect> {
+ public:
+  void SetUp() override {
+    dialect_ = GetParam();
+    DatabaseTest::SetUp();
+  }
   absl::Status SetUpDatabase() override { return absl::OkStatus(); }
 };
 
-TEST_F(SpannerSysTest, SupportedOptimizerVersionsTableIsValid) {
+TEST_P(SpannerSysTest, SupportedOptimizerVersionsTableIsValid) {
 
-  auto results = Query(R"(
+  absl::StatusOr<std::vector<ValueRow>> results;
+  if (dialect_ == database_api::DatabaseDialect::POSTGRESQL) {
+    results = Query(R"(
+      SELECT is_default, to_char(release_date, 'YYYY-MM-dd'), version
+      FROM spanner_sys.SUPPORTED_OPTIMIZER_VERSIONS
+    )");
+  } else {
+    results = Query(R"(
       SELECT is_default, FORMAT_DATE('%F', release_date), version
       FROM spanner_sys.SUPPORTED_OPTIMIZER_VERSIONS
     )");
+  }
 
   EXPECT_THAT(results, IsOkAndHoldsRow({true, "2023-09-19", 42}));
 }
+
+INSTANTIATE_TEST_SUITE_P(
+    PerDialectSpannerSysTest, SpannerSysTest,
+    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
+                    database_api::DatabaseDialect::POSTGRESQL),
+    [](const testing::TestParamInfo<SpannerSysTest::ParamType>& info) {
+      return database_api::DatabaseDialect_Name(info.param);
+    });
 
 }  // namespace
 

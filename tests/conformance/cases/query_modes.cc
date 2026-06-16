@@ -14,16 +14,17 @@
 // limitations under the License.
 //
 
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "google/spanner/v1/query_plan.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "google/cloud/spanner/results.h"
 #include "tests/conformance/common/database_test_base.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -32,27 +33,37 @@ namespace test {
 
 namespace {
 
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
-class QueryModesTest : public DatabaseTest {
+class QueryModesTest
+    : public DatabaseTest,
+      public testing::WithParamInterface<database_api::DatabaseDialect> {
+ public:
+  void SetUp() override {
+    dialect_ = GetParam();
+    DatabaseTest::SetUp();
+  }
+
  public:
   absl::Status SetUpDatabase() override {
-    ZETASQL_RETURN_IF_ERROR(SetSchema({R"(
-      CREATE TABLE Users(
-        ID   INT64 NOT NULL,
-        Name STRING(MAX),
-        Age  INT64
-      ) PRIMARY KEY (ID)
-    )"}));
+    GOOGLESQL_RETURN_IF_ERROR(SetSchemaFromFile("query_modes.test"));
 
-    ZETASQL_RETURN_IF_ERROR(Insert("Users", {"ID", "Name"}, {1, "John"}).status());
-    ZETASQL_RETURN_IF_ERROR(Insert("Users", {"ID", "Name"}, {2, "Peter"}).status());
+    GOOGLESQL_RETURN_IF_ERROR(Insert("Users", {"ID", "Name"}, {1, "John"}).status());
+    GOOGLESQL_RETURN_IF_ERROR(Insert("Users", {"ID", "Name"}, {2, "Peter"}).status());
 
     return absl::OkStatus();
   }
 };
 
-TEST_F(QueryModesTest, AcceptsQueriesInPlanMode) {
+INSTANTIATE_TEST_SUITE_P(
+    PerDialectQueryModesTest, QueryModesTest,
+    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
+                    database_api::DatabaseDialect::POSTGRESQL),
+    [](const testing::TestParamInfo<QueryModesTest::ParamType>& info) {
+      return database_api::DatabaseDialect_Name(info.param);
+    });
+
+TEST_P(QueryModesTest, AcceptsQueriesInPlanMode) {
   // The emulator does return the same query plans as prod, but it does support
   // PLAN mode in order to allow clients to execute AnalyzeSql to get the query
   // metadata without having to actually execute the statement. This also allows
@@ -65,7 +76,7 @@ TEST_F(QueryModesTest, AcceptsQueriesInPlanMode) {
   }
 }
 
-TEST_F(QueryModesTest, ProvidesBasicStatsInProfileMode) {
+TEST_P(QueryModesTest, ProvidesBasicStatsInProfileMode) {
   // The emulator supports basic profile stats to allow some sql shells to work.
   auto stats = client()
                    .ProfileQuery(SqlStatement("select * from Users"))

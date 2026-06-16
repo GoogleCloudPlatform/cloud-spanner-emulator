@@ -1,0 +1,32 @@
+CREATE TABLE Employee (
+  id INT64 NOT NULL,
+  cost_center STRING(MAX),
+  job_title STRING(MAX),
+  office STRING(MAX)
+) PRIMARY KEY (id);
+CREATE VIEW EngineerEmployeeView SQL SECURITY INVOKER AS
+  SELECT e.id, e.cost_center, e.job_title, e.office
+  FROM Employee e
+  WHERE LOWER(e.cost_center) = "engineering";
+CREATE PROPERTY GRAPH EngineeringGraph
+  NODE TABLES (
+    EngineerEmployeeView KEY(id)
+  );
+--
+CREATE TABLE Employee (
+  id INT64 NOT NULL,
+  cost_center STRING(MAX),
+  job_title STRING(MAX),
+  office STRING(MAX),
+) PRIMARY KEY(id);
+CREATE VIEW EngineerEmployeeView SQL SECURITY INVOKER AS
+  SELECT e.id, e.cost_center, e.job_title, e.office
+  FROM Employee e
+  WHERE LOWER(e.cost_center) = "engineering";
+CREATE PROPERTY GRAPH EngineeringGraph
+  NODE TABLES(
+    EngineerEmployeeView KEY(id)
+    LABEL EngineerEmployeeView
+    PROPERTIES(
+      cost_center, id, job_title, office)
+  );

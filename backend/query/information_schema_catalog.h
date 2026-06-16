@@ -23,8 +23,8 @@
 #include <vector>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
-#include "zetasql/public/simple_catalog.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/simple_catalog.h"
+#include "googlesql/public/value.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/strings/string_view.h"
 #include "backend/query/spanner_sys_catalog.h"
@@ -42,8 +42,8 @@ struct IndexColumnsMetaEntry;
 
 // InformationSchemaCatalog provides the INFORMATION_SCHEMA tables.
 //
-// ZetaSQL reference implementation accesses table data via the catalog objects
-// themselves. Hence, this class provides both the catalog and the data
+// GoogleSQL reference implementation accesses table data via the catalog
+// objects themselves. Hence, this class provides both the catalog and the data
 // backing the information schema tables.
 //
 // Cloud Spanner's information schema is documented at:
@@ -54,7 +54,7 @@ struct IndexColumnsMetaEntry;
 // in the emulator.
 //
 // This class is tested via tests/conformance/cases/information_schema.cc
-class InformationSchemaCatalog : public zetasql::SimpleCatalog {
+class InformationSchemaCatalog : public googlesql::SimpleCatalog {
  public:
   static constexpr char kName[] = "INFORMATION_SCHEMA";
   static constexpr char kPGName[] = "PG_INFORMATION_SCHEMA";
@@ -67,23 +67,23 @@ class InformationSchemaCatalog : public zetasql::SimpleCatalog {
   const Schema* default_schema_;
   const SpannerSysCatalog* spanner_sys_catalog_;
   const ::google::spanner::admin::database::v1::DatabaseDialect dialect_;
-  absl::flat_hash_map<std::string, std::unique_ptr<zetasql::SimpleTable>>
+  absl::flat_hash_map<std::string, std::unique_ptr<googlesql::SimpleTable>>
       tables_by_name_;
   std::unique_ptr<postgres_translator::spangres::SpangresSchemaPrinter>
       pg_schema_printer_;
 
   inline std::string GetNameForDialect(absl::string_view name);
-  std::pair<zetasql::Value, zetasql::Value> GetPGDataTypeAndSpannerType(
-      const zetasql::Type* type, std::optional<int64_t> length);
+  std::pair<googlesql::Value, googlesql::Value> GetPGDataTypeAndSpannerType(
+      const googlesql::Type* type, std::optional<int64_t> length);
 
-  zetasql::Value GetSpannerType(const Column* column);
-  zetasql::Value GetSpannerType(const zetasql::Type* type,
+  googlesql::Value GetSpannerType(const Column* column);
+  googlesql::Value GetSpannerType(const googlesql::Type* type,
                                   std::optional<int64_t> length);
-  zetasql::Value PGDataType(const zetasql::Type* type);
-  inline zetasql::Value DialectDefaultSchema();
-  inline zetasql::Value DialectBoolValue(bool value);
-  zetasql::Value DialectColumnOrdering(const KeyColumn* column);
-  inline zetasql::Value DialectTableCatalog();
+  googlesql::Value PGDataType(const googlesql::Type* type);
+  inline googlesql::Value DialectDefaultSchema();
+  inline googlesql::Value DialectBoolValue(bool value);
+  googlesql::Value DialectColumnOrdering(const KeyColumn* column);
+  inline googlesql::Value DialectTableCatalog();
   inline std::pair<std::string, std::string>
   GetSchemaAndNameForInformationSchema(std::string table_name);
 
@@ -122,12 +122,12 @@ class InformationSchemaCatalog : public zetasql::SimpleCatalog {
                              const Model::ModelColumn& column,
                              absl::string_view column_kind,
                              int64_t ordinal_position,
-                             std::vector<std::vector<zetasql::Value>>* rows);
+                             std::vector<std::vector<googlesql::Value>>* rows);
   void FillModelColumnOptionsTable(
       const Model& model, const Model::ModelColumn& column,
       absl::string_view column_kind,
-      std::vector<std::vector<zetasql::Value>>* rows);
-  zetasql::Value ParseLocalityGroupOptions(ddl::SetOption option);
+      std::vector<std::vector<googlesql::Value>>* rows);
+  googlesql::Value ParseLocalityGroupOptions(ddl::SetOption option);
   void FillLocalityGroupOptionsTable();
 
   void FillPropertyGraphsTable();

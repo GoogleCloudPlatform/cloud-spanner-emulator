@@ -22,7 +22,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/memory/memory.h"
 #include "absl/status/statusor.h"
@@ -40,8 +40,8 @@ namespace backend {
 namespace {
 
 using ::google::spanner::emulator::test::ScopedEmulatorFeatureFlagsSetter;
-using zetasql::values::Int64;
-using zetasql_base::testing::StatusIs;
+using googlesql::values::Int64;
+using googlesql_base::testing::StatusIs;
 
 // This unit test works with the following DDL statements:
 //
@@ -80,7 +80,7 @@ class InterleaveTest : public test::ActionsTest {
 
  protected:
   // Test components.
-  zetasql::TypeFactory type_factory_;
+  googlesql::TypeFactory type_factory_;
   std::unique_ptr<const Schema> schema_;
 
   // Test variables.
@@ -96,7 +96,7 @@ TEST_F(InterleaveTest,
                                                   no_action_delete_child_);
 
   // Action should succeed for no child rows.
-  ZETASQL_EXPECT_OK(validator->Validate(ctx(), Delete(parent_table_, Key({Int64(1)}))));
+  GOOGLESQL_EXPECT_OK(validator->Validate(ctx(), Delete(parent_table_, Key({Int64(1)}))));
 }
 
 TEST_F(InterleaveTest, ParentRowDeleteWithNoActionCascadeFailsWithChildRows) {
@@ -105,7 +105,7 @@ TEST_F(InterleaveTest, ParentRowDeleteWithNoActionCascadeFailsWithChildRows) {
                                                   no_action_delete_child_);
 
   // Action should fail if child rows exist.
-  ZETASQL_EXPECT_OK(store()->Insert(no_action_delete_child_, Key({Int64(1), Int64(1)}),
+  GOOGLESQL_EXPECT_OK(store()->Insert(no_action_delete_child_, Key({Int64(1), Int64(1)}),
                             {}, {}));
   EXPECT_THAT(
       validator->Validate(ctx(), Delete(parent_table_, Key({Int64(1)}))),
@@ -119,12 +119,12 @@ TEST_F(InterleaveTest,
                                                   cascade_delete_child_);
 
   // Action should succeed if child row does not exist.
-  ZETASQL_EXPECT_OK(validator->Validate(ctx(), Delete(parent_table_, Key({Int64(1)}))));
+  GOOGLESQL_EXPECT_OK(validator->Validate(ctx(), Delete(parent_table_, Key({Int64(1)}))));
 
   // Action should succeed if child rows exist.
-  ZETASQL_EXPECT_OK(store()->Insert(no_action_delete_child_, Key({Int64(1), Int64(1)}),
+  GOOGLESQL_EXPECT_OK(store()->Insert(no_action_delete_child_, Key({Int64(1), Int64(1)}),
                             {}, {}));
-  ZETASQL_EXPECT_OK(validator->Validate(ctx(), Delete(parent_table_, Key({Int64(1)}))));
+  GOOGLESQL_EXPECT_OK(validator->Validate(ctx(), Delete(parent_table_, Key({Int64(1)}))));
 }
 
 TEST_F(InterleaveTest, ParentRowDeleteWithNoActionDeleteCascadeHasNoEffects) {
@@ -133,7 +133,7 @@ TEST_F(InterleaveTest, ParentRowDeleteWithNoActionDeleteCascadeHasNoEffects) {
                                                  no_action_delete_child_);
 
   // Action should not take any effects even if child row exist.
-  ZETASQL_EXPECT_OK(effector->Effect(ctx(), Delete(parent_table_, Key({Int64(1)}))));
+  GOOGLESQL_EXPECT_OK(effector->Effect(ctx(), Delete(parent_table_, Key({Int64(1)}))));
   EXPECT_EQ(effects_buffer()->ops_queue()->size(), 0);
 }
 
@@ -143,9 +143,9 @@ TEST_F(InterleaveTest, ParentRowDeleteWithOnDeleteCascadeAddsEffects) {
                                                  cascade_delete_child_);
 
   // Effector should add delete ops for child rows.
-  ZETASQL_EXPECT_OK(store()->Insert(cascade_delete_child_, Key({Int64(1), Int64(1)}),
+  GOOGLESQL_EXPECT_OK(store()->Insert(cascade_delete_child_, Key({Int64(1), Int64(1)}),
                             {}, {}));
-  ZETASQL_EXPECT_OK(effector->Effect(ctx(), Delete(parent_table_, Key({Int64(1)}))));
+  GOOGLESQL_EXPECT_OK(effector->Effect(ctx(), Delete(parent_table_, Key({Int64(1)}))));
   ASSERT_EQ(effects_buffer()->ops_queue()->size(), 1);
   EXPECT_THAT(effects_buffer()->ops_queue()->front(),
               testing::VariantWith<DeleteOp>(
@@ -169,10 +169,10 @@ TEST_F(InterleaveTest, ChildRowInsertSucceedsWithParentRow) {
                                                  cascade_delete_child_);
 
   // Add parent row.
-  ZETASQL_EXPECT_OK(store()->Insert(parent_table_, Key({Int64(1)}), {}, {}));
+  GOOGLESQL_EXPECT_OK(store()->Insert(parent_table_, Key({Int64(1)}), {}, {}));
 
   // Action succeeds with parent row.
-  ZETASQL_EXPECT_OK(validator->Validate(
+  GOOGLESQL_EXPECT_OK(validator->Validate(
       ctx(), Insert(cascade_delete_child_, Key({Int64(1), Int64(1)}))));
 }
 
@@ -196,7 +196,7 @@ class NonParentInterleaveTest : public test::ActionsTest {
   void SetUp() override {
     absl::StatusOr<std::unique_ptr<const Schema>> schema =
         emulator::test::CreateSchemaWithNonParentInterleaving(&type_factory_);
-    ZETASQL_ASSERT_OK(schema);
+    GOOGLESQL_ASSERT_OK(schema);
     schema_ = *std::move(schema);
     npi_parent_ = schema_->FindTable("NpiParent");
     npi_child_ = schema_->FindTable("NpiChild");
@@ -205,7 +205,7 @@ class NonParentInterleaveTest : public test::ActionsTest {
 
  protected:
   // Test components.
-  zetasql::TypeFactory type_factory_;
+  googlesql::TypeFactory type_factory_;
   std::unique_ptr<const Schema> schema_;
 
   // Test variables.
@@ -218,23 +218,23 @@ TEST_F(NonParentInterleaveTest, ParentRowDeleteSucceedsWithNoChildRow) {
   std::unique_ptr<Validator> validator =
       std::make_unique<InterleaveParentValidator>(npi_parent_, npi_child_);
   // Add parent row.
-  ZETASQL_EXPECT_OK(store()->Insert(npi_parent_, Key({Int64(1)}), {}, {}));
+  GOOGLESQL_EXPECT_OK(store()->Insert(npi_parent_, Key({Int64(1)}), {}, {}));
 
   // Delete action should succeed with no child rows.
-  ZETASQL_EXPECT_OK(validator->Validate(ctx(), Delete(npi_parent_, Key({Int64(1)}))));
+  GOOGLESQL_EXPECT_OK(validator->Validate(ctx(), Delete(npi_parent_, Key({Int64(1)}))));
 }
 
 TEST_F(NonParentInterleaveTest, ParentRowDeleteSucceedsWithChildRow) {
   std::unique_ptr<Validator> validator =
       std::make_unique<InterleaveParentValidator>(npi_parent_, npi_child_);
   // Add parent row.
-  ZETASQL_EXPECT_OK(store()->Insert(npi_parent_, Key({Int64(1)}), {}, {}));
+  GOOGLESQL_EXPECT_OK(store()->Insert(npi_parent_, Key({Int64(1)}), {}, {}));
 
   // Add child row.
-  ZETASQL_EXPECT_OK(store()->Insert(npi_child_, Key({Int64(1), Int64(10)}), {}, {}));
+  GOOGLESQL_EXPECT_OK(store()->Insert(npi_child_, Key({Int64(1), Int64(10)}), {}, {}));
 
   // Delete action on parent row should succeed with child row exists.
-  ZETASQL_EXPECT_OK(validator->Validate(ctx(), Delete(npi_parent_, Key({Int64(1)}))));
+  GOOGLESQL_EXPECT_OK(validator->Validate(ctx(), Delete(npi_parent_, Key({Int64(1)}))));
 }
 
 TEST_F(NonParentInterleaveTest, ChildRowInsertSucceedsWithNoParentRow) {
@@ -242,7 +242,7 @@ TEST_F(NonParentInterleaveTest, ChildRowInsertSucceedsWithNoParentRow) {
       std::make_unique<InterleaveParentValidator>(npi_parent_, npi_child_);
 
   // Insert action on child row should succeed with parent row exists.
-  ZETASQL_EXPECT_OK(validator->Validate(
+  GOOGLESQL_EXPECT_OK(validator->Validate(
       ctx(), Insert(npi_child_, Key({Int64(1), Int64(10)}))));
 }
 

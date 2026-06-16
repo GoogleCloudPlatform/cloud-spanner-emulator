@@ -34,8 +34,8 @@
 
 #include <cstdint>
 
-#include "zetasql/public/types/type.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/public/value.h"
 #include "absl/flags/declare.h"
 #include "absl/status/statusor.h"
 #include "third_party/spanner_pg/datatypes/extended/spanner_extended_type.h"
@@ -46,17 +46,17 @@ namespace postgres_translator::spangres::datatypes {
 const SpannerExtendedType* GetPgOidType();
 
 // Returns a global static instance of an ARRAY<PG.OID> type.
-const zetasql::ArrayType* GetPgOidArrayType();
+const googlesql::ArrayType* GetPgOidArrayType();
 
-// Creates a zetasql::Value from an uint32_t.
-absl::StatusOr<zetasql::Value> CreatePgOidValue(uint32_t oid);
+// Creates a googlesql::Value from an uint32_t.
+absl::StatusOr<googlesql::Value> CreatePgOidValue(uint32_t oid);
 
-// Creates a PG.OID zetasql::Value that is null.
-zetasql::Value NullPgOid();
+// Creates a PG.OID googlesql::Value that is null.
+googlesql::Value NullPgOid();
 
-// Retrieves int64_t representation from the ZetaSQL `value`.
+// Retrieves int64_t representation from the GoogleSQL `value`.
 // Returns error if `value` doesn't contain non-NULL value of PG.OID.
-absl::StatusOr<int64_t> GetPgOidValue(const zetasql::Value& value);
+absl::StatusOr<int64_t> GetPgOidValue(const googlesql::Value& value);
 
 }  // namespace postgres_translator::spangres::datatypes
 

@@ -19,7 +19,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
@@ -27,7 +27,7 @@
 #include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/conformance/common/database_test_base.h"
 #include "tests/conformance/common/query_translator.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -39,7 +39,7 @@ namespace {
 using testing::ContainsRegex;
 using testing::HasSubstr;
 using testing::Matcher;
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 class SearchTest
     : public DatabaseTest,
@@ -56,7 +56,7 @@ class SearchTest
   }
 
   absl::Status SetUpDatabase() override {
-    ZETASQL_RETURN_IF_ERROR(SetSchemaFromFile("search.test"));
+    GOOGLESQL_RETURN_IF_ERROR(SetSchemaFromFile("search.test"));
     return PopulateDatabase();
   }
 
@@ -65,7 +65,7 @@ class SearchTest
     std::vector<std::string> one_track = {"track1 track2"};
     std::vector<std::string> two_tracks = {"track1", "track2"};
     std::vector<std::string> single_track = {"track1"};
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         MultiInsert(
             "albums",
             {"albumid", "userid", "releasetimestamp", "uid", "name", "tracks",
@@ -91,21 +91,21 @@ class SearchTest
             .status());
 
     // Insert a row with NULL name
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         Insert("albums",
                {"albumid", "userid", "releasetimestamp", "uid", "summary"},
                {14, 2, 9, 0, ""})
             .status());
 
     // Insert a row with NULL summary
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         Insert("albums",
                {"albumid", "userid", "releasetimestamp", "uid", "name"},
                {15, 1, 12, 0, ""})
             .status());
     // Insert a row meant to test TOKENIZE_SUBSTRING with SEARCH_NGRAMS.
-    ZETASQL_RETURN_IF_ERROR(Insert("AccountIds", {"AccountId"}, {1}).status());
-    ZETASQL_RETURN_IF_ERROR(Insert("AccountSearchTerms", {"AccountId", "SearchPhrase"},
+    GOOGLESQL_RETURN_IF_ERROR(Insert("AccountIds", {"AccountId"}, {1}).status());
+    GOOGLESQL_RETURN_IF_ERROR(Insert("AccountSearchTerms", {"AccountId", "SearchPhrase"},
                            {1, "name individual@email.com"})
                         .status());
 
@@ -156,7 +156,7 @@ TEST_P(SearchTest, SearchFunctionSupportOptionalArguments) {
           WHERE SEARCH(summary_tokens, "top", enhance_query=>true)
             AND userid = 1
           ORDER BY albumid ASC)sql";
-  ZETASQL_EXPECT_OK(Query(GetSqlQueryString(query1)));
+  GOOGLESQL_EXPECT_OK(Query(GetSqlQueryString(query1)));
 
   std::string query2 = R"sql(
           SELECT albumid
@@ -167,7 +167,7 @@ TEST_P(SearchTest, SearchFunctionSupportOptionalArguments) {
                        language_tag=>"en-us")
             AND userid = 1
           ORDER BY albumid ASC)sql";
-  ZETASQL_EXPECT_OK(Query(GetSqlQueryString(query2)));
+  GOOGLESQL_EXPECT_OK(Query(GetSqlQueryString(query2)));
 
   std::string query3 = R"sql(
           SELECT albumid
@@ -178,7 +178,7 @@ TEST_P(SearchTest, SearchFunctionSupportOptionalArguments) {
                       language_tag=>"en-us")
             AND userid = 1
           ORDER BY albumid ASC)sql";
-  ZETASQL_EXPECT_OK(Query(GetSqlQueryString(query3)));
+  GOOGLESQL_EXPECT_OK(Query(GetSqlQueryString(query3)));
 }
 
 TEST_P(SearchTest, SearchFunctionWrongArguments) {
@@ -203,7 +203,7 @@ TEST_P(SearchTest, SearchSubStringRelativeSearch) {
                                  relative_search_type=>"word_prefix")
             AND userid = 1
           ORDER BY albumid ASC)sql";
-  ZETASQL_EXPECT_OK(Query(GetSqlQueryString(query)));
+  GOOGLESQL_EXPECT_OK(Query(GetSqlQueryString(query)));
 }
 
 TEST_P(SearchTest, SearchSubStringRelativeSearchNotSupported) {
@@ -862,7 +862,7 @@ TEST_P(SearchTest, BasicScore) {
       SELECT SCORE(summary_tokens, 'top')
       FROM albums
       WHERE userid = 1 AND SEARCH(summary_tokens, 'top'))sql";
-  ZETASQL_EXPECT_OK(Query(GetSqlQueryString(query)));
+  GOOGLESQL_EXPECT_OK(Query(GetSqlQueryString(query)));
 }
 
 TEST_P(SearchTest, ScoreFunctionSupportOptionalArguments) {
@@ -873,7 +873,7 @@ TEST_P(SearchTest, ScoreFunctionSupportOptionalArguments) {
             AND userid = 1
             AND SEARCH(summary_tokens, "top")
           ORDER BY albumid ASC)sql";
-  ZETASQL_EXPECT_OK(Query(GetSqlQueryString(query1)));
+  GOOGLESQL_EXPECT_OK(Query(GetSqlQueryString(query1)));
 
   std::string query2 = R"sql(
           SELECT albumid
@@ -885,7 +885,7 @@ TEST_P(SearchTest, ScoreFunctionSupportOptionalArguments) {
             AND userid = 1
             AND SEARCH(summary_tokens, "top")
           ORDER BY albumid ASC)sql";
-  ZETASQL_EXPECT_OK(Query(GetSqlQueryString(query2)));
+  GOOGLESQL_EXPECT_OK(Query(GetSqlQueryString(query2)));
 }
 
 TEST_P(SearchTest, ScoreFunctionWrongArguments) {
@@ -906,7 +906,7 @@ TEST_P(SearchTest, BasicScoreNgrams) {
       SELECT SCORE_NGRAMS(Tracks_Substring_Tokens, "top")
       FROM albums
       WHERE userid = 1 AND SEARCH(summary_tokens, "top"))sql";
-  ZETASQL_EXPECT_OK(Query(GetSqlQueryString(query)));
+  GOOGLESQL_EXPECT_OK(Query(GetSqlQueryString(query)));
 }
 
 TEST_P(SearchTest, ScoreNgramsFunctionSupportOptionalArguments) {
@@ -917,7 +917,7 @@ TEST_P(SearchTest, ScoreNgramsFunctionSupportOptionalArguments) {
             AND userid = 1
             AND SEARCH(summary_tokens, "top")
           ORDER BY albumid ASC)sql";
-  ZETASQL_EXPECT_OK(Query(GetSqlQueryString(query1)));
+  GOOGLESQL_EXPECT_OK(Query(GetSqlQueryString(query1)));
 
   std::string query2 = R"sql(
           SELECT albumid
@@ -929,7 +929,7 @@ TEST_P(SearchTest, ScoreNgramsFunctionSupportOptionalArguments) {
             AND userid = 1
             AND SEARCH(summary_tokens, "top")
           ORDER BY albumid ASC)sql";
-  ZETASQL_EXPECT_OK(Query(GetSqlQueryString(query2)));
+  GOOGLESQL_EXPECT_OK(Query(GetSqlQueryString(query2)));
 }
 
 TEST_P(SearchTest, ScoreNgramsFunctionWrongArguments) {
@@ -960,7 +960,7 @@ TEST_P(SearchTest, BasicSnippet) {
       SELECT SNIPPET(Summary, 'top')
       FROM albums
       WHERE userid = 1)sql";
-  ZETASQL_EXPECT_OK(Query(GetSqlQueryString(query)));
+  GOOGLESQL_EXPECT_OK(Query(GetSqlQueryString(query)));
 }
 
 TEST_P(SearchTest, InvalidMaxSnippets) {
@@ -1005,7 +1005,7 @@ TEST_P(SearchTest, SnippetNamedArgumentShuffledOrder) {
                      max_snippets=>4)
       FROM albums
       WHERE userid = 1)sql";
-  ZETASQL_EXPECT_OK(Query(GetSqlQueryString(query)));
+  GOOGLESQL_EXPECT_OK(Query(GetSqlQueryString(query)));
 }
 
 TEST_P(SearchTest, WrongSnippetContentType) {
@@ -1039,7 +1039,7 @@ TEST_P(SearchTest, SnippetContentTypeCaseInsensitive) {
                      content_type=>'text/HTML')
       FROM albums
       WHERE userid = 1)sql";
-  ZETASQL_EXPECT_OK(Query(GetSqlQueryString(query)));
+  GOOGLESQL_EXPECT_OK(Query(GetSqlQueryString(query)));
 }
 
 // JSON search does not use the underlined tokenlist, instead it relies on the
@@ -1059,11 +1059,11 @@ TEST_P(SearchTest, JsonSearch) {
       FROM albums
       WHERE userid = 1 AND JSON_CONTAINS(json, JSON '1'))sql";
 
-  ZETASQL_EXPECT_OK(Query(GetSqlQueryString(query)));
+  GOOGLESQL_EXPECT_OK(Query(GetSqlQueryString(query)));
 }
 
 TEST_P(SearchTest, SearchWithExistingSearchIndexHint) {
-  ZETASQL_EXPECT_OK(UpdateSchema({
+  GOOGLESQL_EXPECT_OK(UpdateSchema({
       R"sql(
       CREATE SEARCH INDEX summary_idx
       ON albums(summary_tokens, summary_substr_tokens))sql"}));
@@ -1100,7 +1100,7 @@ TEST_P(SearchTest, SearchWithComplicatedSearchIndexHint) {
         ORDER BY releasetimestamp
         OPTIONS (sort_order_sharding = true, disable_automatic_uid_column=true)
       )sql";
-  ZETASQL_EXPECT_OK(UpdateSchema({index_schema}));
+  GOOGLESQL_EXPECT_OK(UpdateSchema({index_schema}));
   std::string query = R"sql(
       SELECT albumid
       FROM albums@{force_index=summary_idx}
@@ -1149,7 +1149,7 @@ TEST_P(SearchTest, SearchFailAfterDropSearchIndex) {
   std::string create_index_query = R"sql(
       CREATE SEARCH INDEX summary_idx
       ON albums(summary_tokens, summary_substr_tokens))sql";
-  ZETASQL_EXPECT_OK(UpdateSchema({create_index_query}));
+  GOOGLESQL_EXPECT_OK(UpdateSchema({create_index_query}));
   std::string search_query = R"sql(
       SELECT albumid
       FROM albums@{force_index=summary_idx}
@@ -1161,7 +1161,7 @@ TEST_P(SearchTest, SearchFailAfterDropSearchIndex) {
 
   std::string drop_index_query = R"sql(
       DROP SEARCH INDEX summary_idx)sql";
-  ZETASQL_EXPECT_OK(UpdateSchema({drop_index_query}));
+  GOOGLESQL_EXPECT_OK(UpdateSchema({drop_index_query}));
   EXPECT_THAT(Query(GetSqlQueryString(search_query)),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("index called summary_idx")));
@@ -1203,7 +1203,7 @@ TEST_P(SearchTest, ProjectAll) {
       SELECT *
       FROM albums
       WHERE albumid = 1)sql";
-  ZETASQL_EXPECT_OK(Query(GetSqlQueryString(query)));
+  GOOGLESQL_EXPECT_OK(Query(GetSqlQueryString(query)));
 }
 
 TEST_P(SearchTest, ArrayIncludesSupported) {
@@ -1314,7 +1314,7 @@ class SearchInTransactionTest
   }
 
   absl::Status SetUpDatabase() override {
-    ZETASQL_RETURN_IF_ERROR(SetSchema({
+    GOOGLESQL_RETURN_IF_ERROR(SetSchema({
         R"sql(
         CREATE TABLE SqlSearchCountries (
           CountryId INT64 NOT NULL,
@@ -1351,7 +1351,7 @@ TEST_P(SearchInTransactionTest, SearchInTransactionalQuery) {
   if (test.expect_error) {
     EXPECT_THAT(query_result, StatusIs(absl::StatusCode::kInvalidArgument));
   } else {
-    ZETASQL_EXPECT_OK(query_result);
+    GOOGLESQL_EXPECT_OK(query_result);
   }
 }
 
@@ -1419,10 +1419,10 @@ static constexpr char kQueryWithoutSearch[] = R"sql(
 
 TEST_P(SearchInTransactionTest, NonSearchQuerySucceedInTransaction) {
   auto txn = Transaction(Transaction::ReadWriteOptions());
-  ZETASQL_EXPECT_OK(QueryTransaction(txn, kQueryWithoutSearch));
+  GOOGLESQL_EXPECT_OK(QueryTransaction(txn, kQueryWithoutSearch));
 
   txn = Transaction(Transaction::ReadOnlyOptions());
-  ZETASQL_EXPECT_OK(PartitionQuery(txn, kQueryWithoutSearch));
+  GOOGLESQL_EXPECT_OK(PartitionQuery(txn, kQueryWithoutSearch));
 }
 
 TEST_P(SearchInTransactionTest, SearchNotSupportedInPartitionedDML) {
@@ -1441,7 +1441,7 @@ TEST_P(SearchInTransactionTest, SearchNotSupportedInBatchDML) {
 
 struct TokenizeNumberParametersTestCase {
   std::string query;
-  Matcher<const std::string&> expected_error;
+  Matcher<std::string> expected_error;
 };
 
 class TokenizeNumberParametersTest

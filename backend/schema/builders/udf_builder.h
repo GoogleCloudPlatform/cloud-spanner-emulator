@@ -24,7 +24,7 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/function_signature.h"
+#include "googlesql/public/function_signature.h"
 #include "absl/memory/memory.h"
 #include "absl/strings/string_view.h"
 #include "backend/schema/catalog/udf.h"
@@ -104,7 +104,7 @@ class Udf::Builder {
   }
 
   Builder& set_signature(
-      std::unique_ptr<zetasql::FunctionSignature> signature) {
+      std::unique_ptr<googlesql::FunctionSignature> signature) {
     instance_->signature_ = std::move(signature);
     return *this;
   }
@@ -112,6 +112,10 @@ class Udf::Builder {
   Builder& set_determinism_level(Udf::Determinism determinism_level) {
     instance_->determinism_level_ = determinism_level;
     return *this;
+  }
+
+  std::vector<const SchemaNode*> dependencies() const {
+    return instance_->dependencies_;
   }
 
  private:
@@ -135,7 +139,7 @@ class Udf::Editor {
     instance_->body_origin_ = udf->body_origin_;
     instance_->signature_ =
         udf->signature_
-            ? absl::make_unique<zetasql::FunctionSignature>(*udf->signature_)
+            ? absl::make_unique<googlesql::FunctionSignature>(*udf->signature_)
             : nullptr;
     instance_->determinism_level_ = udf->determinism_level_;
     return *this;

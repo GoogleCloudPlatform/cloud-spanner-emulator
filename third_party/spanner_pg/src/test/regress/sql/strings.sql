@@ -85,6 +85,12 @@ SELECT E'DeAdBeEf'::bytea;
 SELECT E'De\\000dBeEf'::bytea;
 SELECT E'De\\123dBeEf'::bytea;
 
+-- Test non-error-throwing API too
+SELECT pg_input_is_valid(E'\\xDeAdBeE', 'bytea');
+SELECT * FROM pg_input_error_info(E'\\xDeAdBeE', 'bytea');
+SELECT * FROM pg_input_error_info(E'\\xDeAdBeEx', 'bytea');
+SELECT * FROM pg_input_error_info(E'foo\\99bar', 'bytea');
+
 --
 -- test conversions between various string types
 -- E021-10 implicit casting among the character data types
@@ -186,6 +192,29 @@ SELECT 'abcd\efg' SIMILAR TO '_bcd\%' ESCAPE '' AS true;
 -- these behaviors are per spec, though:
 SELECT 'abcdefg' SIMILAR TO '_bcd%' ESCAPE NULL AS null;
 SELECT 'abcdefg' SIMILAR TO '_bcd#%' ESCAPE '##' AS error;
+
+-- Characters that should be left alone in character classes when a
+-- SIMILAR TO regexp pattern is converted to POSIX style.
+-- Underscore "_"
+EXPLAIN (COSTS OFF) SELECT * FROM TEXT_TBL WHERE f1 SIMILAR TO '_[_[:alpha:]_]_';
+-- Percentage "%"
+EXPLAIN (COSTS OFF) SELECT * FROM TEXT_TBL WHERE f1 SIMILAR TO '%[%[:alnum:]%]%';
+-- Dot "."
+EXPLAIN (COSTS OFF) SELECT * FROM TEXT_TBL WHERE f1 SIMILAR TO '.[.[:alnum:].].';
+-- Dollar "$"
+EXPLAIN (COSTS OFF) SELECT * FROM TEXT_TBL WHERE f1 SIMILAR TO '$[$[:alnum:]$]$';
+-- Opening parenthesis "("
+EXPLAIN (COSTS OFF) SELECT * FROM TEXT_TBL WHERE f1 SIMILAR TO '()[([:alnum:](]()';
+-- Caret "^"
+EXPLAIN (COSTS OFF) SELECT * FROM TEXT_TBL WHERE f1 SIMILAR TO '^[^[:alnum:]^[^^][[^^]][\^][[\^]]\^]^';
+-- Closing square bracket "]" at the beginning of character class
+EXPLAIN (COSTS OFF) SELECT * FROM TEXT_TBL WHERE f1 SIMILAR TO '[]%][^]%][^%]%';
+-- Closing square bracket effective after two carets at the beginning
+-- of character class.
+EXPLAIN (COSTS OFF) SELECT * FROM TEXT_TBL WHERE f1 SIMILAR TO '[^^]^';
+-- Closing square bracket after an escape sequence at the beginning of
+-- a character closes the character class
+EXPLAIN (COSTS OFF) SELECT * FROM TEXT_TBL WHERE f1 SIMILAR TO '[|a]%' ESCAPE '|';
 
 -- Test backslash escapes in regexp_replace's replacement string
 SELECT regexp_replace('1112223333', E'(\\d{3})(\\d{3})(\\d{4})', E'(\\1) \\2-\\3');
@@ -684,38 +713,6 @@ select split_part('@joeuser@mydatabase@','@',-2) AS "mydatabase";
 select to_hex(256*256*256 - 1) AS "ffffff";
 
 select to_hex(256::bigint*256::bigint*256::bigint*256::bigint - 1) AS "ffffffff";
-
---
--- MD5 test suite - from IETF RFC 1321
--- (see: ftp://ftp.rfc-editor.org/in-notes/rfc1321.txt)
---
-select md5('') = 'd41d8cd98f00b204e9800998ecf8427e' AS "TRUE";
-
-select md5('a') = '0cc175b9c0f1b6a831c399e269772661' AS "TRUE";
-
-select md5('abc') = '900150983cd24fb0d6963f7d28e17f72' AS "TRUE";
-
-select md5('message digest') = 'f96b697d7cb7938d525a2f31aaf161d0' AS "TRUE";
-
-select md5('abcdefghijklmnopqrstuvwxyz') = 'c3fcd3d76192e4007dfb496cca67e13b' AS "TRUE";
-
-select md5('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789') = 'd174ab98d277d9f5a5611c2c9f419d9f' AS "TRUE";
-
-select md5('12345678901234567890123456789012345678901234567890123456789012345678901234567890') = '57edf4a22be3c955ac49da2e2107b67a' AS "TRUE";
-
-select md5(''::bytea) = 'd41d8cd98f00b204e9800998ecf8427e' AS "TRUE";
-
-select md5('a'::bytea) = '0cc175b9c0f1b6a831c399e269772661' AS "TRUE";
-
-select md5('abc'::bytea) = '900150983cd24fb0d6963f7d28e17f72' AS "TRUE";
-
-select md5('message digest'::bytea) = 'f96b697d7cb7938d525a2f31aaf161d0' AS "TRUE";
-
-select md5('abcdefghijklmnopqrstuvwxyz'::bytea) = 'c3fcd3d76192e4007dfb496cca67e13b' AS "TRUE";
-
-select md5('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'::bytea) = 'd174ab98d277d9f5a5611c2c9f419d9f' AS "TRUE";
-
-select md5('12345678901234567890123456789012345678901234567890123456789012345678901234567890'::bytea) = '57edf4a22be3c955ac49da2e2107b67a' AS "TRUE";
 
 --
 -- SHA-2

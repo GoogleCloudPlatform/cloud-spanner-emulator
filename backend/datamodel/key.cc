@@ -22,7 +22,7 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/numeric_value.h"
+#include "googlesql/public/numeric_value.h"
 
 namespace google {
 namespace spanner {
@@ -32,27 +32,27 @@ namespace backend {
 namespace {
 
 // Returns the logical size in bytes of the given value.
-int64_t LogicalBytesInternal(const zetasql::Value& value) {
+int64_t LogicalBytesInternal(const googlesql::Value& value) {
   if (value.is_null()) {
     return 2;
   }
   // TODO: Refactor this to account for physical not null vs
   // logical not null keys. This causes a difference of 1 byte in the size.
   switch (value.type_kind()) {
-    case zetasql::TYPE_BOOL:
+    case googlesql::TYPE_BOOL:
       return 1;
-    case zetasql::TYPE_DATE:
+    case googlesql::TYPE_DATE:
       return 4;
-    case zetasql::TYPE_INT64:
-    case zetasql::TYPE_DOUBLE:
+    case googlesql::TYPE_INT64:
+    case googlesql::TYPE_DOUBLE:
       return 8;
-    case zetasql::TYPE_TIMESTAMP:
+    case googlesql::TYPE_TIMESTAMP:
       return 12;
-    case zetasql::TYPE_STRING:
+    case googlesql::TYPE_STRING:
       return value.string_value().size();
-    case zetasql::TYPE_BYTES:
+    case googlesql::TYPE_BYTES:
       return value.bytes_value().size();
-    case zetasql::TYPE_NUMERIC:
+    case googlesql::TYPE_NUMERIC:
       // Here we use the maximal bytes of a numeric value.
       return 25;
     default:
@@ -66,12 +66,12 @@ int64_t LogicalBytesInternal(const zetasql::Value& value) {
 
 Key::Key() = default;
 
-Key::Key(std::vector<zetasql::Value> columns)
+Key::Key(std::vector<googlesql::Value> columns)
     : columns_(std::move(columns)),
       is_descending_(columns_.size()),
       is_nulls_last_(columns_.size()) {}
 
-void Key::AddColumn(zetasql::Value value, bool desc, bool is_nulls_last) {
+void Key::AddColumn(googlesql::Value value, bool desc, bool is_nulls_last) {
   columns_.emplace_back(std::move(value));
   is_descending_.push_back(desc);
   is_nulls_last_.push_back(is_nulls_last);
@@ -79,14 +79,14 @@ void Key::AddColumn(zetasql::Value value, bool desc, bool is_nulls_last) {
 
 int Key::NumColumns() const { return columns_.size(); }
 
-void Key::SetColumnValue(int i, zetasql::Value value) {
+void Key::SetColumnValue(int i, googlesql::Value value) {
   columns_[i] = std::move(value);
 }
 
 void Key::SetColumnDescending(int i, bool value) { is_descending_[i] = value; }
 void Key::SetColumnNullsLast(int i, bool value) { is_nulls_last_[i] = value; }
 
-const zetasql::Value& Key::ColumnValue(int i) const { return columns_[i]; }
+const googlesql::Value& Key::ColumnValue(int i) const { return columns_[i]; }
 
 bool Key::IsColumnDescending(int i) const { return is_descending_[i]; }
 bool Key::IsColumnNullsLast(int i) const { return is_nulls_last_[i]; }

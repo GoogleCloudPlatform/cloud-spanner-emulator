@@ -24,10 +24,10 @@
 #include <vector>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
-#include "zetasql/public/types/type_factory.h"
+#include "googlesql/public/types/type_factory.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -44,14 +44,14 @@ namespace emulator {
 namespace backend {
 namespace test {
 
-namespace types = zetasql::types;
+namespace types = googlesql::types;
 
 namespace {
 
 using database_api::DatabaseDialect::POSTGRESQL;
 
 TEST_P(SchemaUpdaterTest, CreateTable_SingleKey) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T(
       col1 INT64,
       col2 STRING(MAX)
@@ -72,7 +72,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_SingleKey) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateTable_SingleKeyInline) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T(
       col1 INT64 PRIMARY KEY,
       col2 STRING(MAX)
@@ -96,7 +96,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_MultiKey) {
   std::unique_ptr<const Schema> schema;
   // Changing the ordering for key columns is unsupported in PG.
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
     CREATE TABLE T (
       col1 bigint,
@@ -107,7 +107,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_MultiKey) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
       CREATE TABLE T(
         col1 INT64,
         col2 STRING(MAX)
@@ -135,7 +135,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_MultiKey) {
 TEST_P(SchemaUpdaterTest, CreateTable_NoKey) {
   // Empty key columns are unsupported in PG.
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T(
       col1 INT64
     ) PRIMARY KEY())"}));
@@ -153,7 +153,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_NoKey) {
 TEST_P(SchemaUpdaterTest, CreateTable_NoColumns) {
   // Empty key columns are unsupported in PG.
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T(
     ) PRIMARY KEY())"}));
 
@@ -166,7 +166,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_NoColumns) {
 TEST_P(SchemaUpdaterTest, CreateTable_ColumnLength) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
   // Empty key columns are unsupported in PG.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T(
       col1 BYTES(10)
     ) PRIMARY KEY())"}));
@@ -179,7 +179,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_ColumnLength) {
   EXPECT_THAT(col1, ColumnIs("col1", types::BytesType()));
   EXPECT_EQ(col1->declared_max_length(), 10);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
     CREATE TABLE T(
       col1 BYTES(MAX)
     ) PRIMARY KEY())"}));
@@ -193,7 +193,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_ColumnLength) {
 TEST_P(SchemaUpdaterTest, CreateTable_AllowCommitTimestamp) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                          CreateSchema({R"(
       CREATE TABLE T(
         col1 bigint PRIMARY KEY,
@@ -203,7 +203,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_AllowCommitTimestamp) {
                                       /*dialect=*/POSTGRESQL,
                                       /*use_gsql_to_pg_translation=*/false));
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
       CREATE TABLE T(
         col1 INT64,
         col2 TIMESTAMP OPTIONS(
@@ -221,7 +221,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_AllowCommitTimestamp) {
   // PG.
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
     CREATE TABLE T(
       col1 INT64,
       col2 TIMESTAMP OPTIONS(
@@ -233,7 +233,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_AllowCommitTimestamp) {
   col2 = t->columns()[1];
   EXPECT_FALSE(col2->allows_commit_timestamp());
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
     CREATE TABLE T(
       col1 INT64,
       col2 TIMESTAMP OPTIONS(
@@ -281,7 +281,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_DuplicateColumns) {
 TEST_P(SchemaUpdaterTest, CreateTable_ColumnNullability) {
   // Empty key columns are unsupported in PG.
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T(
       col1 INT64 NOT NULL,
       col2 INT64
@@ -348,12 +348,12 @@ TEST_P(SchemaUpdaterTest, CreateTable_InterleaveInParentNoIdentifier) {
         FOREIGN KEY(id1) REFERENCES home(id1)
       ) PRIMARY KEY(col1), INTERLEAVE IN parent
     )"}),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument,
+              googlesql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument,
                                         testing::HasSubstr("Syntax error ")));
 }
 
 TEST_P(SchemaUpdaterTest, CreateTable_InterleaveInParent) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE `Parent` (
         k1 INT64 NOT NULL,
         c1 STRING(MAX)
@@ -378,7 +378,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_InterleaveInParent) {
 
 TEST_P(SchemaUpdaterTest,
        CreateTable_InterleaveInParentCascadeWithRowDeletionPolicy) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE `Parent` (
         k1 INT64 NOT NULL,
         c1 STRING(MAX),
@@ -400,7 +400,7 @@ TEST_P(SchemaUpdaterTest,
        CreateTable_InterleaveInParentNoActionWithRowDeletionPolicyNotAllowed) {
   // Changing the ordering for key columns is unsupported in PG.
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE `Parent` (
         k1 INT64 NOT NULL,
         c1 STRING(MAX),
@@ -421,7 +421,7 @@ TEST_P(SchemaUpdaterTest,
 }
 
 TEST_P(SchemaUpdaterTest, CreateTable_NonParentInterleave) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE `Parent` (
         k1 INT64 NOT NULL,
         c1 STRING(MAX),
@@ -450,7 +450,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_NonParentInterleave) {
 TEST_P(SchemaUpdaterTest, CreateTable_InterleaveMismatch) {
   // Changing the ordering for key columns is unsupported in PG.
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE `Parent` (
         k1 INT64 NOT NULL,
         c1 STRING(MAX)
@@ -491,7 +491,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_InterleaveMismatch) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateTable_InterleaveDepth) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T0 (
         k0 INT64,
       ) PRIMARY KEY (k0)
@@ -602,7 +602,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_ChildTablePrimaryKeyInWrongOrder) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateTable_CreateChildTable) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE `Parent` (
         k1 INT64 NOT NULL,
@@ -624,7 +624,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_CreateChildTable) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateTable_WithSynonym) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T(
       col1 INT64,
       col2 STRING(MAX),
@@ -702,13 +702,13 @@ TEST_P(SchemaUpdaterTest, CreateTable_SynonymConflictsWithSynonym) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterTable_Rename) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
       ) PRIMARY KEY (k1)
     )"}));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
       ALTER TABLE T RENAME TO S
     )"}));
 
@@ -720,13 +720,13 @@ TEST_P(SchemaUpdaterTest, AlterTable_Rename) {
 }
 
 TEST_P(SchemaUpdaterTest, RenameTable) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
       ) PRIMARY KEY (k1)
     )"}));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
       RENAME TABLE T TO S
     )"}));
 
@@ -738,13 +738,13 @@ TEST_P(SchemaUpdaterTest, RenameTable) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterTable_RenameWithSynonym) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
       ) PRIMARY KEY (k1)
     )"}));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
       ALTER TABLE T RENAME TO S, ADD SYNONYM T
     )"}));
 
@@ -759,7 +759,7 @@ TEST_P(SchemaUpdaterTest, AlterTable_RenameWithSynonym) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterTable_RenameWithDependencies) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
         c1 INT64,
@@ -775,7 +775,7 @@ TEST_P(SchemaUpdaterTest, AlterTable_RenameWithDependencies) {
       CREATE INDEX Idx1 ON T(c1)
     )"}));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
       ALTER TABLE T RENAME TO S
     )"}));
 
@@ -799,7 +799,7 @@ TEST_P(SchemaUpdaterTest, AlterTable_RenameWithDependencies) {
 TEST_P(SchemaUpdaterTest, AlterTable_AddColumn) {
   // Only BYTES(MAX) is supported in PG.
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
         c1 INT64,
@@ -809,7 +809,7 @@ TEST_P(SchemaUpdaterTest, AlterTable_AddColumn) {
   const Table* t_old = schema->FindTable("T");
   EXPECT_EQ(t_old->FindColumn("c2"), nullptr);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
       ALTER TABLE T ADD COLUMN c2 BYTES(100)
     )"}));
 
@@ -825,7 +825,7 @@ TEST_P(SchemaUpdaterTest, AlterTable_AddColumn) {
 TEST_P(SchemaUpdaterTest, AlterTableAddColumnIfNotExists) {
   // IF NOT EXISTS isn't yet supported on the PG side of the emulator
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
         c1 INT64,
@@ -836,7 +836,7 @@ TEST_P(SchemaUpdaterTest, AlterTableAddColumnIfNotExists) {
   EXPECT_EQ(t_old->FindColumn("c2"), nullptr);
 
   // Add a column, make sure it goes in right.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
       ALTER TABLE T ADD COLUMN c2 BYTES(100)
     )"}));
 
@@ -849,7 +849,7 @@ TEST_P(SchemaUpdaterTest, AlterTableAddColumnIfNotExists) {
   EXPECT_EQ(c2->declared_max_length(), 100);
 
   // Add the same column again and make sure we didn't change anything.
-  ZETASQL_ASSERT_OK(UpdateSchema(new_schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK(UpdateSchema(new_schema.get(), {R"(
       ALTER TABLE T ADD COLUMN IF NOT EXISTS c2 INT64
     )"}));
 
@@ -865,7 +865,7 @@ TEST_P(SchemaUpdaterTest, AlterTableAddColumnIfNotExists) {
 TEST_P(SchemaUpdaterTest, AlterTable_AddColumnAlreadyExists) {
   // Only BYTES(MAX) is supported in PG.
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
         c1 INT64,
@@ -881,7 +881,7 @@ TEST_P(SchemaUpdaterTest, AlterTable_AddColumnAlreadyExists) {
 TEST_P(SchemaUpdaterTest, AlterColumn_ChangeColumnType_StaticCheckValid) {
   // Only BYTES(MAX) is supported in PG.
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
         c1 STRING(100),
@@ -893,7 +893,7 @@ TEST_P(SchemaUpdaterTest, AlterColumn_ChangeColumnType_StaticCheckValid) {
   EXPECT_THAT(c1, ColumnIs("c1", types::StringType()));
   EXPECT_EQ(c1->declared_max_length(), 100);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
       ALTER TABLE T ALTER COLUMN c1 BYTES(400)
     )"}));
 
@@ -904,7 +904,7 @@ TEST_P(SchemaUpdaterTest, AlterColumn_ChangeColumnType_StaticCheckValid) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterColumn_ChangeColumnType_Invalid) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
         c1 STRING(100),
@@ -923,7 +923,7 @@ TEST_P(SchemaUpdaterTest, AlterColumn_ChangeColumnType_Invalid) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterColumn_ChangeNonArrayToArray) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
         c1 STRING(100),
@@ -944,7 +944,7 @@ TEST_P(SchemaUpdaterTest, AlterColumn_ChangeNonArrayToArray) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterColumn_NotNullToNullable) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T (
         k1 INT64 NOT NULL,
@@ -957,7 +957,7 @@ TEST_P(SchemaUpdaterTest, AlterColumn_NotNullToNullable) {
   auto c2 = t->FindColumn("c2");
   EXPECT_FALSE(c2->is_nullable());
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
       ALTER TABLE T ALTER COLUMN c2 INT64
     )"}));
 
@@ -969,7 +969,7 @@ TEST_P(SchemaUpdaterTest, AlterColumn_NotNullToNullable) {
 TEST_P(SchemaUpdaterTest, AlterColumn_ChangeIndexedColumnType) {
   // Only BYTES(MAX) is supported in PG.
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T (
         k1 INT64 NOT NULL,
@@ -988,7 +988,7 @@ TEST_P(SchemaUpdaterTest, AlterColumn_ChangeIndexedColumnType) {
   auto c1_idx = idx->key_columns()[0];
   EXPECT_THAT(c1_idx->column(), SourceColumnIs(c1));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
       ALTER TABLE T ALTER COLUMN c1 BYTES(40)
     )"}));
 
@@ -1004,7 +1004,7 @@ TEST_P(SchemaUpdaterTest, AlterColumn_ChangeIndexedColumnType) {
 TEST_P(SchemaUpdaterTest, AlterColumn_ChangeIndexedColumnNullability) {
   // Only BYTES(MAX) is supported in PG.
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T (
         k1 INT64,
@@ -1029,7 +1029,7 @@ TEST_P(SchemaUpdaterTest, AlterColumn_ChangeIndexedColumnNullability) {
 
   // Changing nullability of stored columns and indexed columns
   // in null filtered indexes is allowed
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
       ALTER TABLE T ALTER COLUMN c2 BYTES(40)
     )"}));
 
@@ -1043,13 +1043,13 @@ TEST_P(SchemaUpdaterTest, AlterColumn_ChangeIndexedColumnNullability) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterColumn_KeyColumnType) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 STRING(100) NOT NULL,
       ) PRIMARY KEY (k1)
     )"}));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
       ALTER TABLE T ALTER COLUMN k1 BYTES(MAX) NOT NULL
     )"}));
 
@@ -1060,7 +1060,7 @@ TEST_P(SchemaUpdaterTest, AlterColumn_KeyColumnType) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterColumn_KeyColumnNullability) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64 NOT NULL,
       ) PRIMARY KEY (k1)
@@ -1076,7 +1076,7 @@ TEST_P(SchemaUpdaterTest, AlterColumn_KeyColumnNullability) {
 TEST_P(SchemaUpdaterTest, AlterTable_UnsetAllowCommitTimestamp) {
   // Assigning column options is not supported in PG.
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
         c1 TIMESTAMP OPTIONS (
@@ -1088,7 +1088,7 @@ TEST_P(SchemaUpdaterTest, AlterTable_UnsetAllowCommitTimestamp) {
   auto c1 = schema->FindTable("T")->FindColumn("c1");
   EXPECT_TRUE(c1->allows_commit_timestamp());
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
       ALTER TABLE T ALTER COLUMN c1 SET OPTIONS (
         allow_commit_timestamp = false
       )
@@ -1099,14 +1099,14 @@ TEST_P(SchemaUpdaterTest, AlterTable_UnsetAllowCommitTimestamp) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterTable_DropColumn) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
         c1 STRING(MAX),
       ) PRIMARY KEY (k1)
     )"}));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
       ALTER TABLE T DROP COLUMN c1
     )"}));
 
@@ -1116,7 +1116,7 @@ TEST_P(SchemaUpdaterTest, AlterTable_DropColumn) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterTable_InvalidDropKeyColumn) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
         c1 STRING(MAX),
@@ -1130,7 +1130,7 @@ TEST_P(SchemaUpdaterTest, AlterTable_InvalidDropKeyColumn) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterTable_InvalidDropIndexedColumn) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T (
         k1 INT64,
@@ -1156,7 +1156,7 @@ TEST_P(SchemaUpdaterTest, AlterTable_InvalidDropIndexedColumn) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterTable_InterleaveInParent_ChangeOnDelete) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T1 (
         k1 INT64,
@@ -1176,7 +1176,7 @@ TEST_P(SchemaUpdaterTest, AlterTable_InterleaveInParent_ChangeOnDelete) {
   EXPECT_EQ(t2->on_delete_action(), Table::OnDeleteAction::kNoAction);
 
   // Change from NO ACTION to CASCADE.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
       ALTER TABLE T2 SET ON DELETE CASCADE
     )"}));
 
@@ -1185,7 +1185,7 @@ TEST_P(SchemaUpdaterTest, AlterTable_InterleaveInParent_ChangeOnDelete) {
   EXPECT_EQ(t2->on_delete_action(), Table::OnDeleteAction::kCascade);
 
   // Change from CASCADE to NO ACTION
-  ZETASQL_ASSERT_OK_AND_ASSIGN(new_schema, UpdateSchema(new_schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(new_schema, UpdateSchema(new_schema.get(), {R"(
       ALTER TABLE T2 SET ON DELETE NO ACTION
     )"}));
 
@@ -1196,7 +1196,7 @@ TEST_P(SchemaUpdaterTest, AlterTable_InterleaveInParent_ChangeOnDelete) {
 
 TEST_P(SchemaUpdaterTest,
        AlterTable_SetOnDeleteNoAction_ParentHasRowDeletionPolicy) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T1 (
       k1 INT64 NOT NULL,
       c1 STRING(MAX),
@@ -1224,13 +1224,13 @@ TEST_P(SchemaUpdaterTest,
               StatusIs(error::RowDeletionPolicyOnAncestors("T2", "T1")));
 
   // It's ok to change to INTERLEAVE IN.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
       ALTER TABLE T2 SET INTERLEAVE IN T1
     )"}));
 }
 
 TEST_P(SchemaUpdaterTest, AlterTable_ChangeInterleaveInParent_To_NonParent) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T1 (
         k1 INT64,
@@ -1263,7 +1263,7 @@ TEST_P(SchemaUpdaterTest, AlterTable_ChangeInterleaveInParent_To_NonParent) {
   EXPECT_EQ(t2->interleave_type().value(), Table::InterleaveType::kInParent);
 
   // Now change to INTERLEAVE IN. The delete action is not set.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
       ALTER TABLE T2 SET INTERLEAVE IN T1
     )"}));
 
@@ -1273,7 +1273,7 @@ TEST_P(SchemaUpdaterTest, AlterTable_ChangeInterleaveInParent_To_NonParent) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterTable_ChangeInterleaveIn_To_Parent) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T1 (
         k1 INT64,
@@ -1293,7 +1293,7 @@ TEST_P(SchemaUpdaterTest, AlterTable_ChangeInterleaveIn_To_Parent) {
   EXPECT_FALSE(t2->has_on_delete_action());
   EXPECT_EQ(t2->interleave_type().value(), Table::InterleaveType::kIn);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
       ALTER TABLE T2 SET INTERLEAVE IN PARENT T1
     )"}));
 
@@ -1305,7 +1305,7 @@ TEST_P(SchemaUpdaterTest, AlterTable_ChangeInterleaveIn_To_Parent) {
 
 TEST_P(SchemaUpdaterTest,
        AlterTable_ChangeInterleaveIn_To_ParentExplicitNoAction) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T1 (
         k1 INT64,
@@ -1325,7 +1325,7 @@ TEST_P(SchemaUpdaterTest,
   EXPECT_FALSE(t2->has_on_delete_action());
   EXPECT_EQ(t2->interleave_type().value(), Table::InterleaveType::kIn);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
       ALTER TABLE T2 SET INTERLEAVE IN PARENT T1 ON DELETE NO ACTION
     )"}));
 
@@ -1337,7 +1337,7 @@ TEST_P(SchemaUpdaterTest,
 
 TEST_P(SchemaUpdaterTest,
        AlterTable_CannotSetOnDeleteClause_InterleaveInNonParent) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
   CREATE TABLE T1 (
     k1 INT64,
@@ -1384,7 +1384,7 @@ TEST_P(SchemaUpdaterTest,
 
 TEST_P(SchemaUpdaterTest,
        AlterTable_ChangeInterleaveIn_To_ParentExplicitNoAction_Then_Cascade) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T1 (
         k1 INT64,
@@ -1412,7 +1412,7 @@ TEST_P(SchemaUpdaterTest,
       StatusIs(error::InterleaveInToInParentOnDeleteCascadeUnsupported("T2")));
 
   // First, change to IN PARENT ON DELETE NO ACTION.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
       ALTER TABLE T2 SET INTERLEAVE IN PARENT T1 ON DELETE NO ACTION
     )"}));
 
@@ -1422,7 +1422,7 @@ TEST_P(SchemaUpdaterTest,
   EXPECT_EQ(t2->interleave_type().value(), Table::InterleaveType::kInParent);
 
   // Next, change to IN PARENT ON DELETE CASCADE.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema2, UpdateSchema(new_schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema2, UpdateSchema(new_schema.get(), {R"(
     ALTER TABLE T2 SET ON DELETE CASCADE
   )"}));
 
@@ -1434,7 +1434,7 @@ TEST_P(SchemaUpdaterTest,
 
 TEST_P(SchemaUpdaterTest,
        AlterTable_ChangeInterleaveIn_To_Parent_Then_ExplicitCascade) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
   CREATE TABLE T1 (
     k1 INT64,
@@ -1455,7 +1455,7 @@ TEST_P(SchemaUpdaterTest,
   EXPECT_EQ(t2->interleave_type().value(), Table::InterleaveType::kIn);
 
   // First, change to IN PARENT
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
   ALTER TABLE T2 SET INTERLEAVE IN PARENT T1
   )"}));
 
@@ -1466,7 +1466,7 @@ TEST_P(SchemaUpdaterTest,
   EXPECT_EQ(t2->interleave_type().value(), Table::InterleaveType::kInParent);
 
   // Next, SET ON DELETE CASCADE.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema2, UpdateSchema(new_schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema2, UpdateSchema(new_schema.get(), {R"(
   ALTER TABLE T2 SET ON DELETE CASCADE
   )"}));
 
@@ -1478,14 +1478,14 @@ TEST_P(SchemaUpdaterTest,
 }
 
 TEST_P(SchemaUpdaterTest, AlterTable_AddSynonym) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
       ) PRIMARY KEY (k1)
     )"}));
 
   const Table* t_old = schema->FindTable("T");
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
       ALTER TABLE T ADD SYNONYM S
     )"}));
 
@@ -1497,7 +1497,7 @@ TEST_P(SchemaUpdaterTest, AlterTable_AddSynonym) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterTable_CannotAddDuplicateSynonym) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
       ) PRIMARY KEY (k1)
@@ -1515,7 +1515,7 @@ TEST_P(SchemaUpdaterTest, AlterTable_CannotAddDuplicateSynonym) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterTable_CannotAddTwoSynonyms) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
         SYNONYM(S),
@@ -1529,7 +1529,7 @@ TEST_P(SchemaUpdaterTest, AlterTable_CannotAddTwoSynonyms) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterTable_DropSynonym) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
         SYNONYM(S),
@@ -1537,7 +1537,7 @@ TEST_P(SchemaUpdaterTest, AlterTable_DropSynonym) {
     )"}));
 
   const Table* t_old = schema->FindTable("T");
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
       ALTER TABLE T DROP SYNONYM S
     )"}));
 
@@ -1548,7 +1548,7 @@ TEST_P(SchemaUpdaterTest, AlterTable_DropSynonym) {
   EXPECT_EQ(s_new, nullptr);
 
   // S is now available for reuse.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema1, UpdateSchema(new_schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema1, UpdateSchema(new_schema.get(), {R"(
       CREATE TABLE S (
         k1 INT64,
       ) PRIMARY KEY (k1)
@@ -1558,7 +1558,7 @@ TEST_P(SchemaUpdaterTest, AlterTable_DropSynonym) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterTable_CannotDropNonExistentSynonym) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
       ) PRIMARY KEY (k1)
@@ -1571,7 +1571,7 @@ TEST_P(SchemaUpdaterTest, AlterTable_CannotDropNonExistentSynonym) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterTable_CannotDropInvalidSynonym) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
         SYNONYM(S),
@@ -1587,7 +1587,7 @@ TEST_P(SchemaUpdaterTest, AlterTable_CannotDropInvalidSynonym) {
 TEST_P(SchemaUpdaterTest, DropTableNonexistentIfExists) {
   // IF NOT EXISTS isn't yet supported on the PG side of the emulator
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T1 (
         k1 INT64,
         c1 STRING(10),
@@ -1603,7 +1603,7 @@ TEST_P(SchemaUpdaterTest, DropTableNonexistentIfExists) {
   const Table* t1 = schema->FindTable("T1");
   EXPECT_NE(t1, nullptr);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
       DROP TABLE T1
     )"}));
 
@@ -1612,7 +1612,7 @@ TEST_P(SchemaUpdaterTest, DropTableNonexistentIfExists) {
   t1 = new_schema->FindTable("T1");
   EXPECT_EQ(t1, nullptr);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema2, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema2, UpdateSchema(schema.get(), {R"(
       DROP TABLE IF EXISTS T1
     )"}));
 
@@ -1628,7 +1628,7 @@ TEST_P(SchemaUpdaterTest, DropTableNonexistentIfExists) {
 TEST_P(SchemaUpdaterTest, DropTableIfExists) {
   // IF NOT EXISTS isn't yet supported on the PG side of the emulator
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T1 (
         k1 INT64,
         c1 STRING(10),
@@ -1644,7 +1644,7 @@ TEST_P(SchemaUpdaterTest, DropTableIfExists) {
   const Table* t1 = schema->FindTable("T1");
   EXPECT_NE(t1, nullptr);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
       DROP TABLE IF EXISTS T1
     )"}));
 
@@ -1655,7 +1655,7 @@ TEST_P(SchemaUpdaterTest, DropTableIfExists) {
 }
 
 TEST_P(SchemaUpdaterTest, DropTable) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T1 (
         k1 INT64,
         c1 STRING(10),
@@ -1672,7 +1672,7 @@ TEST_P(SchemaUpdaterTest, DropTable) {
   EXPECT_NE(t1, nullptr);
   EXPECT_EQ(schema->GetSchemaGraph()->GetSchemaNodes().size(), 8);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
       DROP TABLE T1
     )"}));
 
@@ -1688,7 +1688,7 @@ TEST_P(SchemaUpdaterTest, DropTable) {
 }
 
 TEST_P(SchemaUpdaterTest, DropTable_CanDropChildTable) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T1 (
         k1 INT64,
         c1 STRING(10),
@@ -1709,7 +1709,7 @@ TEST_P(SchemaUpdaterTest, DropTable_CanDropChildTable) {
               StatusIs(error::DropTableWithInterleavedTables("T1", "T2")));
 
   // Can drop child table.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
       DROP TABLE T2
     )"}));
 
@@ -1719,7 +1719,7 @@ TEST_P(SchemaUpdaterTest, DropTable_CanDropChildTable) {
 }
 
 TEST_P(SchemaUpdaterTest, DropTable_CanDropChildAndParentTogether) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T1 (
         k1 INT64,
         c1 STRING(10),
@@ -1733,7 +1733,7 @@ TEST_P(SchemaUpdaterTest, DropTable_CanDropChildAndParentTogether) {
       ) PRIMARY KEY (k1, k2), INTERLEAVE IN PARENT T1
     )"}));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
       DROP TABLE T2)",
                                                                     R"(
       DROP TABLE T1)"}));
@@ -1742,20 +1742,20 @@ TEST_P(SchemaUpdaterTest, DropTable_CanDropChildAndParentTogether) {
 }
 
 TEST_P(SchemaUpdaterTest, DropTable_Recreate) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T1 (
         k1 INT64,
         c1 STRING(10),
       ) PRIMARY KEY (k1)
     )"}));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
       DROP TABLE T1
     )"}));
 
   EXPECT_TRUE(new_schema->tables().empty());
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(new_schema, UpdateSchema(new_schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(new_schema, UpdateSchema(new_schema.get(), {R"(
       CREATE TABLE T1 (
         k1 INT64,
         c1 STRING(10),
@@ -1767,7 +1767,7 @@ TEST_P(SchemaUpdaterTest, DropTable_Recreate) {
 }
 
 TEST_P(SchemaUpdaterTest, DropTableWithSynonym) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T1 (
         k1 INT64,
         SYNONYM(S1)
@@ -1780,7 +1780,7 @@ TEST_P(SchemaUpdaterTest, DropTableWithSynonym) {
   EXPECT_NE(s1, nullptr);
   EXPECT_EQ(t1, s1);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
       DROP TABLE T1
     )"}));
 
@@ -1793,7 +1793,7 @@ TEST_P(SchemaUpdaterTest, DropTableWithSynonym) {
 }
 
 TEST_P(SchemaUpdaterTest, ChangeKeyColumn) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T1 (
         k1 STRING(30),
@@ -1816,7 +1816,7 @@ TEST_P(SchemaUpdaterTest, ChangeKeyColumn) {
 
 TEST_P(SchemaUpdaterTest, CreateTable_NumericColumns) {
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T(
         col1 INT64,
         col2 PG.NUMERIC,
@@ -1847,7 +1847,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_NumericColumns) {
                   ->code(),
               google::spanner::v1::TypeAnnotationCode::PG_NUMERIC);
   } else {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T(
         col1 INT64,
         col2 NUMERIC,
@@ -1875,7 +1875,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_NumericAsPK) {
   EmulatorFeatureFlags::Flags flags;
   emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
       CREATE TABLE T (
         k1 NUMERIC
       ) PRIMARY KEY (k1)
@@ -1891,7 +1891,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_NumericAsPK) {
 TEST_P(SchemaUpdaterTest, CreateTable_JsonColumns) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
     CREATE TABLE T(
       col1 INT64,
       col2 PG.JSONB,
@@ -1925,7 +1925,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_JsonColumns) {
   } else {
     EmulatorFeatureFlags::Flags flags;
     emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
-    ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
     CREATE TABLE T(
       col1 INT64,
       col2 JSON,
@@ -1978,7 +1978,7 @@ std::vector<std::string> SchemaForCaseSensitivityTests() {
 }
 
 TEST_P(SchemaUpdaterTest, PrimaryKeyIsCaseSensitive) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(SchemaForCaseSensitivityTests()));
 
   EXPECT_THAT(UpdateSchema(schema.get(), {R"(
@@ -1991,7 +1991,7 @@ TEST_P(SchemaUpdaterTest, PrimaryKeyIsCaseSensitive) {
 }
 
 TEST_P(SchemaUpdaterTest, TableNameIsCaseSensitive) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(SchemaForCaseSensitivityTests()));
 
   EXPECT_THAT(UpdateSchema(schema.get(), {R"(
@@ -2003,7 +2003,7 @@ TEST_P(SchemaUpdaterTest, TableNameIsCaseSensitive) {
 }
 
 TEST_P(SchemaUpdaterTest, InterleaveTableNameIsCaseSensitive) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(SchemaForCaseSensitivityTests()));
 
   EXPECT_THAT(UpdateSchema(schema.get(), {R"(
@@ -2020,7 +2020,7 @@ TEST_P(SchemaUpdaterTest, InterleaveTableNameIsCaseSensitive) {
 TEST_P(SchemaUpdaterTest, AlterTableNameIsCaseSensitive) {
   // Only BYTES(MAX) is supported in PG.
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(SchemaForCaseSensitivityTests()));
 
   EXPECT_THAT(UpdateSchema(schema.get(), {R"(
@@ -2032,7 +2032,7 @@ TEST_P(SchemaUpdaterTest, AlterTableNameIsCaseSensitive) {
 TEST_P(SchemaUpdaterTest, AlterTableSetOptionsIsCaseSensitive) {
   // Assigning column options is not supported in PG.
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(SchemaForCaseSensitivityTests()));
 
   EXPECT_THAT(UpdateSchema(schema.get(), {R"(
@@ -2043,7 +2043,7 @@ TEST_P(SchemaUpdaterTest, AlterTableSetOptionsIsCaseSensitive) {
 }
 
 TEST_P(SchemaUpdaterTest, DropTableIsCaseSensitive) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(SchemaForCaseSensitivityTests()));
 
   EXPECT_THAT(UpdateSchema(schema.get(), {R"(
@@ -2052,7 +2052,7 @@ TEST_P(SchemaUpdaterTest, DropTableIsCaseSensitive) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterColumnIsCaseSensitive) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(SchemaForCaseSensitivityTests()));
 
   EXPECT_THAT(UpdateSchema(schema.get(), {R"(
@@ -2062,7 +2062,7 @@ TEST_P(SchemaUpdaterTest, AlterColumnIsCaseSensitive) {
 }
 
 TEST_P(SchemaUpdaterTest, DropColumnIsCaseSensitive) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema,
                        CreateSchema(SchemaForCaseSensitivityTests()));
 
   EXPECT_THAT(UpdateSchema(schema.get(), {R"(
@@ -2074,13 +2074,13 @@ TEST_P(SchemaUpdaterTest, DropColumnIsCaseSensitive) {
 TEST_P(SchemaUpdaterTest, CreateTableIfNotExists) {
   // IF NOT EXISTS isn't yet supported on the PG side of the emulator
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
     CREATE TABLE T(
       col1 INT64,
       col2 STRING(MAX)
     ) PRIMARY KEY(col1 DESC, col2))"}));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
     CREATE TABLE IF NOT EXISTS T(
       col1 STRING(MAX),
       col3 INT64
@@ -2095,7 +2095,7 @@ TEST_P(SchemaUpdaterTest, CreateTableIfNotExists) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateTableWithVectorLength) {
-  ZETASQL_EXPECT_OK(CreateSchema({R"(
+  GOOGLESQL_EXPECT_OK(CreateSchema({R"(
       CREATE TABLE T (
         k1 INT64,
         a1 ARRAY<FLOAT64>(vector_length=>123),
@@ -2117,7 +2117,7 @@ TEST_P(SchemaUpdaterTest, CreateTableWithVectorLengthOnInvalidType) {
 TEST_P(SchemaUpdaterTest, AlterTableAlterColumnAddVectorLength) {
   // ALTER TABLE ALTER COLUMN to add vector length param is not supported in PG.
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
       CREATE TABLE T (
         k1 INT64,
         a1 ARRAY<FLOAT64>(vector_length=>123),
@@ -2132,7 +2132,7 @@ TEST_P(SchemaUpdaterTest, AlterTableAlterColumnAddVectorLength) {
 }
 
 TEST_P(SchemaUpdaterTest, AlterTableAlterColumnRemoveVectorLength) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
       CREATE TABLE T (
         k1 INT64,
         a1 ARRAY<FLOAT64>(vector_length=>2),
@@ -2181,7 +2181,7 @@ TEST_P(SchemaUpdaterTest, CreateTable_Tokenlist_Column_Not_Hidden) {
 
 TEST_P(SchemaUpdaterTest, AlterTable_Add_Non_Hidden_Tokenlist_Column) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"sql(
         CREATE TABLE T(
           col1 INT64
         ) PRIMARY KEY(col1))sql"}));

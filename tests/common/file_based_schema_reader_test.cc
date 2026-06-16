@@ -21,7 +21,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 
@@ -43,7 +43,7 @@ class FileBasedSchemaReaderTest : public ::testing::Test {
 };
 
 TEST_F(FileBasedSchemaReaderTest, BothDialects) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema_set, GetSchemaSet("multiple_dialects.test"));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema_set, GetSchemaSet("multiple_dialects.test"));
   EXPECT_EQ(schema_set.schemas.size(), 2);
   EXPECT_FALSE(
       schema_set.schemas[DatabaseDialect::GOOGLE_STANDARD_SQL].empty());
@@ -51,7 +51,7 @@ TEST_F(FileBasedSchemaReaderTest, BothDialects) {
 }
 
 TEST_F(FileBasedSchemaReaderTest, GSQLDialect) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema_set, GetSchemaSet("gsql_only.test"));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema_set, GetSchemaSet("gsql_only.test"));
   EXPECT_EQ(schema_set.schemas.size(), 1);
   EXPECT_FALSE(
       schema_set.schemas[DatabaseDialect::GOOGLE_STANDARD_SQL].empty());
@@ -60,7 +60,7 @@ TEST_F(FileBasedSchemaReaderTest, GSQLDialect) {
 }
 
 TEST_F(FileBasedSchemaReaderTest, PGDialect) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto schema_set, GetSchemaSet("pg_only.test"));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema_set, GetSchemaSet("pg_only.test"));
   EXPECT_EQ(schema_set.schemas.size(), 1);
   EXPECT_FALSE(schema_set.schemas[DatabaseDialect::POSTGRESQL].empty());
   EXPECT_EQ(schema_set.schemas.find(DatabaseDialect::GOOGLE_STANDARD_SQL),
@@ -69,14 +69,14 @@ TEST_F(FileBasedSchemaReaderTest, PGDialect) {
 
 TEST_F(FileBasedSchemaReaderTest, InvalidDialectParameter) {
   EXPECT_THAT(GetSchemaSet("invalid_dialect.test"),
-              zetasql_base::testing::StatusIs(
+              googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInvalidArgument,
                   testing::HasSubstr("Dialect parameter must be one of")));
 }
 
 TEST_F(FileBasedSchemaReaderTest, InvalidUnspecifiedDialect) {
   EXPECT_THAT(GetSchemaSet("invalid_unspecified_dialect.test"),
-              zetasql_base::testing::StatusIs(
+              googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInvalidArgument,
                   testing::HasSubstr("DATABASE_DIALECT_UNSPECIFIED")));
 }
@@ -84,28 +84,28 @@ TEST_F(FileBasedSchemaReaderTest, InvalidUnspecifiedDialect) {
 TEST_F(FileBasedSchemaReaderTest, InvalidDuplicateDialect) {
   EXPECT_THAT(
       GetSchemaSet("invalid_duplicate_dialect.test"),
-      zetasql_base::testing::StatusIs(
+      googlesql_base::testing::StatusIs(
           absl::StatusCode::kInvalidArgument,
           testing::HasSubstr("already defined a schema for this dialect")));
 }
 
 TEST_F(FileBasedSchemaReaderTest, InvalidWithoutDialect) {
   EXPECT_THAT(GetSchemaSet("invalid_no_dialect.test"),
-              zetasql_base::testing::StatusIs(
+              googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInvalidArgument,
                   testing::HasSubstr("either a dialect parameter")));
 }
 
 TEST_F(FileBasedSchemaReaderTest, InvalidWithoutSchemaDelimiter) {
   EXPECT_THAT(GetSchemaSet("invalid_without_schema_delimiter.test"),
-              zetasql_base::testing::StatusIs(
+              googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInvalidArgument,
                   testing::HasSubstr("Expected a schema delimiter")));
 }
 
 TEST_F(FileBasedSchemaReaderTest, InvalidFileName) {
   EXPECT_THAT(GetSchemaSet("some_file.test"),
-              zetasql_base::testing::StatusIs(
+              googlesql_base::testing::StatusIs(
                   absl::StatusCode::kInvalidArgument,
                   testing::HasSubstr("Schema file doesn't exist")));
 }

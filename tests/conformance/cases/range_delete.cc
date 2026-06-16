@@ -16,9 +16,10 @@
 
 #include <unistd.h>
 
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "tests/conformance/common/database_test_base.h"
@@ -30,37 +31,30 @@ namespace test {
 
 namespace {
 
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
-class RangeDeleteTest : public DatabaseTest {
+class RangeDeleteTest
+    : public DatabaseTest,
+      public testing::WithParamInterface<database_api::DatabaseDialect> {
+ public:
+  void SetUp() override {
+    dialect_ = GetParam();
+    DatabaseTest::SetUp();
+  }
+
  public:
   absl::Status SetUpDatabase() override {
-    ZETASQL_RETURN_IF_ERROR(SetSchema({
-        R"(
-        CREATE TABLE Users (
-          UserId    INT64 NOT NULL,
-          Name      STRING(MAX),
-        ) PRIMARY KEY (UserId)
-      )",
-        R"(
-        CREATE TABLE Threads (
-          UserId    INT64 NOT NULL,
-          ThreadId  INT64 NOT NULL,
-          Starred   BOOL
-        ) PRIMARY KEY (UserId, ThreadId),
-        INTERLEAVE IN PARENT Users ON DELETE CASCADE
-      )"}));
-    return absl::OkStatus();
+    return SetSchemaFromFile("range_delete.test");
   }
 
  protected:
   void PopulateDatabase() {
     // Write fixure data to use in deletes.
-    ZETASQL_EXPECT_OK(MultiInsert(
+    GOOGLESQL_EXPECT_OK(MultiInsert(
         "Users", {"UserId", "Name"},
         {{1, "Douglas Adams"}, {2, "Suzanne Collins"}, {3, "J.R.R. Tolkien"}}));
 
-    ZETASQL_EXPECT_OK(MultiInsert("Threads", {"UserId", "ThreadId", "Starred"},
+    GOOGLESQL_EXPECT_OK(MultiInsert("Threads", {"UserId", "ThreadId", "Starred"},
                           {{1, 1, true},
                            {1, 2, true},
                            {1, 3, true},
@@ -71,10 +65,18 @@ class RangeDeleteTest : public DatabaseTest {
   }
 };
 
-TEST_F(RangeDeleteTest, CanPointDelete) {
+INSTANTIATE_TEST_SUITE_P(
+    PerDialectRangeDeleteTest, RangeDeleteTest,
+    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
+                    database_api::DatabaseDialect::POSTGRESQL),
+    [](const testing::TestParamInfo<RangeDeleteTest::ParamType>& info) {
+      return database_api::DatabaseDialect_Name(info.param);
+    });
+
+TEST_P(RangeDeleteTest, CanPointDelete) {
   PopulateDatabase();
 
-  ZETASQL_EXPECT_OK(Delete("Threads", Key(2, 2)));
+  GOOGLESQL_EXPECT_OK(Delete("Threads", Key(2, 2)));
   EXPECT_THAT(ReadAll("Threads", {"UserId", "ThreadId", "Starred"}),
               IsOkAndHoldsRows({{1, 1, true},
                                 {1, 2, true},
@@ -84,23 +86,23 @@ TEST_F(RangeDeleteTest, CanPointDelete) {
                                 {3, 1, false}}));
 }
 
-TEST_F(RangeDeleteTest, CanDeleteKeysInSpecifiedRange) {
+TEST_P(RangeDeleteTest, CanDeleteKeysInSpecifiedRange) {
   PopulateDatabase();
 
-  ZETASQL_EXPECT_OK(Delete("Threads", ClosedOpen(Key(1, 1), Key(1, 4))));
+  GOOGLESQL_EXPECT_OK(Delete("Threads", ClosedOpen(Key(1, 1), Key(1, 4))));
   EXPECT_THAT(ReadAll("Threads", {"UserId", "ThreadId", "Starred"}),
               IsOkAndHoldsRows(
                   {{1, 4, false}, {2, 1, false}, {2, 2, true}, {3, 1, false}}));
 }
 
-TEST_F(RangeDeleteTest, DeleteRangeOnEmptyTableIsNoOp) {
-  ZETASQL_EXPECT_OK(Delete("Threads", OpenOpen(Key(1, 2), Key(1, 1))));
+TEST_P(RangeDeleteTest, DeleteRangeOnEmptyTableIsNoOp) {
+  GOOGLESQL_EXPECT_OK(Delete("Threads", OpenOpen(Key(1, 2), Key(1, 1))));
 }
 
-TEST_F(RangeDeleteTest, DeleteEmptyRangeIsNoOp) {
+TEST_P(RangeDeleteTest, DeleteEmptyRangeIsNoOp) {
   PopulateDatabase();
 
-  ZETASQL_EXPECT_OK(Delete("Threads", OpenOpen(Key(1, 2), Key(1, 1))));
+  GOOGLESQL_EXPECT_OK(Delete("Threads", OpenOpen(Key(1, 2), Key(1, 1))));
   EXPECT_THAT(ReadAll("Threads", {"UserId", "ThreadId", "Starred"}),
               IsOkAndHoldsRows({{1, 1, true},
                                 {1, 2, true},
@@ -111,26 +113,26 @@ TEST_F(RangeDeleteTest, DeleteEmptyRangeIsNoOp) {
                                 {3, 1, false}}));
 }
 
-TEST_F(RangeDeleteTest, CanDeleteClosedOpenRange) {
+TEST_P(RangeDeleteTest, CanDeleteClosedOpenRange) {
   PopulateDatabase();
 
-  ZETASQL_EXPECT_OK(Delete("Threads", ClosedOpen(Key(1), Key(2))));
+  GOOGLESQL_EXPECT_OK(Delete("Threads", ClosedOpen(Key(1), Key(2))));
   EXPECT_THAT(ReadAll("Threads", {"UserId", "ThreadId", "Starred"}),
               IsOkAndHoldsRows({{2, 1, false}, {2, 2, true}, {3, 1, false}}));
 }
 
-TEST_F(RangeDeleteTest, CanDeleteClosedClosedRange) {
+TEST_P(RangeDeleteTest, CanDeleteClosedClosedRange) {
   PopulateDatabase();
 
-  ZETASQL_EXPECT_OK(Delete("Threads", ClosedClosed(Key(1), Key(2))));
+  GOOGLESQL_EXPECT_OK(Delete("Threads", ClosedClosed(Key(1), Key(2))));
   EXPECT_THAT(ReadAll("Threads", {"UserId", "ThreadId", "Starred"}),
               IsOkAndHoldsRows({{3, 1, false}}));
 }
 
-TEST_F(RangeDeleteTest, CanDeleteOpenOpenRange) {
+TEST_P(RangeDeleteTest, CanDeleteOpenOpenRange) {
   PopulateDatabase();
 
-  ZETASQL_EXPECT_OK(Delete("Threads", OpenOpen(Key(1), Key(3))));
+  GOOGLESQL_EXPECT_OK(Delete("Threads", OpenOpen(Key(1), Key(3))));
   EXPECT_THAT(ReadAll("Threads", {"UserId", "ThreadId", "Starred"}),
               IsOkAndHoldsRows({{1, 1, true},
                                 {1, 2, true},
@@ -139,10 +141,10 @@ TEST_F(RangeDeleteTest, CanDeleteOpenOpenRange) {
                                 {3, 1, false}}));
 }
 
-TEST_F(RangeDeleteTest, CanDeleteOpenClosedRange) {
+TEST_P(RangeDeleteTest, CanDeleteOpenClosedRange) {
   PopulateDatabase();
 
-  ZETASQL_EXPECT_OK(Delete("Threads", OpenClosed(Key(1), Key(2))));
+  GOOGLESQL_EXPECT_OK(Delete("Threads", OpenClosed(Key(1), Key(2))));
   EXPECT_THAT(ReadAll("Threads", {"UserId", "ThreadId", "Starred"}),
               IsOkAndHoldsRows({{1, 1, true},
                                 {1, 2, true},
@@ -151,10 +153,10 @@ TEST_F(RangeDeleteTest, CanDeleteOpenClosedRange) {
                                 {3, 1, false}}));
 }
 
-TEST_F(RangeDeleteTest, CanDeletePrefixRange) {
+TEST_P(RangeDeleteTest, CanDeletePrefixRange) {
   PopulateDatabase();
 
-  ZETASQL_EXPECT_OK(Delete("Threads", ClosedClosed(Key(2), Key(2))));
+  GOOGLESQL_EXPECT_OK(Delete("Threads", ClosedClosed(Key(2), Key(2))));
   EXPECT_THAT(ReadAll("Threads", {"UserId", "ThreadId", "Starred"}),
               IsOkAndHoldsRows({{1, 1, true},
                                 {1, 2, true},
@@ -163,10 +165,10 @@ TEST_F(RangeDeleteTest, CanDeletePrefixRange) {
                                 {3, 1, false}}));
 }
 
-TEST_F(RangeDeleteTest, DeleteOpenPrefixRangeIsNoOp) {
+TEST_P(RangeDeleteTest, DeleteOpenPrefixRangeIsNoOp) {
   PopulateDatabase();
 
-  ZETASQL_EXPECT_OK(Delete("Threads", OpenOpen(Key(1), Key(1))));
+  GOOGLESQL_EXPECT_OK(Delete("Threads", OpenOpen(Key(1), Key(1))));
   EXPECT_THAT(ReadAll("Threads", {"UserId", "ThreadId", "Starred"}),
               IsOkAndHoldsRows({{1, 1, true},
                                 {1, 2, true},
@@ -177,15 +179,15 @@ TEST_F(RangeDeleteTest, DeleteOpenPrefixRangeIsNoOp) {
                                 {3, 1, false}}));
 }
 
-TEST_F(RangeDeleteTest, CanDeletePrefixRangeWithDifferentKeySizes) {
+TEST_P(RangeDeleteTest, CanDeletePrefixRangeWithDifferentKeySizes) {
   PopulateDatabase();
 
-  ZETASQL_EXPECT_OK(Delete("Threads", ClosedClosed(Key(1, 1), Key(1))));
+  GOOGLESQL_EXPECT_OK(Delete("Threads", ClosedClosed(Key(1, 1), Key(1))));
   EXPECT_THAT(ReadAll("Threads", {"UserId", "ThreadId", "Starred"}),
               IsOkAndHoldsRows({{2, 1, false}, {2, 2, true}, {3, 1, false}}));
 }
 
-TEST_F(RangeDeleteTest, CannotDeleteInvalidPrefixRange) {
+TEST_P(RangeDeleteTest, CannotDeleteInvalidPrefixRange) {
   PopulateDatabase();
 
   EXPECT_THAT(Delete("Threads", ClosedClosed(Key(1, 3), Key(2, 2))),

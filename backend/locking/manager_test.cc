@@ -24,7 +24,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/time/clock.h"
 #include "backend/common/ids.h"
@@ -57,7 +57,7 @@ TEST_F(LockManagerTest, SingleTransactionAcquiresLock) {
                               /*try_abort_fn=*/nullptr, TransactionPriority(1));
   lh->EnqueueLock(request());
   EXPECT_FALSE(lh->IsBlocked());
-  ZETASQL_EXPECT_OK(lh->Wait());
+  GOOGLESQL_EXPECT_OK(lh->Wait());
 }
 
 TEST_F(LockManagerTest, ConcurrentTransactionIsAborted) {
@@ -71,7 +71,7 @@ TEST_F(LockManagerTest, ConcurrentTransactionIsAborted) {
   // First transaction gets the lock.
   lh1->EnqueueLock(request());
   EXPECT_FALSE(lh1->IsBlocked());
-  ZETASQL_EXPECT_OK(lh1->Wait());
+  GOOGLESQL_EXPECT_OK(lh1->Wait());
   EXPECT_FALSE(lh1->IsBlocked());
   EXPECT_FALSE(lh1->IsAborted());
 
@@ -80,7 +80,7 @@ TEST_F(LockManagerTest, ConcurrentTransactionIsAborted) {
   EXPECT_FALSE(lh2->IsBlocked());
   EXPECT_TRUE(lh2->IsAborted());
   EXPECT_THAT(lh2->Wait(),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kAborted));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kAborted));
   EXPECT_TRUE(lh2->IsAborted());
 }
 
@@ -97,23 +97,23 @@ TEST_F(LockManagerTest, SequentialTransactionAcquiresLock) {
 
   // First transaction gets the lock.
   lh1->EnqueueLock(request());
-  ZETASQL_EXPECT_OK(lh1->Wait());
+  GOOGLESQL_EXPECT_OK(lh1->Wait());
 
   // Second transaction does not get the lock yet.
   lh2->EnqueueLock(request());
   EXPECT_THAT(lh2->Wait(),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kAborted));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kAborted));
 
   // First transaction unlocks.
   lh1->UnlockAll();
 
   // Second transaction is still in a final aborted state.
   EXPECT_THAT(lh2->Wait(),
-              zetasql_base::testing::StatusIs(absl::StatusCode::kAborted));
+              googlesql_base::testing::StatusIs(absl::StatusCode::kAborted));
 
   // Now another transaction can get the lock.
   lh3->EnqueueLock(request());
-  ZETASQL_EXPECT_OK(lh3->Wait());
+  GOOGLESQL_EXPECT_OK(lh3->Wait());
 }
 
 TEST_F(LockManagerTest, TransactionsThatDidNotAcquireLockCanReleaseIt) {
@@ -127,7 +127,7 @@ TEST_F(LockManagerTest, TransactionsThatDidNotAcquireLockCanReleaseIt) {
                               /*try_abort_fn=*/nullptr, TransactionPriority(1));
   lh2->EnqueueLock(request());
   EXPECT_FALSE(lh2->IsBlocked());
-  ZETASQL_EXPECT_OK(lh2->Wait());
+  GOOGLESQL_EXPECT_OK(lh2->Wait());
 }
 
 TEST_F(LockManagerTest, EnsuresSerializationWithParallelTransactions) {
@@ -163,7 +163,7 @@ TEST_F(LockManagerTest, EnsuresSerializationWithParallelTransactions) {
               if (status.code() == absl::StatusCode::kAborted) {
                 continue;
               } else {
-                ZETASQL_ASSERT_OK(status);
+                GOOGLESQL_ASSERT_OK(status);
               }
 
               // We got the lock, increment the counter.

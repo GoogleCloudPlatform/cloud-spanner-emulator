@@ -23,7 +23,7 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/type.h"
+#include "googlesql/public/type.h"
 #include "absl/log/check.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
@@ -37,7 +37,9 @@
 #include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/udf.h"
 #include "backend/schema/graph/schema_node.h"
+#include "common/constants.h"
 #include "common/limits.h"
+#include "re2/re2.h"
 #include "absl/status/status.h"
 
 namespace google {
@@ -58,7 +60,7 @@ class Column : public SchemaNode {
   std::string FullName() const;
 
   // Returns the type of the column.
-  const zetasql::Type* GetType() const { return type_; }
+  const googlesql::Type* GetType() const { return type_; }
 
   // Returns a unique id of this column.
   const ColumnID id() const { return id_; }
@@ -243,7 +245,7 @@ class Column : public SchemaNode {
   ColumnID id_;
 
   // Type of this column.
-  const zetasql::Type* type_;
+  const googlesql::Type* type_;
 
   // The source column from the indexed table that this column is derived from.
   // Only used by index columns.

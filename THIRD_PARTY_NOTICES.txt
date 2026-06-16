@@ -1,7 +1,7 @@
 -----------------------------------------------------------------------------------------
 == portpicker
 == googleapis
-== zetasql
+== googlesql
 == grpc-Java
 == riegeli
 == abseil-cpp

@@ -35,7 +35,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "third_party/spanner_pg/util/valid_memory_context_fixture.h"
 
 using ValidMemoryContextUuidConversionTest =
@@ -44,7 +44,7 @@ using ValidMemoryContextUuidConversionTest =
 TEST_F(ValidMemoryContextUuidConversionTest,
        UuidStringToPgConstAndBackToUuidString) {
   std::string uuid_string = "9a31411b-caca-4ff1-86e9-39fbd2bc3f39";
-  ZETASQL_ASSERT_OK_AND_ASSIGN(Const * pg_const, UuidStringToPgConst(uuid_string));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(Const * pg_const, UuidStringToPgConst(uuid_string));
   EXPECT_NE(pg_const, nullptr);
   pg_uuid_t* pg_uuid = DatumGetUUIDP(pg_const->constvalue);
 
@@ -55,7 +55,7 @@ TEST_F(ValidMemoryContextUuidConversionTest,
     EXPECT_EQ(pg_uuid->data[i], static_cast<unsigned char>(uuid_bytes[i]));
   }
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(absl::string_view uuid_string_from_conversion,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::string_view uuid_string_from_conversion,
                        PgConstToUuidString(pg_const));
   EXPECT_EQ(uuid_string_from_conversion, uuid_string);
 }

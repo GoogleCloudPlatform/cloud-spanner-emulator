@@ -20,13 +20,13 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/simple_catalog.h"
-#include "zetasql/public/type.h"
-#include "zetasql/resolved_ast/resolved_ast.h"
-#include "zetasql/resolved_ast/resolved_column.h"
+#include "googlesql/public/simple_catalog.h"
+#include "googlesql/public/type.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_column.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 
 namespace google {
 namespace spanner {
@@ -36,41 +36,41 @@ namespace backend {
 namespace {
 
 TEST(HintRewriterTest, RewritesOnlyEmptyHintQualifier) {
-  zetasql::SimpleTable table{
+  googlesql::SimpleTable table{
       "test_table",
-      {zetasql::SimpleTable::NameAndType{"test_col",
-                                           zetasql::types::StringType()}}};
+      {googlesql::SimpleTable::NameAndType{"test_col",
+                                           googlesql::types::StringType()}}};
   // Make a resolved AST for
   // `@{force_index=test_index} SELECT test_col FROM test_table`
-  std::vector<std::unique_ptr<zetasql::ResolvedOutputColumn>> output_columns;
-  output_columns.push_back(zetasql::MakeResolvedOutputColumn(
+  std::vector<std::unique_ptr<googlesql::ResolvedOutputColumn>> output_columns;
+  output_columns.push_back(googlesql::MakeResolvedOutputColumn(
       "test_col",
-      zetasql::ResolvedColumn(/*column_id=*/1,
-                                zetasql::IdString::MakeGlobal("test_table"),
-                                zetasql::IdString::MakeGlobal("test_col"),
-                                zetasql::types::StringType())));
-  const auto& statement = zetasql::MakeResolvedQueryStmt(
+      googlesql::ResolvedColumn(/*column_id=*/1,
+                                googlesql::IdString::MakeGlobal("test_table"),
+                                googlesql::IdString::MakeGlobal("test_col"),
+                                googlesql::types::StringType())));
+  const auto& statement = googlesql::MakeResolvedQueryStmt(
       std::move(output_columns), /*is_value_table=*/false,
-      zetasql::MakeResolvedTableScan(
-          {zetasql::ResolvedColumn(
-              /*column_id=*/1, zetasql::IdString::MakeGlobal("test_table"),
-              zetasql::IdString::MakeGlobal("test_col"),
-              zetasql::types::StringType())},
+      googlesql::MakeResolvedTableScan(
+          {googlesql::ResolvedColumn(
+              /*column_id=*/1, googlesql::IdString::MakeGlobal("test_table"),
+              googlesql::IdString::MakeGlobal("test_col"),
+              googlesql::types::StringType())},
           &table, /*for_system_time_expr=*/nullptr));
-  statement->add_hint_list(zetasql::MakeResolvedOption(
+  statement->add_hint_list(googlesql::MakeResolvedOption(
       /*qualifier=*/"", "force_index",
-      zetasql::MakeResolvedLiteral(
-          zetasql::Value::StringValue("test_index"))));
-  statement->add_hint_list(zetasql::MakeResolvedOption(
+      googlesql::MakeResolvedLiteral(
+          googlesql::Value::StringValue("test_index"))));
+  statement->add_hint_list(googlesql::MakeResolvedOption(
       /*qualifier=*/"unknown", "force_index",
-      zetasql::MakeResolvedLiteral(
-          zetasql::Value::StringValue("test_index"))));
+      googlesql::MakeResolvedLiteral(
+          googlesql::Value::StringValue("test_index"))));
 
   HintRewriter rewriter;
-  ZETASQL_ASSERT_OK(statement->Accept(&rewriter));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<zetasql::ResolvedQueryStmt> rewritten_statement,
-      rewriter.ConsumeRootNode<zetasql::ResolvedQueryStmt>());
+  GOOGLESQL_ASSERT_OK(statement->Accept(&rewriter));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<googlesql::ResolvedQueryStmt> rewritten_statement,
+      rewriter.ConsumeRootNode<googlesql::ResolvedQueryStmt>());
   EXPECT_EQ(rewritten_statement->hint_list_size(), 2);
   EXPECT_EQ(rewritten_statement->hint_list(0)->qualifier(), "spanner");
   EXPECT_EQ(rewritten_statement->hint_list(1)->qualifier(), "unknown");

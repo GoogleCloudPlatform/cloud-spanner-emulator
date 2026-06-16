@@ -1,0 +1,46 @@
+@Dialect=GOOGLE_STANDARD_SQL
+CREATE TABLE Users(
+  ID   INT64 NOT NULL,
+  Name STRING(MAX),
+  Age  INT64
+) PRIMARY KEY (ID);
+CREATE INDEX UsersByName ON Users(Name);
+CREATE TABLE Messages (
+  UserId     INT64 NOT NULL,
+  ThreadId   INT64 NOT NULL,
+  MessageId  INT64 NOT NULL,
+  Subject    STRING(MAX),
+) PRIMARY KEY (UserId, ThreadId, MessageId);
+CREATE TABLE Referencing (
+  X INT64 NOT NULL,
+  Y INT64 NOT NULL,
+  FOREIGN KEY (X, Y) REFERENCES Users (ID, Age),
+) PRIMARY KEY(X);
+CREATE INDEX MessagesBySubject ON Messages(Subject);
+CREATE NULL_FILTERED INDEX UsersByAge ON Users(Age);
+CREATE NULL_FILTERED INDEX MessagesByIdAndThread ON Messages(MessageId, ThreadId);
+CREATE NULL_FILTERED INDEX MessagesByIdAndSubject ON Messages(MessageId, Subject);
+===
+@Dialect=POSTGRESQL
+CREATE TABLE Users(
+  ID   bigint NOT NULL PRIMARY KEY,
+  Name varchar,
+  Age  bigint
+);
+CREATE INDEX UsersByName ON Users(Name);
+CREATE TABLE Messages (
+  UserId     bigint NOT NULL,
+  ThreadId   bigint NOT NULL,
+  MessageId  bigint NOT NULL,
+  Subject    varchar,
+  PRIMARY KEY (UserId, ThreadId, MessageId)
+);
+CREATE TABLE Referencing (
+  X bigint NOT NULL PRIMARY KEY,
+  Y bigint NOT NULL,
+  FOREIGN KEY (X, Y) REFERENCES Users (ID, Age)
+);
+CREATE INDEX MessagesBySubject ON Messages(Subject);
+CREATE INDEX UsersByAge ON Users(Age) WHERE Age IS NOT NULL;
+CREATE INDEX MessagesByIdAndThread ON Messages(MessageId, ThreadId) WHERE MessageId IS NOT NULL AND ThreadId IS NOT NULL;
+CREATE INDEX MessagesByIdAndSubject ON Messages(MessageId, Subject) WHERE MessageId IS NOT NULL AND Subject IS NOT NULL;

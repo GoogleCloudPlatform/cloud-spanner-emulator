@@ -45,4 +45,7 @@ message ParserOutputProto {
 
   optional string serialized_parse_tree = 1;
   repeated TokenLocation token_locations = 2;
+
+  optional uint64 literal_sensitive_hash = 3;
+  optional uint64 literal_insensitive_hash = 4;
 }

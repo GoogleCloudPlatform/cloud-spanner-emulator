@@ -56,6 +56,8 @@ cc_library(
         "catalog",
     ],
     visibility = [
+        "//third_party/spanner_pg/transformer:__pkg__",
+        "//third_party/spanner_pg/ddl:__pkg__",
         "//spanner/datatypes/common/jsonb:__pkg__",
         "//spanner/tests/spangres_end_to_end_test:__subpackages__",
         # Use spangres/postgres_includes for safe PostgreSQL headers in non-PostgreSQL code.
@@ -63,10 +65,12 @@ cc_library(
         "//third_party/spanner_pg/src:__subpackages__",
         # Bootstrap Catalog needs to directly parse the PostgreSQL headers to build the catalog.
         "//third_party/spanner_pg/bootstrap_catalog:__pkg__",
+        "//third_party/spanner_pg/shims:__pkg__",
     ],
     deps = [
         "//third_party/spanner_pg/src/backend:backend_include",
         "//third_party/spanner_pg/src/backend/catalog:generated_catalog_headers",
+        "//third_party/spanner_pg/src/backend/nodes:node_tag_gen_include",
         "//third_party/spanner_pg/src/backend/parser:include",
         "//third_party/spanner_pg/src/backend/utils:generated_headers",
         "//third_party/spanner_pg/util:integral_types",
@@ -146,6 +150,37 @@ filegroup(
         # Use spangres/postgres_includes for safe PostgreSQL headers in non-PostgreSQL code.
         "//third_party/spanner_pg/postgres_includes:__pkg__",
     ],
+)
+
+filegroup(
+    name = "node_header_files",
+    # Do not sort: The order of these source files is important because they will be used for code
+    # generation.
+    srcs = [
+        "nodes/nodes.h",
+        "nodes/primnodes.h",
+        "nodes/parsenodes.h",
+        "nodes/pathnodes.h",
+        "nodes/plannodes.h",
+        "nodes/execnodes.h",
+        "access/amapi.h",
+        "access/sdir.h",
+        "access/tableam.h",
+        "access/tsmapi.h",
+        "commands/event_trigger.h",
+        "commands/trigger.h",
+        "executor/tuptable.h",
+        "foreign/fdwapi.h",
+        "nodes/bitmapset.h",
+        "nodes/extensible.h",
+        "nodes/lockoptions.h",
+        "nodes/miscnodes.h",
+        "nodes/replnodes.h",
+        "nodes/supportnodes.h",
+        "nodes/value.h",
+        "utils/rel.h",
+    ],
+    visibility = ["//:__subpackages__"],
 )
 
 filegroup(

@@ -29,10 +29,10 @@
 // MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 //------------------------------------------------------------------------------
 
-#include "zetasql/public/types/timestamp_util.h"
+#include "googlesql/public/types/timestamp_util.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
 #include "third_party/spanner_pg/function_evaluators/tests/test_base.h"
 #include "third_party/spanner_pg/interface/datetime_evaluators.h"
@@ -44,13 +44,13 @@ namespace {
 
 inline constexpr char kDefaultTimezone[] = "UTC";
 
-using ::zetasql::types::kTimestampMax;
-using ::zetasql::types::kTimestampMin;
+using ::googlesql::types::kTimestampMax;
+using ::googlesql::types::kTimestampMin;
 using ::postgres_translator::CleanupTimezone;
 using ::postgres_translator::InitTimezone;
 using ::testing::HasSubstr;
-using ::zetasql_base::testing::IsOkAndHolds;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::IsOkAndHolds;
+using ::googlesql_base::testing::StatusIs;
 
 struct ExpectedTime {
   ExpectedTime(absl::CivilSecond civil_second, double timezone_offset,
@@ -74,7 +74,7 @@ class TimestamptzInTest : public PgEvaluatorTest {
  protected:
   void SetUp() override {
     PgEvaluatorTest::SetUp();
-    ZETASQL_ASSERT_OK(InitTimezone(kDefaultTimezone));
+    GOOGLESQL_ASSERT_OK(InitTimezone(kDefaultTimezone));
   }
 
   void TearDown() override {
@@ -201,7 +201,7 @@ TEST_F(TimestamptzInTest, RegressionSpecialTimestamptzs) {
     absl::Time expected_time =
         test_case.second.timezone.At(test_case.second.cs).pre +
         test_case.second.subseconds;
-    ZETASQL_ASSERT_OK_AND_ASSIGN(absl::Time parsed_time,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(absl::Time parsed_time,
                          PgTimestamptzIn(test_case.first));
     EXPECT_EQ(expected_time, parsed_time);
   }

@@ -18,15 +18,16 @@
 #include "backend/schema/catalog/udf.h"
 
 #include <memory>
+#include <string>
 #include <vector>
 
-#include "zetasql/public/json_value.h"
-#include "zetasql/public/numeric_value.h"
-#include "zetasql/public/types/type_factory.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/json_value.h"
+#include "googlesql/public/numeric_value.h"
+#include "googlesql/public/types/type_factory.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/time/time.h"
@@ -52,13 +53,13 @@ namespace test {
 // expressions from GSQL to PG is not supported in tests.
 using absl::StatusCode;
 using database_api::DatabaseDialect::POSTGRESQL;
-using zetasql::Value;
+using googlesql::Value;
 using ::testing::ContainsRegex;
 using ::testing::HasSubstr;
 
 TEST_P(SchemaUpdaterTest, CreateUDF_Basic) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const Schema> schema,
       CreateSchema(
           {R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 SQL SECURITY INVOKER
@@ -75,18 +76,18 @@ TEST_P(SchemaUpdaterTest, CreateUDF_Basic) {
   EXPECT_EQ(udfs[0]->body(), "x+1");
   EXPECT_EQ(udf->signature()->DebugString(), "(INT64 x) -> INT64");
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                        UpdateSchema(schema.get(), {R"(DROP FUNCTION udf_1)"}));
   udf = schema->FindUdf("udf_1");
   ASSERT_EQ(udf, nullptr);
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       schema, UpdateSchema(schema.get(), {R"(DROP FUNCTION IF EXISTS udf_1)"}));
   EXPECT_THAT(UpdateSchema(schema.get(), {R"(DROP FUNCTION udf_1)"}),
               StatusIs(error::FunctionNotFound("udf_1")));
 
   // Ensure the emulator can identify the determinism level of the UDF.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       schema,
       CreateSchema(
           {R"(CREATE FUNCTION NOW(x INT64) RETURNS TIMESTAMP SQL SECURITY
@@ -100,7 +101,7 @@ TEST_P(SchemaUpdaterTest, CreateUDF_Basic) {
             Udf::Determinism::NOT_DETERMINISTIC_STABLE);
 
   // Ensure the emulator can handle UDFs with default arguments.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       schema,
       CreateSchema(
           {R"(CREATE FUNCTION test_udf(x INT64 DEFAULT 1) RETURNS INT64 SQL
@@ -111,16 +112,29 @@ TEST_P(SchemaUpdaterTest, CreateUDF_Basic) {
   EXPECT_EQ(udf->body(), "x+1");
   EXPECT_EQ(udf->signature()->DebugString(), "(optional INT64 x) -> INT64");
   EXPECT_EQ(udf->signature()->arguments()[0].GetDefault().value(),
-            zetasql::Value::Int64(1));
+            googlesql::Value::Int64(1));
 }
 
 TEST_P(SchemaUpdaterTest, CreateRemoteUDF_Basic) {
-  if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<const Schema> schema,
-      CreateSchema(
-          {R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 NOT DETERMINISTIC LANGUAGE REMOTE
-            OPTIONS (endpoint = 'https://www.google.com', max_batching_rows = 10))"}));
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
+  std::string ddl;
+  if (GetParam() == POSTGRESQL) {
+    ddl =
+        R"sql(CREATE FUNCTION udf_1(x BIGINT) RETURNS BIGINT VOLATILE LANGUAGE REMOTE
+            AS $${"endpoint": "https://www.google.com", "max_batching_rows": 10}$$)sql";
+  } else {
+    ddl =
+        R"sql(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 NOT DETERMINISTIC LANGUAGE REMOTE
+            OPTIONS (endpoint = 'https://www.google.com', max_batching_rows = 10))sql";
+  }
+
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const Schema> schema,
+                       CreateSchema({ddl}, /*proto_descriptor_bytes=*/"",
+                                    /*dialect=*/GetParam(),
+                                    /*use_gsql_to_pg_translation=*/false));
 
   const Udf* udf = schema->FindUdf("udf_1");
   ASSERT_NE(udf, nullptr);
@@ -130,6 +144,7 @@ TEST_P(SchemaUpdaterTest, CreateRemoteUDF_Basic) {
   EXPECT_EQ(udf->language(), Udf::Language::REMOTE);
   EXPECT_FALSE(udf->is_remote());
   EXPECT_EQ(*udf->max_batching_rows(), 10);
+
   const absl::Span<const Udf* const> udfs = schema->udfs();
   ASSERT_EQ(udfs.size(), 1);
   EXPECT_EQ(udfs[0]->Name(), "udf_1");
@@ -142,57 +157,155 @@ TEST_P(SchemaUpdaterTest, CreateRemoteUDF_Basic) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateRemoteUDF_Error) {
-  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
   // No endpoint set.
   EXPECT_THAT(
       CreateSchema(
-          {R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 NOT DETERMINISTIC LANGUAGE REMOTE
-            OPTIONS (max_batching_rows = 10))"}),
-      ::zetasql_base::testing::StatusIs(absl::StatusCode::kInternal,
-                                  HasSubstr("udf->endpoint_.has_value()")));
-
-  // Both REMOTE and LANGUAGE REMOTE are set.
-  EXPECT_THAT(
-      CreateSchema(
-          {R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 NOT DETERMINISTIC REMOTE LANGUAGE REMOTE
-            OPTIONS (endpoint = 'https://www.google.com'))"}),
-      ::zetasql_base::testing::StatusIs(
+          {GetParam() == POSTGRESQL
+               ? R"sql(CREATE FUNCTION udf_1(x BIGINT) RETURNS BIGINT VOLATILE LANGUAGE REMOTE AS $${"max_batching_rows": 10}$$)sql"
+               : R"sql(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 NOT DETERMINISTIC LANGUAGE REMOTE OPTIONS (max_batching_rows = 10))sql"},
+          /*proto_descriptor_bytes=*/"",
+          /*dialect=*/GetParam(),
+          /*use_gsql_to_pg_translation=*/false),
+      ::googlesql_base::testing::StatusIs(
           absl::StatusCode::kInvalidArgument,
-          HasSubstr("Encountered 'LANGUAGE' while parsing: "
-                    "create_function_statement")));
+          HasSubstr("Missing option endpoint for function udf_1.")));
+
+  // Both REMOTE and LANGUAGE REMOTE are set. Not possible in PG.
+  if (GetParam() != POSTGRESQL) {
+    EXPECT_THAT(
+        CreateSchema(
+            {R"sql(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 NOT DETERMINISTIC REMOTE LANGUAGE REMOTE OPTIONS (endpoint = 'https://www.google.com'))sql"},
+            /*proto_descriptor_bytes=*/"",
+            /*dialect=*/GetParam(),
+            /*use_gsql_to_pg_translation=*/false),
+        ::googlesql_base::testing::StatusIs(
+            absl::StatusCode::kInvalidArgument,
+            HasSubstr("Encountered 'LANGUAGE' while parsing: "
+                      "create_function_statement")));
+  }
 
   // Negative max batching size.
   EXPECT_THAT(
       CreateSchema(
-          {R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 NOT DETERMINISTIC LANGUAGE REMOTE
-            OPTIONS (endpoint = 'https://www.google.com', max_batching_rows = -1))"}),
-      ::zetasql_base::testing::StatusIs(absl::StatusCode::kInternal,
-                                  HasSubstr("udf->max_batching_rows_ >= 0")));
+          {GetParam() == POSTGRESQL
+               ? R"sql(CREATE FUNCTION udf_1(x BIGINT) RETURNS BIGINT VOLATILE LANGUAGE REMOTE AS $${"endpoint": "https://www.google.com", "max_batching_rows": -1}$$)sql"
+               : R"sql(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 NOT DETERMINISTIC LANGUAGE REMOTE OPTIONS (endpoint = 'https://www.google.com', max_batching_rows = -1))sql"},
+          /*proto_descriptor_bytes=*/"",
+          /*dialect=*/GetParam(),
+          /*use_gsql_to_pg_translation=*/false),
+      ::googlesql_base::testing::StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          HasSubstr("Invalid option value -1 for option max_batching_rows of "
+                    "function udf_1.")));
 
   // Unknown option.
   EXPECT_THAT(
       CreateSchema(
-          {R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 NOT DETERMINISTIC LANGUAGE REMOTE
-            OPTIONS (unknown_option = 'abcd'))"}),
-      ::zetasql_base::testing::StatusIs(
+          {GetParam() == POSTGRESQL
+               ? R"sql(CREATE FUNCTION udf_1(x BIGINT) RETURNS BIGINT VOLATILE LANGUAGE REMOTE AS $${"unknown_option": "abcd"}$$)sql"
+               : R"sql(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 NOT DETERMINISTIC LANGUAGE REMOTE OPTIONS (unknown_option = 'abcd'))sql"},
+          /*proto_descriptor_bytes=*/"",
+          /*dialect=*/GetParam(),
+          /*use_gsql_to_pg_translation=*/false),
+      ::googlesql_base::testing::StatusIs(
           absl::StatusCode::kInvalidArgument,
-          HasSubstr("Invalid option unknown_option for remote UDF udf_1")));
+          HasSubstr("Invalid option unknown_option for function udf_1.")));
 
   // No determinism level set.
-  EXPECT_THAT(
-      CreateSchema(
-          {R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 LANGUAGE REMOTE
-            OPTIONS (unknown_option = 'abcd'))"}),
-      ::zetasql_base::testing::StatusIs(
-          absl::StatusCode::kInvalidArgument,
-          HasSubstr("Invalid option unknown_option for remote UDF udf_1")));
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_THAT(
+        CreateSchema(
+            {R"sql(CREATE FUNCTION udf_1(x BIGINT) RETURNS BIGINT LANGUAGE REMOTE AS $${"endpoint": "https://www.google.com"}$$)sql"},
+            /*proto_descriptor_bytes=*/"",
+            /*dialect=*/GetParam(),
+            /*use_gsql_to_pg_translation=*/false),
+        ::googlesql_base::testing::StatusIs(
+            absl::StatusCode::kInvalidArgument,
+            HasSubstr("Remote UDF udf_1 declaration must specify the VOLATILE "
+                      "attribute")));
+  } else {
+    EXPECT_THAT(
+        CreateSchema(
+            {R"sql(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 LANGUAGE REMOTE OPTIONS (endpoint = 'https://www.google.com'))sql"},
+            /*proto_descriptor_bytes=*/"",
+            /*dialect=*/GetParam(),
+            /*use_gsql_to_pg_translation=*/false),
+        ::googlesql_base::testing::StatusIs(
+            absl::StatusCode::kInvalidArgument,
+            HasSubstr("Remote UDF udf_1 declaration must specify the NOT "
+                      "DETERMINISTIC attribute")));
+  }
 
   // Language SQL set.
   EXPECT_THAT(
-      CreateSchema({R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 LANGUAGE SQL
-            OPTIONS (endpoint = 'https://www.google.com'))"}),
-      ::zetasql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument,
-                                  HasSubstr("Syntax error: Unexpected \")\"")));
+      CreateSchema(
+          {GetParam() == POSTGRESQL
+               ? R"sql(CREATE FUNCTION udf_1(x BIGINT) RETURNS BIGINT LANGUAGE SQL AS $${"endpoint": "https://www.google.com"}$$)sql"
+               : R"sql(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 LANGUAGE SQL OPTIONS (endpoint = 'https://www.google.com'))sql"},
+          /*proto_descriptor_bytes=*/"",
+          /*dialect=*/GetParam(),
+          /*use_gsql_to_pg_translation=*/false),
+      ::googlesql_base::testing::StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          HasSubstr("To write SQL functions, omit the LANGUAGE clause and "
+                    "write the function body using 'AS (expression)'")));
+
+  // Unsupported argument type.
+  EXPECT_THAT(
+      CreateSchema(
+          {GetParam() == POSTGRESQL
+               ? R"sql(CREATE FUNCTION udf_1(x ARRAY<TOKENLIST>) RETURNS BIGINT VOLATILE LANGUAGE REMOTE AS $${"endpoint": "https://www.google.com"}$$)sql"
+               : R"sql(CREATE FUNCTION udf_1(x ARRAY<TOKENLIST>) RETURNS INT64 NOT DETERMINISTIC LANGUAGE REMOTE OPTIONS (endpoint = 'https://www.google.com'))sql"},
+          /*proto_descriptor_bytes=*/"",
+          /*dialect=*/GetParam(),
+          /*use_gsql_to_pg_translation=*/false),
+      ::googlesql_base::testing::StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          HasSubstr(
+              "Encountered 'TOKENLIST' while parsing: function_data_type")));
+
+  // Unsupported return type.
+  EXPECT_THAT(
+      CreateSchema(
+          {GetParam() == POSTGRESQL
+               ? R"sql(CREATE FUNCTION udf_1(x BIGINT) RETURNS ARRAY<TOKENLIST> VOLATILE LANGUAGE REMOTE AS $${"endpoint": "https://www.google.com"}$$)sql"
+               : R"sql(CREATE FUNCTION udf_1(x INT64) RETURNS ARRAY<TOKENLIST> NOT DETERMINISTIC LANGUAGE REMOTE OPTIONS (endpoint = 'https://www.google.com'))sql"},
+          /*proto_descriptor_bytes=*/"",
+          /*dialect=*/GetParam(),
+          /*use_gsql_to_pg_translation=*/false),
+      ::googlesql_base::testing::StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          HasSubstr(
+              "Encountered 'TOKENLIST' while parsing: function_data_type")));
+
+  // Duplicate struct field names. Not possible with PG composite types.
+  if (GetParam() != POSTGRESQL) {
+    EXPECT_THAT(
+        CreateSchema(
+            {R"sql(CREATE FUNCTION udf_1(x STRUCT<x INT64, x INT64>) RETURNS INT64 NOT DETERMINISTIC LANGUAGE REMOTE OPTIONS (endpoint = 'https://www.google.com'))sql"},
+            /*proto_descriptor_bytes=*/"",
+            /*dialect=*/GetParam(),
+            /*use_gsql_to_pg_translation=*/false),
+        ::googlesql_base::testing::StatusIs(
+            absl::StatusCode::kInvalidArgument,
+            HasSubstr("Remote UDF udf_1 declaration has struct with duplicate "
+                      "field names `x`.")));
+
+    EXPECT_THAT(
+        CreateSchema(
+            {R"sql(CREATE FUNCTION udf_1(x INT64) RETURNS STRUCT<x INT64, x INT64> NOT DETERMINISTIC LANGUAGE REMOTE OPTIONS (endpoint = 'https://www.google.com'))sql"},
+            /*proto_descriptor_bytes=*/"",
+            /*dialect=*/GetParam(),
+            /*use_gsql_to_pg_translation=*/false),
+        ::googlesql_base::testing::StatusIs(
+            absl::StatusCode::kInvalidArgument,
+            HasSubstr("Remote UDF udf_1 declaration has struct with duplicate "
+                      "field names `x`.")));
+  }
 }
 
 TEST_P(SchemaUpdaterTest, CreateUDF_ParameterizedTypes) {
@@ -201,7 +314,7 @@ TEST_P(SchemaUpdaterTest, CreateUDF_ParameterizedTypes) {
   EXPECT_THAT(
       CreateSchema({R"(CREATE FUNCTION func(a STRING(10)) RETURNS STRING(MAX)
                          SQL SECURITY INVOKER AS (CONCAT(a, ' world')))"}),
-      ::zetasql_base::testing::StatusIs(
+      ::googlesql_base::testing::StatusIs(
           StatusCode::kInvalidArgument,
           HasSubstr(
               "Error analyzing the definition of function `func`: "
@@ -210,13 +323,13 @@ TEST_P(SchemaUpdaterTest, CreateUDF_ParameterizedTypes) {
   EXPECT_THAT(
       CreateSchema({R"(CREATE FUNCTION func(a STRING) RETURNS STRING(10)
                          SQL SECURITY INVOKER AS (SUBSTR(a, 1, 10)))"}),
-      ::zetasql_base::testing::StatusIs(
+      ::googlesql_base::testing::StatusIs(
           absl::StatusCode::kInvalidArgument,
           HasSubstr(
               "Error analyzing the definition of function `func`: "
               "Parameterized types are not supported in function signatures")));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const Schema> schema,
       CreateSchema({R"(CREATE FUNCTION func(a STRING) RETURNS STRING
                          SQL SECURITY INVOKER AS (SUBSTR(a, 1, 10)))"}));
@@ -227,7 +340,7 @@ TEST_P(SchemaUpdaterTest, CreateUDF_ParameterizedTypes) {
   EXPECT_EQ(udf->determinism_level(), Udf::Determinism::DETERMINISTIC);
   EXPECT_EQ(udf->signature()->DebugString(), "(STRING a) -> STRING");
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       schema,
       CreateSchema({R"(CREATE FUNCTION func(a STRING) RETURNS ARRAY<STRING>
                          SQL SECURITY INVOKER AS ([a]))"}));
@@ -238,7 +351,7 @@ TEST_P(SchemaUpdaterTest, CreateUDF_ParameterizedTypes) {
   EXPECT_EQ(udf->determinism_level(), Udf::Determinism::DETERMINISTIC);
   EXPECT_EQ(udf->signature()->DebugString(), "(STRING a) -> ARRAY<STRING>");
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       schema,
       CreateSchema({R"(CREATE FUNCTION func(a ARRAY<STRING>) RETURNS STRING
                  SQL SECURITY INVOKER AS (ARRAY_TO_STRING(a, ', ')))"}));
@@ -267,7 +380,7 @@ TEST_P(SchemaUpdaterTest, CreateUDF_FunctionTypeMismatch) {
       CreateSchema({
           R"(CREATE FUNCTION udf_1(x INT64) RETURNS STRING(MAX) SQL SECURITY INVOKER
             AS (x+1))"}),
-      ::zetasql_base::testing::StatusIs(
+      ::googlesql_base::testing::StatusIs(
           absl::StatusCode::kInvalidArgument,
           HasSubstr(
               "Error analyzing the definition of function `udf_1`: "
@@ -289,7 +402,7 @@ TEST_P(SchemaUpdaterTest, CreateUDF_ReplaceBuiltInFunction) {
       StatusIs(error::ReplacingBuiltInFunction("create", "View", "abs")));
 
   // Can have the same name as a built-in function if in named schema.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const Schema> schema,
       CreateSchema(
           {R"(CREATE SCHEMA my_schema)",
@@ -309,12 +422,12 @@ TEST_P(SchemaUpdaterTest, CreateUDF_InvalidBodyAnalysis) {
   EXPECT_THAT(
       CreateSchema({R"(CREATE FUNCTION func(x INT64) RETURNS INT64 SQL
                       SECURITY INVOKER AS (x+func_2(x)))"}),
-      ::zetasql_base::testing::StatusIs(
+      ::googlesql_base::testing::StatusIs(
           StatusCode::kInvalidArgument,
           ContainsRegex(
               "Error (analyzing|parsing) the definition of function `func`")));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const Schema> schema,
       CreateSchema(
           {R"(CREATE FUNCTION func(x INT64) RETURNS INT64 SQL SECURITY INVOKER
@@ -326,7 +439,7 @@ TEST_P(SchemaUpdaterTest, CreateUDF_InvalidBodyAnalysis) {
                   schema.get(),
                   {R"(CREATE OR REPLACE FUNCTION func(x INT64) RETURNS INT64 SQL
                       SECURITY INVOKER AS (x+func_2(x)))"}),
-              ::zetasql_base::testing::StatusIs(
+              ::googlesql_base::testing::StatusIs(
                   StatusCode::kFailedPrecondition,
                   HasSubstr("Cannot replace FUNCTION `func` "
                             "because new definition is invalid")));
@@ -334,7 +447,7 @@ TEST_P(SchemaUpdaterTest, CreateUDF_InvalidBodyAnalysis) {
 
 TEST_P(SchemaUpdaterTest, CreateUDF_CreateOrReplace) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const Schema> schema,
       CreateSchema(
           {R"(CREATE OR REPLACE FUNCTION udf_1(x INT64) RETURNS INT64 SQL
@@ -345,7 +458,7 @@ TEST_P(SchemaUpdaterTest, CreateUDF_CreateOrReplace) {
   EXPECT_EQ(udf->Name(), "udf_1");
   EXPECT_EQ(udf->body(), "x+1");
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       schema,
       UpdateSchema(
           schema.get(),
@@ -361,7 +474,7 @@ TEST_P(SchemaUpdaterTest, CreateUDF_CreateOrReplace) {
 TEST_P(SchemaUpdaterTest, CreateUDF_WithTableDepedency) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const Schema> schema,
       CreateSchema(
           {R"(CREATE TABLE t (col1 INT64, col2 INT64) PRIMARY KEY (col1))",
@@ -388,7 +501,7 @@ TEST_P(SchemaUpdaterTest, CreateUDF_WithTableDepedency) {
 TEST_P(SchemaUpdaterTest, CreateUDF_WithViewDepedency) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const Schema> schema,
       CreateSchema(
           {R"(CREATE TABLE t (col1 INT64, col2 INT64) PRIMARY KEY (col1))",
@@ -416,7 +529,7 @@ TEST_P(SchemaUpdaterTest, CreateUDF_WithViewDepedency) {
 TEST_P(SchemaUpdaterTest, CreateUDF_WithIndexDependency) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const Schema> schema,
       CreateSchema(
           {R"(CREATE TABLE t (col1 INT64, col2 INT64) PRIMARY KEY (col1))",
@@ -448,7 +561,7 @@ TEST_P(SchemaUpdaterTest, CreateUDF_WithIndexDependency) {
 TEST_P(SchemaUpdaterTest, CreateUDF_WithSequenceDependency) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const Schema> schema,
       CreateSchema(
           {R"(CREATE TABLE t (col1 INT64, col2 INT64) PRIMARY KEY (col1))",
@@ -478,7 +591,7 @@ TEST_P(SchemaUpdaterTest, CreateUDF_WithSequenceDependency) {
 TEST_P(SchemaUpdaterTest, CreateUDF_WithVariousDefaultParamsAndLiterals) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const Schema> schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const Schema> schema,
                        CreateSchema({R"(CREATE FUNCTION func_int64(
                         x INT64 DEFAULT 1
                       ) RETURNS INT64 SQL SECURITY INVOKER AS (x + 1))"}));
@@ -491,7 +604,7 @@ TEST_P(SchemaUpdaterTest, CreateUDF_WithVariousDefaultParamsAndLiterals) {
   EXPECT_EQ(udf_int64->signature()->arguments()[0].GetDefault().value(),
             Value::Int64(1));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(CREATE FUNCTION func_numeric(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(CREATE FUNCTION func_numeric(
                         x NUMERIC DEFAULT NUMERIC '123.456'
                       ) RETURNS NUMERIC SQL SECURITY INVOKER AS (x * 2))"}));
   const Udf* udf_numeric = schema->FindUdf("func_numeric");
@@ -502,9 +615,9 @@ TEST_P(SchemaUpdaterTest, CreateUDF_WithVariousDefaultParamsAndLiterals) {
             "(optional NUMERIC x) -> NUMERIC");
   EXPECT_EQ(udf_numeric->signature()->arguments()[0].GetDefault().value(),
             Value::Numeric(
-                zetasql::NumericValue::FromStringStrict("123.456").value()));
+                googlesql::NumericValue::FromStringStrict("123.456").value()));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(CREATE FUNCTION func_string(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(CREATE FUNCTION func_string(
                         x STRING DEFAULT 'default_string'
                       ) RETURNS STRING SQL SECURITY INVOKER AS (CONCAT(x, '_suffix')))"}));
   const Udf* udf_string = schema->FindUdf("func_string");
@@ -516,7 +629,7 @@ TEST_P(SchemaUpdaterTest, CreateUDF_WithVariousDefaultParamsAndLiterals) {
   EXPECT_EQ(udf_string->signature()->arguments()[0].GetDefault().value(),
             Value::String("default_string"));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       schema,
       CreateSchema(
           {R"(CREATE FUNCTION func_bool(x BOOL DEFAULT TRUE) RETURNS BOOL SQL
@@ -529,7 +642,7 @@ TEST_P(SchemaUpdaterTest, CreateUDF_WithVariousDefaultParamsAndLiterals) {
   EXPECT_EQ(udf_bool->signature()->arguments()[0].GetDefault().value(),
             Value::Bool(true));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(CREATE FUNCTION func_timestamp(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(CREATE FUNCTION func_timestamp(
                         x TIMESTAMP DEFAULT TIMESTAMP '2021-01-01 00:00:00+00'
                       ) RETURNS TIMESTAMP SQL SECURITY INVOKER AS (x))"}));
   const Udf* udf_timestamp = schema->FindUdf("func_timestamp");
@@ -541,7 +654,7 @@ TEST_P(SchemaUpdaterTest, CreateUDF_WithVariousDefaultParamsAndLiterals) {
   EXPECT_EQ(udf_timestamp->signature()->arguments()[0].GetDefault().value(),
             Value::Timestamp(absl::FromUnixSeconds(1609459200)));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(CREATE FUNCTION func_struct(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(CREATE FUNCTION func_struct(
                         x STRUCT<field1 INT64> DEFAULT STRUCT<field1 INT64>(1)
                       ) RETURNS INT64 SQL SECURITY INVOKER AS
                       (x.field1))"}));
@@ -552,7 +665,7 @@ TEST_P(SchemaUpdaterTest, CreateUDF_WithVariousDefaultParamsAndLiterals) {
   EXPECT_EQ(udf_struct->signature()->DebugString(),
             "(optional STRUCT<field1 INT64> x) -> INT64");
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(CREATE FUNCTION func_json(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(CREATE FUNCTION func_json(
                         x JSON DEFAULT JSON '{"key": "value"}'
                       ) RETURNS JSON SQL SECURITY INVOKER AS (x))"}));
   const Udf* udf_json = schema->FindUdf("func_json");
@@ -562,10 +675,10 @@ TEST_P(SchemaUpdaterTest, CreateUDF_WithVariousDefaultParamsAndLiterals) {
   EXPECT_EQ(udf_json->signature()->DebugString(), "(optional JSON x) -> JSON");
   EXPECT_EQ(
       udf_json->signature()->arguments()[0].GetDefault().value(),
-      Value::Json(zetasql::JSONValue::ParseJSONString("{\"key\": \"value\"}")
+      Value::Json(googlesql::JSONValue::ParseJSONString("{\"key\": \"value\"}")
                       .value()));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(CREATE FUNCTION func_null(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(CREATE FUNCTION func_null(
                         x INT64 DEFAULT NULL
                       ) RETURNS INT64 SQL SECURITY INVOKER AS (x))"}));
   const Udf* udf_null = schema->FindUdf("func_null");
@@ -577,7 +690,7 @@ TEST_P(SchemaUpdaterTest, CreateUDF_WithVariousDefaultParamsAndLiterals) {
   EXPECT_TRUE(
       udf_null->signature()->arguments()[0].GetDefault().value().is_null());
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(CREATE FUNCTION func_array_int(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(CREATE FUNCTION func_array_int(
                         x ARRAY<INT64> DEFAULT [1, 2, 3]
                       ) RETURNS INT64 SQL SECURITY INVOKER AS (ARRAY_LENGTH(x)))"}));
   const Udf* udf_array_int = schema->FindUdf("func_array_int");
@@ -587,10 +700,10 @@ TEST_P(SchemaUpdaterTest, CreateUDF_WithVariousDefaultParamsAndLiterals) {
   EXPECT_EQ(udf_array_int->signature()->DebugString(),
             "(optional ARRAY<INT64> x) -> INT64");
   EXPECT_EQ(udf_array_int->signature()->arguments()[0].GetDefault().value(),
-            Value::Array(zetasql::types::Int64ArrayType(),
+            Value::Array(googlesql::types::Int64ArrayType(),
                          {Value::Int64(1), Value::Int64(2), Value::Int64(3)}));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(schema,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
                        CreateSchema({R"(CREATE FUNCTION func_array_string(
                         x ARRAY<STRING> DEFAULT ['x', 'y', 'xy']
                       ) RETURNS INT64 SQL SECURITY INVOKER AS (ARRAY_LENGTH(x)))"}));
@@ -602,14 +715,14 @@ TEST_P(SchemaUpdaterTest, CreateUDF_WithVariousDefaultParamsAndLiterals) {
             "(optional ARRAY<STRING> x) -> INT64");
   EXPECT_EQ(udf_array_string->signature()->arguments()[0].GetDefault().value(),
             Value::Array(
-                zetasql::types::StringArrayType(),
+                googlesql::types::StringArrayType(),
                 {Value::String("x"), Value::String("y"), Value::String("xy")}));
 
   EXPECT_THAT(
       CreateSchema({R"(CREATE FUNCTION func_array_array_int(
                         x ARRAY<ARRAY<INT64>> DEFAULT [[1, 2], [3, 4]]
                       ) RETURNS INT64 SQL SECURITY INVOKER AS (ARRAY_LENGTH(x)))"}),
-      zetasql_base::testing::StatusIs(
+      googlesql_base::testing::StatusIs(
           StatusCode::kInvalidArgument,
           HasSubstr("Cannot construct array with element type ARRAY<INT64> "
                     "because nested arrays are not supported")));
@@ -652,7 +765,7 @@ TEST_P(SchemaUpdaterTest, CreateUDF_ViewsAndFunctionsWithSameName) {
 TEST_P(SchemaUpdaterTest, CreateUDF_UsingInUdf) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const Schema> schema,
       CreateSchema(
           {R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 SQL SECURITY INVOKER
@@ -679,7 +792,7 @@ TEST_P(SchemaUpdaterTest, CreateUDF_UsingInUdf) {
 TEST_P(SchemaUpdaterTest, CreateUDF_UsingInTable) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const Schema> schema,
       CreateSchema(
           {R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 SQL SECURITY INVOKER AS (x+1))",
@@ -719,7 +832,7 @@ TEST_P(SchemaUpdaterTest, CreateUDF_UsingInTable) {
                    {R"(ALTER TABLE t1 ALTER COLUMN col1 INT64 AS (1))"}),
       StatusIs(error::CannotAlterGeneratedColumnExpression("t1", "col1")));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       schema,
       UpdateSchema(schema.get(),
                    {R"(ALTER TABLE t2 ALTER COLUMN col2 SET DEFAULT (1))"}));
@@ -737,7 +850,7 @@ TEST_P(SchemaUpdaterTest, CreateUDF_UsingInIndexes) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
   // Indexes will not directly depend on UDFs; though, they may depend on UDFs
   // when index expressions are supported.
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const Schema> schema,
       CreateSchema(
           {R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 SQL SECURITY INVOKER
@@ -773,14 +886,14 @@ TEST_P(SchemaUpdaterTest, CreateUDF_UsingInIndexes) {
   EXPECT_THAT(
       UpdateSchema(schema.get(),
                    {R"(CREATE INDEX Idx2 ON t1 (col2) STORING (col2+1))"}),
-      ::zetasql_base::testing::StatusIs(StatusCode::kInvalidArgument,
+      ::googlesql_base::testing::StatusIs(StatusCode::kInvalidArgument,
                                   HasSubstr("Expecting ')' but found '+'")));
 }
 
 TEST_P(SchemaUpdaterTest, CreateUDF_UsingInViews) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const Schema> schema,
       CreateSchema({
           R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 SQL SECURITY INVOKER
@@ -812,7 +925,7 @@ TEST_P(SchemaUpdaterTest, CreateUDF_UsingInViews) {
 TEST_P(SchemaUpdaterTest, CreateUDF_TransitiveFunctionDeterminism) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const Schema> schema,
       CreateSchema(
           {R"(CREATE FUNCTION udf_1(x INT64) RETURNS TIMESTAMP SQL SECURITY INVOKER
@@ -836,7 +949,7 @@ TEST_P(SchemaUpdaterTest, CreateUDF_TransitiveFunctionDeterminism) {
             AS (EXTRACT(YEAR from CURRENT_TIMESTAMP())))",
            R"(CREATE FUNCTION udf_2(x INT64) RETURNS INT64 SQL SECURITY INVOKER
             AS ((SELECT APPROX_DOT_PRODUCT([100, 10], [200, 6]) AS results) + udf_1(x)))"}),
-      ::zetasql_base::testing::StatusIs(
+      ::googlesql_base::testing::StatusIs(
           absl::StatusCode::kInvalidArgument,
           HasSubstr("Error analyzing the definition of function `udf_2`: "
                     "Function declared to return INT64 but the function body "
@@ -846,7 +959,7 @@ TEST_P(SchemaUpdaterTest, CreateUDF_TransitiveFunctionDeterminism) {
 TEST_P(SchemaUpdaterTest, CreateUDF_CyclicDependencyOnViewFails) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const Schema> schema,
       CreateSchema({
           R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 SQL SECURITY
@@ -884,7 +997,7 @@ TEST_P(SchemaUpdaterTest, CreateUDF_CyclicDependencyOnViewFails) {
 TEST_P(SchemaUpdaterTest, CreateUDF_CyclicDependencyOnUdfFails) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const Schema> schema,
       CreateSchema({
           R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 SQL SECURITY
@@ -914,7 +1027,7 @@ TEST_P(SchemaUpdaterTest, CreateUDF_CyclicDependencyOnUdfFails) {
 TEST_P(SchemaUpdaterTest, CreateUDF_CyclicDependencyOnColumnExpressionFails) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const Schema> schema,
       CreateSchema(
           {R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 SQL SECURITY INVOKER
@@ -944,7 +1057,7 @@ TEST_P(SchemaUpdaterTest, CreateUDF_CyclicDependencyOnColumnExpressionFails) {
 TEST_P(SchemaUpdaterTest, CreateUDF_InvalidNewSignatureOnUdfFails) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const Schema> schema,
       CreateSchema({
           R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 SQL SECURITY
@@ -968,13 +1081,13 @@ TEST_P(SchemaUpdaterTest, CreateUDF_InvalidNewSignatureOnUdfFails) {
           schema.get(),
           {R"(CREATE OR REPLACE FUNCTION udf_1(x BOOL) RETURNS STRING(MAX) SQL
             SECURITY INVOKER AS (CASE WHEN x THEN 'true' ELSE 'false' END || 'c'))"}),
-      zetasql_base::testing::StatusIs(absl::StatusCode::kFailedPrecondition));
+      googlesql_base::testing::StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_P(SchemaUpdaterTest, CreateUDF_InvalidNewSignatureOnViewFails) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const Schema> schema,
       CreateSchema(
           {R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 SQL SECURITY INVOKER
@@ -1005,13 +1118,13 @@ TEST_P(SchemaUpdaterTest, CreateUDF_InvalidNewSignatureOnViewFails) {
           {R"(CREATE OR REPLACE FUNCTION udf_1(x BOOL) RETURNS STRING(MAX)
           SQL SECURITY INVOKER AS (CASE WHEN x THEN 'true' ELSE 'false' END
           || 'c'))"}),
-      zetasql_base::testing::StatusIs(absl::StatusCode::kFailedPrecondition));
+      googlesql_base::testing::StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_P(SchemaUpdaterTest, CreateUDF_InvalidNewSignatureOnCheckConstraintFails) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const Schema> schema,
       CreateSchema(
           {R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 SQL SECURITY INVOKER
@@ -1036,14 +1149,14 @@ TEST_P(SchemaUpdaterTest, CreateUDF_InvalidNewSignatureOnCheckConstraintFails) {
           {R"(CREATE OR REPLACE FUNCTION udf_1(x BOOL) RETURNS STRING(MAX)
           SQL SECURITY INVOKER AS (CASE WHEN x THEN 'true' ELSE 'false' END
           || 'c'))"}),
-      zetasql_base::testing::StatusIs(absl::StatusCode::kFailedPrecondition));
+      googlesql_base::testing::StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_P(SchemaUpdaterTest,
        CreateUDF_InvalidNewSignatureOnColumnExpressionFails) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const Schema> schema,
       CreateSchema(
           {R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 SQL SECURITY INVOKER
@@ -1068,7 +1181,7 @@ TEST_P(SchemaUpdaterTest,
           {R"(CREATE OR REPLACE FUNCTION udf_1(x BOOL) RETURNS STRING(MAX)
           SQL SECURITY INVOKER AS (CASE WHEN x THEN 'true' ELSE 'false' END
           || 'c'))"}),
-      zetasql_base::testing::StatusIs(absl::StatusCode::kFailedPrecondition));
+      googlesql_base::testing::StatusIs(absl::StatusCode::kFailedPrecondition));
 
   // Changing generated column expression is not supported, so no need to handle
   // this cyclic case.
@@ -1077,7 +1190,7 @@ TEST_P(SchemaUpdaterTest,
 TEST_P(SchemaUpdaterTest, CreateUDF_InvalidNewSignatureOnDefaultValueFails) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const Schema> schema,
       CreateSchema(
           {R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 SQL SECURITY INVOKER
@@ -1102,13 +1215,13 @@ TEST_P(SchemaUpdaterTest, CreateUDF_InvalidNewSignatureOnDefaultValueFails) {
           {R"(CREATE OR REPLACE FUNCTION udf_1(x BOOL) RETURNS STRING(MAX)
           SQL SECURITY INVOKER AS (CASE WHEN x THEN 'true' ELSE 'false' END
           || 'c'))"}),
-      zetasql_base::testing::StatusIs(absl::StatusCode::kFailedPrecondition));
+      googlesql_base::testing::StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_P(SchemaUpdaterTest, CreateUDF_InvalidNewSignatureOnSequenceFails) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<const Schema> schema,
       CreateSchema({
           R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64
@@ -1126,7 +1239,7 @@ TEST_P(SchemaUpdaterTest, CreateUDF_InvalidNewSignatureOnSequenceFails) {
           {R"(CREATE OR REPLACE FUNCTION udf_1(x BOOL) RETURNS STRING(MAX)
           SQL SECURITY INVOKER AS (CASE WHEN x THEN 'true' ELSE 'false' END
           || 'c'))"}),
-      zetasql_base::testing::StatusIs(absl::StatusCode::kFailedPrecondition));
+      googlesql_base::testing::StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_P(SchemaUpdaterTest, CreateUDF_WithForUpdateInvalid) {
@@ -1137,7 +1250,7 @@ TEST_P(SchemaUpdaterTest, CreateUDF_WithForUpdateInvalid) {
           {R"(CREATE TABLE t (col1 INT64, col2 INT64) PRIMARY KEY (col1))",
            R"(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 SQL SECURITY INVOKER
             AS ((SELECT MAX(t.col1) FROM t FOR UPDATE) + x))"}),
-      ::zetasql_base::testing::StatusIs(
+      ::googlesql_base::testing::StatusIs(
           absl::StatusCode::kInvalidArgument,
           testing::HasSubstr("Unexpected lock mode in function body query")));
 }

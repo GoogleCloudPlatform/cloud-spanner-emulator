@@ -225,7 +225,7 @@ class Index : public SchemaNode {
   std::vector<const Column*> null_filtered_columns_;
 
   // The type of the index.
-  enum class IndexType { kIndex, kSearchIndex, kVectorIndex };
+  enum class IndexType { kIndex, kSearchIndex, kVectorIndex, kExpressionIndex };
   IndexType index_type_ = IndexType::kIndex;
 
   // Currently applies only to search index. A list of key parts that the index

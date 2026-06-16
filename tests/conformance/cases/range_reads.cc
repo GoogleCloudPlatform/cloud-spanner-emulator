@@ -14,11 +14,17 @@
 // limitations under the License.
 //
 
+#include <cstdint>
+#include <string>
+
+#include "google/spanner/admin/database/v1/common.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
+#include "google/cloud/spanner/numeric.h"
+#include "common/feature_flags.h"
 #include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/conformance/common/database_test_base.h"
 
@@ -29,41 +35,45 @@ namespace test {
 
 namespace {
 
-class RangeReadsTest : public DatabaseTest {
+class RangeReadsTest
+    : public DatabaseTest,
+      public testing::WithParamInterface<database_api::DatabaseDialect> {
+ public:
+  void SetUp() override {
+    dialect_ = GetParam();
+    DatabaseTest::SetUp();
+  }
+
  public:
   absl::Status SetUpDatabase() override {
     EmulatorFeatureFlags::Flags flags;
     emulator::test::ScopedEmulatorFeatureFlagsSetter setter(flags);
 
-    ZETASQL_RETURN_IF_ERROR(SetSchema({R"(
-      CREATE TABLE Users(
-        ID   INT64,
-        Name STRING(MAX),
-        Age  INT64
-      ) PRIMARY KEY (ID)
-    )",
-                               R"(
-      CREATE TABLE NumericTable(
-        key   NUMERIC,
-        val STRING(MAX)
-      ) PRIMARY KEY (key)
-    )"}));
-    return absl::OkStatus();
+    return SetSchemaFromFile("range_reads.test");
   }
 
  protected:
   void PopulateDatabase() {
     // Write fixure data to use in reads.
-    ZETASQL_EXPECT_OK(MultiInsert("Users", {"ID", "Name", "Age"},
-                          {{Null<std::int64_t>(), "Adam", 20},
-                           {1, "John", 22},
-                           {2, "Peter", 41},
-                           {4, "Matthew", 33},
-                           {5, Null<std::string>(), 18}}));
+    if (dialect_ == database_api::POSTGRESQL) {
+      // PostgreSQL does not support NULL primary keys.
+      GOOGLESQL_EXPECT_OK(MultiInsert("Users", {"ID", "Name", "Age"},
+                            {{1, "John", 22},
+                             {2, "Peter", 41},
+                             {4, "Matthew", 33},
+                             {5, Null<std::string>(), 18}}));
+    } else {
+      GOOGLESQL_EXPECT_OK(MultiInsert("Users", {"ID", "Name", "Age"},
+                            {{Null<std::int64_t>(), "Adam", 20},
+                             {1, "John", 22},
+                             {2, "Peter", 41},
+                             {4, "Matthew", 33},
+                             {5, Null<std::string>(), 18}}));
+    }
   }
 
   void PopulateNumericTable() {
-    ZETASQL_EXPECT_OK(MultiInsert("NumericTable", {"key", "val"},
+    GOOGLESQL_EXPECT_OK(MultiInsert("NumericTable", {"key", "val"},
                           {
                               {Null<Numeric>(), "null"},
                               {minNumeric(), "min"},
@@ -97,18 +107,34 @@ class RangeReadsTest : public DatabaseTest {
   }
 };
 
-TEST_F(RangeReadsTest, CanReadAllKeyrange) {
+INSTANTIATE_TEST_SUITE_P(
+    PerDialectRangeReadsTest, RangeReadsTest,
+    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
+                    database_api::DatabaseDialect::POSTGRESQL),
+    [](const testing::TestParamInfo<RangeReadsTest::ParamType>& info) {
+      return database_api::DatabaseDialect_Name(info.param);
+    });
+
+TEST_P(RangeReadsTest, CanReadAllKeyrange) {
   PopulateDatabase();
 
-  EXPECT_THAT(Read("Users", {"ID", "Name", "Age"}, KeySet::All()),
-              IsOkAndHoldsRows({{Null<std::int64_t>(), "Adam", 20},
-                                {1, "John", 22},
-                                {2, "Peter", 41},
-                                {4, "Matthew", 33},
-                                {5, Null<std::string>(), 18}}));
+  if (dialect_ == database_api::POSTGRESQL) {
+    EXPECT_THAT(Read("Users", {"ID", "Name", "Age"}, KeySet::All()),
+                IsOkAndHoldsRows({{1, "John", 22},
+                                  {2, "Peter", 41},
+                                  {4, "Matthew", 33},
+                                  {5, Null<std::string>(), 18}}));
+  } else {
+    EXPECT_THAT(Read("Users", {"ID", "Name", "Age"}, KeySet::All()),
+                IsOkAndHoldsRows({{Null<std::int64_t>(), "Adam", 20},
+                                  {1, "John", 22},
+                                  {2, "Peter", 41},
+                                  {4, "Matthew", 33},
+                                  {5, Null<std::string>(), 18}}));
+  }
 }
 
-TEST_F(RangeReadsTest, CanReadPointKey) {
+TEST_P(RangeReadsTest, CanReadPointKey) {
   PopulateDatabase();
 
   KeySet key_set;
@@ -117,68 +143,125 @@ TEST_F(RangeReadsTest, CanReadPointKey) {
               IsOkAndHoldsRows({{1, "John", 22}}));
 }
 
-TEST_F(RangeReadsTest, CanReadUsingKeyBounds) {
+TEST_P(RangeReadsTest, CanReadUsingKeyBounds) {
   PopulateDatabase();
 
-  // Can read using a closed closed range.
-  EXPECT_THAT(
-      Read("Users", {"ID", "Name", "Age"},
-           ClosedClosed(Key(Null<std::int64_t>()), Key(1))),
-      IsOkAndHoldsRows({{Null<std::int64_t>(), "Adam", 20}, {1, "John", 22}}));
+  if (dialect_ == database_api::POSTGRESQL) {
+    // Can read using a closed closed range.
+    EXPECT_THAT(
+        Read("Users", {"ID", "Name", "Age"}, ClosedClosed(Key(1), Key(2))),
+        IsOkAndHoldsRows({{1, "John", 22}, {2, "Peter", 41}}));
 
-  // Can read using a closed open range.
-  EXPECT_THAT(Read("Users", {"ID", "Name", "Age"},
-                   ClosedOpen(Key(Null<std::int64_t>()), Key(1))),
-              IsOkAndHoldsRows({{Null<std::int64_t>(), "Adam", 20}}));
+    // Can read using a closed open range.
+    EXPECT_THAT(
+        Read("Users", {"ID", "Name", "Age"}, ClosedOpen(Key(1), Key(2))),
+        IsOkAndHoldsRows({{1, "John", 22}}));
 
-  // Can read using an open closed range.
-  EXPECT_THAT(Read("Users", {"ID", "Name", "Age"},
-                   OpenClosed(Key(Null<std::int64_t>()), Key(1))),
-              IsOkAndHoldsRows({{1, "John", 22}}));
+    // Can read using an open closed range.
+    EXPECT_THAT(
+        Read("Users", {"ID", "Name", "Age"}, OpenClosed(Key(1), Key(2))),
+        IsOkAndHoldsRows({{2, "Peter", 41}}));
 
-  // Can read using an open open range.
-  EXPECT_THAT(Read("Users", {"ID", "Name", "Age"},
-                   OpenOpen(Key(Null<std::int64_t>()), Key(2))),
-              IsOkAndHoldsRows({{1, "John", 22}}));
+    // Can read using an open open range.
+    EXPECT_THAT(Read("Users", {"ID", "Name", "Age"}, OpenOpen(Key(1), Key(3))),
+                IsOkAndHoldsRows({{2, "Peter", 41}}));
+  } else {
+    // Can read using a closed closed range.
+    EXPECT_THAT(Read("Users", {"ID", "Name", "Age"},
+                     ClosedClosed(Key(Null<std::int64_t>()), Key(1))),
+                IsOkAndHoldsRows(
+                    {{Null<std::int64_t>(), "Adam", 20}, {1, "John", 22}}));
+
+    // Can read using a closed open range.
+    EXPECT_THAT(Read("Users", {"ID", "Name", "Age"},
+                     ClosedOpen(Key(Null<std::int64_t>()), Key(1))),
+                IsOkAndHoldsRows({{Null<std::int64_t>(), "Adam", 20}}));
+
+    // Can read using an open closed range.
+    EXPECT_THAT(Read("Users", {"ID", "Name", "Age"},
+                     OpenClosed(Key(Null<std::int64_t>()), Key(1))),
+                IsOkAndHoldsRows({{1, "John", 22}}));
+
+    // Can read using an open open range.
+    EXPECT_THAT(Read("Users", {"ID", "Name", "Age"},
+                     OpenOpen(Key(Null<std::int64_t>()), Key(2))),
+                IsOkAndHoldsRows({{1, "John", 22}}));
+  }
 }
 
-TEST_F(RangeReadsTest, CanReadUsingEmptyKeyBounds) {
+TEST_P(RangeReadsTest, CanReadUsingEmptyKeyBounds) {
   PopulateDatabase();
 
   // Empty range bound corresponds to match all for closed bound and match none
   // for open bound.
 
   // Can read using a closed closed range with empty start key.
-  EXPECT_THAT(
-      Read("Users", {"ID", "Name", "Age"}, ClosedClosed(Key(), Key(1))),
-      IsOkAndHoldsRows({{Null<std::int64_t>(), "Adam", 20}, {1, "John", 22}}));
+  if (dialect_ == database_api::POSTGRESQL) {
+    EXPECT_THAT(
+        Read("Users", {"ID", "Name", "Age"}, ClosedClosed(Key(), Key(2))),
+        IsOkAndHoldsRows({{1, "John", 22}, {2, "Peter", 41}}));
 
-  EXPECT_THAT(Read("Users", {"ID", "Name", "Age"}, OpenClosed(Key(), Key(1))),
-              IsOkAndHoldsRows({}));
+    EXPECT_THAT(Read("Users", {"ID", "Name", "Age"}, OpenClosed(Key(), Key(1))),
+                IsOkAndHoldsRows({}));
 
-  // Can read using a open closed range with empty end key.
-  EXPECT_THAT(Read("Users", {"ID", "Name", "Age"}, OpenClosed(Key(1), Key())),
-              IsOkAndHoldsRows({{2, "Peter", 41},
-                                {4, "Matthew", 33},
-                                {5, Null<std::string>(), 18}}));
+    // Can read using a open closed range with empty end key.
+    EXPECT_THAT(Read("Users", {"ID", "Name", "Age"}, OpenClosed(Key(1), Key())),
+                IsOkAndHoldsRows({{2, "Peter", 41},
+                                  {4, "Matthew", 33},
+                                  {5, Null<std::string>(), 18}}));
 
-  EXPECT_THAT(Read("Users", {"ID", "Name", "Age"}, ClosedOpen(Key(1), Key())),
-              IsOkAndHoldsRows({}));
+    EXPECT_THAT(Read("Users", {"ID", "Name", "Age"}, ClosedOpen(Key(1), Key())),
+                IsOkAndHoldsRows({}));
 
-  // Can read using a closed open range with empty start key.
-  EXPECT_THAT(Read("Users", {"ID", "Name", "Age"}, ClosedOpen(Key(), Key(1))),
-              IsOkAndHoldsRows({{Null<std::int64_t>(), "Adam", 20}}));
+    // Can read using a closed open range with empty start key.
+    EXPECT_THAT(Read("Users", {"ID", "Name", "Age"}, ClosedOpen(Key(), Key(2))),
+                IsOkAndHoldsRows({{1, "John", 22}}));
 
-  // Can read using an closed closed range with both ends being empty.
-  EXPECT_THAT(Read("Users", {"ID", "Name", "Age"}, ClosedClosed(Key(), Key())),
-              IsOkAndHoldsRows({{Null<std::int64_t>(), "Adam", 20},
-                                {1, "John", 22},
-                                {2, "Peter", 41},
-                                {4, "Matthew", 33},
-                                {5, Null<std::string>(), 18}}));
+    // Can read using an closed closed range with both ends being empty.
+    EXPECT_THAT(
+        Read("Users", {"ID", "Name", "Age"}, ClosedClosed(Key(), Key())),
+        IsOkAndHoldsRows({{1, "John", 22},
+                          {2, "Peter", 41},
+                          {4, "Matthew", 33},
+                          {5, Null<std::string>(), 18}}));
+  } else {
+    EXPECT_THAT(
+        Read("Users", {"ID", "Name", "Age"}, ClosedClosed(Key(), Key(1))),
+        IsOkAndHoldsRows(
+            {{Null<std::int64_t>(), "Adam", 20}, {1, "John", 22}}));
+
+    EXPECT_THAT(Read("Users", {"ID", "Name", "Age"}, OpenClosed(Key(), Key(1))),
+                IsOkAndHoldsRows({}));
+
+    // Can read using a open closed range with empty end key.
+    EXPECT_THAT(Read("Users", {"ID", "Name", "Age"}, OpenClosed(Key(1), Key())),
+                IsOkAndHoldsRows({{2, "Peter", 41},
+                                  {4, "Matthew", 33},
+                                  {5, Null<std::string>(), 18}}));
+
+    EXPECT_THAT(Read("Users", {"ID", "Name", "Age"}, ClosedOpen(Key(1), Key())),
+                IsOkAndHoldsRows({}));
+
+    // Can read using a closed open range with empty start key.
+    EXPECT_THAT(Read("Users", {"ID", "Name", "Age"}, ClosedOpen(Key(), Key(1))),
+                IsOkAndHoldsRows({{Null<std::int64_t>(), "Adam", 20}}));
+
+    // Can read using an closed closed range with both ends being empty.
+    EXPECT_THAT(
+        Read("Users", {"ID", "Name", "Age"}, ClosedClosed(Key(), Key())),
+        IsOkAndHoldsRows({{Null<std::int64_t>(), "Adam", 20},
+                          {1, "John", 22},
+                          {2, "Peter", 41},
+                          {4, "Matthew", 33},
+                          {5, Null<std::string>(), 18}}));
+  }
 }
 
-TEST_F(RangeReadsTest, CanReadNumericAllKeyrange) {
+TEST_P(RangeReadsTest, CanReadNumericAllKeyrange) {
+  if (dialect_ == database_api::POSTGRESQL) {
+    GTEST_SKIP() << "PostgreSQL dialect does not support numeric primary keys";
+  }
+
   PopulateNumericTable();
 
   EXPECT_THAT(Read("NumericTable", {"key", "val"}, KeySet::All()),
@@ -192,7 +275,11 @@ TEST_F(RangeReadsTest, CanReadNumericAllKeyrange) {
               }));
 }
 
-TEST_F(RangeReadsTest, CanReadNumericPointKey) {
+TEST_P(RangeReadsTest, CanReadNumericPointKey) {
+  if (dialect_ == database_api::POSTGRESQL) {
+    GTEST_SKIP() << "PostgreSQL dialect does not support numeric primary keys";
+  }
+
   PopulateNumericTable();
 
   KeySet key_set;
@@ -201,7 +288,11 @@ TEST_F(RangeReadsTest, CanReadNumericPointKey) {
               IsOkAndHoldsRows({{positiveNumeric(), "pos"}}));
 }
 
-TEST_F(RangeReadsTest, CanReadNumericUsingKeyBounds) {
+TEST_P(RangeReadsTest, CanReadNumericUsingKeyBounds) {
+  if (dialect_ == database_api::POSTGRESQL) {
+    GTEST_SKIP() << "PostgreSQL dialect does not support numeric primary keys";
+  }
+
   PopulateNumericTable();
 
   // Can read using a closed closed range.
@@ -266,7 +357,11 @@ TEST_F(RangeReadsTest, CanReadNumericUsingKeyBounds) {
               IsOkAndHoldsRows({{zeroNumeric(), "zero"}}));
 }
 
-TEST_F(RangeReadsTest, CanReadNumericUsingEmptyKeyBounds) {
+TEST_P(RangeReadsTest, CanReadNumericUsingEmptyKeyBounds) {
+  if (dialect_ == database_api::POSTGRESQL) {
+    GTEST_SKIP() << "PostgreSQL dialect does not support numeric primary keys";
+  }
+
   PopulateNumericTable();
 
   // Can read using a closed closed range with empty start key.

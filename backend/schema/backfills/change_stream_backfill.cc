@@ -21,7 +21,7 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/strings/escaping.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
@@ -30,7 +30,7 @@
 #include "backend/schema/catalog/column.h"
 #include "common/errors.h"
 #include "common/limits.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -42,7 +42,7 @@ absl::StatusOr<Key> ComputeChangeStreamPartitionTableKey(
   // Columns must be added to the key for each column in change stream partition
   // table primary key.
   Key key;
-  key.AddColumn(zetasql::Value::String(partition_token_str),
+  key.AddColumn(googlesql::Value::String(partition_token_str),
                 change_stream->change_stream_partition_table()
                     ->FindKeyColumn("partition_token")
                     ->is_descending());
@@ -55,23 +55,23 @@ absl::StatusOr<Key> ComputeChangeStreamPartitionTableKey(
   return key;
 }
 
-std::vector<zetasql::Value> CreateInitialBackfillPartitions(
-    std::vector<zetasql::Value> row_values, std::string partition_token_str,
+std::vector<googlesql::Value> CreateInitialBackfillPartitions(
+    std::vector<googlesql::Value> row_values, std::string partition_token_str,
     absl::Time start_time, std::string churn_type) {
   // specify partition_token
-  row_values.push_back(zetasql::Value::String(partition_token_str));
+  row_values.push_back(googlesql::Value::String(partition_token_str));
   // Specify start_time
-  row_values.push_back(zetasql::Value::Timestamp(start_time));
+  row_values.push_back(googlesql::Value::Timestamp(start_time));
   // Specify end_time
-  row_values.push_back(zetasql::Value::NullTimestamp());
+  row_values.push_back(googlesql::Value::NullTimestamp());
   // Specify parents
   row_values.push_back(
-      zetasql::Value::EmptyArray(zetasql::types::StringArrayType()));
+      googlesql::Value::EmptyArray(googlesql::types::StringArrayType()));
   // Specify children
   row_values.push_back(
-      zetasql::Value::EmptyArray(zetasql::types::StringArrayType()));
+      googlesql::Value::EmptyArray(googlesql::types::StringArrayType()));
   // Specify the churn type.
-  row_values.push_back(zetasql::Value::String(churn_type));
+  row_values.push_back(googlesql::Value::String(churn_type));
   return row_values;
 }
 
@@ -107,18 +107,18 @@ absl::Status BackfillChangeStreamPartition(
     std::string churn_type) {
   std::string partition_token_str = CreatePartitionTokenString();
   // Populate values for the row representing the first partition
-  std::vector<zetasql::Value> initial_row_values;
+  std::vector<googlesql::Value> initial_row_values;
   initial_row_values.reserve(change_stream_partition_table_columns.size());
   initial_row_values = CreateInitialBackfillPartitions(
       initial_row_values, partition_token_str, change_stream->creation_time(),
       churn_type);
   // Create Key for the change stream partition table
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       Key change_stream_partition_table_key,
       ComputeChangeStreamPartitionTableKey(partition_token_str, change_stream),
       _.SetErrorCode(absl::StatusCode::kFailedPrecondition));
   // Insert the second new row in the change_stream_partition_table.
-  ZETASQL_RETURN_IF_ERROR(context->storage()->Write(
+  GOOGLESQL_RETURN_IF_ERROR(context->storage()->Write(
       context->pending_commit_timestamp(),
       change_stream->change_stream_partition_table()->id(),
       change_stream_partition_table_key,
@@ -145,7 +145,7 @@ absl::Status BackfillChangeStream(const ChangeStream* change_stream,
       // generates one child token.)
       churn_type = "SPLIT";
     }
-    ZETASQL_RETURN_IF_ERROR(BackfillChangeStreamPartition(
+    GOOGLESQL_RETURN_IF_ERROR(BackfillChangeStreamPartition(
         context, change_stream, change_stream_partition_table_columns,
         change_stream_partition_table_column_ids, churn_type));
   }

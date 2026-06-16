@@ -52,11 +52,11 @@ absl::Status inline UnsupportedTranslationError(
 // connected to one another via C++ inheritance, which is not true in this case.
 template <typename NodeType, const NodeTag NodeTypeTag, typename FromNodeType>
 absl::StatusOr<const NodeType*> DowncastNode(const FromNodeType* node) {
-  ZETASQL_RET_CHECK_NE(node, nullptr);
+  GOOGLESQL_RET_CHECK_NE(node, nullptr);
   // Extra precaution: nothing prevents reinterpret_cast from casting Node to
   // any type available, with a subsequent segfaults, so we pass expected type
   // tag explicitly and make sure the node has this type before casting.
-  ZETASQL_RET_CHECK_EQ(node->type, NodeTypeTag);
+  GOOGLESQL_RET_CHECK_EQ(node->type, NodeTypeTag);
 
   return reinterpret_cast<const NodeType*>(node);
 }
@@ -68,7 +68,7 @@ absl::StatusOr<const NodeType*> DowncastNode(const FromNodeType* node) {
 //   as defined in parsenodes.h
 // - in the order fields are listed in AssertPGNodeConsistsOf, for each field,
 //   one of:
-//   - ZETASQL_RET_CHECK validation if presence of the field breaks the invariant
+//   - GOOGLESQL_RET_CHECK validation if presence of the field breaks the invariant
 //   - Validate and return UnsupportedTranslationError if field is misused
 //   - Comment explaining where and how we validate the field if more validation
 //     is required.

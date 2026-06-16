@@ -31,11 +31,11 @@
 
 #include "third_party/spanner_pg/util/unittest_utils.h"
 
-#include "zetasql/public/analyzer.h"
-#include "zetasql/public/catalog.h"
+#include "googlesql/public/analyzer.h"
+#include "googlesql/public/catalog.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
 #include "third_party/spanner_pg/shims/memory_context_manager.h"
 #include "third_party/spanner_pg/shims/memory_reservation_holder.h"
@@ -48,7 +48,7 @@ namespace {
 
 using ::postgres_translator::test::ValidMemoryContext;
 using ::testing::HasSubstr;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 
 TEST_F(ValidMemoryContext, InvalidArgumentParseTest) {
   std::string sql = "select 1; select 2";
@@ -69,17 +69,17 @@ TEST(UnittestUtilsTest, InvalidSetupAnalyzerTest) {
   {
     // Set up a MemoryReservationManager, expect parser to succeed.
     auto reservation_manager = std::make_unique<StubMemoryReservationManager>();
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         MemoryReservationHolder reservation_holder,
         MemoryReservationHolder::Create(reservation_manager.get()));
-    ZETASQL_ASSERT_OK_AND_ASSIGN(auto memory_context,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto memory_context,
                          MemoryContextManager::Init("UnittestUtils test"));
-    ZETASQL_ASSERT_OK_AND_ASSIGN(parse_tree, ParseFromPostgres(sql));
-    ZETASQL_ASSERT_OK(memory_context.Clear());
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(parse_tree, ParseFromPostgres(sql));
+    GOOGLESQL_ASSERT_OK(memory_context.Clear());
   }
 
   // Now there is no MemoryReservationManager, expect analyzer error.
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   EXPECT_THAT(AnalyzeFromPostgresForTest(sql, parse_tree, analyzer_options),
               StatusIs(absl::StatusCode::kInternal));
@@ -90,7 +90,7 @@ TEST(UnittestUtilsTest, InvalidSetupAnalyzerTest) {
 }
 
 TEST_F(ValidMemoryContext, InvalidInputAnalyzerTest) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
@@ -102,7 +102,7 @@ TEST_F(ValidMemoryContext, InvalidInputAnalyzerTest) {
 }
 
 TEST_F(ValidMemoryContext, ParseAndAnalyzeFromPostgresTest) {
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapterHolder> catalog_adapter_holder =
       GetSpangresTestCatalogAdapterHolder(analyzer_options);
@@ -110,46 +110,46 @@ TEST_F(ValidMemoryContext, ParseAndAnalyzeFromPostgresTest) {
   // A valid sql string, expect success.
   std::string sql = "select 1";
   List* parse_tree;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(parse_tree, ParseFromPostgres(sql));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(parse_tree, ParseFromPostgres(sql));
   ASSERT_NE(parse_tree, nullptr);
 
   Query* query;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       query, AnalyzeFromPostgresForTest(sql, parse_tree, analyzer_options));
 
   EXPECT_NE(query, nullptr);
 }
 
-TEST(UnittestUtilsTest, ParseAndAnalyzeFromZetaSQLNegativeTest) {
+TEST(UnittestUtilsTest, ParseAndAnalyzeFromGoogleSQLNegativeTest) {
   // No valid catalog, expect error.
   std::string sql = "select 1";
-  zetasql::TypeFactory type_factory;
-  std::unique_ptr<const zetasql::AnalyzerOutput> gsql_output;
+  googlesql::TypeFactory type_factory;
+  std::unique_ptr<const googlesql::AnalyzerOutput> gsql_output;
 
-  // Invalid zetasql::TypeFactory, expect error.
+  // Invalid googlesql::TypeFactory, expect error.
   EXPECT_THAT(
-      ParseAndAnalyzeFromZetaSQLForTest(sql, /*type_factory=*/nullptr,
+      ParseAndAnalyzeFromGoogleSQLForTest(sql, /*type_factory=*/nullptr,
                                           &gsql_output),
       StatusIs(absl::StatusCode::kInternal,
-               HasSubstr("A valid zetasql::TypeFactory object is needed")));
+               HasSubstr("A valid googlesql::TypeFactory object is needed")));
 
-  // Invalid zetasql::AnalyzerOutput, expect error.
+  // Invalid googlesql::AnalyzerOutput, expect error.
   EXPECT_THAT(
-      ParseAndAnalyzeFromZetaSQLForTest(sql, &type_factory,
+      ParseAndAnalyzeFromGoogleSQLForTest(sql, &type_factory,
                                           /*gsql_output=*/nullptr),
       StatusIs(
           absl::StatusCode::kInternal,
-          HasSubstr("A valid zetasql::AnalyzerOutput object is needed")));
+          HasSubstr("A valid googlesql::AnalyzerOutput object is needed")));
 }
 
-TEST(UnittestUtilsTest, ParseAndAnalyzeFromZetaSQLTest) {
+TEST(UnittestUtilsTest, ParseAndAnalyzeFromGoogleSQLTest) {
   std::string sql = "select 1";
-  zetasql::TypeFactory type_factory;
-  std::unique_ptr<const zetasql::AnalyzerOutput> gsql_output;
+  googlesql::TypeFactory type_factory;
+  std::unique_ptr<const googlesql::AnalyzerOutput> gsql_output;
 
   // Valid arguments, expect success.
-  ZETASQL_ASSERT_OK(
-      ParseAndAnalyzeFromZetaSQLForTest(sql, &type_factory, &gsql_output));
+  GOOGLESQL_ASSERT_OK(
+      ParseAndAnalyzeFromGoogleSQLForTest(sql, &type_factory, &gsql_output));
   EXPECT_NE(gsql_output->resolved_statement(), nullptr);
 }
 

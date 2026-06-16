@@ -19,7 +19,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "tests/conformance/common/database_test_base.h"
@@ -31,7 +31,7 @@ namespace test {
 
 namespace {
 
-using zetasql_base::testing::StatusIs;
+using googlesql_base::testing::StatusIs;
 
 class ColumnConstraintsTest
     : public DatabaseTest,
@@ -65,7 +65,7 @@ TEST_P(ColumnConstraintsTest, CannotInsertNullValueIntoTableWithNonNullColumn) {
 }
 
 TEST_P(ColumnConstraintsTest, CannotInsertOrUpdateRowInTableWithNonNullColumn) {
-  ZETASQL_EXPECT_OK(Insert("testtable", {"id1", "stringcol"}, {1, "value"}));
+  GOOGLESQL_EXPECT_OK(Insert("testtable", {"id1", "stringcol"}, {1, "value"}));
   // NOT NULL stringcol is missing from InsertOrUpdate, and this will error.
   EXPECT_THAT(
       InsertOrUpdate("testtable", {"id1", "bytescol"}, {1, Bytes("1234")}),
@@ -73,17 +73,17 @@ TEST_P(ColumnConstraintsTest, CannotInsertOrUpdateRowInTableWithNonNullColumn) {
 }
 
 TEST_P(ColumnConstraintsTest, CannotReplaceRowInTableWithNonNullColumn) {
-  ZETASQL_EXPECT_OK(Insert("testtable", {"id1", "stringcol"}, {1, "value"}));
+  GOOGLESQL_EXPECT_OK(Insert("testtable", {"id1", "stringcol"}, {1, "value"}));
   // NOT NULL stringcol is missing from Replace, and this will error.
   EXPECT_THAT(Replace("testtable", {"id1", "bytescol"}, {1, Bytes("1234")}),
               StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
 TEST_P(ColumnConstraintsTest, CanUpdateRowInTableWithNonNullColumn) {
-  ZETASQL_EXPECT_OK(Insert("testtable", {"id1", "stringcol"}, {1, "value"}));
+  GOOGLESQL_EXPECT_OK(Insert("testtable", {"id1", "stringcol"}, {1, "value"}));
   // NOT NULL stringcol is missing from update, but it already exists so this
   // should succeed.
-  ZETASQL_EXPECT_OK(Update("testtable", {"id1", "bytescol"}, {1, Bytes("1234")}));
+  GOOGLESQL_EXPECT_OK(Update("testtable", {"id1", "bytescol"}, {1, Bytes("1234")}));
 }
 
 TEST_P(ColumnConstraintsTest, SizeEnforcementHappensOnUTFCharactersForStrings) {
@@ -91,7 +91,7 @@ TEST_P(ColumnConstraintsTest, SizeEnforcementHappensOnUTFCharactersForStrings) {
   std::array<unsigned char, 20> utf_chars = {
       0xF0, 0x9F, 0x80, 0xA1, 0xF0, 0x9F, 0x81, 0xA2, 0xF0, 0x9F,
       0x82, 0xA3, 0xF0, 0x9F, 0x83, 0xA4, 0xF0, 0x9F, 0x84, 0xA5};
-  ZETASQL_EXPECT_OK(Insert("testtable", {"id1", "stringcol"},
+  GOOGLESQL_EXPECT_OK(Insert("testtable", {"id1", "stringcol"},
                    {1, std::string(utf_chars.begin(), utf_chars.end())}));
 }
 

@@ -21,13 +21,13 @@
 #include <ostream>
 #include <string>
 
-#include "zetasql/base/logging.h"
+#include "googlesql/base/logging.h"
 #include "google/protobuf/message.h"
 #include "google/protobuf/util/field_comparator.h"
 #include "google/protobuf/util/message_differencer.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/strings/string_view.h"
 
@@ -55,7 +55,7 @@ class ParseProtoHelper {
   operator ProtoT() {
     ProtoT proto;
     std::string error_text;
-    ZETASQL_VLOG(ParsePartialFromAscii(asciipb_, &proto, &error_text))  // Crash ok.
+    GOOGLESQL_VLOG(ParsePartialFromAscii(asciipb_, &proto, &error_text))  // Crash ok.
         << "Failed to parse \"" << asciipb_ << "\" as a "
         << proto.GetDescriptor()->full_name() << ":\n"
         << error_text;

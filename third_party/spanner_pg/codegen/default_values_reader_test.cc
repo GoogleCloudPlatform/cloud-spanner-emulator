@@ -35,7 +35,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/status/status.h"
 #include "third_party/spanner_pg/codegen/default_values_embed.h"
 
@@ -43,10 +43,10 @@ namespace postgres_translator {
 namespace {
 
 using ::testing::HasSubstr;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 
 TEST(ProcsDefaultValuesReaderTest, ParsesProductionCatalogCorrectly) {
-  ZETASQL_ASSERT_OK(GetProcsDefaultValues(kDefaultValuesEmbed));
+  GOOGLESQL_ASSERT_OK(GetProcsDefaultValues(kDefaultValuesEmbed));
 }
 
 TEST(ProcsDefaultValuesReaderTest, ReturnsErrorWhenJsonIsMalformed) {

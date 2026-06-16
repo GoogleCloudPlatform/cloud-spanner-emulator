@@ -39,21 +39,21 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/analyzer/expr_matching_helpers.h"
-#include "zetasql/public/id_string.h"
-#include "zetasql/public/types/type.h"
-#include "zetasql/resolved_ast/resolved_ast.h"
-#include "zetasql/resolved_ast/resolved_ast_enums.pb.h"
-#include "zetasql/resolved_ast/resolved_column.h"
+#include "googlesql/analyzer/expr_matching_helpers.h"
+#include "googlesql/public/id_string.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_ast_enums.pb.h"
+#include "googlesql/resolved_ast/resolved_column.h"
 #include "absl/memory/memory.h"
 #include "absl/strings/string_view.h"
 #include "third_party/spanner_pg/postgres_includes/all.h"
-#include "zetasql/base/map_util.h"
+#include "googlesql/base/map_util.h"
 
 namespace postgres_translator {
 
 // Converting a Postgres positional parameter (an integer)
-// to a ZetaSQL named parameter (a string) by prepending the prefix.
+// to a GoogleSQL named parameter (a string) by prepending the prefix.
 inline constexpr absl::string_view kParameterPrefix = "p";
 
 inline constexpr absl::string_view kAnonymousQuery = "$query";
@@ -72,11 +72,11 @@ inline constexpr absl::string_view kGroupByPrefix = "$groupby";
 inline constexpr absl::string_view kPreGroupByPrefix = "$pre_groupby";
 inline constexpr absl::string_view kDistinctId = "$distinct";
 
-// kEqualFunction is the ZetaSQL function for equal. This maps to the
+// kEqualFunction is the GoogleSQL function for equal. This maps to the
 // PostgreSQL "=" operators.
 inline constexpr absl::string_view kEqualFunction = "$equal";
 
-// kFullJoin is the ZetaSQL placeholder name for columns corresponding to a
+// kFullJoin is the GoogleSQL placeholder name for columns corresponding to a
 // FULL JOIN with USING.
 inline constexpr absl::string_view kFullJoin = "$full_join";
 
@@ -109,30 +109,30 @@ TemporaryVectorElement(std::vector<Element>& vector)
 
 struct NamedColumn {
  public:
-  NamedColumn(zetasql::IdString name_in,
-              const zetasql::ResolvedColumn& column_in)
+  NamedColumn(googlesql::IdString name_in,
+              const googlesql::ResolvedColumn& column_in)
       : name(name_in), column(column_in) {}
 
-  zetasql::IdString name;
-  zetasql::ResolvedColumn column;
+  googlesql::IdString name;
+  googlesql::ResolvedColumn column;
 };
 
 struct NamedSubquery {
   NamedSubquery(absl::string_view subquery_name_in,
-                const std::vector<zetasql::ResolvedColumn>& column_list_in,
+                const std::vector<googlesql::ResolvedColumn>& column_list_in,
                 const std::vector<NamedColumn>& column_aliases_in)
       : subquery_name(subquery_name_in),
         column_list(column_list_in),
         column_aliases(column_aliases_in) {}
 
   std::string subquery_name;
-  std::vector<zetasql::ResolvedColumn> column_list;
+  std::vector<googlesql::ResolvedColumn> column_list;
   std::vector<NamedColumn> column_aliases;
 };
 
 // TransformerGroupByAndAggregateInfo is used (and mutated) to store info
 // related to grouping/distinct and aggregation analysis for a single SELECT
-// query block. Originally modeled after ZetaSQL's
+// query block. Originally modeled after GoogleSQL's
 // QueryGroupByAndAggregateInfo.
 struct TransformerGroupByAndAggregateInfo {
   TransformerGroupByAndAggregateInfo() {}
@@ -148,11 +148,11 @@ struct TransformerGroupByAndAggregateInfo {
   // computed columns for the given aggregate expression.
   // Not owned.
   // The ResolvedComputedColumns are owned by <aggregate_columns_>.
-  std::map<const Expr*, const zetasql::ResolvedComputedColumn*>
+  std::map<const Expr*, const googlesql::ResolvedComputedColumn*>
       aggregate_expr_map;
 
   // Group by expressions that must be computed.
-  std::vector<std::unique_ptr<const zetasql::ResolvedComputedColumn>>
+  std::vector<std::unique_ptr<const googlesql::ResolvedComputedColumn>>
       group_by_columns_to_compute;
 
   // Aggregate function calls that must be computed.
@@ -160,11 +160,11 @@ struct TransformerGroupByAndAggregateInfo {
   // resolution, aggregate functions are moved into <aggregate_columns_> and
   // replaced by a ResolvedColumnRef pointing at the ResolvedColumn created
   // here.
-  std::vector<std::unique_ptr<const zetasql::ResolvedComputedColumn>>
+  std::vector<std::unique_ptr<const googlesql::ResolvedComputedColumn>>
       aggregate_columns_to_compute;
 
-  // Map of GROUP BY Vars to the GROUP BY zetasql::ResolvedColumn
-  std::unordered_map<const Var*, zetasql::ResolvedColumn> group_by_map;
+  // Map of GROUP BY Vars to the GROUP BY googlesql::ResolvedColumn
+  std::unordered_map<const Var*, googlesql::ResolvedColumn> group_by_map;
 
   bool is_post_distinct = false;
 
@@ -184,12 +184,12 @@ struct TransformerGroupByAndAggregateInfo {
 // SelectColumnTransformState contains state related to an expression in the
 // select-list of a query, while it is being transformed. This is used and
 // mutated in multiple passes while transforming the SELECT-list and GROUP BY.
-// Originally modeled after ZetaSQL's SelectColumnState.
+// Originally modeled after GoogleSQL's SelectColumnState.
 struct SelectColumnTransformState {
   explicit SelectColumnTransformState(
-      const TargetEntry* entry, zetasql::IdString alias_in,
+      const TargetEntry* entry, googlesql::IdString alias_in,
       bool has_aggregation_in,
-      std::unique_ptr<const zetasql::ResolvedExpr> resolved_expr_in)
+      std::unique_ptr<const googlesql::ResolvedExpr> resolved_expr_in)
       : target_entry(entry),
         alias(alias_in),
         resolved_expr(std::move(resolved_expr_in)),
@@ -199,7 +199,7 @@ struct SelectColumnTransformState {
   SelectColumnTransformState& operator=(const SelectColumnTransformState&) =
       delete;
 
-  const zetasql::Type* GetType() const {
+  const googlesql::Type* GetType() const {
     if (resolved_select_column.IsInitialized()) {
       return resolved_select_column.type();
     }
@@ -213,13 +213,13 @@ struct SelectColumnTransformState {
   const TargetEntry* target_entry;
 
   // The alias for this column.
-  const zetasql::IdString alias;
+  const googlesql::IdString alias;
 
   // Owned ResolvedExpr for this SELECT list column. If we need a
   // ResolvedComputedColumn for this SELECT column, then ownership of
   // this <resolved_expr> will be transferred to that ResolvedComputedColumn
   // and <resolved_expr> will be set to NULL.
-  std::unique_ptr<const zetasql::ResolvedExpr> resolved_expr;
+  std::unique_ptr<const googlesql::ResolvedExpr> resolved_expr;
 
   // References the related ResolvedComputedColumn for this SELECT list column,
   // if one is needed.  Otherwise it is NULL.  The referenced
@@ -228,7 +228,7 @@ struct SelectColumnTransformState {
   // between this SELECT list column and its related expression for
   // subsequent HAVING and ORDER BY expression analysis.
   // Not owned.
-  const zetasql::ResolvedComputedColumn* resolved_computed_column = nullptr;
+  const googlesql::ResolvedComputedColumn* resolved_computed_column = nullptr;
 
   // True if this expression includes aggregation.  Select-list expressions
   // that use aggregation cannot be referenced in GROUP BY.
@@ -242,12 +242,12 @@ struct SelectColumnTransformState {
   // been fully transformed, <resolved_select_column> will be initialized.
   // After it is set, it is used in subsequent expression transformation (SELECT
   // list ordinal references and SELECT list alias references).
-  zetasql::ResolvedColumn resolved_select_column;
+  googlesql::ResolvedColumn resolved_select_column;
 
   // If set, indicates the pre-GROUP BY version of the column.  Will only
   // be set if the column must be computed before the AggregateScan (so
   // it will not necessarily always be set if is_group_by_column is true).
-  zetasql::ResolvedColumn resolved_pre_group_by_select_column;
+  googlesql::ResolvedColumn resolved_pre_group_by_select_column;
 };
 
 // This class contains a SelectColumnTransformState for each column in the
@@ -261,9 +261,9 @@ class SelectListTransformState {
   // Creates and returns a SelectColumnTransformState for a new SELECT-list
   // column.
   SelectColumnTransformState* AddSelectColumn(
-      const TargetEntry* target_entry, zetasql::IdString alias,
+      const TargetEntry* target_entry, googlesql::IdString alias,
       bool has_aggregation,
-      std::unique_ptr<const zetasql::ResolvedExpr> resolved_expr);
+      std::unique_ptr<const googlesql::ResolvedExpr> resolved_expr);
 
   std::vector<std::unique_ptr<SelectColumnTransformState>>&
   select_column_state_list() {
@@ -273,7 +273,7 @@ class SelectListTransformState {
   // Returns a list of output ResolvedColumns, one ResolvedColumn per
   // <select_column_state_list_> entry.  Currently only used when creating a
   // ProjectScan, ensuring that all SELECT list columns are in the scan.
-  const zetasql::ResolvedColumnList resolved_column_list() const;
+  const googlesql::ResolvedColumnList resolved_column_list() const;
 
  private:
   std::vector<std::unique_ptr<SelectColumnTransformState>>
@@ -284,8 +284,8 @@ struct OrderByItemTransformInfo {
   // Constructor for OrderByItems that are not in the SELECT list and must
   // transform their Exprs.
   OrderByItemTransformInfo(
-      std::unique_ptr<const zetasql::ResolvedExpr> expr, bool descending,
-      zetasql::ResolvedOrderByItemEnums::NullOrderMode null_order)
+      std::unique_ptr<const googlesql::ResolvedExpr> expr, bool descending,
+      googlesql::ResolvedOrderByItemEnums::NullOrderMode null_order)
       : order_expression(std::move(expr)),
         select_list_index(0),
         is_descending(descending),
@@ -295,19 +295,19 @@ struct OrderByItemTransformInfo {
   // use the ResolvedExpr from transforming the SELECT list.
   OrderByItemTransformInfo(
       int select_list_index, bool descending,
-      zetasql::ResolvedOrderByItemEnums::NullOrderMode null_order)
+      googlesql::ResolvedOrderByItemEnums::NullOrderMode null_order)
       : order_expression(nullptr),
         select_list_index(select_list_index),
         is_descending(descending),
         null_order(null_order) {}
 
-  std::unique_ptr<const zetasql::ResolvedExpr> order_expression;
+  std::unique_ptr<const googlesql::ResolvedExpr> order_expression;
   int select_list_index;
-  zetasql::ResolvedColumn order_column;
+  googlesql::ResolvedColumn order_column;
 
   bool is_descending;  // Indicates DESC or ASC.
   // Indicates NULLS LAST or NULLS FIRST.
-  zetasql::ResolvedOrderByItemEnums::NullOrderMode null_order;
+  googlesql::ResolvedOrderByItemEnums::NullOrderMode null_order;
 };
 
 // TransformerInfo is used (and mutated) to store info related to
@@ -317,7 +317,7 @@ struct OrderByItemTransformInfo {
 // See comments on Transformer::BuildGsqlResolvedScanForSelect for discussion of
 // the various phases of analysis and how TransformerInfo is updated
 // and referenced during that process.
-// Originally modeled after ZetaSQL's QueryResolutionInfo.
+// Originally modeled after GoogleSQL's QueryResolutionInfo.
 class TransformerInfo {
  public:
   TransformerInfo() {
@@ -328,20 +328,20 @@ class TransformerInfo {
 
   // Adds group by column <column>, which is computed from <expr>.
   void AddGroupByComputedColumnIfNeeded(
-      const zetasql::ResolvedColumn& column,
-      std::unique_ptr<const zetasql::ResolvedExpr> expr);
+      const googlesql::ResolvedColumn& column,
+      std::unique_ptr<const googlesql::ResolvedExpr> expr);
 
   void AddAggregateComputedColumn(
       const Expr* aggregate_expr,
-      std::unique_ptr<const zetasql::ResolvedComputedColumn> column) {
+      std::unique_ptr<const googlesql::ResolvedComputedColumn> column) {
     group_by_info_.has_aggregation = true;
-    zetasql_base::InsertIfNotPresent(&group_by_info_.aggregate_expr_map, aggregate_expr,
+    googlesql_base::InsertIfNotPresent(&group_by_info_.aggregate_expr_map, aggregate_expr,
                             column.get());
     group_by_info_.aggregate_columns_to_compute.push_back(std::move(column));
   }
 
   void AddGroupByVarIndexColumn(const Var* var,
-                                const zetasql::ResolvedColumn& column) {
+                                const googlesql::ResolvedColumn& column) {
     group_by_info_.group_by_map[var] = column;
   }
 
@@ -353,33 +353,33 @@ class TransformerInfo {
 
   bool HasHavingOrOrderBy() const { return has_having_ || has_order_by_; }
 
-  const std::vector<std::unique_ptr<const zetasql::ResolvedComputedColumn>>&
+  const std::vector<std::unique_ptr<const googlesql::ResolvedComputedColumn>>&
   group_by_columns_to_compute() const {
     return group_by_info_.group_by_columns_to_compute;
   }
 
-  std::vector<std::unique_ptr<const zetasql::ResolvedComputedColumn>>
+  std::vector<std::unique_ptr<const googlesql::ResolvedComputedColumn>>
   release_group_by_columns_to_compute() {
-    std::vector<std::unique_ptr<const zetasql::ResolvedComputedColumn>> tmp;
+    std::vector<std::unique_ptr<const googlesql::ResolvedComputedColumn>> tmp;
     group_by_info_.group_by_columns_to_compute.swap(tmp);
     return tmp;
   }
 
-  const std::vector<std::unique_ptr<const zetasql::ResolvedComputedColumn>>&
+  const std::vector<std::unique_ptr<const googlesql::ResolvedComputedColumn>>&
   aggregate_columns_to_compute() const {
     return group_by_info_.aggregate_columns_to_compute;
   }
 
   // Transfer ownership of aggregate_columns_to_compute, clearing the
   // internal storage.
-  std::vector<std::unique_ptr<const zetasql::ResolvedComputedColumn>>
+  std::vector<std::unique_ptr<const googlesql::ResolvedComputedColumn>>
   release_aggregate_columns_to_compute() {
-    std::vector<std::unique_ptr<const zetasql::ResolvedComputedColumn>> tmp;
+    std::vector<std::unique_ptr<const googlesql::ResolvedComputedColumn>> tmp;
     group_by_info_.aggregate_columns_to_compute.swap(tmp);
     return tmp;
   }
 
-  const std::unordered_map<const Var*, zetasql::ResolvedColumn>&
+  const std::unordered_map<const Var*, googlesql::ResolvedColumn>&
   group_by_map() const {
     return group_by_info_.group_by_map;
   }
@@ -399,35 +399,35 @@ class TransformerInfo {
         .get();
   }
 
-  std::vector<std::unique_ptr<const zetasql::ResolvedComputedColumn>>*
+  std::vector<std::unique_ptr<const googlesql::ResolvedComputedColumn>>*
   select_list_columns_to_compute() {
     return &select_list_columns_to_compute_;
   }
 
   // Transfer ownership of select_list_columns_to_compute, clearing the
   // internal storage.
-  std::vector<std::unique_ptr<const zetasql::ResolvedComputedColumn>>
+  std::vector<std::unique_ptr<const googlesql::ResolvedComputedColumn>>
   release_select_list_columns_to_compute() {
-    std::vector<std::unique_ptr<const zetasql::ResolvedComputedColumn>> tmp;
+    std::vector<std::unique_ptr<const googlesql::ResolvedComputedColumn>> tmp;
     select_list_columns_to_compute_.swap(tmp);
     return tmp;
   }
 
-  std::vector<std::unique_ptr<const zetasql::ResolvedComputedColumn>>*
+  std::vector<std::unique_ptr<const googlesql::ResolvedComputedColumn>>*
   select_list_columns_to_compute_before_aggregation() {
     return &select_list_columns_to_compute_before_aggregation_;
   }
 
   // Transfer ownership of select_list_columns_to_compute_before_aggregation,
   // clearing the internal storage.
-  std::vector<std::unique_ptr<const zetasql::ResolvedComputedColumn>>
+  std::vector<std::unique_ptr<const googlesql::ResolvedComputedColumn>>
   release_select_list_columns_to_compute_before_aggregation() {
-    std::vector<std::unique_ptr<const zetasql::ResolvedComputedColumn>> tmp;
+    std::vector<std::unique_ptr<const googlesql::ResolvedComputedColumn>> tmp;
     select_list_columns_to_compute_before_aggregation_.swap(tmp);
     return tmp;
   }
 
-  const std::map<const Expr*, const zetasql::ResolvedComputedColumn*>&
+  const std::map<const Expr*, const googlesql::ResolvedComputedColumn*>&
   aggregate_expr_map() {
     return group_by_info_.aggregate_expr_map;
   }
@@ -442,16 +442,16 @@ class TransformerInfo {
     return &order_by_item_transform_info_;
   }
 
-  std::vector<std::unique_ptr<const zetasql::ResolvedComputedColumn>>*
+  std::vector<std::unique_ptr<const googlesql::ResolvedComputedColumn>>*
   order_by_columns_to_compute() {
     return &order_by_columns_to_compute_;
   }
 
   // Transfer ownership of order_by_columns_to_compute, clearing the
   // internal storage.
-  std::vector<std::unique_ptr<const zetasql::ResolvedComputedColumn>>
+  std::vector<std::unique_ptr<const googlesql::ResolvedComputedColumn>>
   release_order_by_columns_to_compute() {
-    std::vector<std::unique_ptr<const zetasql::ResolvedComputedColumn>> tmp;
+    std::vector<std::unique_ptr<const googlesql::ResolvedComputedColumn>> tmp;
     order_by_columns_to_compute_.swap(tmp);
     return tmp;
   }
@@ -478,13 +478,13 @@ class TransformerInfo {
   bool is_post_distinct() const { return group_by_info_.is_post_distinct; }
 
   void set_lock_mode(
-      std::unique_ptr<const zetasql::ResolvedLockMode> lock_mode) {
+      std::unique_ptr<const googlesql::ResolvedLockMode> lock_mode) {
     lock_mode_ = std::move(lock_mode);
   }
 
   bool has_lock_mode() const { return lock_mode_ != nullptr; }
 
-  const zetasql::ResolvedLockMode* get_lock_mode() const {
+  const googlesql::ResolvedLockMode* get_lock_mode() const {
     if (lock_mode_ != nullptr) {
       return lock_mode_.get();
     }
@@ -501,7 +501,7 @@ class TransformerInfo {
   std::unique_ptr<SelectListTransformState> select_list_transform_state_;
 
   // SELECT list computed columns.
-  std::vector<std::unique_ptr<const zetasql::ResolvedComputedColumn>>
+  std::vector<std::unique_ptr<const googlesql::ResolvedComputedColumn>>
       select_list_columns_to_compute_;
 
   // Columns that must be computed before the AggregateScan. It is populated
@@ -509,7 +509,7 @@ class TransformerInfo {
   // either HAVING or ORDER BY is present in the query.
   // This list only contains SELECT columns that do not themselves include
   // aggregation.
-  std::vector<std::unique_ptr<const zetasql::ResolvedComputedColumn>>
+  std::vector<std::unique_ptr<const googlesql::ResolvedComputedColumn>>
       select_list_columns_to_compute_before_aggregation_;
 
   // SELECT DISTINCT information
@@ -529,12 +529,12 @@ class TransformerInfo {
   std::vector<OrderByItemTransformInfo> order_by_item_transform_info_;
 
   // Columns that need to be computed for ORDER BY (before OrderByScan).
-  std::vector<std::unique_ptr<const zetasql::ResolvedComputedColumn>>
+  std::vector<std::unique_ptr<const googlesql::ResolvedComputedColumn>>
       order_by_columns_to_compute_;
 
   // Lock mode information which is recoreded at the query-level then
   // passed down to the point where a ResolvedTableScan node is created.
-  std::unique_ptr<const zetasql::ResolvedLockMode> lock_mode_ = nullptr;
+  std::unique_ptr<const googlesql::ResolvedLockMode> lock_mode_ = nullptr;
 };
 
 }  // namespace postgres_translator

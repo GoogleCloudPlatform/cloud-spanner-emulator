@@ -24,8 +24,8 @@
 #include "google/protobuf/struct.pb.h"
 #include "google/spanner/v1/keys.pb.h"
 #include "google/spanner/v1/result_set.pb.h"
-#include "zetasql/public/type.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/type.h"
+#include "googlesql/public/value.h"
 #include "absl/strings/str_cat.h"
 #include "backend/access/write.h"
 #include "backend/datamodel/key.h"
@@ -86,7 +86,7 @@ absl::Status WriteFromProto(const backend::Schema& schema,
                                                        values.values_size());
     }
     for (int i = 0; i < columns.size(); ++i) {
-      ZETASQL_ASSIGN_OR_RETURN(row_values.emplace_back(),
+      GOOGLESQL_ASSIGN_OR_RETURN(row_values.emplace_back(),
                        ValueFromProto(values.values(i), columns[i]->GetType()));
     }
     value_list.push_back(std::move(row_values));
@@ -140,12 +140,12 @@ absl::Status DeleteFromProto(const backend::Schema& schema,
   }
 
   // Parse the delete key set from the request proto.
-  ZETASQL_ASSIGN_OR_RETURN(backend::KeySet key_set,
+  GOOGLESQL_ASSIGN_OR_RETURN(backend::KeySet key_set,
                    KeySetFromProto(delete_pb.key_set(), *table));
 
   // Perform extra validations for delete ranges in the request key set.
   for (const backend::KeyRange& range : key_set.ranges()) {
-    ZETASQL_RETURN_IF_ERROR(ValidateDeleteRange(range));
+    GOOGLESQL_RETURN_IF_ERROR(ValidateDeleteRange(range));
   }
 
   mutation->AddDeleteOp(table->Name(), key_set);
@@ -161,27 +161,27 @@ absl::Status MutationFromProto(
   for (const spanner_api::Mutation& mutation_pb : mutation_pbs) {
     switch (mutation_pb.operation_case()) {
       case spanner_api::Mutation::kInsert:
-        ZETASQL_RETURN_IF_ERROR(WriteFromProto(schema, mutation_pb.insert(),
+        GOOGLESQL_RETURN_IF_ERROR(WriteFromProto(schema, mutation_pb.insert(),
                                        backend::MutationOpType::kInsert,
                                        mutation));
         break;
       case spanner_api::Mutation::kUpdate:
-        ZETASQL_RETURN_IF_ERROR(WriteFromProto(schema, mutation_pb.update(),
+        GOOGLESQL_RETURN_IF_ERROR(WriteFromProto(schema, mutation_pb.update(),
                                        backend::MutationOpType::kUpdate,
                                        mutation));
         break;
       case spanner_api::Mutation::kInsertOrUpdate:
-        ZETASQL_RETURN_IF_ERROR(WriteFromProto(schema, mutation_pb.insert_or_update(),
+        GOOGLESQL_RETURN_IF_ERROR(WriteFromProto(schema, mutation_pb.insert_or_update(),
                                        backend::MutationOpType::kInsertOrUpdate,
                                        mutation));
         break;
       case spanner_api::Mutation::kReplace:
-        ZETASQL_RETURN_IF_ERROR(WriteFromProto(schema, mutation_pb.replace(),
+        GOOGLESQL_RETURN_IF_ERROR(WriteFromProto(schema, mutation_pb.replace(),
                                        backend::MutationOpType::kReplace,
                                        mutation));
         break;
       case spanner_api::Mutation::kDelete:
-        ZETASQL_RETURN_IF_ERROR(
+        GOOGLESQL_RETURN_IF_ERROR(
             DeleteFromProto(schema, mutation_pb.delete_(), mutation));
         break;
       default:

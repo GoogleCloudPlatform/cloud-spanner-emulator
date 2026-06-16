@@ -1093,16 +1093,29 @@ CREATE TABLE inhta ();
 CREATE TABLE inhtb () INHERITS (inhta);
 CREATE TABLE inhtc () INHERITS (inhtb);
 CREATE TABLE inhtd () INHERITS (inhta, inhtb, inhtc);
-ALTER TABLE inhta ADD COLUMN i int;
+ALTER TABLE inhta ADD COLUMN i int, ADD COLUMN j bigint DEFAULT 1;
 NOTICE:  merging definition of column "i" for child "inhtd"
 NOTICE:  merging definition of column "i" for child "inhtd"
+NOTICE:  merging definition of column "j" for child "inhtd"
+NOTICE:  merging definition of column "j" for child "inhtd"
 \d+ inhta
                                    Table "public.inhta"
  Column |  Type   | Collation | Nullable | Default | Storage | Stats target | Description 
 --------+---------+-----------+----------+---------+---------+--------------+-------------
  i      | integer |           |          |         | plain   |              | 
+ j      | bigint  |           |          | 1       | plain   |              | 
 Child tables: inhtb,
               inhtd
+
+\d+ inhtd
+                                   Table "public.inhtd"
+ Column |  Type   | Collation | Nullable | Default | Storage | Stats target | Description 
+--------+---------+-----------+----------+---------+---------+--------------+-------------
+ i      | integer |           |          |         | plain   |              | 
+ j      | bigint  |           |          | 1       | plain   |              | 
+Inherits: inhta,
+          inhtb,
+          inhtc
 
 DROP TABLE inhta, inhtb, inhtc, inhtd;
 -- Test for renaming in diamond inheritance
@@ -2634,7 +2647,7 @@ alter table permtest_child attach partition permtest_grandchild for values in ('
 alter table permtest_parent attach partition permtest_child for values in (1);
 create index on permtest_parent (left(c, 3));
 insert into permtest_parent
-  select 1, 'a', left(md5(i::text), 5) from generate_series(0, 100) i;
+  select 1, 'a', left(fipshash(i::text), 5) from generate_series(0, 100) i;
 analyze permtest_parent;
 create role regress_no_child_access;
 revoke all on permtest_grandchild from regress_no_child_access;

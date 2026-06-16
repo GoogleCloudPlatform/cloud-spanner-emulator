@@ -3,7 +3,7 @@
  * win32stat.c
  *	  Replacements for <sys/stat.h> functions using GetFileInformationByHandle
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -14,8 +14,6 @@
  */
 
 #ifdef WIN32
-
-#define UMDF_USING_NTSTATUS
 
 #include "c.h"
 #include "port/win32ntdll.h"
@@ -201,15 +199,25 @@ _pglstat64(const char *name, struct stat *buf)
 int
 _pgstat64(const char *name, struct stat *buf)
 {
+	int			loops = 0;
 	int			ret;
+	char		curr[MAXPGPATH];
 
 	ret = _pglstat64(name, buf);
 
+	strlcpy(curr, name, MAXPGPATH);
+
 	/* Do we need to follow a symlink (junction point)? */
-	if (ret == 0 && S_ISLNK(buf->st_mode))
+	while (ret == 0 && S_ISLNK(buf->st_mode))
 	{
 		char		next[MAXPGPATH];
 		ssize_t		size;
+
+		if (++loops > 8)
+		{
+			errno = ELOOP;
+			return -1;
+		}
 
 		/*
 		 * _pglstat64() already called readlink() once to be able to fill in
@@ -217,7 +225,7 @@ _pgstat64(const char *name, struct stat *buf)
 		 * That could be optimized, but stat() on symlinks is probably rare
 		 * and this way is simple.
 		 */
-		size = readlink(name, next, sizeof(next));
+		size = readlink(curr, next, sizeof(next));
 		if (size < 0)
 		{
 			if (errno == EACCES &&
@@ -236,17 +244,7 @@ _pgstat64(const char *name, struct stat *buf)
 		next[size] = 0;
 
 		ret = _pglstat64(next, buf);
-		if (ret == 0 && S_ISLNK(buf->st_mode))
-		{
-			/*
-			 * We're only prepared to go one hop, because we only expect to
-			 * deal with the simple cases that we create.  The error for too
-			 * many symlinks is supposed to be ELOOP, but Windows hasn't got
-			 * it.
-			 */
-			errno = EIO;
-			return -1;
-		}
+		strcpy(curr, next);
 	}
 
 	return ret;

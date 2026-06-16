@@ -22,8 +22,8 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/analyzer_options.h"
-#include "zetasql/public/type.h"
+#include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/type.h"
 #include "absl/status/statusor.h"
 #include "backend/access/read.h"
 #include "backend/access/write.h"
@@ -51,27 +51,27 @@ struct ExecuteUpdateResult {
 // is returned at the end of ON CONFLICT DML execution.
 struct InsertOnConflictReturningRows {
   std::vector<std::string> column_names;
-  std::vector<const zetasql::Type*> column_types;
-  std::vector<std::vector<zetasql::Value>> rows;
+  std::vector<const googlesql::Type*> column_types;
+  std::vector<std::vector<googlesql::Value>> rows;
 };
 
 // Uses googlesql/public/analyzer to build an AnalyzerOutput for a query.
 // We need to analyze the SQL before executing it in order to determine what
 // kind of statement (query or DML) it is.
-absl::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>> Analyze(
-    const std::string& sql, zetasql::Catalog* catalog,
-    const zetasql::AnalyzerOptions& options,
-    zetasql::TypeFactory* type_factory);
+absl::StatusOr<std::unique_ptr<const googlesql::AnalyzerOutput>> Analyze(
+    const std::string& sql, googlesql::Catalog* catalog,
+    const googlesql::AnalyzerOptions& options,
+    googlesql::TypeFactory* type_factory);
 
-absl::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>>
-AnalyzePostgreSQL(const std::string& sql, zetasql::EnumerableCatalog* catalog,
-                  zetasql::AnalyzerOptions& options,
-                  zetasql::TypeFactory* type_factory,
+absl::StatusOr<std::unique_ptr<const googlesql::AnalyzerOutput>>
+AnalyzePostgreSQL(const std::string& sql, googlesql::EnumerableCatalog* catalog,
+                  googlesql::AnalyzerOptions& options,
+                  googlesql::TypeFactory* type_factory,
                   const FunctionCatalog* function_catalog);
 
-absl::StatusOr<std::unique_ptr<const zetasql::ResolvedFunctionCall>>
-BuildPendingCommitTimestampFunction(zetasql::TypeFactory& type_factory,
-                                    zetasql::Catalog& catalog);
+absl::StatusOr<std::unique_ptr<const googlesql::ResolvedFunctionCall>>
+BuildPendingCommitTimestampFunction(googlesql::TypeFactory& type_factory,
+                                    googlesql::Catalog& catalog);
 
 }  // namespace backend
 }  // namespace emulator

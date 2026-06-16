@@ -29,6 +29,9 @@
 # MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 #------------------------------------------------------------------------------
 
+load("@com_google_protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
+load("@com_google_protobuf//bazel:proto_library.bzl", "proto_library")
+
 # entry point from Spanner to Spangres
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
@@ -96,15 +99,15 @@ cc_library(
         "@com_google_absl//absl/time",
         "@com_google_absl//absl/types:variant",
         "@com_google_absl//absl/utility",
-        "@com_google_zetasql//zetasql/base",
-        "@com_google_zetasql//zetasql/public:analyzer",
-        "@com_google_zetasql//zetasql/public:analyzer_options",
-        "@com_google_zetasql//zetasql/public:builtin_function",
-        "@com_google_zetasql//zetasql/public:builtin_function_options",
-        "@com_google_zetasql//zetasql/public:catalog",
-        "@com_google_zetasql//zetasql/public:function",
-        "@com_google_zetasql//zetasql/public:language_options",
-        "@com_google_zetasql//zetasql/public:type",
+        "@com_google_googlesql//googlesql/base",
+        "@com_google_googlesql//googlesql/public:analyzer",
+        "@com_google_googlesql//googlesql/public:analyzer_options",
+        "@com_google_googlesql//googlesql/public:builtin_function",
+        "@com_google_googlesql//googlesql/public:builtin_function_options",
+        "@com_google_googlesql//googlesql/public:catalog",
+        "@com_google_googlesql//googlesql/public:function",
+        "@com_google_googlesql//googlesql/public:language_options",
+        "@com_google_googlesql//googlesql/public:type",
     ],
 )
 
@@ -140,26 +143,26 @@ cc_library(
         "//third_party/spanner_pg/src/backend:backend_with_shims",
         "//third_party/spanner_pg/transformer",
         "//third_party/spanner_pg/transformer:forward_transformer",
+        "//third_party/spanner_pg/util:integral_types",
         "//third_party/spanner_pg/util:postgres",
-        "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:span",
-        "@com_google_zetasql//zetasql/base",
-        "@com_google_zetasql//zetasql/base:ret_check",
-        "@com_google_zetasql//zetasql/public:analyzer",
-        "@com_google_zetasql//zetasql/public:analyzer_options",
-        "@com_google_zetasql//zetasql/public:analyzer_output",
-        "@com_google_zetasql//zetasql/public:analyzer_output_properties",
-        "@com_google_zetasql//zetasql/public:catalog",
-        "@com_google_zetasql//zetasql/public:function",
-        "@com_google_zetasql//zetasql/public:options_cc_proto",
-        "@com_google_zetasql//zetasql/public:strings",
-        "@com_google_zetasql//zetasql/public/types:type",
-        "@com_google_zetasql//zetasql/resolved_ast",
-        "@com_google_zetasql//zetasql/resolved_ast:validator",
+        "@com_google_googlesql//googlesql/base:logging",
+        "@com_google_googlesql//googlesql/base:ret_check",
+        "@com_google_googlesql//googlesql/public:analyzer",
+        "@com_google_googlesql//googlesql/public:analyzer_options",
+        "@com_google_googlesql//googlesql/public:analyzer_output",
+        "@com_google_googlesql//googlesql/public:analyzer_output_properties",
+        "@com_google_googlesql//googlesql/public:catalog",
+        "@com_google_googlesql//googlesql/public:function",
+        "@com_google_googlesql//googlesql/public:options_cc_proto",
+        "@com_google_googlesql//googlesql/public:strings",
+        "@com_google_googlesql//googlesql/public/types:type",
+        "@com_google_googlesql//googlesql/resolved_ast",
+        "@com_google_googlesql//googlesql/resolved_ast:validator",
     ],
     alwayslink = 1,  # for REGISTER_MODULE_INITIALIZER
 )
@@ -184,7 +187,7 @@ cc_library(
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/time",
         "@com_google_absl//absl/types:span",
-        "@com_google_zetasql//zetasql/base:status",
+        "@com_google_googlesql//googlesql/base:status",
     ],
 )
 
@@ -230,9 +233,9 @@ cc_test(
         "//third_party/spanner_pg/shims:memory_reservation_holder",
         "//third_party/spanner_pg/shims:stub_memory_reservation_manager",
         "@com_google_absl//absl/status",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -262,8 +265,8 @@ cc_library(
         "//third_party/spanner_pg/test_catalog",
         "//third_party/spanner_pg/test_catalog:spanner_test_catalog",
         "@com_google_absl//absl/time",
-        "@com_google_zetasql//zetasql/base:logging",
-        "@com_google_zetasql//zetasql/public:catalog",
+        "@com_google_googlesql//googlesql/base:logging",
+        "@com_google_googlesql//googlesql/public:catalog",
     ],
 )
 
@@ -277,8 +280,8 @@ cc_test(
         ":spangres_translator_test_wrapper",
         "//third_party/spanner_pg/src/backend:backend_with_shims",
         "@com_google_absl//absl/time",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -290,11 +293,11 @@ cc_test(
         ":interfaces_with_stub_implementations",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
+        "@com_google_googlesql//googlesql/public:analyzer",
+        "@com_google_googlesql//googlesql/public:function",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
-        "@com_google_zetasql//zetasql/public:analyzer",
-        "@com_google_zetasql//zetasql/public:function",
     ],
 )
 
@@ -302,8 +305,8 @@ cc_library(
     name = "sql_builder",
     hdrs = ["sql_builder.h"],
     deps = [
-        "@com_google_zetasql//zetasql/public:strings",
-        "@com_google_zetasql//zetasql/resolved_ast:sql_builder",
+        "@com_google_googlesql//googlesql/public:strings",
+        "@com_google_googlesql//googlesql/resolved_ast:sql_builder",
     ],
 )
 
@@ -328,8 +331,8 @@ cc_library(
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:cord",
         "@com_google_absl//absl/time",
-        "@com_google_zetasql//zetasql/public:interval_value",
-        "@com_google_zetasql//zetasql/public:value",
+        "@com_google_googlesql//googlesql/public:interval_value",
+        "@com_google_googlesql//googlesql/public:value",
     ],
 )
 
@@ -352,8 +355,8 @@ cc_library(
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:cord",
         "@com_google_absl//absl/time",
-        "@com_google_zetasql//zetasql/public:interval_value",
-        "@com_google_zetasql//zetasql/public:value",
+        "@com_google_googlesql//googlesql/public:interval_value",
+        "@com_google_googlesql//googlesql/public:value",
     ],
 )
 
@@ -366,9 +369,9 @@ cc_test(
     deps = [
         ":pg_evaluators",
         ":pg_evaluators_stubs",  # buildcleaner: keep
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
+        "@com_google_googlesql//googlesql/public:interval_value",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
-        "@com_google_zetasql//zetasql/public:interval_value",
     ],
 )
 
@@ -381,8 +384,8 @@ cc_test(
     deps = [
         ":pg_evaluators",
         ":pg_evaluators_stubs",  # buildcleaner: keep
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -396,8 +399,8 @@ cc_test(
         ":pg_evaluators",
         ":pg_evaluators_stubs",  # buildcleaner: keep
         "@com_google_absl//absl/status",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -411,8 +414,8 @@ cc_test(
         ":pg_evaluators",
         ":pg_evaluators_stubs",  # buildcleaner: keep
         "@com_google_absl//absl/status",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -425,8 +428,8 @@ cc_test(
     deps = [
         ":pg_evaluators",
         ":pg_evaluators_stubs",  # buildcleaner: keep
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -439,8 +442,8 @@ cc_test(
     deps = [
         ":pg_evaluators",
         ":pg_evaluators_stubs",  # buildcleaner: keep
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
     ],
 )
 
@@ -486,9 +489,9 @@ cc_library(
         "//backend/query:function_catalog",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
-        "@com_google_zetasql//zetasql/public:function",
-        "@com_google_zetasql//zetasql/public:language_options",
-        "@com_google_zetasql//zetasql/public:type",
+        "@com_google_googlesql//googlesql/public:function",
+        "@com_google_googlesql//googlesql/public:language_options",
+        "@com_google_googlesql//googlesql/public:type",
     ],
 )
 
@@ -507,10 +510,10 @@ cc_library(
         "//third_party/spanner_pg/src/backend:backend_with_shims",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
-        "@com_google_zetasql//zetasql/public:analyzer",
-        "@com_google_zetasql//zetasql/public:catalog",
-        "@com_google_zetasql//zetasql/public:function",
-        "@com_google_zetasql//zetasql/public:type",
+        "@com_google_googlesql//googlesql/public:analyzer",
+        "@com_google_googlesql//googlesql/public:catalog",
+        "@com_google_googlesql//googlesql/public:function",
+        "@com_google_googlesql//googlesql/public:type",
     ],
 )
 
@@ -527,12 +530,12 @@ cc_test(
         "//backend/schema/graph:schema_graph",
         "//third_party/spanner_pg/shims:memory_context_pg_arena",
         "//third_party/spanner_pg/test_catalog:emulator_catalog",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
+        "@com_google_googlesql//googlesql/public:analyzer_options",
+        "@com_google_googlesql//googlesql/public:catalog",
+        "@com_google_googlesql//googlesql/public:simple_catalog",
+        "@com_google_googlesql//googlesql/public:type",
         "@com_google_googletest//:gtest",
-        "@com_google_zetasql//zetasql/base/testing:status_matchers",
-        "@com_google_zetasql//zetasql/public:analyzer_options",
-        "@com_google_zetasql//zetasql/public:catalog",
-        "@com_google_zetasql//zetasql/public:simple_catalog",
-        "@com_google_zetasql//zetasql/public:type",
     ],
 )
 
@@ -579,6 +582,6 @@ cc_library(
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
-        "@com_google_zetasql//zetasql/base:die_if_null",
+        "@com_google_googlesql//googlesql/base:die_if_null",
     ],
 )

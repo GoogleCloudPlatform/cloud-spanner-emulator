@@ -26,8 +26,8 @@
 #include "backend/schema/updater/global_schema_names.h"
 #include "backend/schema/updater/schema_validation_context.h"
 #include "common/errors.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -50,13 +50,13 @@ std::vector<std::string> GetObjectNames(absl::Span<const T* const> objects) {
 
 absl::Status NamedSchemaValidator::Validate(const NamedSchema* named_schema,
                                             SchemaValidationContext* context) {
-  ZETASQL_RET_CHECK(!named_schema->name_.empty());
+  GOOGLESQL_RET_CHECK(!named_schema->name_.empty());
   if (context->is_postgresql_dialect()) {
-    ZETASQL_RET_CHECK(named_schema->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(named_schema->postgresql_oid().has_value());
   } else {
-    ZETASQL_RET_CHECK(!named_schema->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(!named_schema->postgresql_oid().has_value());
   }
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(
       GlobalSchemaNames::ValidateNamedSchemaName(named_schema->name_));
   return absl::OkStatus();
 }
@@ -78,16 +78,16 @@ absl::Status NamedSchemaValidator::ValidateUpdate(
     return absl::OkStatus();
   }
 
-  ZETASQL_RET_CHECK_EQ(named_schema->Name(), old_named_schema->Name());
-  ZETASQL_RET_CHECK_EQ(named_schema->id(), old_named_schema->id());
+  GOOGLESQL_RET_CHECK_EQ(named_schema->Name(), old_named_schema->Name());
+  GOOGLESQL_RET_CHECK_EQ(named_schema->id(), old_named_schema->id());
   if (context->is_postgresql_dialect()) {
-    ZETASQL_RET_CHECK(named_schema->postgresql_oid().has_value());
-    ZETASQL_RET_CHECK(old_named_schema->postgresql_oid().has_value());
-    ZETASQL_RET_CHECK_EQ(named_schema->postgresql_oid().value(),
+    GOOGLESQL_RET_CHECK(named_schema->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(old_named_schema->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK_EQ(named_schema->postgresql_oid().value(),
                  old_named_schema->postgresql_oid().value());
   } else {
-    ZETASQL_RET_CHECK(!named_schema->postgresql_oid().has_value());
-    ZETASQL_RET_CHECK(!old_named_schema->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(!named_schema->postgresql_oid().has_value());
+    GOOGLESQL_RET_CHECK(!old_named_schema->postgresql_oid().has_value());
   }
   return absl::OkStatus();
 }

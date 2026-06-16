@@ -18,11 +18,11 @@
 
 #include <memory>
 
-#include "zetasql/public/type.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/type.h"
+#include "googlesql/public/value.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "backend/access/write.h"
 #include "backend/datamodel/key_range.h"
@@ -40,14 +40,14 @@ namespace emulator {
 namespace backend {
 namespace {
 
-using zetasql::values::Int64;
-using zetasql::values::String;
-using zetasql_base::testing::StatusIs;
+using googlesql::values::Int64;
+using googlesql::values::String;
+using googlesql_base::testing::StatusIs;
 
 class ResolveTest : public testing::Test {
  public:
   ResolveTest()
-      : type_factory_(std::make_unique<zetasql::TypeFactory>()),
+      : type_factory_(std::make_unique<googlesql::TypeFactory>()),
         schema_(test::CreateSchemaFromDDL(
                     {
                         R"(
@@ -78,7 +78,7 @@ class ResolveTest : public testing::Test {
 
  protected:
   Clock clock_;
-  std::unique_ptr<zetasql::TypeFactory> type_factory_;
+  std::unique_ptr<googlesql::TypeFactory> type_factory_;
   std::unique_ptr<const Schema> schema_;
   const Table* test_table_;
   const Index* index_;
@@ -97,7 +97,7 @@ TEST_F(ResolveTest, CanResolveTableAndColumnsFromReadArg) {
   read_arg.columns = {"Int64Col", "StringCol"};
   read_arg.key_set = KeySet(Key({Int64(1)}));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto resolved_read_arg,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto resolved_read_arg,
                        ResolveReadArg(read_arg, schema_.get()));
 
   EXPECT_EQ(resolved_read_arg.table, test_table_);
@@ -109,7 +109,7 @@ TEST_F(ResolveTest, CanResolveChangeStreamInternalPartitionTableFromReadArg) {
   backend::ReadArg read_arg;
   read_arg.change_stream_for_partition_table = "ChangeStream_TestTable";
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto resolved_read_arg,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto resolved_read_arg,
                        ResolveReadArg(read_arg, schema_.get()));
 
   EXPECT_EQ(resolved_read_arg.table, change_stream_partition_table_);
@@ -126,7 +126,7 @@ TEST_F(ResolveTest, CanResolveChangeStreamInternalDataTableFromReadArg) {
   backend::ReadArg read_arg;
   read_arg.change_stream_for_data_table = "ChangeStream_TestTable";
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto resolved_read_arg,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto resolved_read_arg,
                        ResolveReadArg(read_arg, schema_.get()));
 
   EXPECT_EQ(resolved_read_arg.table, change_stream_data_table_);
@@ -173,7 +173,7 @@ TEST_F(ResolveTest, CanResolveTableAndColumnsFromReadArgWithIndex) {
   read_arg.columns = {"StringCol"};
   read_arg.key_set = KeySet(Key({String("value")}));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto resolved_read_arg,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto resolved_read_arg,
                        ResolveReadArg(read_arg, schema_.get()));
 
   EXPECT_EQ(resolved_read_arg.table, index_->index_data_table());
@@ -202,7 +202,7 @@ TEST_F(ResolveTest, CanResolveDeleteMutationOp) {
 
   mutation_op.key_set = ks;
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       const ResolvedMutationOp& resolved_mutation_op,
       ResolveDeleteMutationOp(mutation_op, schema_.get(), clock_.Now()));
 

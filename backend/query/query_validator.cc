@@ -20,10 +20,10 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/public/type.h"
-#include "zetasql/resolved_ast/resolved_ast.h"
-#include "zetasql/resolved_ast/resolved_node.h"
-#include "zetasql/resolved_ast/resolved_node_kind.pb.h"
+#include "googlesql/public/type.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_node.h"
+#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
@@ -43,8 +43,8 @@
 #include "common/constants.h"
 #include "common/errors.h"
 #include "common/pg_literals.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -137,11 +137,11 @@ constexpr absl::string_view kScanMethodBatch = "batch";
 constexpr absl::string_view kScanMethodRow = "row";
 
 absl::Status CollectHintsForNode(
-    const zetasql::ResolvedOption* hint,
-    absl::flat_hash_map<absl::string_view, zetasql::Value>* node_hint_map) {
-  ZETASQL_RET_CHECK_EQ(hint->value()->node_kind(), zetasql::RESOLVED_LITERAL);
-  const zetasql::Value& value =
-      hint->value()->GetAs<zetasql::ResolvedLiteral>()->value();
+    const googlesql::ResolvedOption* hint,
+    absl::flat_hash_map<absl::string_view, googlesql::Value>* node_hint_map) {
+  GOOGLESQL_RET_CHECK_EQ(hint->value()->node_kind(), googlesql::RESOLVED_LITERAL);
+  const googlesql::Value& value =
+      hint->value()->GetAs<googlesql::ResolvedLiteral>()->value();
   if (node_hint_map->contains(hint->name())) {
     return error::MultipleValuesForSameHint(hint->name());
   }
@@ -166,34 +166,34 @@ bool IsSearchQueryAllowed(const QueryEngineOptions* options,
   return true;
 }
 
-bool IsSelectForUpdateQuery(const zetasql::ResolvedNode& node) {
-  std::vector<const zetasql::ResolvedNode*> scan_nodes;
+bool IsSelectForUpdateQuery(const googlesql::ResolvedNode& node) {
+  std::vector<const googlesql::ResolvedNode*> scan_nodes;
   node.GetDescendantsSatisfying(
-      &zetasql::ResolvedNode::Is<zetasql::ResolvedLockMode>, &scan_nodes);
+      &googlesql::ResolvedNode::Is<googlesql::ResolvedLockMode>, &scan_nodes);
   return !scan_nodes.empty();
 }
 
 absl::Status QueryValidator::ValidateHints(
-    const zetasql::ResolvedNode* node) {
-  std::vector<const zetasql::ResolvedNode*> child_nodes;
+    const googlesql::ResolvedNode* node) {
+  std::vector<const googlesql::ResolvedNode*> child_nodes;
   node->GetChildNodes(&child_nodes);
   // Process the hints for each node, using maps to keep track of
   // the hints for each node.
-  absl::flat_hash_map<absl::string_view, zetasql::Value> hint_map;
-  absl::flat_hash_map<absl::string_view, zetasql::Value> emulator_hint_map;
-  for (const zetasql::ResolvedNode* child_node : child_nodes) {
-    if (child_node->node_kind() == zetasql::RESOLVED_OPTION) {
-      const zetasql::ResolvedOption* hint =
-          child_node->GetAs<zetasql::ResolvedOption>();
+  absl::flat_hash_map<absl::string_view, googlesql::Value> hint_map;
+  absl::flat_hash_map<absl::string_view, googlesql::Value> emulator_hint_map;
+  for (const googlesql::ResolvedNode* child_node : child_nodes) {
+    if (child_node->node_kind() == googlesql::RESOLVED_OPTION) {
+      const googlesql::ResolvedOption* hint =
+          child_node->GetAs<googlesql::ResolvedOption>();
       if (absl::EqualsIgnoreCase(hint->qualifier(),
                                  kSpannerQueryEngineHintPrefix) ||
           hint->qualifier().empty()) {
-        ZETASQL_RETURN_IF_ERROR(CheckSpannerHintName(hint->name(), node->node_kind()));
-        ZETASQL_RETURN_IF_ERROR(CollectHintsForNode(hint, &hint_map));
+        GOOGLESQL_RETURN_IF_ERROR(CheckSpannerHintName(hint->name(), node->node_kind()));
+        GOOGLESQL_RETURN_IF_ERROR(CollectHintsForNode(hint, &hint_map));
       } else if (absl::EqualsIgnoreCase(hint->qualifier(),
                                         kEmulatorQueryEngineHintPrefix)) {
-        ZETASQL_RETURN_IF_ERROR(CheckEmulatorHintName(hint->name(), node->node_kind()));
-        ZETASQL_RETURN_IF_ERROR(CollectHintsForNode(hint, &emulator_hint_map));
+        GOOGLESQL_RETURN_IF_ERROR(CheckEmulatorHintName(hint->name(), node->node_kind()));
+        GOOGLESQL_RETURN_IF_ERROR(CollectHintsForNode(hint, &emulator_hint_map));
       } else {
         // Ignore hints intended for other engines. Mark the value used so an
         // 'Unimplemented' error is not raised.
@@ -204,40 +204,40 @@ absl::Status QueryValidator::ValidateHints(
   }
 
   for (const auto& [hint_name, hint_value] : hint_map) {
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         CheckHintValue(hint_name, hint_value, node->node_kind(), hint_map));
   }
 
-  ZETASQL_RETURN_IF_ERROR(ExtractSpannerOptionsForNode(hint_map));
+  GOOGLESQL_RETURN_IF_ERROR(ExtractSpannerOptionsForNode(hint_map));
 
   // Extract any Emulator-engine options from the hints for this node.
   return ExtractEmulatorOptionsForNode(emulator_hint_map);
 }
 
 absl::Status QueryValidator::CheckSpannerHintName(
-    absl::string_view name, const zetasql::ResolvedNodeKind node_kind) const {
+    absl::string_view name, const googlesql::ResolvedNodeKind node_kind) const {
   static const auto* supported_hints = new const absl::flat_hash_map<
-      zetasql::ResolvedNodeKind,
-      absl::flat_hash_set<absl::string_view, zetasql_base::StringViewCaseHash,
-                          zetasql_base::StringViewCaseEqual>>{
-      {zetasql::RESOLVED_TABLE_SCAN,
+      googlesql::ResolvedNodeKind,
+      absl::flat_hash_set<absl::string_view, googlesql_base::StringViewCaseHash,
+                          googlesql_base::StringViewCaseEqual>>{
+      {googlesql::RESOLVED_TABLE_SCAN,
        {kHintForceIndex, kHintTableScanGroupByScanOptimization,
         kHintIndexStrategy, kScanMethod}},
-      {zetasql::RESOLVED_JOIN_SCAN,
+      {googlesql::RESOLVED_JOIN_SCAN,
        {kHintJoinTypeDeprecated, kHintJoinMethod, kHashJoinBuildSide,
         kHintJoinForceOrder, kHashJoinExecution}},
-      {zetasql::RESOLVED_AGGREGATE_SCAN,
+      {googlesql::RESOLVED_AGGREGATE_SCAN,
        {kHintGroupTypeDeprecated, kHintGroupMethod}},
-      {zetasql::RESOLVED_ARRAY_SCAN,
+      {googlesql::RESOLVED_ARRAY_SCAN,
        {kHintJoinTypeDeprecated, kHintJoinMethod, kHashJoinBuildSide,
         kHintJoinBatch, kHintJoinForceOrder}},
-      {zetasql::RESOLVED_INSERT_STMT, {kHintLockScannedRanges}},
-      {zetasql::RESOLVED_UPDATE_STMT,
+      {googlesql::RESOLVED_INSERT_STMT, {kHintLockScannedRanges}},
+      {googlesql::RESOLVED_UPDATE_STMT,
        {
            kHintLockScannedRanges,
        }},
-      {zetasql::RESOLVED_DELETE_STMT, {kHintLockScannedRanges}},
-      {zetasql::RESOLVED_QUERY_STMT,
+      {googlesql::RESOLVED_DELETE_STMT, {kHintLockScannedRanges}},
+      {googlesql::RESOLVED_QUERY_STMT,
        {
            kHintForceIndex,
            kHintIndexStrategy,
@@ -256,12 +256,12 @@ absl::Status QueryValidator::CheckSpannerHintName(
            kEnhanceQueryTimeoutMs,
            kScanMethod,
        }},
-      {zetasql::RESOLVED_SUBQUERY_EXPR,
+      {googlesql::RESOLVED_SUBQUERY_EXPR,
        {kHintJoinTypeDeprecated, kHintJoinMethod, kHashJoinBuildSide,
         kHintJoinBatch, kHintJoinForceOrder, kHashJoinExecution}},
-      {zetasql::RESOLVED_SET_OPERATION_SCAN,
+      {googlesql::RESOLVED_SET_OPERATION_SCAN,
        {kHintJoinMethod, kHintJoinForceOrder}},
-      {zetasql::RESOLVED_FUNCTION_CALL, {kHintDisableInline}}};
+      {googlesql::RESOLVED_FUNCTION_CALL, {kHintDisableInline}}};
 
   const auto& iter = supported_hints->find(node_kind);
   if (iter == supported_hints->end() || !iter->second.contains(name)) {
@@ -271,14 +271,14 @@ absl::Status QueryValidator::CheckSpannerHintName(
 }
 
 absl::Status QueryValidator::CheckEmulatorHintName(
-    absl::string_view name, const zetasql::ResolvedNodeKind node_kind) const {
+    absl::string_view name, const googlesql::ResolvedNodeKind node_kind) const {
   static const auto* supported_hints = new const absl::flat_hash_map<
-      zetasql::ResolvedNodeKind,
-      absl::flat_hash_set<absl::string_view, zetasql_base::StringViewCaseHash,
-                          zetasql_base::StringViewCaseEqual>>{
-      {zetasql::RESOLVED_TABLE_SCAN,
+      googlesql::ResolvedNodeKind,
+      absl::flat_hash_set<absl::string_view, googlesql_base::StringViewCaseHash,
+                          googlesql_base::StringViewCaseEqual>>{
+      {googlesql::RESOLVED_TABLE_SCAN,
        {kHintDisableQueryNullFilteredIndexCheck}},
-      {zetasql::RESOLVED_QUERY_STMT,
+      {googlesql::RESOLVED_QUERY_STMT,
        {kHintDisableQueryPartitionabilityCheck,
         kHintDisableQueryNullFilteredIndexCheck}},
   };
@@ -291,37 +291,37 @@ absl::Status QueryValidator::CheckEmulatorHintName(
 }
 
 absl::Status QueryValidator::CheckHintValue(
-    absl::string_view name, const zetasql::Value& value,
-    const zetasql::ResolvedNodeKind node_kind,
-    const absl::flat_hash_map<absl::string_view, zetasql::Value>& hint_map) {
+    absl::string_view name, const googlesql::Value& value,
+    const googlesql::ResolvedNodeKind node_kind,
+    const absl::flat_hash_map<absl::string_view, googlesql::Value>& hint_map) {
   static const auto* supported_hint_types =
-      new absl::flat_hash_map<absl::string_view, const zetasql::Type*,
-                              zetasql_base::StringViewCaseHash, zetasql_base::StringViewCaseEqual>{{
-          {kHintJoinTypeDeprecated, zetasql::types::StringType()},
-          {kHintParameterSensitive, zetasql::types::StringType()},
-          {kHintJoinMethod, zetasql::types::StringType()},
-          {kHashJoinBuildSide, zetasql::types::StringType()},
-          {kHashJoinExecution, zetasql::types::StringType()},
-          {kHintJoinBatch, zetasql::types::BoolType()},
-          {kHintJoinForceOrder, zetasql::types::BoolType()},
-          {kHintGroupTypeDeprecated, zetasql::types::StringType()},
-          {kHintGroupMethod, zetasql::types::StringType()},
-          {kHintForceIndex, zetasql::types::StringType()},
-          {kUseAdditionalParallelism, zetasql::types::BoolType()},
-          {kHintLockScannedRanges, zetasql::types::StringType()},
-          {kHintConstantFolding, zetasql::types::BoolType()},
-          {kHintTableScanGroupByScanOptimization, zetasql::types::BoolType()},
-          {kHintEnableAdaptivePlans, zetasql::types::BoolType()},
-          {kHintDisableInline, zetasql::types::BoolType()},
-          {kHintIndexStrategy, zetasql::types::StringType()},
-          {kHintAllowSearchIndexesInTransaction, zetasql::types::BoolType()},
-          {kRequireEnhanceQuery, zetasql::types::BoolType()},
-          {kEnhanceQueryTimeoutMs, zetasql::types::Int64Type()},
-          {kScanMethod, zetasql::types::StringType()},
+      new absl::flat_hash_map<absl::string_view, const googlesql::Type*,
+                              googlesql_base::StringViewCaseHash, googlesql_base::StringViewCaseEqual>{{
+          {kHintJoinTypeDeprecated, googlesql::types::StringType()},
+          {kHintParameterSensitive, googlesql::types::StringType()},
+          {kHintJoinMethod, googlesql::types::StringType()},
+          {kHashJoinBuildSide, googlesql::types::StringType()},
+          {kHashJoinExecution, googlesql::types::StringType()},
+          {kHintJoinBatch, googlesql::types::BoolType()},
+          {kHintJoinForceOrder, googlesql::types::BoolType()},
+          {kHintGroupTypeDeprecated, googlesql::types::StringType()},
+          {kHintGroupMethod, googlesql::types::StringType()},
+          {kHintForceIndex, googlesql::types::StringType()},
+          {kUseAdditionalParallelism, googlesql::types::BoolType()},
+          {kHintLockScannedRanges, googlesql::types::StringType()},
+          {kHintConstantFolding, googlesql::types::BoolType()},
+          {kHintTableScanGroupByScanOptimization, googlesql::types::BoolType()},
+          {kHintEnableAdaptivePlans, googlesql::types::BoolType()},
+          {kHintDisableInline, googlesql::types::BoolType()},
+          {kHintIndexStrategy, googlesql::types::StringType()},
+          {kHintAllowSearchIndexesInTransaction, googlesql::types::BoolType()},
+          {kRequireEnhanceQuery, googlesql::types::BoolType()},
+          {kEnhanceQueryTimeoutMs, googlesql::types::Int64Type()},
+          {kScanMethod, googlesql::types::StringType()},
       }};
 
   const auto& iter = supported_hint_types->find(name);
-  ZETASQL_RET_CHECK(iter != supported_hint_types->cend());
+  GOOGLESQL_RET_CHECK(iter != supported_hint_types->cend());
   if (!value.type()->Equals(iter->second)) {
     return error::InvalidHintValue(name, value.DebugString());
   }
@@ -330,7 +330,7 @@ absl::Status QueryValidator::CheckHintValue(
     bool base_table_hint = absl::EqualsIgnoreCase(index_name, kHintBaseTable);
     if (!base_table_hint) {
       // Statement-level FORCE_INDEX hints can only be '_BASE_TABLE'.
-      if (node_kind == zetasql::RESOLVED_QUERY_STMT) {
+      if (node_kind == googlesql::RESOLVED_QUERY_STMT) {
         return error::InvalidStatementHintValue(name, value.DebugString());
       }
       const std::vector<const Index*> indexes =
@@ -424,7 +424,7 @@ absl::Status QueryValidator::CheckHintValue(
 }
 
 absl::Status QueryValidator::ExtractSpannerOptionsForNode(
-    const absl::flat_hash_map<absl::string_view, zetasql::Value>&
+    const absl::flat_hash_map<absl::string_view, googlesql::Value>&
         node_hint_map) {
   // Only extract options if they are requested.
   if (extracted_options_ == nullptr) {
@@ -447,7 +447,7 @@ absl::Status QueryValidator::ExtractSpannerOptionsForNode(
 }
 
 absl::Status QueryValidator::ExtractEmulatorOptionsForNode(
-    const absl::flat_hash_map<absl::string_view, zetasql::Value>&
+    const absl::flat_hash_map<absl::string_view, googlesql::Value>&
         node_hint_map) const {
   // Only extract options if they are requested.
   if (extracted_options_ == nullptr) return absl::OkStatus();
@@ -495,8 +495,8 @@ absl::Status QueryValidator::CheckTableScanLockModeAllowed(
 
 namespace {
 
-absl::Status CheckAllowedCasts(const zetasql::Type* from_type,
-                               const zetasql::Type* to_type) {
+absl::Status CheckAllowedCasts(const googlesql::Type* from_type,
+                               const googlesql::Type* to_type) {
   if (to_type->IsArray() && from_type->IsArray() &&
       !to_type->AsArray()->element_type()->Equals(
           from_type->AsArray()->element_type())) {
@@ -508,13 +508,13 @@ absl::Status CheckAllowedCasts(const zetasql::Type* from_type,
 
 }  // namespace
 
-absl::Status QueryValidator::DefaultVisit(const zetasql::ResolvedNode* node) {
-  ZETASQL_RETURN_IF_ERROR(ValidateHints(node));
-  return zetasql::ResolvedASTVisitor::DefaultVisit(node);
+absl::Status QueryValidator::DefaultVisit(const googlesql::ResolvedNode* node) {
+  GOOGLESQL_RETURN_IF_ERROR(ValidateHints(node));
+  return googlesql::ResolvedASTVisitor::DefaultVisit(node);
 }
 
 absl::Status QueryValidator::VisitResolvedQueryStmt(
-    const zetasql::ResolvedQueryStmt* node) {
+    const googlesql::ResolvedQueryStmt* node) {
   for (const auto& column : node->output_column_list()) {
     if (column->column().type()->IsStruct())
       return error::UnsupportedReturnStructAsColumn();
@@ -524,10 +524,10 @@ absl::Status QueryValidator::VisitResolvedQueryStmt(
     query_features_.has_for_update = true;
   }
 
-  ZETASQL_RETURN_IF_ERROR(DefaultVisit(node));
+  GOOGLESQL_RETURN_IF_ERROR(DefaultVisit(node));
 
   if (IsSelectForUpdateQuery(*node)) {
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         CheckTableScanLockModeAllowed(extracted_options_, context_));
   }
 
@@ -535,10 +535,10 @@ absl::Status QueryValidator::VisitResolvedQueryStmt(
 }
 
 absl::Status QueryValidator::CheckSearchFunctionsAreAllowed(
-    const zetasql::ResolvedFunctionCall& function_call) {
+    const googlesql::ResolvedFunctionCall& function_call) {
   static const auto* search_functions =
-      new const absl::flat_hash_set<absl::string_view, zetasql_base::StringViewCaseHash,
-                                    zetasql_base::StringViewCaseEqual>{
+      new const absl::flat_hash_set<absl::string_view, googlesql_base::StringViewCaseHash,
+                                    googlesql_base::StringViewCaseEqual>{
           "search", "search_substring", "score", "snippet"};
 
   const std::string name = function_call.function()->FullName(false);
@@ -562,7 +562,7 @@ absl::Status QueryValidator::CheckSearchFunctionsAreAllowed(
 }
 
 absl::Status QueryValidator::VisitResolvedLiteral(
-    const zetasql::ResolvedLiteral* node) {
+    const googlesql::ResolvedLiteral* node) {
   if (node->type()->IsArray() &&
       node->type()->AsArray()->element_type()->IsStruct() &&
       node->value().is_null()) {
@@ -580,29 +580,29 @@ bool QueryValidator::IsReadWriteOnlyFunction(absl::string_view name) const {
 }
 
 absl::Status QueryValidator::VisitResolvedFunctionCall(
-    const zetasql::ResolvedFunctionCall* node) {
-  // Check if function is part of supported subset of ZetaSQL
-  if (node->function()->IsZetaSQLBuiltin()) {
-    if (!IsSupportedZetaSQLFunction(*node->function())) {
+    const googlesql::ResolvedFunctionCall* node) {
+  // Check if function is part of supported subset of GoogleSQL
+  if (node->function()->IsGoogleSQLBuiltin()) {
+    if (!IsSupportedGoogleSQLFunction(*node->function())) {
       return error::UnsupportedFunction(node->function()->SQLName());
     }
   }
 
-  // Out of the supported subset of ZetaSQL, filter out functions that
+  // Out of the supported subset of GoogleSQL, filter out functions that
   // are unimplemented or may require additional validation of arguments.
-  ZETASQL_RETURN_IF_ERROR(FilterSafeModeFunction(*node));
-  ZETASQL_RETURN_IF_ERROR(
+  GOOGLESQL_RETURN_IF_ERROR(FilterSafeModeFunction(*node));
+  GOOGLESQL_RETURN_IF_ERROR(
       FilterResolvedFunction(language_options_, sql_features_, *node));
 
   if (node->function()->FullName(/*include_group=*/false) == "cast") {
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         CheckAllowedCasts(node->argument_list(0)->type(), node->type()));
   }
 
-  ZETASQL_RETURN_IF_ERROR(CheckSearchFunctionsAreAllowed(*node));
+  GOOGLESQL_RETURN_IF_ERROR(CheckSearchFunctionsAreAllowed(*node));
 
   if (IsSequenceFunction(node)) {
-    ZETASQL_RETURN_IF_ERROR(ValidateSequenceFunction(node));
+    GOOGLESQL_RETURN_IF_ERROR(ValidateSequenceFunction(node));
   }
 
   if (!context_.allow_read_write_only_functions &&
@@ -616,7 +616,7 @@ absl::Status QueryValidator::VisitResolvedFunctionCall(
 }
 
 bool QueryValidator::IsSequenceFunction(
-    const zetasql::ResolvedFunctionCall* node) const {
+    const googlesql::ResolvedFunctionCall* node) const {
   return (node->function()->FullName(/*include_group=*/false) ==
               kGetNextSequenceValueFunctionName ||
           node->function()->FullName(/*include_group=*/false) ==
@@ -624,7 +624,7 @@ bool QueryValidator::IsSequenceFunction(
 }
 
 absl::Status QueryValidator::ValidateSequenceFunction(
-    const zetasql::ResolvedFunctionCall* node) {
+    const googlesql::ResolvedFunctionCall* node) {
   if (schema()->dialect() ==
       database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
     if (node->generic_argument_list_size() != 1 ||
@@ -646,9 +646,9 @@ absl::Status QueryValidator::ValidateSequenceFunction(
 
   // This is when the dialect is PostgreSQL.
   if (node->argument_list_size() == 1 &&
-      node->argument_list(0)->node_kind() == zetasql::RESOLVED_LITERAL) {
-    const zetasql::Value& value =
-        node->argument_list(0)->GetAs<zetasql::ResolvedLiteral>()->value();
+      node->argument_list(0)->node_kind() == googlesql::RESOLVED_LITERAL) {
+    const googlesql::Value& value =
+        node->argument_list(0)->GetAs<googlesql::ResolvedLiteral>()->value();
     if (value.type()->IsString()) {
       std::string sequence_name =
           GetFullyQualifiedNameFromPgLiteral(value.string_value());
@@ -665,29 +665,29 @@ absl::Status QueryValidator::ValidateSequenceFunction(
 }
 
 absl::Status QueryValidator::VisitResolvedAggregateFunctionCall(
-    const zetasql::ResolvedAggregateFunctionCall* node) {
-  // Check if function is part of supported subset of ZetaSQL
-  if (node->function()->IsZetaSQLBuiltin()) {
-    if (!IsSupportedZetaSQLFunction(*node->function())) {
+    const googlesql::ResolvedAggregateFunctionCall* node) {
+  // Check if function is part of supported subset of GoogleSQL
+  if (node->function()->IsGoogleSQLBuiltin()) {
+    if (!IsSupportedGoogleSQLFunction(*node->function())) {
       return error::UnsupportedFunction(node->function()->SQLName());
     }
   }
 
-  // Out of the supported subset of ZetaSQL, filter out functions that
+  // Out of the supported subset of GoogleSQL, filter out functions that
   // are unimplemented or may require additional validation of arguments.
-  ZETASQL_RETURN_IF_ERROR(FilterSafeModeFunction(*node));
-  ZETASQL_RETURN_IF_ERROR(FilterResolvedAggregateFunction(sql_features_, *node));
+  GOOGLESQL_RETURN_IF_ERROR(FilterSafeModeFunction(*node));
+  GOOGLESQL_RETURN_IF_ERROR(FilterResolvedAggregateFunction(sql_features_, *node));
   return DefaultVisit(node);
 }
 
 absl::Status QueryValidator::VisitResolvedCast(
-    const zetasql::ResolvedCast* node) {
-  ZETASQL_RETURN_IF_ERROR(CheckAllowedCasts(node->expr()->type(), node->type()));
+    const googlesql::ResolvedCast* node) {
+  GOOGLESQL_RETURN_IF_ERROR(CheckAllowedCasts(node->expr()->type(), node->type()));
   return DefaultVisit(node);
 }
 
 absl::Status QueryValidator::VisitResolvedSampleScan(
-    const zetasql::ResolvedSampleScan* node) {
+    const googlesql::ResolvedSampleScan* node) {
   if (node->repeatable_argument()) {
     return error::UnsupportedTablesampleRepeatable();
   }
@@ -699,9 +699,9 @@ absl::Status QueryValidator::VisitResolvedSampleScan(
 }
 
 absl::Status QueryValidator::CheckPendingCommitTimestampReads(
-    const zetasql::ResolvedTableScan* table_scan,
-    absl::Span<const zetasql::ResolvedStatement::ObjectAccess> access_list) {
-  ZETASQL_RET_CHECK(access_list.empty() ||
+    const googlesql::ResolvedTableScan* table_scan,
+    absl::Span<const googlesql::ResolvedStatement::ObjectAccess> access_list) {
+  GOOGLESQL_RET_CHECK(access_list.empty() ||
             access_list.size() == table_scan->column_index_list_size());
   // A commit timestamp tracker is not always present (e.g. read-only txns).
   if (context_.commit_timestamp_tracker == nullptr) {
@@ -720,25 +720,25 @@ absl::Status QueryValidator::CheckPendingCommitTimestampReads(
 
   const Table* table =
       table_scan->table()->GetAs<QueryableTable>()->wrapped_table();
-  ZETASQL_RET_CHECK(table != nullptr);
+  GOOGLESQL_RET_CHECK(table != nullptr);
   std::vector<const Column*> columns;
   for (int i = 0; i < table_scan->column_index_list_size(); ++i) {
     // Ignore scan columns which are not read
     if (i < access_list.size() &&
-        !(access_list[i] & zetasql::ResolvedStatement::READ)) {
+        !(access_list[i] & googlesql::ResolvedStatement::READ)) {
       continue;
     }
     int idx = table_scan->column_index_list(i);
     std::string column_name = table_scan->table()->GetColumn(idx)->Name();
     const Column* column = table->FindColumn(column_name);
-    ZETASQL_RET_CHECK(column != nullptr);
+    GOOGLESQL_RET_CHECK(column != nullptr);
     columns.push_back(column);
   }
   return context_.commit_timestamp_tracker->CheckRead(table, columns);
 }
 
 absl::Status QueryValidator::VisitResolvedInsertStmt(
-    const zetasql::ResolvedInsertStmt* node) {
+    const googlesql::ResolvedInsertStmt* node) {
   if (node->table_scan() != nullptr) {
     dml_table_scans_.insert(node->table_scan());
   }
@@ -746,9 +746,9 @@ absl::Status QueryValidator::VisitResolvedInsertStmt(
 }
 
 absl::Status QueryValidator::VisitResolvedUpdateStmt(
-    const zetasql::ResolvedUpdateStmt* node) {
+    const googlesql::ResolvedUpdateStmt* node) {
   if (node->table_scan() != nullptr) {
-    ZETASQL_RETURN_IF_ERROR(CheckPendingCommitTimestampReads(
+    GOOGLESQL_RETURN_IF_ERROR(CheckPendingCommitTimestampReads(
         node->table_scan(), node->column_access_list()));
     dml_table_scans_.insert(node->table_scan());
   }
@@ -756,9 +756,9 @@ absl::Status QueryValidator::VisitResolvedUpdateStmt(
 }
 
 absl::Status QueryValidator::VisitResolvedDeleteStmt(
-    const zetasql::ResolvedDeleteStmt* node) {
+    const googlesql::ResolvedDeleteStmt* node) {
   if (node->table_scan() != nullptr) {
-    ZETASQL_RETURN_IF_ERROR(CheckPendingCommitTimestampReads(
+    GOOGLESQL_RETURN_IF_ERROR(CheckPendingCommitTimestampReads(
         node->table_scan(), node->column_access_list()));
     dml_table_scans_.insert(node->table_scan());
   }
@@ -766,10 +766,10 @@ absl::Status QueryValidator::VisitResolvedDeleteStmt(
 }
 
 absl::Status QueryValidator::VisitResolvedTableScan(
-    const zetasql::ResolvedTableScan* node) {
+    const googlesql::ResolvedTableScan* node) {
   // Skip table scans owned by DML statements. These have already been handled.
   if (!dml_table_scans_.contains(node)) {
-    ZETASQL_RETURN_IF_ERROR(CheckPendingCommitTimestampReads(node));
+    GOOGLESQL_RETURN_IF_ERROR(CheckPendingCommitTimestampReads(node));
   }
 
   return DefaultVisit(node);

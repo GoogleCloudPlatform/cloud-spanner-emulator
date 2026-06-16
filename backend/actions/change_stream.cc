@@ -26,15 +26,17 @@
 #include <variant>
 #include <vector>
 
-#include "zetasql/public/json_value.h"
-#include "zetasql/public/types/type.h"
-#include "zetasql/public/types/type_factory.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/json_value.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/public/types/type_factory.h"
+#include "googlesql/public/value.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/cord.h"
+#include "absl/strings/escaping.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
@@ -54,15 +56,16 @@
 #include "common/constants.h"
 #include "common/errors.h"
 #include "common/limits.h"
+#include "googlesql/base/status_macros.h"
 #include "nlohmann/json_fwd.hpp"
 #include "nlohmann/json.hpp"
 #include "third_party/spanner_pg/datatypes/extended/spanner_extended_type.h"
-#include "zetasql/base/status_macros.h"
+
 namespace google {
 namespace spanner {
 namespace emulator {
 namespace backend {
-using ::zetasql::JSONValueRef;
+using ::googlesql::JSONValueRef;
 using JSON = ::nlohmann::json;
 using ::google::spanner::v1::TypeAnnotationCode;
 using ::postgres_translator::spangres::datatypes::SpannerExtendedType;
@@ -87,13 +90,13 @@ RetrieveTableWithTrackedChangeStreams(const Schema* schema) {
   return table_with_tracked_change_streams;
 }
 
-absl::StatusOr<zetasql::Value> RetrieveChangeStreamWithPartitionToken(
+absl::StatusOr<googlesql::Value> RetrieveChangeStreamWithPartitionToken(
     ReadOnlyStore* store, const ChangeStream* change_stream) {
   std::vector<const Column*> read_columns = {
       change_stream->change_stream_partition_table()->FindColumn(
           "partition_token"),
       change_stream->change_stream_partition_table()->FindColumn("end_time")};
-  ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<StorageIterator> itr,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<StorageIterator> itr,
                    store->Read(change_stream->change_stream_partition_table(),
                                KeyRange::All(), read_columns));
   std::vector<std::string> active_partition_tokens;
@@ -106,7 +109,7 @@ absl::StatusOr<zetasql::Value> RetrieveChangeStreamWithPartitionToken(
     }
   }
   std::sort(active_partition_tokens.begin(), active_partition_tokens.end());
-  return zetasql::Value::String(active_partition_tokens[0]);
+  return googlesql::Value::String(active_partition_tokens[0]);
 }
 
 bool IsPrimaryKey(const Table* table, const Column* column) {
@@ -173,7 +176,7 @@ DataChangeRecord BuildDataChangeRecord(
   std::string record_sequence = ToFragmentIdString(record_sequence_number);
   DataChangeRecord record{
       (*last_mod_group_by_change_stream)[change_stream].partition_token_str,
-      zetasql::Value::Timestamp(kCommitTimestampValueSentinel),
+      googlesql::Value::Timestamp(kCommitTimestampValueSentinel),
       std::to_string(transaction_id), record_sequence, false,
       tracked_table_name, column_types,
       (*last_mod_group_by_change_stream)[change_stream].mods,
@@ -193,7 +196,7 @@ absl::StatusOr<ValueList> RetrieveExistingValues(
   for (const std::string& col : non_key_columns) {
     columns.push_back(table->FindColumn(col));
   }
-  ZETASQL_ASSIGN_OR_RETURN(ValueList values, store->ReadCommitted(table, key, columns));
+  GOOGLESQL_ASSIGN_OR_RETURN(ValueList values, store->ReadCommitted(table, key, columns));
   return values;
 }
 
@@ -225,7 +228,7 @@ std::vector<const Column*> GetColumnsForDataChangeRecord(
 }
 
 // Gets the old values for the recorded columns in a data change record.
-absl::StatusOr<std::vector<zetasql::Value>> GetOldValuesForDataChangeRecord(
+absl::StatusOr<std::vector<googlesql::Value>> GetOldValuesForDataChangeRecord(
     absl::string_view value_capture_type, absl::string_view mod_type,
     const Table* tracked_table, const Key& key, ReadOnlyStore* store,
     const std::vector<std::string>& non_key_cols,
@@ -235,18 +238,18 @@ absl::StatusOr<std::vector<zetasql::Value>> GetOldValuesForDataChangeRecord(
   if ((value_capture_type != kChangeStreamValueCaptureTypeDefault &&
        value_capture_type != kChangeStreamValueCaptureTypeNewRowOldValues) ||
       mod_type == kInsert) {
-    return std::vector<zetasql::Value>();
+    return std::vector<googlesql::Value>();
   }
 
-  ZETASQL_ASSIGN_OR_RETURN(
-      std::vector<zetasql::Value> old_values,
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      std::vector<googlesql::Value> old_values,
       RetrieveExistingValues(tracked_table, non_key_cols, key, store));
 
   if (value_capture_type == kChangeStreamValueCaptureTypeNewRowOldValues &&
       mod_type == kUpdate) {
     for (int i = 0; i < old_values.size(); i++) {
       if (!modified_tracked_column_names.contains(non_key_cols[i])) {
-        old_values[i] = zetasql::Value();
+        old_values[i] = googlesql::Value();
       }
     }
   }
@@ -254,14 +257,14 @@ absl::StatusOr<std::vector<zetasql::Value>> GetOldValuesForDataChangeRecord(
 }
 
 // Gets the new values for the recorded columns in a data change record.
-absl::StatusOr<std::vector<zetasql::Value>> GetNewValuesForDataChangeRecord(
+absl::StatusOr<std::vector<googlesql::Value>> GetNewValuesForDataChangeRecord(
     absl::string_view value_capture_type, absl::string_view mod_type,
     const Table* tracked_table,
     const std::vector<std::string> modified_tracked_columns_names,
-    const std::vector<zetasql::Value>& modified_tracked_values,
+    const std::vector<googlesql::Value>& modified_tracked_values,
     const Key& key, ReadOnlyStore* store,
     std::vector<const Column*> tracked_columns) {
-  std::vector<zetasql::Value> new_values_for_tracked_cols;
+  std::vector<googlesql::Value> new_values_for_tracked_cols;
   if (mod_type == kDelete ||
       (mod_type == kUpdate &&
        (value_capture_type == kChangeStreamValueCaptureTypeDefault ||
@@ -269,7 +272,7 @@ absl::StatusOr<std::vector<zetasql::Value>> GetNewValuesForDataChangeRecord(
     return modified_tracked_values;
   }
   // Store modified tracked columns and values into a map
-  absl::flat_hash_map<std::string, zetasql::Value> populated_col_to_value;
+  absl::flat_hash_map<std::string, googlesql::Value> populated_col_to_value;
 
   for (int i = 0; i < modified_tracked_columns_names.size(); i++) {
     populated_col_to_value[modified_tracked_columns_names[i]] =
@@ -281,47 +284,47 @@ absl::StatusOr<std::vector<zetasql::Value>> GetNewValuesForDataChangeRecord(
       new_values_for_tracked_cols.push_back(
           populated_col_to_value.contains(col->Name())
               ? populated_col_to_value[col->Name()]
-              : zetasql::Value::NullString());
+              : googlesql::Value::NullString());
     }
     return new_values_for_tracked_cols;
   }
-    // Find unpopulated columns
-    std::vector<std::string> unpopulated_cols;
-    for (const Column* col : tracked_columns) {
-      if (!IsPrimaryKey(tracked_table, col) &&
-          !populated_col_to_value.contains(col->Name())) {
-        unpopulated_cols.push_back(col->Name());
-      }
+  // Find unpopulated columns
+  std::vector<std::string> unpopulated_cols;
+  for (const Column* col : tracked_columns) {
+    if (!IsPrimaryKey(tracked_table, col) &&
+        !populated_col_to_value.contains(col->Name())) {
+      unpopulated_cols.push_back(col->Name());
     }
-    // For UPDATES with NEW_ROW, Read for the existing values for the
-    // unpopulated columns from the user table
-    ZETASQL_ASSIGN_OR_RETURN(
-        std::vector<zetasql::Value>
-            existing_values_for_tracked_unpopulated_cols,
-        RetrieveExistingValues(tracked_table, unpopulated_cols, key, store));
+  }
+  // For UPDATES with NEW_ROW, Read for the existing values for the
+  // unpopulated columns from the user table
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      std::vector<googlesql::Value>
+          existing_values_for_tracked_unpopulated_cols,
+      RetrieveExistingValues(tracked_table, unpopulated_cols, key, store));
 
-    absl::flat_hash_map<std::string, zetasql::Value> unpopulated_col_to_value;
-    for (int i = 0; i < unpopulated_cols.size(); i++) {
-      unpopulated_col_to_value[unpopulated_cols[i]] =
-          existing_values_for_tracked_unpopulated_cols[i];
-    }
-    // Merge the populated values and old values together in order
-    for (const Column* col : tracked_columns) {
-      new_values_for_tracked_cols.push_back(
-          populated_col_to_value.contains(col->Name())
-              ? populated_col_to_value[col->Name()]
-              : unpopulated_col_to_value[col->Name()]);
-    }
+  absl::flat_hash_map<std::string, googlesql::Value> unpopulated_col_to_value;
+  for (int i = 0; i < unpopulated_cols.size(); i++) {
+    unpopulated_col_to_value[unpopulated_cols[i]] =
+        existing_values_for_tracked_unpopulated_cols[i];
+  }
+  // Merge the populated values and old values together in order
+  for (const Column* col : tracked_columns) {
+    new_values_for_tracked_cols.push_back(
+        populated_col_to_value.contains(col->Name())
+            ? populated_col_to_value[col->Name()]
+            : unpopulated_col_to_value[col->Name()]);
+  }
 
-    return new_values_for_tracked_cols;
+  return new_values_for_tracked_cols;
 }
 
 // Accumulate tracked column types and values for same DataChangeRecord
 absl::Status LogTableMod(
     const Key& key, std::vector<const Column*> modified_tracked_columns,
-    const std::vector<zetasql::Value>& modified_tracked_values,
+    const std::vector<googlesql::Value>& modified_tracked_values,
     const Table* tracked_table, const ChangeStream* change_stream,
-    absl::string_view mod_type, zetasql::Value partition_token,
+    absl::string_view mod_type, googlesql::Value partition_token,
     absl::flat_hash_map<const ChangeStream*, std::vector<DataChangeRecord>>*
         data_change_records_in_transaction_by_change_stream,
     TransactionID transaction_id,
@@ -361,14 +364,14 @@ absl::Status LogTableMod(
     modified_tracked_column_names.push_back(column->Name());
   }
 
-  ZETASQL_ASSIGN_OR_RETURN(std::vector<zetasql::Value> updated_values,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::vector<googlesql::Value> updated_values,
                    GetNewValuesForDataChangeRecord(
                        value_capture_type, mod_type, tracked_table,
                        modified_tracked_column_names, modified_tracked_values,
                        key, store, tracked_columns));
 
-  std::vector<zetasql::Value> new_values_for_tracked_cols;
-  std::vector<zetasql::Value> old_values_for_tracked_cols;
+  std::vector<googlesql::Value> new_values_for_tracked_cols;
+  std::vector<googlesql::Value> old_values_for_tracked_cols;
   std::vector<ColumnType> column_types;
   std::vector<std::string> non_key_cols;
   for (int i = 0; i < tracked_columns.size(); ++i) {
@@ -386,7 +389,7 @@ absl::Status LogTableMod(
     }
   }
 
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       old_values_for_tracked_cols,
       GetOldValuesForDataChangeRecord(
           value_capture_type, mod_type, tracked_table, key, store, non_key_cols,
@@ -421,13 +424,13 @@ absl::Status LogTableMod(
   return absl::OkStatus();
 }
 
-std::pair<std::vector<const Column*>, std::vector<zetasql::Value>>
+std::pair<std::vector<const Column*>, std::vector<googlesql::Value>>
 GetTrackedColumnsAndValues(std::vector<const Column*> columns,
-                           std::vector<zetasql::Value> values,
+                           std::vector<googlesql::Value> values,
                            const ChangeStream* change_stream,
                            const Table* table) {
   std::vector<const Column*> tracked_columns;
-  std::vector<zetasql::Value> tracked_values;
+  std::vector<googlesql::Value> tracked_values;
   for (int i = 0; i < columns.size(); i++) {
     auto column = columns[i];
     if (column->FindChangeStream(change_stream->Name()) ||
@@ -441,24 +444,24 @@ GetTrackedColumnsAndValues(std::vector<const Column*> columns,
 
 absl::Status LogTableMod(
     WriteOp op, const ChangeStream* change_stream,
-    zetasql::Value partition_token,
+    googlesql::Value partition_token,
     absl::flat_hash_map<const ChangeStream*, std::vector<DataChangeRecord>>*
         data_change_records_in_transaction_by_change_stream,
     TransactionID transaction_id,
     absl::flat_hash_map<const ChangeStream*, ModGroup>*
         last_mod_group_by_change_stream,
     ReadOnlyStore* store) {
-  ZETASQL_RETURN_IF_ERROR(std::visit(
+  GOOGLESQL_RETURN_IF_ERROR(std::visit(
       overloaded{
           [&](const InsertOp& op) -> absl::Status {
             if (change_stream->exclude_insert().has_value() &&
                 change_stream->exclude_insert().value()) {
               return absl::OkStatus();
             }
-            std::pair<std::vector<const Column*>, std::vector<zetasql::Value>>
+            std::pair<std::vector<const Column*>, std::vector<googlesql::Value>>
                 tracked_columns_and_values = GetTrackedColumnsAndValues(
                     op.columns, op.values, change_stream, op.table);
-            ZETASQL_RETURN_IF_ERROR(LogTableMod(
+            GOOGLESQL_RETURN_IF_ERROR(LogTableMod(
                 op.key, tracked_columns_and_values.first,
                 tracked_columns_and_values.second, op.table, change_stream,
                 kInsert, partition_token,
@@ -471,10 +474,10 @@ absl::Status LogTableMod(
                 change_stream->exclude_update().value()) {
               return absl::OkStatus();
             }
-            std::pair<std::vector<const Column*>, std::vector<zetasql::Value>>
+            std::pair<std::vector<const Column*>, std::vector<googlesql::Value>>
                 tracked_columns_and_values = GetTrackedColumnsAndValues(
                     op.columns, op.values, change_stream, op.table);
-            ZETASQL_RETURN_IF_ERROR(LogTableMod(
+            GOOGLESQL_RETURN_IF_ERROR(LogTableMod(
                 op.key, tracked_columns_and_values.first,
                 tracked_columns_and_values.second, op.table, change_stream,
                 kUpdate, partition_token,
@@ -491,7 +494,7 @@ absl::Status LogTableMod(
             for (const KeyColumn* pk : op.table->primary_key()) {
               columns.push_back(pk->column());
             }
-            ZETASQL_RETURN_IF_ERROR(LogTableMod(
+            GOOGLESQL_RETURN_IF_ERROR(LogTableMod(
                 op.key, columns, {}, op.table, change_stream, kDelete,
                 partition_token,
                 data_change_records_in_transaction_by_change_stream,
@@ -503,15 +506,15 @@ absl::Status LogTableMod(
   return absl::OkStatus();
 }
 
-std::string GsqlTypeToSpannerType(const zetasql::Type* type) {
+std::string GsqlTypeToSpannerType(const googlesql::Type* type) {
   JSON type_json;
   if (type->IsArray()) {
     type_json["code"] = kArray;
   }
   std::string element_type_code;
-  const zetasql::Type* element_type =
+  const googlesql::Type* element_type =
       type->IsArray() ? type->AsArray()->element_type() : type;
-  if (element_type->kind() == zetasql::TYPE_EXTENDED) {
+  if (element_type->kind() == googlesql::TYPE_EXTENDED) {
     std::string element_annotation_code;
     auto type_code =
         static_cast<const SpannerExtendedType*>(element_type)->code();
@@ -525,8 +528,10 @@ std::string GsqlTypeToSpannerType(const zetasql::Type* type) {
     type->IsArray() ? type_json["array_element_type"]["type_annotation"] =
                           element_annotation_code
                     : type_json["type_annotation"] = element_annotation_code;
+  } else if (element_type->kind() == googlesql::TYPE_PROTO) {
+    element_type_code = "PROTO";
   } else {
-    element_type_code = element_type->TypeName(zetasql::PRODUCT_EXTERNAL,
+    element_type_code = element_type->TypeName(googlesql::PRODUCT_EXTERNAL,
                                                /*use_external_float32=*/true);
   }
   type->IsArray() ? type_json["array_element_type"]["code"] = element_type_code
@@ -534,42 +539,42 @@ std::string GsqlTypeToSpannerType(const zetasql::Type* type) {
   return type_json.dump();
 }
 
-void CloudValueToJSONValue(const zetasql::Value value, JSONValueRef& ref) {
+void CloudValueToJSONValue(const googlesql::Value value, JSONValueRef& ref) {
   switch (value.type_kind()) {
-    case zetasql::TYPE_DOUBLE: {
+    case googlesql::TYPE_DOUBLE: {
       ref.SetDouble(value.double_value());
       break;
     }
-    case zetasql::TYPE_FLOAT: {
+    case googlesql::TYPE_FLOAT: {
       ref.SetDouble(static_cast<double>(value.float_value()));
       break;
     }
-    case zetasql::TYPE_STRING: {
+    case googlesql::TYPE_STRING: {
       ref.SetString(value.string_value());
       break;
     }
-    case zetasql::TYPE_BOOL: {
+    case googlesql::TYPE_BOOL: {
       ref.SetBoolean(value.bool_value());
       break;
     }
-    case zetasql::TYPE_DATE: {
+    case googlesql::TYPE_DATE: {
       ref.SetString(value.Format(false));
       break;
     }
-    case zetasql::TYPE_TIMESTAMP: {
+    case googlesql::TYPE_TIMESTAMP: {
       ref.SetString(absl::FormatTime("%Y-%m-%d%ET%H:%M:%SZ", value.ToTime(),
                                      absl::UTCTimeZone()));
       break;
     }
-    case zetasql::TYPE_INT64: {
+    case googlesql::TYPE_INT64: {
       ref.SetString(value.GetSQLLiteral());
       break;
     }
-    case zetasql::TYPE_NUMERIC: {
+    case googlesql::TYPE_NUMERIC: {
       ref.SetString(value.Format(false));
       break;
     }
-    case zetasql::TYPE_ARRAY: {
+    case googlesql::TYPE_ARRAY: {
       if (value.num_elements() == 0) {
         ref.SetToEmptyArray();
       } else {
@@ -580,16 +585,22 @@ void CloudValueToJSONValue(const zetasql::Value value, JSONValueRef& ref) {
       }
       break;
     }
-    case zetasql::TYPE_BYTES: {
-      ref.SetString(google::cloud::spanner_internal::BytesToBase64(
-          google::cloud::spanner::Bytes(value.bytes_value())));
+    case googlesql::TYPE_BYTES:
+    case googlesql::TYPE_PROTO: {
+      std::string strvalue;
+      absl::CopyCordToString(value.ToCord(), &strvalue);
+      ref.SetString(absl::Base64Escape(strvalue));
       break;
     }
-    case zetasql::TYPE_JSON: {
+    case googlesql::TYPE_JSON: {
       ref.SetString(value.Format(false));
       break;
     }
-    case zetasql::TypeKind::TYPE_EXTENDED: {
+    case googlesql::TypeKind::TYPE_EXTENDED: {
+      ref.SetString(value.Format(false));
+      break;
+    }
+    case googlesql::TYPE_UUID: {
       ref.SetString(value.Format(false));
       break;
     }
@@ -601,8 +612,8 @@ void CloudValueToJSONValue(const zetasql::Value value, JSONValueRef& ref) {
 
 std::string CloudListValueToJSONString(
     std::vector<std::string> col_names,
-    const std::vector<zetasql::Value> mod_values) {
-  zetasql::JSONValue json_value;
+    const std::vector<googlesql::Value> mod_values) {
+  googlesql::JSONValue json_value;
   JSONValueRef ref = json_value.GetRef();
   for (int i = 0; i < col_names.size(); i++) {
     // Skip invalid old values since they belong to unmodified columns in
@@ -619,14 +630,14 @@ std::string CloudListValueToJSONString(
 }
 
 absl::StatusOr<Key> ComputeChangeStreamDataTableKey(
-    zetasql::Value partition_token_str, zetasql::Value commit_timestamp,
+    googlesql::Value partition_token_str, googlesql::Value commit_timestamp,
     std::string record_sequence, std::string server_transaction_id,
     std::string table_name) {
   Key key;
   key.AddColumn(partition_token_str, false);
   key.AddColumn(commit_timestamp, false);
-  key.AddColumn(zetasql::Value::String(server_transaction_id), false);
-  key.AddColumn(zetasql::Value::String(record_sequence), false);
+  key.AddColumn(googlesql::Value::String(server_transaction_id), false);
+  key.AddColumn(googlesql::Value::String(record_sequence), false);
   const int64_t key_size = key.LogicalSizeInBytes();
   if (key_size > limits::kMaxKeySizeBytes) {
     return error::KeyTooLarge(table_name, key_size, limits::kMaxKeySizeBytes);
@@ -638,44 +649,44 @@ absl::StatusOr<WriteOp> ConvertDataChangeRecordToWriteOp(
     const ChangeStream* change_stream, DataChangeRecord record,
     std::vector<const Column*> columns) {
   // Compute change_stream_data_table key
-  ZETASQL_ASSIGN_OR_RETURN(Key change_stream_data_table_key,
+  GOOGLESQL_ASSIGN_OR_RETURN(Key change_stream_data_table_key,
                    ComputeChangeStreamDataTableKey(
                        record.partition_token, record.commit_timestamp,
                        record.server_transaction_id, record.record_sequence,
                        change_stream->change_stream_data_table()->Name()));
-  std::vector<zetasql::Value> values;
+  std::vector<googlesql::Value> values;
   values.push_back(record.partition_token);
   values.push_back(record.commit_timestamp);
-  values.push_back(zetasql::Value::String(record.server_transaction_id));
-  values.push_back(zetasql::Value::String(record.record_sequence));
-  values.push_back(zetasql::Value::Bool(
+  values.push_back(googlesql::Value::String(record.server_transaction_id));
+  values.push_back(googlesql::Value::String(record.record_sequence));
+  values.push_back(googlesql::Value::Bool(
       record.is_last_record_in_transaction_in_partition));
-  values.push_back(zetasql::Value::String(record.tracked_table_name));
-  std::vector<zetasql::Value> column_types_name;
-  std::vector<zetasql::Value> column_types_type;
-  std::vector<zetasql::Value> column_types_is_primary_key;
-  std::vector<zetasql::Value> column_types_ordinal_position;
+  values.push_back(googlesql::Value::String(record.tracked_table_name));
+  std::vector<googlesql::Value> column_types_name;
+  std::vector<googlesql::Value> column_types_type;
+  std::vector<googlesql::Value> column_types_is_primary_key;
+  std::vector<googlesql::Value> column_types_ordinal_position;
   for (const ColumnType& column_type : record.column_types) {
-    column_types_name.push_back(zetasql::Value::String(column_type.name));
+    column_types_name.push_back(googlesql::Value::String(column_type.name));
     column_types_type.push_back(
-        zetasql::Value::String(GsqlTypeToSpannerType(column_type.type)));
+        googlesql::Value::String(GsqlTypeToSpannerType(column_type.type)));
     column_types_is_primary_key.push_back(
-        zetasql::Value::Bool(column_type.is_primary_key));
+        googlesql::Value::Bool(column_type.is_primary_key));
     column_types_ordinal_position.push_back(
-        zetasql::Value::Int64(column_type.ordinal_position));
+        googlesql::Value::Int64(column_type.ordinal_position));
   }
-  values.push_back(zetasql::values::Array(zetasql::types::StringArrayType(),
+  values.push_back(googlesql::values::Array(googlesql::types::StringArrayType(),
                                             column_types_name));
-  values.push_back(zetasql::values::Array(zetasql::types::StringArrayType(),
+  values.push_back(googlesql::values::Array(googlesql::types::StringArrayType(),
                                             column_types_type));
-  values.push_back(zetasql::values::Array(zetasql::types::BoolArrayType(),
+  values.push_back(googlesql::values::Array(googlesql::types::BoolArrayType(),
                                             column_types_is_primary_key));
-  values.push_back(zetasql::values::Array(zetasql::types::Int64ArrayType(),
+  values.push_back(googlesql::values::Array(googlesql::types::Int64ArrayType(),
                                             column_types_ordinal_position));
-  std::vector<zetasql::Value> mods_keys;
-  std::vector<zetasql::Value> mods_new_values;
-  std::vector<zetasql::Value> mods_old_values;
-  zetasql::JSONValue keys_json;
+  std::vector<googlesql::Value> mods_keys;
+  std::vector<googlesql::Value> mods_new_values;
+  std::vector<googlesql::Value> mods_old_values;
+  googlesql::JSONValue keys_json;
   JSONValueRef ref = keys_json.GetRef();
   for (const Mod& mod : record.mods) {
     for (int i = 0; i < mod.key_columns.size(); ++i) {
@@ -689,44 +700,44 @@ absl::StatusOr<WriteOp> ConvertDataChangeRecordToWriteOp(
         CloudValueToJSONValue(mod.keys[i], key_col_ref);
       }
     }
-    mods_keys.push_back(zetasql::Value::String(ref.ToString()));
+    mods_keys.push_back(googlesql::Value::String(ref.ToString()));
 
     if (mod.new_values.empty()) {
-      mods_new_values.push_back(zetasql::Value::String(kMinimumValidJson));
+      mods_new_values.push_back(googlesql::Value::String(kMinimumValidJson));
     } else {
       std::string new_values_json_str =
           CloudListValueToJSONString(mod.non_key_columns, mod.new_values);
-      mods_new_values.push_back(zetasql::Value::String(new_values_json_str));
+      mods_new_values.push_back(googlesql::Value::String(new_values_json_str));
     }
     if (mod.old_values.empty()) {
-      mods_old_values.push_back(zetasql::Value::String(kMinimumValidJson));
+      mods_old_values.push_back(googlesql::Value::String(kMinimumValidJson));
     } else {
       std::string old_values_json_str =
           CloudListValueToJSONString(mod.non_key_columns, mod.old_values);
-      mods_old_values.push_back(zetasql::Value::String(old_values_json_str));
+      mods_old_values.push_back(googlesql::Value::String(old_values_json_str));
     }
   }
   values.push_back(
-      zetasql::values::Array(zetasql::types::StringArrayType(), mods_keys));
-  values.push_back(zetasql::values::Array(zetasql::types::StringArrayType(),
+      googlesql::values::Array(googlesql::types::StringArrayType(), mods_keys));
+  values.push_back(googlesql::values::Array(googlesql::types::StringArrayType(),
                                             mods_new_values));
-  values.push_back(zetasql::values::Array(zetasql::types::StringArrayType(),
+  values.push_back(googlesql::values::Array(googlesql::types::StringArrayType(),
                                             mods_old_values));
-  values.push_back(zetasql::Value::String(record.mod_type));
-  values.push_back(zetasql::Value::String(record.value_capture_type));
+  values.push_back(googlesql::Value::String(record.mod_type));
+  values.push_back(googlesql::Value::String(record.value_capture_type));
   values.push_back(
-      zetasql::Value::Int64(record.number_of_records_in_transaction));
+      googlesql::Value::Int64(record.number_of_records_in_transaction));
   values.push_back(
-      zetasql::Value::Int64(record.number_of_partitions_in_transaction));
-  values.push_back(zetasql::Value::String(record.transaction_tag));
-  values.push_back(zetasql::Value::Bool(record.is_system_transaction));
+      googlesql::Value::Int64(record.number_of_partitions_in_transaction));
+  values.push_back(googlesql::Value::String(record.transaction_tag));
+  values.push_back(googlesql::Value::Bool(record.is_system_transaction));
   return InsertOp{change_stream->change_stream_data_table(),
                   change_stream_data_table_key, columns, values};
 }
 
 // Set number_of_records_in_transaction and build the WriteOp for
 // change_stream_data_table
-std::vector<WriteOp> BuildMutation(
+absl::StatusOr<std::vector<WriteOp>> BuildMutation(
     absl::flat_hash_map<const ChangeStream*, std::vector<DataChangeRecord>>*
         data_change_records_in_transaction_by_change_stream,
     TransactionID transaction_id,
@@ -771,9 +782,9 @@ std::vector<WriteOp> BuildMutation(
     for (DataChangeRecord record : records) {
       record.number_of_records_in_transaction =
           number_of_records_in_transaction;
-      write_ops.push_back(
-          ConvertDataChangeRecordToWriteOp(change_stream, record, columns)
-              .value());
+      GOOGLESQL_ASSIGN_OR_RETURN(WriteOp write_op, ConvertDataChangeRecordToWriteOp(
+                                             change_stream, record, columns));
+      write_ops.push_back(write_op);
     }
   }
   return write_ops;
@@ -781,9 +792,10 @@ std::vector<WriteOp> BuildMutation(
 
 absl::StatusOr<std::vector<WriteOp>> BuildChangeStreamWriteOps(
     const Schema* schema, std::vector<WriteOp> buffered_write_ops,
-    ReadOnlyStore* store, TransactionID transaction_id) {
+    ReadOnlyStore* store, TransactionID transaction_id,
+    bool exclude_txn_from_change_streams) {
   // Map for change streams and their partition tokens within the transaction.
-  absl::flat_hash_map<const ChangeStream*, zetasql::Value>
+  absl::flat_hash_map<const ChangeStream*, googlesql::Value>
       change_stream_with_partition_token;
   // Map for tables and the change streams tracking the tables or columns
   // included in the tables.
@@ -800,21 +812,27 @@ absl::StatusOr<std::vector<WriteOp>> BuildChangeStreamWriteOps(
     const Table* table = TableOf(write_op);
     for (const ChangeStream* change_stream :
          table_with_tracked_change_streams[table]) {
-      if (!change_stream_with_partition_token.contains(change_stream)) {
-        change_stream_with_partition_token[change_stream] =
-            RetrieveChangeStreamWithPartitionToken(store, change_stream)
-                .value();
+      if (exclude_txn_from_change_streams &&
+          change_stream->allow_txn_exclusion().value_or(false)) {
+        continue;
       }
-      ZETASQL_RETURN_IF_ERROR(
+      if (!change_stream_with_partition_token.contains(change_stream)) {
+        GOOGLESQL_ASSIGN_OR_RETURN(
+            googlesql::Value partition_token,
+            RetrieveChangeStreamWithPartitionToken(store, change_stream));
+        change_stream_with_partition_token[change_stream] = partition_token;
+      }
+      GOOGLESQL_RETURN_IF_ERROR(
           LogTableMod(write_op, change_stream,
                       change_stream_with_partition_token[change_stream],
                       &data_change_records_in_transaction_by_change_stream,
                       transaction_id, &last_mod_group_by_change_stream, store));
     }
   }
-  std::vector<WriteOp> write_ops =
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      std::vector<WriteOp> write_ops,
       BuildMutation(&data_change_records_in_transaction_by_change_stream,
-                    transaction_id, &last_mod_group_by_change_stream);
+                    transaction_id, &last_mod_group_by_change_stream));
   return write_ops;
 }
 

@@ -60,7 +60,7 @@ ReadOnlyTransaction::ReadOnlyTransaction(
 
 absl::Status ReadOnlyTransaction::Read(const ReadArg& read_arg,
                                        std::unique_ptr<RowCursor>* cursor) {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   // Wait for any concurrent schema change or read-write transactions to commit
   // before accessing database state to perform a read.
   lock_handle_->WaitForSafeRead(read_timestamp_);
@@ -69,7 +69,7 @@ absl::Status ReadOnlyTransaction::Read(const ReadArg& read_arg,
     return error::ReadTimestampPastVersionGCLimit(read_timestamp_);
   }
 
-  ZETASQL_ASSIGN_OR_RETURN(const ResolvedReadArg resolved_read_arg,
+  GOOGLESQL_ASSIGN_OR_RETURN(const ResolvedReadArg resolved_read_arg,
                    ResolveReadArg(read_arg, schema()));
 
   // Clean up any dropped tables that are eligible for deletion.
@@ -80,7 +80,7 @@ absl::Status ReadOnlyTransaction::Read(const ReadArg& read_arg,
   std::vector<std::unique_ptr<StorageIterator>> iterators;
   for (const auto& key_range : resolved_read_arg.key_ranges) {
     std::unique_ptr<StorageIterator> itr;
-    ZETASQL_RETURN_IF_ERROR(base_storage_->Read(
+    GOOGLESQL_RETURN_IF_ERROR(base_storage_->Read(
         read_timestamp_, resolved_read_arg.table->id(), key_range,
         GetColumnIDs(resolved_read_arg.columns), &itr));
     iterators.push_back(std::move(itr));

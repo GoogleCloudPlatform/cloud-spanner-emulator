@@ -1,0 +1,22 @@
+@Dialect=GOOGLE_STANDARD_SQL
+CREATE TABLE Users (
+  UserId    INT64 NOT NULL,
+  Name      STRING(MAX),
+) PRIMARY KEY (UserId);
+CREATE TABLE Threads (
+  UserId    INT64 NOT NULL,
+  ThreadId  INT64 NOT NULL,
+  Starred   BOOL
+) PRIMARY KEY (UserId, ThreadId), INTERLEAVE IN PARENT Users ON DELETE CASCADE;
+===
+@Dialect=POSTGRESQL
+CREATE TABLE Users (
+  UserId    bigint NOT NULL PRIMARY KEY,
+  Name      varchar
+);
+CREATE TABLE Threads (
+  UserId    bigint NOT NULL,
+  ThreadId  bigint NOT NULL,
+  Starred   boolean,
+  PRIMARY KEY (UserId, ThreadId)
+) INTERLEAVE IN PARENT Users ON DELETE CASCADE;

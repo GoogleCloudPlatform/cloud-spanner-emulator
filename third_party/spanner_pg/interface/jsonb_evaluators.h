@@ -35,18 +35,18 @@
 
 #include <cstdint>
 
-#include "zetasql/public/value.h"
+#include "googlesql/public/value.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 
 namespace postgres_translator::function_evaluators {
-absl::StatusOr<zetasql::Value> JsonbArrayElement(
+absl::StatusOr<googlesql::Value> JsonbArrayElement(
     absl::string_view jsonb_string, int64_t element);
 
-absl::StatusOr<zetasql::Value> JsonbObjectField(
+absl::StatusOr<googlesql::Value> JsonbObjectField(
     absl::string_view jsonb_string, absl::string_view key);
 
-absl::StatusOr<zetasql::Value> JsonbTypeof(absl::string_view jsonb_string);
+absl::StatusOr<googlesql::Value> JsonbTypeof(absl::string_view jsonb_string);
 }  // namespace postgres_translator::function_evaluators
 
 #endif  // INTERFACE_JSONB_EVALUATORS_H_

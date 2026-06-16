@@ -21,17 +21,17 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/analyzer/function_signature_matcher.h"
-#include "zetasql/public/analyzer.h"
-#include "zetasql/public/analyzer_options.h"
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/coercer.h"
-#include "zetasql/public/function_signature.h"
-#include "zetasql/public/input_argument_type.h"
-#include "zetasql/public/options.pb.h"
-#include "zetasql/public/signature_match_result.h"
-#include "zetasql/public/type.h"
-#include "zetasql/resolved_ast/resolved_ast.h"
+#include "googlesql/analyzer/function_signature_matcher.h"
+#include "googlesql/public/analyzer.h"
+#include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/coercer.h"
+#include "googlesql/public/function_signature.h"
+#include "googlesql/public/input_argument_type.h"
+#include "googlesql/public/options.pb.h"
+#include "googlesql/public/signature_match_result.h"
+#include "googlesql/public/type.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/cord.h"
@@ -42,8 +42,8 @@
 #include "third_party/spanner_pg/interface/emulator_parser.h"
 #include "third_party/spanner_pg/interface/pg_arena.h"
 #include "third_party/spanner_pg/shims/memory_context_pg_arena.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace {
 
@@ -76,25 +76,25 @@ namespace backend {
 // Uses googlesql/public/analyzer to build an AnalyzerOutput for a query.
 // We need to analyze the SQL before executing it in order to determine what
 // kind of statement (query or DML) it is.
-absl::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>> Analyze(
-    const std::string& sql, zetasql::Catalog* catalog,
-    const zetasql::AnalyzerOptions& options,
-    zetasql::TypeFactory* type_factory) {
+absl::StatusOr<std::unique_ptr<const googlesql::AnalyzerOutput>> Analyze(
+    const std::string& sql, googlesql::Catalog* catalog,
+    const googlesql::AnalyzerOptions& options,
+    googlesql::TypeFactory* type_factory) {
   // Check the overall length of the query string.
   if (sql.size() > limits::kMaxQueryStringSize) {
     return error::QueryStringTooLong(sql.size(), limits::kMaxQueryStringSize);
   }
 
-  std::unique_ptr<const zetasql::AnalyzerOutput> output;
-  ZETASQL_RETURN_IF_ERROR(zetasql::AnalyzeStatement(sql, options, catalog,
+  std::unique_ptr<const googlesql::AnalyzerOutput> output;
+  GOOGLESQL_RETURN_IF_ERROR(googlesql::AnalyzeStatement(sql, options, catalog,
                                               type_factory, &output));
   return output;
 }
 
-absl::StatusOr<std::unique_ptr<const zetasql::AnalyzerOutput>>
-AnalyzePostgreSQL(const std::string& sql, zetasql::EnumerableCatalog* catalog,
-                  zetasql::AnalyzerOptions& options,
-                  zetasql::TypeFactory* type_factory,
+absl::StatusOr<std::unique_ptr<const googlesql::AnalyzerOutput>>
+AnalyzePostgreSQL(const std::string& sql, googlesql::EnumerableCatalog* catalog,
+                  googlesql::AnalyzerOptions& options,
+                  googlesql::TypeFactory* type_factory,
                   const FunctionCatalog* function_catalog) {
   // Check the overall length of the query string.
   if (sql.size() > limits::kMaxQueryStringSize) {
@@ -102,15 +102,15 @@ AnalyzePostgreSQL(const std::string& sql, zetasql::EnumerableCatalog* catalog,
   }
 
   options.CreateDefaultArenasIfNotSet();
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       std::unique_ptr<postgres_translator::interfaces::PGArena> arena,
       postgres_translator::spangres::MemoryContextPGArena::Init(nullptr));
   // PG needs ASC NULLS LAST and DESC NULLS FIRST for functions implemented as
   // a SQL rewrite.
   options.mutable_language()->EnableLanguageFeature(
-      zetasql::FEATURE_NULLS_FIRST_LAST_IN_ORDER_BY);
-  ZETASQL_ASSIGN_OR_RETURN(
-      std::unique_ptr<const zetasql::AnalyzerOutput> output,
+      googlesql::FEATURE_NULLS_FIRST_LAST_IN_ORDER_BY);
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      std::unique_ptr<const googlesql::AnalyzerOutput> output,
       postgres_translator::spangres::ParseAndAnalyzePostgreSQL(
           sql, catalog, options, type_factory,
           std::make_unique<FunctionCatalog>(
@@ -121,33 +121,33 @@ AnalyzePostgreSQL(const std::string& sql, zetasql::EnumerableCatalog* catalog,
   return std::move(output);
 }
 
-absl::StatusOr<std::unique_ptr<const zetasql::ResolvedFunctionCall>>
-BuildPendingCommitTimestampFunction(zetasql::TypeFactory& type_factory,
-                                    zetasql::Catalog& catalog) {
-  const zetasql::Function* pct_function = nullptr;
-  ZETASQL_RETURN_IF_ERROR(
+absl::StatusOr<std::unique_ptr<const googlesql::ResolvedFunctionCall>>
+BuildPendingCommitTimestampFunction(googlesql::TypeFactory& type_factory,
+                                    googlesql::Catalog& catalog) {
+  const googlesql::Function* pct_function = nullptr;
+  GOOGLESQL_RETURN_IF_ERROR(
       catalog.FindFunction({"pending_commit_timestamp"}, &pct_function));
-  ZETASQL_RET_CHECK(pct_function != nullptr);
-  ZETASQL_RET_CHECK_EQ(pct_function->signatures().size(), 1);
-  std::vector<zetasql::InputArgumentType> input_argument_types;
-  zetasql::LanguageOptions language_options;
-  zetasql::Coercer coercer(&type_factory, &language_options);
-  std::unique_ptr<zetasql::FunctionSignature> result_signature;
-  zetasql::SignatureMatchResult signature_match_result;
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_RET_CHECK(pct_function != nullptr);
+  GOOGLESQL_RET_CHECK_EQ(pct_function->signatures().size(), 1);
+  std::vector<googlesql::InputArgumentType> input_argument_types;
+  googlesql::LanguageOptions language_options;
+  googlesql::Coercer coercer(&type_factory, &language_options);
+  std::unique_ptr<googlesql::FunctionSignature> result_signature;
+  googlesql::SignatureMatchResult signature_match_result;
+  GOOGLESQL_ASSIGN_OR_RETURN(
       bool function_signature_matches,
-      zetasql::FunctionSignatureMatchesWithStatus(
+      googlesql::FunctionSignatureMatchesWithStatus(
           language_options, coercer, /*arg_ast_nodes=*/{}, input_argument_types,
           pct_function->signatures().at(0),
           /*allow_argument_coercion=*/false, &type_factory,
           /*resolve_lambda_callback=*/nullptr, &result_signature,
           &signature_match_result,
           /*arg_index_mapping=*/nullptr, /*arg_overrides=*/nullptr));
-  ZETASQL_RET_CHECK(result_signature->IsConcrete());
-  ZETASQL_RET_CHECK(function_signature_matches);
-  return zetasql::MakeResolvedFunctionCall(
+  GOOGLESQL_RET_CHECK(result_signature->IsConcrete());
+  GOOGLESQL_RET_CHECK(function_signature_matches);
+  return googlesql::MakeResolvedFunctionCall(
       result_signature->result_type().type(), pct_function, *result_signature,
-      {}, zetasql::ResolvedFunctionCall::DEFAULT_ERROR_MODE);
+      {}, googlesql::ResolvedFunctionCall::DEFAULT_ERROR_MODE);
 }
 
 }  // namespace backend

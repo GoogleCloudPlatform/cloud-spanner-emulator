@@ -35,14 +35,14 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/parse_location.h"
-#include "zetasql/public/types/type_factory.h"
-#include "zetasql/public/value.h"
-#include "zetasql/resolved_ast/resolved_ast.h"
-#include "zetasql/resolved_ast/resolved_column.h"
+#include "googlesql/public/parse_location.h"
+#include "googlesql/public/types/type_factory.h"
+#include "googlesql/public/value.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_column.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "zetasql/base/testing/status_matchers.h"
+#include "googlesql/base/testing/status_matchers.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/flags/declare.h"
 #include "absl/flags/flag.h"
@@ -61,7 +61,7 @@
 #include "third_party/spanner_pg/util/postgres.h"
 #include "third_party/spanner_pg/util/uuid_conversion.h"
 #include "third_party/spanner_pg/util/valid_memory_context_fixture.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator::spangres::test {
 namespace {
@@ -71,9 +71,9 @@ using ::postgres_translator::internal::PostgresCastToExpr;
 using ::postgres_translator::internal::PostgresCastToNode;
 using ::postgres_translator::spangres::types::PgNumericMapping;
 using ::postgres_translator::test::ValidMemoryContext;
-using ::zetasql_base::testing::StatusIs;
+using ::googlesql_base::testing::StatusIs;
 
-using ValuePair = std::pair<Expr*, std::unique_ptr<zetasql::ResolvedExpr>>;
+using ValuePair = std::pair<Expr*, std::unique_ptr<googlesql::ResolvedExpr>>;
 using ValuePairVector = std::vector<ValuePair>;
 
 using ExpressionTransformerTest = ::postgres_translator::TransformerTest;
@@ -85,7 +85,7 @@ absl::StatusOr<Const*> MakeNumericConst(absl::string_view value,
   Datum const_value =
       DirectFunctionCall3(numeric_in, CStringGetDatum(value.data()),
                           ObjectIdGetDatum(InvalidOid), Int32GetDatum(-1));
-  ZETASQL_ASSIGN_OR_RETURN(auto numeric_const,
+  GOOGLESQL_ASSIGN_OR_RETURN(auto numeric_const,
                    internal::makeScalarConst(NUMERICOID, const_value, is_null));
   return numeric_const;
 }
@@ -97,101 +97,101 @@ absl::StatusOr<ValuePairVector> ConstValuePairs() {
   // bool <-> bool
   value_pairs.emplace_back(
       PostgresCastToExpr(makeBoolConst(/*value=*/true, /*isnull=*/false)),
-      zetasql::MakeResolvedLiteral(zetasql::types::BoolType(),
-                                     zetasql::Value::Bool(true)));
+      googlesql::MakeResolvedLiteral(googlesql::types::BoolType(),
+                                     googlesql::Value::Bool(true)));
   value_pairs.emplace_back(
       PostgresCastToExpr(makeBoolConst(/*value=*/false, /*isnull=*/true)),
-      zetasql::MakeResolvedLiteral(zetasql::types::BoolType(),
-                                     zetasql::Value::NullBool()));
+      googlesql::MakeResolvedLiteral(googlesql::types::BoolType(),
+                                     googlesql::Value::NullBool()));
 
   // int8_t <-> int64_t
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       auto int8_const,
       internal::makeScalarConst(INT8OID, Int64GetDatum(17'000'000'000'000),
                                 /*constisnull=*/false));
   value_pairs.emplace_back(PostgresCastToExpr(int8_const),
-                           zetasql::MakeResolvedLiteral(
-                               zetasql::types::Int64Type(),
-                               zetasql::Value::Int64(17'000'000'000'000)));
-  ZETASQL_ASSIGN_OR_RETURN(int8_const,
+                           googlesql::MakeResolvedLiteral(
+                               googlesql::types::Int64Type(),
+                               googlesql::Value::Int64(17'000'000'000'000)));
+  GOOGLESQL_ASSIGN_OR_RETURN(int8_const,
                    internal::makeScalarConst(INT8OID, Int64GetDatum(0),
                                              /*constisnull=*/true));
   value_pairs.emplace_back(
       PostgresCastToExpr(int8_const),
-      zetasql::MakeResolvedLiteral(zetasql::types::Int64Type(),
-                                     zetasql::Value::NullInt64()));
+      googlesql::MakeResolvedLiteral(googlesql::types::Int64Type(),
+                                     googlesql::Value::NullInt64()));
   // float8 <-> double
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       auto float8_const,
       internal::makeScalarConst(FLOAT8OID, Float8GetDatum(3.141592653589793),
                                 /*constisnull=*/false));
   value_pairs.emplace_back(PostgresCastToExpr(float8_const),
-                           zetasql::MakeResolvedLiteral(
-                               zetasql::types::DoubleType(),
-                               zetasql::Value::Double(3.141592653589793)));
-  ZETASQL_ASSIGN_OR_RETURN(float8_const,
+                           googlesql::MakeResolvedLiteral(
+                               googlesql::types::DoubleType(),
+                               googlesql::Value::Double(3.141592653589793)));
+  GOOGLESQL_ASSIGN_OR_RETURN(float8_const,
                    internal::makeScalarConst(FLOAT8OID, Float8GetDatum(0),
                                              /*constisnull=*/true));
   value_pairs.emplace_back(
       PostgresCastToExpr(float8_const),
-      zetasql::MakeResolvedLiteral(zetasql::types::DoubleType(),
-                                     zetasql::Value::NullDouble()));
+      googlesql::MakeResolvedLiteral(googlesql::types::DoubleType(),
+                                     googlesql::Value::NullDouble()));
 
   // float4 <-> float32
-  ZETASQL_ASSIGN_OR_RETURN(auto float4_const,
+  GOOGLESQL_ASSIGN_OR_RETURN(auto float4_const,
                    internal::makeScalarConst(FLOAT4OID, Float4GetDatum(3.14159),
                                              /*constisnull=*/false));
   value_pairs.emplace_back(
       PostgresCastToExpr(float4_const),
-      zetasql::MakeResolvedLiteral(zetasql::types::FloatType(),
-                                     zetasql::Value::Float(3.14159)));
-  ZETASQL_ASSIGN_OR_RETURN(float4_const,
+      googlesql::MakeResolvedLiteral(googlesql::types::FloatType(),
+                                     googlesql::Value::Float(3.14159)));
+  GOOGLESQL_ASSIGN_OR_RETURN(float4_const,
                    internal::makeScalarConst(FLOAT4OID, Float4GetDatum(0),
                                              /*constisnull=*/true));
   value_pairs.emplace_back(
       PostgresCastToExpr(float4_const),
-      zetasql::MakeResolvedLiteral(zetasql::types::FloatType(),
-                                     zetasql::Value::NullFloat()));
+      googlesql::MakeResolvedLiteral(googlesql::types::FloatType(),
+                                     googlesql::Value::NullFloat()));
 
   // text <-> string
-  ZETASQL_ASSIGN_OR_RETURN(auto string_const,
+  GOOGLESQL_ASSIGN_OR_RETURN(auto string_const,
                    internal::makeStringConst(TEXTOID, "hello world",
                                              /*constisnull=*/false));
   value_pairs.emplace_back(
       PostgresCastToExpr(string_const),
-      zetasql::MakeResolvedLiteral(zetasql::types::StringType(),
-                                     zetasql::Value::String("hello world")));
-  ZETASQL_ASSIGN_OR_RETURN(string_const,
+      googlesql::MakeResolvedLiteral(googlesql::types::StringType(),
+                                     googlesql::Value::String("hello world")));
+  GOOGLESQL_ASSIGN_OR_RETURN(string_const,
                    internal::makeStringConst(TEXTOID, nullptr,
                                              /*constisnull=*/true));
   value_pairs.emplace_back(
       PostgresCastToExpr(string_const),
-      zetasql::MakeResolvedLiteral(zetasql::types::StringType(),
-                                     zetasql::Value::NullString()));
+      googlesql::MakeResolvedLiteral(googlesql::types::StringType(),
+                                     googlesql::Value::NullString()));
   // bytea <-> bytes
-  ZETASQL_ASSIGN_OR_RETURN(string_const,
+  GOOGLESQL_ASSIGN_OR_RETURN(string_const,
                    internal::makeStringConst(BYTEAOID, "\x01 bytes",
                                              /*constisnull=*/false));
   value_pairs.emplace_back(
       PostgresCastToExpr(string_const),
-      zetasql::MakeResolvedLiteral(zetasql::types::BytesType(),
-                                     zetasql::Value::Bytes("\x01 bytes")));
-  ZETASQL_ASSIGN_OR_RETURN(string_const,
+      googlesql::MakeResolvedLiteral(googlesql::types::BytesType(),
+                                     googlesql::Value::Bytes("\x01 bytes")));
+  GOOGLESQL_ASSIGN_OR_RETURN(string_const,
                    internal::makeStringConst(BYTEAOID, nullptr,
                                              /*constisnull=*/true));
   value_pairs.emplace_back(
       PostgresCastToExpr(string_const),
-      zetasql::MakeResolvedLiteral(zetasql::types::BytesType(),
-                                     zetasql::Value::NullBytes()));
+      googlesql::MakeResolvedLiteral(googlesql::types::BytesType(),
+                                     googlesql::Value::NullBytes()));
 
   // interval <-> interval
-  ZETASQL_ASSIGN_OR_RETURN(void* p, CheckedPgPalloc(sizeof(Interval)));
+  GOOGLESQL_ASSIGN_OR_RETURN(void* p, CheckedPgPalloc(sizeof(Interval)));
   Interval* interval = reinterpret_cast<Interval*>(p);
   interval->month = 10;
   interval->day = -50;
   interval->time = 5057089;
 
-  ZETASQL_ASSIGN_OR_RETURN(auto interval_const,
+  GOOGLESQL_ASSIGN_OR_RETURN(auto interval_const,
                    CheckedPgMakeConst(
                        /*consttype=*/INTERVALOID,
                        /*consttypmod=*/-1,
@@ -203,13 +203,13 @@ absl::StatusOr<ValuePairVector> ConstValuePairs() {
 
   value_pairs.emplace_back(
       PostgresCastToExpr(interval_const),
-      zetasql::MakeResolvedLiteral(
-          zetasql::types::IntervalType(),
-          zetasql::Value::Interval(
-              *zetasql::IntervalValue::FromMonthsDaysMicros(
+      googlesql::MakeResolvedLiteral(
+          googlesql::types::IntervalType(),
+          googlesql::Value::Interval(
+              *googlesql::IntervalValue::FromMonthsDaysMicros(
                   interval->month, interval->day, interval->time))));
 
-  ZETASQL_ASSIGN_OR_RETURN(interval_const,
+  GOOGLESQL_ASSIGN_OR_RETURN(interval_const,
                    CheckedPgMakeConst(
                        /*consttype=*/INTERVALOID,
                        /*consttypmod=*/-1,
@@ -221,13 +221,13 @@ absl::StatusOr<ValuePairVector> ConstValuePairs() {
 
   value_pairs.emplace_back(
       PostgresCastToExpr(interval_const),
-      zetasql::MakeResolvedLiteral(zetasql::types::IntervalType(),
-                                     zetasql::Value::NullInterval()));
+      googlesql::MakeResolvedLiteral(googlesql::types::IntervalType(),
+                                     googlesql::Value::NullInterval()));
 
   // uuid <-> uuid
   // Test null uuid
-  pg_uuid_t* pg_uuid;
-  ZETASQL_ASSIGN_OR_RETURN(Const * pg_null_uuid_const,
+  pg_uuid_t pg_uuid;
+  GOOGLESQL_ASSIGN_OR_RETURN(Const * pg_null_uuid_const,
                    CheckedPgMakeConst(
                        /*consttype=*/UUIDOID,
                        /*consttypmod=*/-1,
@@ -238,36 +238,36 @@ absl::StatusOr<ValuePairVector> ConstValuePairs() {
                        /*constbyval=*/false));
   value_pairs.emplace_back(
       PostgresCastToExpr(pg_null_uuid_const),
-      zetasql::MakeResolvedLiteral(zetasql::types::UuidType(),
-                                     zetasql::Value::NullUuid()));
+      googlesql::MakeResolvedLiteral(googlesql::types::UuidType(),
+                                     googlesql::Value::NullUuid()));
 
   // Test non null uuid
-  ZETASQL_ASSIGN_OR_RETURN(
-      zetasql::UuidValue uuid_value,
-      zetasql::UuidValue::FromString("9a31411b-caca-4ff1-86e9-39fbd2bc3f39"));
-  ZETASQL_ASSIGN_OR_RETURN(Const * pg_uuid_const,
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      googlesql::UuidValue uuid_value,
+      googlesql::UuidValue::FromString("9a31411b-caca-4ff1-86e9-39fbd2bc3f39"));
+  GOOGLESQL_ASSIGN_OR_RETURN(Const * pg_uuid_const,
                    UuidStringToPgConst(uuid_value.ToString()));
 
   value_pairs.emplace_back(
       PostgresCastToExpr(pg_uuid_const),
-      zetasql::MakeResolvedLiteral(zetasql::types::UuidType(),
-                                     zetasql::Value::Uuid(uuid_value)));
+      googlesql::MakeResolvedLiteral(googlesql::types::UuidType(),
+                                     googlesql::Value::Uuid(uuid_value)));
 
   // numeric <-> PG.NUMERIC
-  ZETASQL_ASSIGN_OR_RETURN(auto numeric_const,
+  GOOGLESQL_ASSIGN_OR_RETURN(auto numeric_const,
                    MakeNumericConst("-13.1357315957913513502000"));
 
   value_pairs.emplace_back(
       PostgresCastToExpr(numeric_const),
-      zetasql::MakeResolvedLiteral(
+      googlesql::MakeResolvedLiteral(
           PgNumericMapping()->mapped_type(),
           *PgNumericMapping()->MakeGsqlValue(numeric_const)));
 
-  ZETASQL_ASSIGN_OR_RETURN(numeric_const, MakeNumericConst("0", /*is_null=*/true));
+  GOOGLESQL_ASSIGN_OR_RETURN(numeric_const, MakeNumericConst("0", /*is_null=*/true));
 
   value_pairs.emplace_back(
       PostgresCastToExpr(numeric_const),
-      zetasql::MakeResolvedLiteral(
+      googlesql::MakeResolvedLiteral(
           PgNumericMapping()->mapped_type(),
           *PgNumericMapping()->MakeGsqlValue(numeric_const)));
 
@@ -276,18 +276,18 @@ absl::StatusOr<ValuePairVector> ConstValuePairs() {
 
 absl::StatusOr<ValuePairVector> ParamValuePairs() {
   ValuePairVector value_pairs;
-  ZETASQL_ASSIGN_OR_RETURN(auto bool_param,
+  GOOGLESQL_ASSIGN_OR_RETURN(auto bool_param,
                    internal::makeParam(PARAM_EXTERN, /*paramid=*/0, BOOLOID));
   value_pairs.emplace_back(PostgresCastToExpr(bool_param),
-                           zetasql::MakeResolvedParameter(
-                               zetasql::types::BoolType(),
+                           googlesql::MakeResolvedParameter(
+                               googlesql::types::BoolType(),
                                /*name=*/absl::StrCat(kParameterPrefix, 0)));
 
-  ZETASQL_ASSIGN_OR_RETURN(auto int_param,
+  GOOGLESQL_ASSIGN_OR_RETURN(auto int_param,
                    internal::makeParam(PARAM_EXTERN, /*paramid=*/1, INT8OID));
   value_pairs.emplace_back(PostgresCastToExpr(int_param),
-                           zetasql::MakeResolvedParameter(
-                               zetasql::types::Int64Type(),
+                           googlesql::MakeResolvedParameter(
+                               googlesql::types::Int64Type(),
                                /*name=*/absl::StrCat(kParameterPrefix, 1)));
   return value_pairs;
 }
@@ -298,7 +298,7 @@ absl::StatusOr<ValuePairVector> SubLinkValuePairs() {
     Query* query = makeNode(Query);
     query->commandType = CMD_SELECT;
     query->jointree = makeNode(FromExpr);
-    ZETASQL_ASSIGN_OR_RETURN(auto int8_const,
+    GOOGLESQL_ASSIGN_OR_RETURN(auto int8_const,
                      internal::makeScalarConst(INT8OID, /*constvalue=*/1,
                                                /*constisnull=*/false));
     TargetEntry* target_entry = makeTargetEntry(PostgresCastToExpr(int8_const),
@@ -311,45 +311,45 @@ absl::StatusOr<ValuePairVector> SubLinkValuePairs() {
     return query;
   };
   auto gsql_subquery_select1 =
-      []() -> std::unique_ptr<zetasql::ResolvedProjectScan> {
-    zetasql::ResolvedColumn column(
+      []() -> std::unique_ptr<googlesql::ResolvedProjectScan> {
+    googlesql::ResolvedColumn column(
         /*column_id=*/1,
-        /*table_name=*/zetasql::IdString::MakeGlobal("$expr_subquery"),
-        /*name=*/zetasql::IdString::MakeGlobal("?column?"),
-        zetasql::types::Int64Type());
-    std::vector<zetasql::ResolvedColumn> column_list{column};
-    std::vector<std::unique_ptr<zetasql::ResolvedComputedColumn>> expr_list;
-    expr_list.push_back(zetasql::MakeResolvedComputedColumn(
-        column, zetasql::MakeResolvedLiteral(zetasql::types::Int64Type(),
-                                               zetasql::Value::Int64(1))));
-    return zetasql::MakeResolvedProjectScan(
+        /*table_name=*/googlesql::IdString::MakeGlobal("$expr_subquery"),
+        /*name=*/googlesql::IdString::MakeGlobal("?column?"),
+        googlesql::types::Int64Type());
+    std::vector<googlesql::ResolvedColumn> column_list{column};
+    std::vector<std::unique_ptr<googlesql::ResolvedComputedColumn>> expr_list;
+    expr_list.push_back(googlesql::MakeResolvedComputedColumn(
+        column, googlesql::MakeResolvedLiteral(googlesql::types::Int64Type(),
+                                               googlesql::Value::Int64(1))));
+    return googlesql::MakeResolvedProjectScan(
         column_list, std::move(expr_list),
-        zetasql::MakeResolvedSingleRowScan());
+        googlesql::MakeResolvedSingleRowScan());
   };
 
   // EXISTS_SUBLINK: EXISTS(SELECT 1::int8)
-  ZETASQL_ASSIGN_OR_RETURN(auto sublink,
+  GOOGLESQL_ASSIGN_OR_RETURN(auto sublink,
                    internal::makeSubLink(
                        EXISTS_SUBLINK, /*subLinkId=*/0,
                        /*testexpr=*/nullptr, /*operName=*/nullptr,
                        /*subselect=*/PostgresCastToNode(*pg_select1_int64())));
   value_pairs.emplace_back(
       PostgresCastToExpr(sublink),
-      zetasql::MakeResolvedSubqueryExpr(
-          zetasql::types::BoolType(), zetasql::ResolvedSubqueryExpr::EXISTS,
+      googlesql::MakeResolvedSubqueryExpr(
+          googlesql::types::BoolType(), googlesql::ResolvedSubqueryExpr::EXISTS,
           /*parameter_list=*/{}, /*in_expr=*/nullptr,
           /*subquery=*/gsql_subquery_select1()));
 
   // EXPR_SUBLINK: (lefthand) op (SELECT 1::int8)
-  ZETASQL_ASSIGN_OR_RETURN(sublink,
+  GOOGLESQL_ASSIGN_OR_RETURN(sublink,
                    internal::makeSubLink(
                        EXPR_SUBLINK, /*subLinkId=*/0,
                        /*testexpr=*/nullptr, /*operName=*/nullptr,
                        /*subselect=*/PostgresCastToNode(*pg_select1_int64())));
   value_pairs.emplace_back(PostgresCastToExpr(sublink),
-                           zetasql::MakeResolvedSubqueryExpr(
-                               zetasql::types::Int64Type(),
-                               zetasql::ResolvedSubqueryExpr::SCALAR,
+                           googlesql::MakeResolvedSubqueryExpr(
+                               googlesql::types::Int64Type(),
+                               googlesql::ResolvedSubqueryExpr::SCALAR,
                                /*parameter_list=*/{}, /*in_expr=*/nullptr,
                                /*subquery=*/gsql_subquery_select1()));
 
@@ -360,20 +360,20 @@ absl::StatusOr<ValuePairVector> ExplicitCastingCoerceViaIOValuePairs() {
   ValuePairVector value_pairs;
 
   // pg: cast(1 as text) -> gsql: "cast(1 as string)"
-  ZETASQL_ASSIGN_OR_RETURN(auto int8_const,
+  GOOGLESQL_ASSIGN_OR_RETURN(auto int8_const,
                    internal::makeScalarConst(INT8OID, Int64GetDatum(1),
                                              /*constisnull=*/false));
-  ZETASQL_ASSIGN_OR_RETURN(auto coerce, internal::makeCoerceViaIO(
+  GOOGLESQL_ASSIGN_OR_RETURN(auto coerce, internal::makeCoerceViaIO(
                                     /*arg=*/PostgresCastToExpr(int8_const),
                                     /*resulttype=*/TEXTOID,
                                     /*resultcollid=*/DEFAULT_COLLATION_OID,
                                     /*coerceformat=*/COERCE_EXPLICIT_CAST));
   value_pairs.emplace_back(
       PostgresCastToExpr(coerce),
-      zetasql::MakeResolvedCast(
-          zetasql::types::StringType(),
-          zetasql::MakeResolvedLiteral(zetasql::types::Int64Type(),
-                                         zetasql::Value::Int64(1)),
+      googlesql::MakeResolvedCast(
+          googlesql::types::StringType(),
+          googlesql::MakeResolvedLiteral(googlesql::types::Int64Type(),
+                                         googlesql::Value::Int64(1)),
           /*return_null_on_error=*/false));
 
   return value_pairs;
@@ -382,7 +382,7 @@ absl::StatusOr<ValuePairVector> ExplicitCastingCoerceViaIOValuePairs() {
 absl::StatusOr<ValuePairVector> CastingValuePairs() {
   ValuePairVector value_pairs;
 
-  ZETASQL_ASSIGN_OR_RETURN(auto new_values, ExplicitCastingCoerceViaIOValuePairs());
+  GOOGLESQL_ASSIGN_OR_RETURN(auto new_values, ExplicitCastingCoerceViaIOValuePairs());
   std::move(std::begin(new_values), std::end(new_values),
             std::back_inserter(value_pairs));
 
@@ -395,110 +395,109 @@ NumericCastingValuePairs() {
       pg_expr_to_gsql_expr_debug_string;
   // numeric -> float8
   // pg: cast(1.1 as float8) <-> gsql: pg.cast_to_double(1.1)
-  ZETASQL_ASSIGN_OR_RETURN(auto numeric_const, MakeNumericConst("1.1"));
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(auto numeric_const, MakeNumericConst("1.1"));
+  GOOGLESQL_ASSIGN_OR_RETURN(
       auto float_cast,
       internal::makeFuncExpr(1746, FLOAT8OID,
                              list_make1(PostgresCastToExpr(numeric_const)),
                              COERCE_EXPLICIT_CAST));
   pg_expr_to_gsql_expr_debug_string.emplace_back(
       PostgresCastToExpr(float_cast),
-      "FunctionCall(spanner:pg.cast_to_double(PG.NUMERIC) -> "
-      "DOUBLE)\n+-Literal(type=PG.NUMERIC, value=1.1)\n");
+      "FunctionCall(spanner:pg.cast_to_double(PG.NUMERIC) -> DOUBLE)\n"
+      "+-Literal(type=PG.NUMERIC, value=1.1)\n");
 
   // numeric -> int8_t
   // pg: cast(2.2 as int8_t) <-> gsql: pg.cast_to_int64(2.2)
-  ZETASQL_ASSIGN_OR_RETURN(numeric_const, MakeNumericConst("2.2"));
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(numeric_const, MakeNumericConst("2.2"));
+  GOOGLESQL_ASSIGN_OR_RETURN(
       auto int_cast,
       internal::makeFuncExpr(1779, INT8OID,
                              list_make1(PostgresCastToExpr(numeric_const)),
                              COERCE_EXPLICIT_CAST));
   pg_expr_to_gsql_expr_debug_string.emplace_back(
       PostgresCastToExpr(int_cast),
-      "FunctionCall(spanner:pg.cast_to_int64(PG.NUMERIC) -> "
-      "INT64)\n+-Literal(type=PG.NUMERIC, value=2.2)\n");
+      "FunctionCall(spanner:pg.cast_to_int64(PG.NUMERIC) -> INT64)\n"
+      "+-Literal(type=PG.NUMERIC, value=2.2)\n");
 
   // numeric -> text
   // pg: cast(3.3 as text) -> gsql: pg.cast_to_string(3.3)
-  ZETASQL_ASSIGN_OR_RETURN(numeric_const, MakeNumericConst("3.3"));
-  ZETASQL_ASSIGN_OR_RETURN(auto coerce, internal::makeCoerceViaIO(
+  GOOGLESQL_ASSIGN_OR_RETURN(numeric_const, MakeNumericConst("3.3"));
+  GOOGLESQL_ASSIGN_OR_RETURN(auto coerce, internal::makeCoerceViaIO(
                                     /*arg=*/PostgresCastToExpr(numeric_const),
                                     /*resulttype=*/TEXTOID,
                                     /*resultcollid=*/DEFAULT_COLLATION_OID,
                                     /*coerceformat=*/COERCE_EXPLICIT_CAST));
   pg_expr_to_gsql_expr_debug_string.emplace_back(
       PostgresCastToExpr(coerce),
-      "FunctionCall(spanner:pg.cast_to_string(PG.NUMERIC) -> "
-      "STRING)\n+-Literal(type=PG.NUMERIC, value=3.3)\n");
+      "FunctionCall(spanner:pg.cast_to_string(PG.NUMERIC) -> STRING)\n"
+      "+-Literal(type=PG.NUMERIC, value=3.3)\n");
 
   // numeric -> text
   // pg: cast(1000000000000.0000000000001 as text) -> gsql:
   // pg.cast_to_string(1000000000000.0000000000001)
-  ZETASQL_ASSIGN_OR_RETURN(numeric_const,
+  GOOGLESQL_ASSIGN_OR_RETURN(numeric_const,
                    MakeNumericConst("1000000000000.0000000000001"));
-  ZETASQL_ASSIGN_OR_RETURN(coerce, internal::makeCoerceViaIO(
+  GOOGLESQL_ASSIGN_OR_RETURN(coerce, internal::makeCoerceViaIO(
                                /*arg=*/PostgresCastToExpr(numeric_const),
                                /*resulttype=*/TEXTOID,
                                /*resultcollid=*/DEFAULT_COLLATION_OID,
                                /*coerceformat=*/COERCE_EXPLICIT_CAST));
   pg_expr_to_gsql_expr_debug_string.emplace_back(
       PostgresCastToExpr(coerce),
-      "FunctionCall(spanner:pg.cast_to_string(PG.NUMERIC) -> "
-      "STRING)\n+-Literal(type=PG.NUMERIC, "
-      "value=1000000000000.0000000000001)\n");
+      "FunctionCall(spanner:pg.cast_to_string(PG.NUMERIC) -> STRING)\n"
+      "+-Literal(type=PG.NUMERIC, value=1000000000000.0000000000001)\n");
 
   // float8 -> numeric
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       auto float8_const,
       internal::makeScalarConst(FLOAT8OID, Float8GetDatum(3.141592653589793),
                                 /*constisnull=*/false));
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       auto float_to_numeric_cast,
       internal::makeFuncExpr(1743, NUMERICOID,
                              list_make1(PostgresCastToExpr(float8_const)),
                              COERCE_EXPLICIT_CAST));
   pg_expr_to_gsql_expr_debug_string.emplace_back(
       PostgresCastToExpr(float_to_numeric_cast),
-      "FunctionCall(spanner:pg.cast_to_numeric(DOUBLE) -> "
-      "PG.NUMERIC)\n+-Literal(type=DOUBLE, value=3.1415926535897931)\n");
+      "FunctionCall(spanner:pg.cast_to_numeric(DOUBLE) -> PG.NUMERIC)\n"
+      "+-Literal(type=DOUBLE, value=3.1415926535897931)\n");
 
   // int8_t -> numeric
-  ZETASQL_ASSIGN_OR_RETURN(auto int8_const,
-                   internal::makeScalarConst(INT8OID, Int8GetDatum(123456),
+  GOOGLESQL_ASSIGN_OR_RETURN(auto int8_const,
+                   internal::makeScalarConst(INT8OID, Int64GetDatum(123456),
                                              /*constisnull=*/false));
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       auto int_to_numeric_cast,
       internal::makeFuncExpr(1781, NUMERICOID,
                              list_make1(PostgresCastToExpr(int8_const)),
                              COERCE_EXPLICIT_CAST));
   pg_expr_to_gsql_expr_debug_string.emplace_back(
       PostgresCastToExpr(int_to_numeric_cast),
-      "FunctionCall(spanner:pg.cast_to_numeric(INT64) -> "
-      "PG.NUMERIC)\n+-Literal(type=INT64, value=123456)\n");
+      "FunctionCall(spanner:pg.cast_to_numeric(INT64) -> PG.NUMERIC)\n"
+      "+-Literal(type=INT64, value=123456)\n");
 
   // text -> numeric
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       auto string_const,
       internal::makeStringConst(TEXTOID, "123.456789", /*constisnull=*/false));
-  ZETASQL_ASSIGN_OR_RETURN(coerce, internal::makeCoerceViaIO(
+  GOOGLESQL_ASSIGN_OR_RETURN(coerce, internal::makeCoerceViaIO(
                                /*arg=*/PostgresCastToExpr(string_const),
                                /*resulttype=*/NUMERICOID,
                                /*resultcollid=*/DEFAULT_COLLATION_OID,
                                /*coerceformat=*/COERCE_EXPLICIT_CAST));
   pg_expr_to_gsql_expr_debug_string.emplace_back(
       PostgresCastToExpr(coerce),
-      "FunctionCall(spanner:pg.cast_to_numeric(STRING) -> "
-      "PG.NUMERIC)\n+-Literal(type=STRING, value=\"123.456789\")\n");
+      "FunctionCall(spanner:pg.cast_to_numeric(STRING) -> PG.NUMERIC)\n"
+      "+-Literal(type=STRING, value=\"123.456789\")\n");
 
   // numeric -> fixed precision numeric
   // pg: cast(3.3 as numeric(4,2)) -> gsql: pg.cast_to_numeric(3.3, 4, 5)
-  ZETASQL_ASSIGN_OR_RETURN(auto int4_const,
+  GOOGLESQL_ASSIGN_OR_RETURN(auto int4_const,
                    // 262150 represents precision=4, scale=2
                    internal::makeScalarConst(INT4OID, Int32GetDatum(262150),
                                              /*constisnull=*/false));
-  ZETASQL_ASSIGN_OR_RETURN(numeric_const, MakeNumericConst("3.3"));
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(numeric_const, MakeNumericConst("3.3"));
+  GOOGLESQL_ASSIGN_OR_RETURN(
       auto fixed_numeric_cast,
       internal::makeFuncExpr(
           1703, NUMERICOID,
@@ -515,7 +514,7 @@ NumericCastingValuePairs() {
 }
 
 // Accumulates all value pairs for the general
-// Expr <-> zetasql::ResolvedExpr tests.
+// Expr <-> googlesql::ResolvedExpr tests.
 std::vector<absl::StatusOr<ValuePairVector>> ValuePairVectors() {
   std::vector<absl::StatusOr<ValuePairVector>> pair_lists;
   pair_lists.push_back(ConstValuePairs());
@@ -526,7 +525,7 @@ std::vector<absl::StatusOr<ValuePairVector>> ValuePairVectors() {
 TEST_F(ExpressionTransformerTest, PgConstToGsqlLiteralNotFoundTypeInt16) {
   Const* const_value;
   // This type isn't even recognized; should generate a different error
-  ZETASQL_ASSERT_OK_AND_ASSIGN(const_value,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const_value,
                        internal::makeScalarConst(INT2OID, Int16GetDatum(17),
                                                  /*constisnull=*/false));
   EXPECT_THAT(forward_transformer_->BuildGsqlResolvedLiteral(*const_value),
@@ -535,7 +534,7 @@ TEST_F(ExpressionTransformerTest, PgConstToGsqlLiteralNotFoundTypeInt16) {
 
 TEST_F(ExpressionTransformerTest, PgConstToGsqlLiteralWithLocation) {
   Const* pg_const;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(pg_const,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(pg_const,
                        internal::makeScalarConst(INT8OID, Int64GetDatum(13),
                                                  /*constisnull=*/false));
   pg_const->location = 42;
@@ -544,13 +543,13 @@ TEST_F(ExpressionTransformerTest, PgConstToGsqlLiteralWithLocation) {
   // parse location. The default transformer created in
   // ExpressionTransformerTest contains an adapter with an empty parse location
   // list.
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
   std::unique_ptr<CatalogAdapter> adapter = GetSpangresTestCatalogAdapter(
       analyzer_options, /*rqg_user_catalog=*/nullptr, {{42, 44}});
 
   auto transformer = std::make_unique<ForwardTransformer>(std::move(adapter));
-  ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<zetasql::ResolvedLiteral> gsql_literal,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<googlesql::ResolvedLiteral> gsql_literal,
                        transformer->BuildGsqlResolvedLiteral(*pg_const));
 
   const auto* parse_location_range =
@@ -561,23 +560,23 @@ TEST_F(ExpressionTransformerTest, PgConstToGsqlLiteralWithLocation) {
 
 TEST_F(ExpressionTransformerTest, PgConstToGsqlLiteralWithoutLocation) {
   Const* pg_const;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(pg_const,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(pg_const,
                        internal::makeScalarConst(INT8OID, Int64GetDatum(13),
                                                  /*constisnull=*/false));
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<zetasql::ResolvedLiteral> gsql_literal,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<googlesql::ResolvedLiteral> gsql_literal,
       forward_transformer_->BuildGsqlResolvedLiteral(*pg_const));
 
   EXPECT_EQ(gsql_literal->GetParseLocationRangeOrNULL(), nullptr);
 }
 
 TEST_F(ExpressionTransformerTest, PgParamToGsqlParameter) {
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto param_pairs, ParamValuePairs());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto param_pairs, ParamValuePairs());
   for (const auto& [pg_expr, gsql_expr] : param_pairs) {
     Param* pg_param = PostgresCastNode(Param, pg_expr);
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
-        std::unique_ptr<const zetasql::ResolvedParameter> gsql_parameter,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+        std::unique_ptr<const googlesql::ResolvedParameter> gsql_parameter,
         forward_transformer_->BuildGsqlResolvedParameter(*pg_param));
     ASSERT_NE(gsql_parameter, nullptr);
     EXPECT_EQ(gsql_parameter->DebugString(), gsql_expr->DebugString());
@@ -586,7 +585,7 @@ TEST_F(ExpressionTransformerTest, PgParamToGsqlParameter) {
 
 TEST_F(ExpressionTransformerTest, PgParamToGsqlParameterInvalidArgument) {
   for (const auto param_type : {PARAM_EXEC, PARAM_SUBLINK, PARAM_MULTIEXPR}) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
         const Param* pg_param,
         internal::makeParam(param_type, /*paramid=*/0, INT8OID));
     EXPECT_THAT(forward_transformer_->BuildGsqlResolvedParameter(*pg_param),
@@ -599,15 +598,15 @@ TEST_F(ValidMemoryContext, PgSubLinkToGsqlSubquery) {
   ExprTransformerInfo expr_transformer_info =
       ExprTransformerInfo::ForScalarFunctions(&var_index_scope,
                                               /*clause_name=*/"");
-  zetasql::AnalyzerOptions analyzer_options =
+  googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto sublink_pairs, SubLinkValuePairs());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto sublink_pairs, SubLinkValuePairs());
   for (const auto& [pg_expr, gsql_expr] : sublink_pairs) {
     ForwardTransformer transformer(
         GetSpangresTestCatalogAdapter(analyzer_options));
     SubLink* pg_sublink = PostgresCastNode(SubLink, pg_expr);
-    ZETASQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<zetasql::ResolvedExpr> gsql_subquery,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<googlesql::ResolvedExpr> gsql_subquery,
                          transformer.BuildGsqlResolvedSubqueryExpr(
                              *pg_sublink, &expr_transformer_info));
     ASSERT_NE(gsql_subquery, nullptr);
@@ -622,12 +621,12 @@ TEST_F(ExpressionTransformerTest,
       ExprTransformerInfo::ForScalarFunctions(&var_index_scope,
                                               /*clause_name=*/"");
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto explicit_coerce_pairs,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto explicit_coerce_pairs,
                        ExplicitCastingCoerceViaIOValuePairs());
   for (const auto& [pg_expr, gsql_expr] : explicit_coerce_pairs) {
     CoerceViaIO* pg_coerce_via_io = PostgresCastNode(CoerceViaIO, pg_expr);
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
-        std::unique_ptr<const zetasql::ResolvedExpr> new_gsql_expr,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+        std::unique_ptr<const googlesql::ResolvedExpr> new_gsql_expr,
         forward_transformer_->BuildGsqlResolvedExpr(*pg_coerce_via_io,
                                                     &expr_transformer_info));
     ASSERT_NE(new_gsql_expr, nullptr);
@@ -641,10 +640,10 @@ TEST_F(ExpressionTransformerTest, PgCastingToGsqlResolvedExpr) {
       ExprTransformerInfo::ForScalarFunctions(&var_index_scope,
                                               /*clause_name=*/"");
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto cast_pairs, CastingValuePairs());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto cast_pairs, CastingValuePairs());
   for (const auto& [pg_expr, gsql_expr] : cast_pairs) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
-        std::unique_ptr<const zetasql::ResolvedExpr> new_gsql_expr,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+        std::unique_ptr<const googlesql::ResolvedExpr> new_gsql_expr,
         forward_transformer_->BuildGsqlResolvedExpr(*pg_expr,
                                                     &expr_transformer_info));
     ASSERT_NE(new_gsql_expr, nullptr);
@@ -658,10 +657,10 @@ TEST_F(ExpressionTransformerTest, PgCastingNumericToGsqlResolvedExpr) {
       ExprTransformerInfo::ForScalarFunctions(&var_index_scope,
                                               /*clause_name=*/"");
 
-  ZETASQL_ASSERT_OK_AND_ASSIGN(auto numeric_cast_pairs, NumericCastingValuePairs());
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto numeric_cast_pairs, NumericCastingValuePairs());
   for (const auto& [pg_expr, expected_debug_str] : numeric_cast_pairs) {
-    ZETASQL_ASSERT_OK_AND_ASSIGN(
-        std::unique_ptr<const zetasql::ResolvedExpr> new_gsql_expr,
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+        std::unique_ptr<const googlesql::ResolvedExpr> new_gsql_expr,
         forward_transformer_->BuildGsqlResolvedExpr(*pg_expr,
                                                     &expr_transformer_info));
     ASSERT_NE(new_gsql_expr, nullptr);
@@ -676,10 +675,10 @@ TEST_F(ExpressionTransformerTest, PgExprToGsqlExpr) {
                                               /*clause_name=*/"");
 
   for (const auto& value_pair_list : ValuePairVectors()) {
-    ZETASQL_ASSERT_OK(value_pair_list);
+    GOOGLESQL_ASSERT_OK(value_pair_list);
     for (const auto& [pg_expr, gsql_expr] : *value_pair_list) {
-      ZETASQL_ASSERT_OK_AND_ASSIGN(
-          std::unique_ptr<const zetasql::ResolvedExpr> result,
+      GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+          std::unique_ptr<const googlesql::ResolvedExpr> result,
           forward_transformer_->BuildGsqlResolvedExpr(*pg_expr,
                                                       &expr_transformer_info));
       ASSERT_NE(result, nullptr);
@@ -700,13 +699,13 @@ void GetHintList(List** list) {
                                /*location=*/-1);
   hint1->defnamespace = pstrdup("hint1_namespace");
   Const* string_const;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(string_const, makeStringConst(TEXTOID, "hint2_value",
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(string_const, makeStringConst(TEXTOID, "hint2_value",
                                                      /*constisnull=*/false));
   DefElem* hint2 =
       makeDefElem(pstrdup("hint2_name"), PostgresCastToNode(string_const),
                   /*location=*/-1);
   Const* int8_const;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(int8_const, makeScalarConst(INT8OID, Int8GetDatum(42),
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(int8_const, makeScalarConst(INT8OID, Int64GetDatum(42),
                                                    /*constisnull=*/false));
   DefElem* hint3 =
       makeDefElem(pstrdup("hint3_name"), PostgresCastToNode(int8_const),
@@ -719,48 +718,48 @@ TEST_F(ExpressionTransformerTest, PgHintToGsqlHint) {
   GetHintList(&hint_list);
 
   VarIndexScope var_index_scope;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
-      std::vector<std::unique_ptr<const zetasql::ResolvedOption>> option_list,
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      std::vector<std::unique_ptr<const googlesql::ResolvedOption>> option_list,
       forward_transformer_->BuildGsqlResolvedOptionList(*hint_list,
                                                         &var_index_scope));
 
   ASSERT_EQ(option_list.size(), 3);
   EXPECT_EQ(option_list[0]->name(), "hint1_name");
   EXPECT_EQ(option_list[0]->qualifier(), "hint1_namespace");
-  EXPECT_TRUE(option_list[0]->value()->Is<zetasql::ResolvedLiteral>());
+  EXPECT_TRUE(option_list[0]->value()->Is<googlesql::ResolvedLiteral>());
   EXPECT_TRUE(option_list[0]
                   ->value()
-                  ->GetAs<zetasql::ResolvedLiteral>()
+                  ->GetAs<googlesql::ResolvedLiteral>()
                   ->type()
                   ->IsBool());
   EXPECT_TRUE(option_list[0]
                   ->value()
-                  ->GetAs<zetasql::ResolvedLiteral>()
+                  ->GetAs<googlesql::ResolvedLiteral>()
                   ->value()
                   .bool_value());
   EXPECT_EQ(option_list[1]->name(), "hint2_name");
-  EXPECT_TRUE(option_list[1]->value()->Is<zetasql::ResolvedLiteral>());
+  EXPECT_TRUE(option_list[1]->value()->Is<googlesql::ResolvedLiteral>());
   EXPECT_TRUE(option_list[1]
                   ->value()
-                  ->GetAs<zetasql::ResolvedLiteral>()
+                  ->GetAs<googlesql::ResolvedLiteral>()
                   ->type()
                   ->IsString());
   EXPECT_EQ(option_list[1]
                 ->value()
-                ->GetAs<zetasql::ResolvedLiteral>()
+                ->GetAs<googlesql::ResolvedLiteral>()
                 ->value()
                 .string_value(),
             "hint2_value");
   EXPECT_EQ(option_list[2]->name(), "hint3_name");
-  EXPECT_TRUE(option_list[2]->value()->Is<zetasql::ResolvedLiteral>());
+  EXPECT_TRUE(option_list[2]->value()->Is<googlesql::ResolvedLiteral>());
   EXPECT_TRUE(option_list[2]
                   ->value()
-                  ->GetAs<zetasql::ResolvedLiteral>()
+                  ->GetAs<googlesql::ResolvedLiteral>()
                   ->type()
                   ->IsInteger());
   EXPECT_EQ(option_list[2]
                 ->value()
-                ->GetAs<zetasql::ResolvedLiteral>()
+                ->GetAs<googlesql::ResolvedLiteral>()
                 ->value()
                 .int64_value(),
             42);
@@ -777,11 +776,11 @@ TEST_F(ExpressionTransformerTest, BuildGsqlResolvedLiteralPreservesNullBytes) {
                 /*constlen=*/-1, pg_datum,
                 /*constisnull=*/false, /*constbyval=*/false);
 
-  std::unique_ptr<zetasql::ResolvedLiteral> literal;
-  ZETASQL_ASSERT_OK_AND_ASSIGN(
+  std::unique_ptr<googlesql::ResolvedLiteral> literal;
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       literal, forward_transformer_->BuildGsqlResolvedLiteral(*pg_const));
 
-  ASSERT_EQ(literal->type(), zetasql::types::BytesType());
+  ASSERT_EQ(literal->type(), googlesql::types::BytesType());
   const std::string& value = literal->value().bytes_value();
   ASSERT_EQ(value.size(), byte_vector.size()) << literal->DebugString();
   for (int i = 0; i < byte_vector.size(); ++i) {

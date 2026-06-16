@@ -51,14 +51,14 @@ ValidMemoryContext::ValidMemoryContext()
 void ValidMemoryContext::SetUp() {
   memory_context_ = postgres_translator::MemoryContextManager::Init(
       "ValidMemoryContext test");
-  ZETASQL_ASSERT_OK(memory_context_);
-  ZETASQL_ASSERT_OK(InitTimezone());
+  GOOGLESQL_ASSERT_OK(memory_context_);
+  GOOGLESQL_ASSERT_OK(InitTimezone());
 }
 
 void ValidMemoryContext::TearDown() {
   CleanupTimezone();
   if (memory_context_.ok()) {
-    ZETASQL_ASSERT_OK(memory_context_->Clear());
+    GOOGLESQL_ASSERT_OK(memory_context_->Clear());
   }
 }
 

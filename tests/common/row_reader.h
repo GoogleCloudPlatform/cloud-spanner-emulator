@@ -20,8 +20,8 @@
 #include <memory>
 #include <vector>
 
-#include "zetasql/public/type.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/type.h"
+#include "googlesql/public/value.h"
 #include "absl/memory/memory.h"
 #include "backend/access/read.h"
 #include "backend/common/case.h"
@@ -62,11 +62,11 @@ class ColumnRemappedRowCursor : public backend::RowCursor {
     return wrapped_cursor_->ColumnName(column_index_map_[i]);
   }
 
-  const zetasql::Value ColumnValue(int i) const override {
+  const googlesql::Value ColumnValue(int i) const override {
     return wrapped_cursor_->ColumnValue(column_index_map_[i]);
   }
 
-  const zetasql::Type* ColumnType(int i) const override {
+  const googlesql::Type* ColumnType(int i) const override {
     return wrapped_cursor_->ColumnType(column_index_map_[i]);
   }
 
@@ -82,8 +82,8 @@ class TestRowReader : public backend::RowReader {
  public:
   struct Table {
     std::vector<std::string> column_names;
-    std::vector<const zetasql::Type*> column_types;
-    std::vector<std::vector<zetasql::Value>> column_values;
+    std::vector<const googlesql::Type*> column_types;
+    std::vector<std::vector<googlesql::Value>> column_values;
   };
 
   explicit TestRowReader(backend::CaseInsensitiveStringMap<Table> tables)

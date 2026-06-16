@@ -45,7 +45,7 @@
 #include <variant>
 #include <vector>
 
-#include "zetasql/base/logging.h"
+#include "googlesql/base/logging.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
@@ -61,8 +61,8 @@
 #include "third_party/spanner_pg/datatypes/common/numeric_core.h"
 #include "third_party/spanner_pg/datatypes/common/pg_numeric_parse.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 namespace postgres_translator::spangres::datatypes::common::jsonb {
 
@@ -210,17 +210,17 @@ class PGJSONBParser {
 
   // Returns a PgJsonbValue which is a wrapper on the internal representation.
   absl::StatusOr<PgJsonbValue> GetRepresentation() && {
-    ZETASQL_RETURN_IF_ERROR(status_);
-    ZETASQL_RET_CHECK_EQ(working_stack_.size(), 1);
+    GOOGLESQL_RETURN_IF_ERROR(status_);
+    GOOGLESQL_RET_CHECK_EQ(working_stack_.size(), 1);
     return PgJsonbValue(working_stack_.back(), std::move(tree_nodes_),
                         max_depth_estimate_, total_bytes_estimate_);
   }
 
   absl::StatusOr<std::string> NormalizePgNumericForJsonB(
       absl::string_view readable_value) {
-    ZETASQL_ASSIGN_OR_RETURN(std::string pg_normalized,
+    GOOGLESQL_ASSIGN_OR_RETURN(std::string pg_normalized,
                      NormalizePgNumeric(readable_value));
-    ZETASQL_RETURN_IF_ERROR(
+    GOOGLESQL_RETURN_IF_ERROR(
         ValidateIntegralPartForJsonB(readable_value, pg_normalized));
     return pg_normalized;
   }
@@ -729,7 +729,7 @@ absl::StatusOr<std::optional<PgJsonbValue>> PgJsonbValue::FindAtPath(
       if (mode == kIgnoreStringPathOnArrayError && !index.ok()) {
         return std::nullopt;
       }
-      ZETASQL_RETURN_IF_ERROR(index.status());
+      GOOGLESQL_RETURN_IF_ERROR(index.status());
       child = parent->GetArrayElementIfExists(*index);
     } else if (parent->IsObject()) {
       child = parent->GetMemberIfExists(path_element);
@@ -784,7 +784,7 @@ TreeNode* PgJsonbValue::CreateTreeNode(NodeType tag) {
 
 absl::StatusOr<absl::Cord> ParseJsonb(absl::string_view json) {
   std::vector<std::unique_ptr<TreeNode>> tree_nodes;
-  ZETASQL_ASSIGN_OR_RETURN(PgJsonbValue result, PgJsonbValue::Parse(json, &tree_nodes));
+  GOOGLESQL_ASSIGN_OR_RETURN(PgJsonbValue result, PgJsonbValue::Parse(json, &tree_nodes));
   absl::Cord result_cord = result.Serialize();
   return result_cord;
 }

@@ -29,9 +29,9 @@
 # MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 #------------------------------------------------------------------------------
 
-load("@com_google_zetasql//bazel:bison.bzl", "genyacc")
-load("@com_google_zetasql//bazel:flex.bzl", "genlex")
+load("@com_google_googlesql//bazel:bison.bzl", "genyacc")
 load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_hdl//dependency_support/com_github_westes_flex:flex.bzl", "genlex")
 
 
 
@@ -54,6 +54,7 @@ cc_library(
     name = "bootstrap",
     srcs = [
         "bootparse.c",
+        "bootscanner.c",
         "bootstrap.c",
     ],
     copts = [
@@ -64,7 +65,6 @@ cc_library(
         ".",
     ],
     textual_hdrs = [
-        "bootscanner.c",
         "bootparse.h",
     ],
     deps = [

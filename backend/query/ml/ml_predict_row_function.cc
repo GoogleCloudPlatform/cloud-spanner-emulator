@@ -22,8 +22,8 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/public/json_value.h"
-#include "zetasql/public/value.h"
+#include "googlesql/public/json_value.h"
+#include "googlesql/public/value.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
@@ -32,16 +32,16 @@
 #include "absl/types/span.h"
 #include "backend/query/ml/model_evaluator.h"
 #include "common/errors.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
 
 namespace google::spanner::emulator::backend {
 namespace {
 
-using zetasql::JSONValue;
-using zetasql::JSONValueConstRef;
-using zetasql::JSONValueRef;
+using googlesql::JSONValue;
+using googlesql::JSONValueConstRef;
+using googlesql::JSONValueRef;
 using postgres_translator::spangres::datatypes::CreatePgJsonbValue;
 using postgres_translator::spangres::datatypes::GetPgJsonbNormalizedValue;
 using postgres_translator::spangres::datatypes::GetPgJsonbType;
@@ -84,7 +84,7 @@ absl::StatusOr<ModelEndpoint> ModelEndpoint::FromString(absl::string_view str) {
 
 absl::StatusOr<ModelEndpoint> ModelEndpoint::FromJsonb(absl::string_view json) {
   ModelEndpoint result;
-  ZETASQL_ASSIGN_OR_RETURN(JSONValue model_endpoint_json,
+  GOOGLESQL_ASSIGN_OR_RETURN(JSONValue model_endpoint_json,
                    JSONValue::ParseJSONString(json));
   JSONValueConstRef model_endpoint = model_endpoint_json.GetConstRef();
 
@@ -151,7 +151,7 @@ absl::string_view ModelEndpoint::Endpoint() {
 absl::Status ParseArgsJsonb(absl::string_view args_jsonb_string,
                             std::vector<JSONValue>* instances,
                             JSONValue* parameters) {
-  ZETASQL_ASSIGN_OR_RETURN(JSONValue args_json,
+  GOOGLESQL_ASSIGN_OR_RETURN(JSONValue args_json,
                    JSONValue::ParseJSONString(args_jsonb_string));
   JSONValueConstRef args = args_json.GetConstRef();
   if (!args.IsObject()) {
@@ -178,7 +178,7 @@ absl::Status ParseArgsJsonb(absl::string_view args_jsonb_string,
   return absl::OkStatus();
 }
 
-absl::StatusOr<zetasql::Value> PredictionsToJsonB(
+absl::StatusOr<googlesql::Value> PredictionsToJsonB(
     std::vector<JSONValue> predictions) {
   JSONValue result;
   result.GetRef().SetToEmptyObject();
@@ -186,7 +186,7 @@ absl::StatusOr<zetasql::Value> PredictionsToJsonB(
       result.GetRef().GetMember(kModelPredictionsResultName);
   predictions_json.SetToEmptyArray();
   for (JSONValue& prediction : predictions) {
-    ZETASQL_RETURN_IF_ERROR(predictions_json.AppendArrayElement(
+    GOOGLESQL_RETURN_IF_ERROR(predictions_json.AppendArrayElement(
         JSONValue::MoveFrom(prediction.GetRef())));
   }
   return CreatePgJsonbValue(result.GetConstRef().ToString());
@@ -194,39 +194,40 @@ absl::StatusOr<zetasql::Value> PredictionsToJsonB(
 
 }  // namespace
 
-absl::StatusOr<zetasql::Value> EvalMlPredictRow(
-    absl::Span<const zetasql::Value> args) {
-  ZETASQL_RET_CHECK_EQ(args.size(), 2);
+absl::StatusOr<googlesql::Value> EvalMlPredictRow(
+    absl::Span<const googlesql::Value> args) {
+  GOOGLESQL_RET_CHECK_EQ(args.size(), 2);
 
   // Validate model_endpoint parameter and get first endpoint.
   ModelEndpoint model_endpoint;
   if (args[0].is_null()) {
     return error::MlPredictRow_Argument_Null(kMlPredictRowParamModelEndpoint);
   } else if (args[0].type()->IsString()) {
-    ZETASQL_ASSIGN_OR_RETURN(model_endpoint,
+    GOOGLESQL_ASSIGN_OR_RETURN(model_endpoint,
                      ModelEndpoint::FromString(args[0].string_value()));
   } else if (args[0].type()->Equals(GetPgJsonbType())) {
-    ZETASQL_ASSIGN_OR_RETURN(absl::Cord cord, GetPgJsonbNormalizedValue(args[0]));
-    ZETASQL_ASSIGN_OR_RETURN(model_endpoint, ModelEndpoint::FromJsonb(cord.Flatten()));
+    GOOGLESQL_ASSIGN_OR_RETURN(absl::Cord cord, GetPgJsonbNormalizedValue(args[0]));
+    GOOGLESQL_ASSIGN_OR_RETURN(model_endpoint, ModelEndpoint::FromJsonb(cord.Flatten()));
   } else {
-    ZETASQL_RET_CHECK_FAIL() << "Unexpected model_endpoint argument type "
-                     << args[0].type()->TypeName(zetasql::PRODUCT_EXTERNAL,
+    GOOGLESQL_RET_CHECK_FAIL() << "Unexpected model_endpoint argument type "
+                     << args[0].type()->TypeName(googlesql::PRODUCT_EXTERNAL,
                                                  /*use_external_float32=*/true);
   }
-  ZETASQL_RETURN_IF_ERROR(model_endpoint.Validate());
+  GOOGLESQL_RETURN_IF_ERROR(model_endpoint.Validate());
   absl::string_view first_endpoint = model_endpoint.Endpoint();
 
   // Validate args parameter and extract instances.
   std::vector<JSONValue> instances;
   JSONValue parameters;
+  parameters.GetRef().SetToEmptyObject();
   if (args[1].is_null()) {
     return error::MlPredictRow_Argument_Null(kMlPredictRowParamArgs);
   } else if (args[1].type()->Equals(GetPgJsonbType())) {
-    ZETASQL_ASSIGN_OR_RETURN(absl::Cord cord, GetPgJsonbNormalizedValue(args[1]));
-    ZETASQL_RETURN_IF_ERROR(ParseArgsJsonb(cord.Flatten(), &instances, &parameters));
+    GOOGLESQL_ASSIGN_OR_RETURN(absl::Cord cord, GetPgJsonbNormalizedValue(args[1]));
+    GOOGLESQL_RETURN_IF_ERROR(ParseArgsJsonb(cord.Flatten(), &instances, &parameters));
   } else {
-    ZETASQL_RET_CHECK_FAIL() << "Unexpected args var type "
-                     << args[1].type()->TypeName(zetasql::PRODUCT_EXTERNAL,
+    GOOGLESQL_RET_CHECK_FAIL() << "Unexpected args var type "
+                     << args[1].type()->TypeName(googlesql::PRODUCT_EXTERNAL,
                                                  /*use_external_float32=*/true);
   }
   if (instances.empty()) {
@@ -236,7 +237,7 @@ absl::StatusOr<zetasql::Value> EvalMlPredictRow(
   // Run prediction on each instance.
   std::vector<JSONValue> predictions;
   for (const JSONValue& instance : instances) {
-    ZETASQL_RETURN_IF_ERROR(ModelEvaluator::PgPredict(
+    GOOGLESQL_RETURN_IF_ERROR(ModelEvaluator::PgPredict(
         first_endpoint, instance.GetConstRef(), parameters.GetConstRef(),
         predictions.emplace_back().GetRef()));
   }

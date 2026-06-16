@@ -3,7 +3,7 @@
  * llvmjit.c
  *	  Core part of the LLVM JIT provider.
  *
- * Copyright (c) 2016-2022, PostgreSQL Global Development Group
+ * Copyright (c) 2016-2023, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/jit/llvm/llvmjit.c
@@ -604,7 +604,7 @@ llvm_function_reference(LLVMJitContext *context,
 	else if (basename != NULL)
 	{
 		/* internal function */
-		funcname = psprintf("%s", basename);
+		funcname = pstrdup(basename);
 	}
 	else
 	{
@@ -774,7 +774,7 @@ llvm_compile_module(LLVMJitContext *context)
 	{
 		char	   *filename;
 
-		filename = psprintf("%u.%zu.bc",
+		filename = psprintf("%d.%zu.bc",
 							MyProcPid,
 							context->module_generation);
 		LLVMWriteBitcodeToFile(context->module, filename);
@@ -793,7 +793,7 @@ llvm_compile_module(LLVMJitContext *context)
 	{
 		char	   *filename;
 
-		filename = psprintf("%u.%zu.optimized.bc",
+		filename = psprintf("%d.%zu.optimized.bc",
 							MyProcPid,
 							context->module_generation);
 		LLVMWriteBitcodeToFile(context->module, filename);
@@ -1261,7 +1261,7 @@ llvm_resolve_symbol(const char *symname, void *ctx)
 
 static LLVMErrorRef
 llvm_resolve_symbols(LLVMOrcDefinitionGeneratorRef GeneratorObj, void *Ctx,
-					 LLVMOrcLookupStateRef * LookupState, LLVMOrcLookupKind Kind,
+					 LLVMOrcLookupStateRef *LookupState, LLVMOrcLookupKind Kind,
 					 LLVMOrcJITDylibRef JD, LLVMOrcJITDylibLookupFlags JDLookupFlags,
 					 LLVMOrcCLookupSet LookupSet, size_t LookupSetSize)
 {
@@ -1324,6 +1324,7 @@ llvm_create_object_layer(void *Ctx, LLVMOrcExecutionSessionRef ES, const char *T
 	LLVMOrcObjectLayerRef objlayer =
 		LLVMOrcCreateRTDyldObjectLinkingLayerWithSectionMemoryManager(ES);
 #endif
+
 
 #if defined(HAVE_DECL_LLVMCREATEGDBREGISTRATIONLISTENER) && HAVE_DECL_LLVMCREATEGDBREGISTRATIONLISTENER
 	if (jit_debugging_support)

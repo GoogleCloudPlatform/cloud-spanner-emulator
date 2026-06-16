@@ -35,15 +35,15 @@
 #include <string>
 #include <vector>
 
-#include "zetasql/base/logging.h"
-#include "zetasql/public/catalog.h"
-#include "zetasql/public/table_valued_function.h"
-#include "zetasql/public/types/type.h"
-#include "zetasql/base/case.h"
+#include "googlesql/base/logging.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/public/table_valued_function.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/base/case.h"
 #include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
-#include "zetasql/base/die_if_null.h"
+#include "googlesql/base/die_if_null.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
@@ -55,17 +55,17 @@ namespace postgres_translator {
 // A derived class of EnumerableCatalog. This enables us to map identifiers in
 // user queries to different objects in the GsqlCatalog e.g., we use it to map
 // information_schema in queries to pg_information_schema in the GsqlCatalog.
-class EngineUserCatalog : public zetasql::EnumerableCatalog {
+class EngineUserCatalog : public googlesql::EnumerableCatalog {
  public:
   constexpr static absl::string_view kPublicSchema = "public";
 
   // Does not take ownership of the `engine_provided_catalog` which must outlive
   // this object.
   explicit EngineUserCatalog(
-      zetasql::EnumerableCatalog* engine_provided_catalog,
+      googlesql::EnumerableCatalog* engine_provided_catalog,
       const absl::flat_hash_map<std::string, std::string>& pg_to_engine_schema,
       const std::vector<std::string>& uppercase_schema_list)
-      : engine_provided_catalog_(ZETASQL_DIE_IF_NULL(engine_provided_catalog)),
+      : engine_provided_catalog_(GOOGLESQL_DIE_IF_NULL(engine_provided_catalog)),
         uppercase_schema_list_(uppercase_schema_list) {
     for (const auto& entry : pg_to_engine_schema) {
       blocked_schemas_.emplace(entry.second);
@@ -83,53 +83,57 @@ class EngineUserCatalog : public zetasql::EnumerableCatalog {
   // FindTable uses the pg_to_engine_schema_ and blocked_schemas_ member
   // variables to map between the requested path and the actual path.
   absl::Status FindTable(const absl::Span<const std::string>& path,
-                         const zetasql::Table** table,
+                         const googlesql::Table** table,
                          const FindOptions& options = FindOptions()) override;
 
   // FindFunction uses the engine-specific IsUserDefinedFunction to filter out
   // non-UDFs from the result to prevent duplicates with the SystemCatalog.
   absl::Status FindFunction(
       const absl::Span<const std::string>& path,
-      const zetasql::Function** function,
+      const googlesql::Function** function,
       const FindOptions& options = FindOptions()) override;
 
   // FindTableValuedFunction uses the engine-specific IsUserDefinedTVF to filter
   // out non-UDFs from the result to prevent duplicates with the SystemCatalog.
   absl::Status FindTableValuedFunction(
       const absl::Span<const std::string>& path,
-      const zetasql::TableValuedFunction** tvf,
+      const googlesql::TableValuedFunction** tvf,
       const FindOptions& options = FindOptions()) override;
 
   // InUppercaseCatalogPath uses GetCatalogPathForTable() to check if a table's
   // schema is in the uppercase_schema_list_.
   absl::StatusOr<bool> InUppercaseCatalogPath(
-      const zetasql::Table* gsql_table) const;
+      const googlesql::Table* gsql_table) const;
 
   virtual const std::vector<std::string> GetCatalogPathForTable(
-      const zetasql::Table* table) const = 0;
+      const googlesql::Table* table) const = 0;
+
+  // Engine-specific filter for user-defined scalar UDFs. Used to prevent
+  // returning duplicate entries in both the system and user catalogs.
+  virtual bool IsUserDefinedFunction(const googlesql::Function* udf) const = 0;
 
   virtual absl::StatusOr<std::vector<absl::string_view>> GetPrimaryKeyColumns(
-      const zetasql::Table& table) const = 0;
+      const googlesql::Table& table) const = 0;
 
   // The methods below use the implementations of the held
   // engine_provided_catalog object.
-  absl::Status GetCatalogs(absl::flat_hash_set<const zetasql::Catalog*>*
+  absl::Status GetCatalogs(absl::flat_hash_set<const googlesql::Catalog*>*
                                output) const override final {
     return engine_provided_catalog_->GetCatalogs(output);
   };
-  absl::Status GetTables(absl::flat_hash_set<const zetasql::Table*>* output)
+  absl::Status GetTables(absl::flat_hash_set<const googlesql::Table*>* output)
       const override final {
     return engine_provided_catalog_->GetTables(output);
   }
-  absl::Status GetTypes(absl::flat_hash_set<const zetasql::Type*>* output)
+  absl::Status GetTypes(absl::flat_hash_set<const googlesql::Type*>* output)
       const override final {
     return engine_provided_catalog_->GetTypes(output);
   }
-  absl::Status GetFunctions(absl::flat_hash_set<const zetasql::Function*>*
+  absl::Status GetFunctions(absl::flat_hash_set<const googlesql::Function*>*
                                 output) const override final {
     return engine_provided_catalog_->GetFunctions(output);
   }
-  absl::Status GetConversions(absl::flat_hash_set<const zetasql::Conversion*>*
+  absl::Status GetConversions(absl::flat_hash_set<const googlesql::Conversion*>*
                                   output) const override final {
     return engine_provided_catalog_->GetConversions(output);
   }
@@ -138,7 +142,7 @@ class EngineUserCatalog : public zetasql::EnumerableCatalog {
   // as provided by the googlesql table would have had its schema name mapped
   // by MapSchemaName, so we need to invert that map.
   absl::StatusOr<TableName> GetTableNameForGsqlTable(
-      const zetasql::Table& table) const;
+      const googlesql::Table& table) const;
 
  private:
   friend class EngineUserCatalogTestPeer;
@@ -147,7 +151,7 @@ class EngineUserCatalog : public zetasql::EnumerableCatalog {
       absl::Span<const std::string> path);
   absl::StatusOr<std::string> MapSchemaName(
       std::string schema_name, const absl::Span<const std::string>& path) const;
-  zetasql::EnumerableCatalog* engine_provided_catalog_;
+  googlesql::EnumerableCatalog* engine_provided_catalog_;
   // Mapping of PG schema names (which MUST be lowercased) to
   // googlesql names (which are case insensitive).
   // PG schema names (i.e., the map keys) should be lowercased because:
@@ -162,9 +166,9 @@ class EngineUserCatalog : public zetasql::EnumerableCatalog {
   // Contains internal schema names which should not be directly accessible
   // to PG users. Should contain the values in `pg_to_engine_schema_` map.
   // Although Pg is case-sensitive, we perform case-insensitive check for
-  // blocked schemas because the underlying zetasql::Catalog::FindTable is
+  // blocked schemas because the underlying googlesql::Catalog::FindTable is
   // case-insensitive.
-  absl::btree_set<absl::string_view, zetasql_base::CaseLess>
+  absl::btree_set<absl::string_view, googlesql_base::CaseLess>
       blocked_schemas_;
   // `uppercase_schema_list` is set by the derived engine class.
   std::vector<std::string> uppercase_schema_list_;

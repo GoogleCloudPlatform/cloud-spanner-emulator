@@ -40,20 +40,20 @@
 #include <utility>
 #include <vector>
 
-#include "zetasql/base/logging.h"
-#include "zetasql/public/analyzer.h"
-#include "zetasql/public/analyzer_options.h"
-#include "zetasql/public/analyzer_output.h"
-#include "zetasql/public/analyzer_output_properties.h"
-#include "zetasql/public/function.h"
-#include "zetasql/public/function_signature.h"
-#include "zetasql/public/options.pb.h"
-#include "zetasql/public/strings.h"
-#include "zetasql/public/types/type.h"
-#include "zetasql/resolved_ast/resolved_ast.h"
-#include "zetasql/resolved_ast/resolved_ast_deep_copy_visitor.h"
-#include "zetasql/resolved_ast/resolved_node.h"
-#include "zetasql/resolved_ast/validator.h"
+#include "googlesql/base/logging.h"
+#include "googlesql/public/analyzer.h"
+#include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/analyzer_output.h"
+#include "googlesql/public/analyzer_output_properties.h"
+#include "googlesql/public/function.h"
+#include "googlesql/public/function_signature.h"
+#include "googlesql/public/options.pb.h"
+#include "googlesql/public/strings.h"
+#include "googlesql/public/types/type.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_ast_deep_copy_visitor.h"
+#include "googlesql/resolved_ast/resolved_node.h"
+#include "googlesql/resolved_ast/validator.h"
 #include "absl/flags/flag.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -83,8 +83,8 @@
 #include "third_party/spanner_pg/transformer/forward_transformer.h"
 #include "third_party/spanner_pg/transformer/transformer.h"
 #include "third_party/spanner_pg/util/postgres.h"
-#include "zetasql/base/ret_check.h"
-#include "zetasql/base/status_macros.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 
 ABSL_FLAG(int64_t, spangres_sql_length_limit, 100'000,
           "The maximum length of a supported SQL text.");
@@ -99,6 +99,23 @@ using ::postgres_translator::internal::GetUdfParameterName;
 namespace {
 const char* FormatNode(const void* obj) {
   return pretty_format_node_dump(nodeToString(obj));
+}
+
+bool IsRawNullConstant(const Node* node) {
+  if (node == nullptr) return false;
+  if (IsA(node, A_Const)) {
+    const A_Const* a_const = reinterpret_cast<const A_Const*>(node);
+    return a_const->isnull;
+  }
+  return false;
+}
+
+const googlesql::ResolvedExpr* UnwrapCasts(
+    const googlesql::ResolvedExpr* expr) {
+  while (expr->node_kind() == googlesql::RESOLVED_CAST) {
+    expr = expr->GetAs<googlesql::ResolvedCast>()->expr();
+  }
+  return expr;
 }
 
 // Returns true if the query is a simple scenario that isn't supported by the
@@ -125,39 +142,39 @@ bool IsSimpleSrfInSelect(Query* pg_query) {
 // E.g. `SELECT generate_series(1, 10);`
 absl::Status RewriteSimpleSrfInSelect(Query* pg_query) {
   TargetEntry* target_entry = linitial_node(TargetEntry, pg_query->targetList);
-  ZETASQL_RET_CHECK(IsA(target_entry->expr, FuncExpr));
+  GOOGLESQL_RET_CHECK(IsA(target_entry->expr, FuncExpr));
   FuncExpr* func_expr =
       internal::PostgresCastNode(FuncExpr, target_entry->expr);
-  ZETASQL_ASSIGN_OR_RETURN(RangeTblEntry * rte, CheckedPgMakeNode(RangeTblEntry));
+  GOOGLESQL_ASSIGN_OR_RETURN(RangeTblEntry * rte, CheckedPgMakeNode(RangeTblEntry));
   // Set up the RTE for the SRF
-  ZETASQL_ASSIGN_OR_RETURN(pg_query->rtable, CheckedPgListMake1(rte));
+  GOOGLESQL_ASSIGN_OR_RETURN(pg_query->rtable, CheckedPgListMake1(rte));
   pg_query->hasTargetSRFs = false;
   // Set up the alias for the RTE
-  ZETASQL_ASSIGN_OR_RETURN(rte->eref, CheckedPgMakeNode(Alias));
+  GOOGLESQL_ASSIGN_OR_RETURN(rte->eref, CheckedPgMakeNode(Alias));
   // To simplify, we'll always use `$array` as the alias.
-  ZETASQL_ASSIGN_OR_RETURN(rte->eref->aliasname, CheckedPgPstrdup("$array"));
-  ZETASQL_RET_CHECK(target_entry->resname != nullptr) << "Unexpected return statement";
-  ZETASQL_ASSIGN_OR_RETURN(char* resname_val, CheckedPgPstrdup(target_entry->resname));
-  ZETASQL_ASSIGN_OR_RETURN(String * resname_str, CheckedPgMakeString(resname_val));
-  ZETASQL_ASSIGN_OR_RETURN(rte->eref->colnames,
+  GOOGLESQL_ASSIGN_OR_RETURN(rte->eref->aliasname, CheckedPgPstrdup("$array"));
+  GOOGLESQL_RET_CHECK(target_entry->resname != nullptr) << "Unexpected return statement";
+  GOOGLESQL_ASSIGN_OR_RETURN(char* resname_val, CheckedPgPstrdup(target_entry->resname));
+  GOOGLESQL_ASSIGN_OR_RETURN(String * resname_str, CheckedPgMakeString(resname_val));
+  GOOGLESQL_ASSIGN_OR_RETURN(rte->eref->colnames,
                    CheckedPgLappend(rte->eref->colnames, resname_str));
   rte->alias = rte->eref;
   rte->rtekind = RTE_FUNCTION;
   rte->inFromCl = true;  // Defined in the FROM clause
   // The FuncExpr is now the only entry in the rtable
-  ZETASQL_ASSIGN_OR_RETURN(RangeTblFunction * rt_func,
+  GOOGLESQL_ASSIGN_OR_RETURN(RangeTblFunction * rt_func,
                    CheckedPgMakeNode(RangeTblFunction));
   rt_func->funcexpr = reinterpret_cast<Node*>(func_expr);
   rt_func->funccolcount = 1;  // 1 output column
-  ZETASQL_ASSIGN_OR_RETURN(rte->functions, CheckedPgListMake1(rt_func));
+  GOOGLESQL_ASSIGN_OR_RETURN(rte->functions, CheckedPgListMake1(rt_func));
   // With the SRF in the FROM clause, the FromExpr needs to be updated to
   // reference the RTE.
   FromExpr* from_expr = pg_query->jointree;
-  ZETASQL_ASSIGN_OR_RETURN(RangeTblRef * rt_ref, CheckedPgMakeNode(RangeTblRef));
+  GOOGLESQL_ASSIGN_OR_RETURN(RangeTblRef * rt_ref, CheckedPgMakeNode(RangeTblRef));
   rt_ref->rtindex = 1;
-  ZETASQL_ASSIGN_OR_RETURN(from_expr->fromlist, CheckedPgListMake1(rt_ref));
+  GOOGLESQL_ASSIGN_OR_RETURN(from_expr->fromlist, CheckedPgListMake1(rt_ref));
   // Update the target entry to be a var referencing the RTE
-  ZETASQL_ASSIGN_OR_RETURN(Var * var, CheckedPgMakeNode(Var));
+  GOOGLESQL_ASSIGN_OR_RETURN(Var * var, CheckedPgMakeNode(Var));
   var->varno = 1;     // 1st and only relation in the RangeTblEntry
   var->varattno = 1;  // 1st and only column in the relation
   var->vartype = func_expr->funcresulttype;
@@ -208,10 +225,10 @@ SpangresTranslator::GetParserQueryOutput(
   }
   const std::string* serialized_parse_tree = params.serialized_parse_tree();
   if (serialized_parse_tree != nullptr) {
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         arena, MemoryContextPGArena::Init(GetMemoryReservationManager(params)));
     List* parse_tree;
-    ZETASQL_ASSIGN_OR_RETURN(parse_tree, DeserializeParseQuery(*serialized_parse_tree));
+    GOOGLESQL_ASSIGN_OR_RETURN(parse_tree, DeserializeParseQuery(*serialized_parse_tree));
     return interfaces::ParserOutput(
         parse_tree,
         {.token_locations = {},
@@ -222,46 +239,46 @@ SpangresTranslator::GetParserQueryOutput(
       "parser output");
 }
 
-absl::StatusOr<std::unique_ptr<zetasql::ResolvedCreateFunctionStmt>>
+absl::StatusOr<std::unique_ptr<googlesql::ResolvedCreateFunctionStmt>>
 WrapInResolvedCreateFunctionStmt(
-    const zetasql::ResolvedStatement* stmt,
+    const googlesql::ResolvedStatement* stmt,
     const std::vector<std::string>& input_params,
-    const std::map<std::string, const zetasql::Type*>& param_types_map) {
-  const zetasql::ResolvedExpr* expr = nullptr;
-  std::vector<const zetasql::ResolvedNode*> child_nodes;
+    const std::map<std::string, const googlesql::Type*>& param_types_map) {
+  const googlesql::ResolvedExpr* expr = nullptr;
+  std::vector<const googlesql::ResolvedNode*> child_nodes;
   stmt->GetChildNodes(&child_nodes);
-  for (const zetasql::ResolvedNode* child_node : child_nodes) {
+  for (const googlesql::ResolvedNode* child_node : child_nodes) {
     // Get the ResolvedScan
-    std::vector<const zetasql::ResolvedNode*> scan_child_nodes;
+    std::vector<const googlesql::ResolvedNode*> scan_child_nodes;
     if (child_node->IsScan()) {
-      const zetasql::ResolvedScan* scan =
-          child_node->GetAs<zetasql::ResolvedScan>();
+      const googlesql::ResolvedScan* scan =
+          child_node->GetAs<googlesql::ResolvedScan>();
       scan->GetChildNodes(&scan_child_nodes);
       if (!scan_child_nodes.empty()) {
-        const zetasql::ResolvedComputedColumn* computed_column =
-            scan_child_nodes[0]->GetAs<zetasql::ResolvedComputedColumn>();
+        const googlesql::ResolvedComputedColumn* computed_column =
+            scan_child_nodes[0]->GetAs<googlesql::ResolvedComputedColumn>();
         expr = computed_column->expr();
       }
     }
   }
-  ZETASQL_RET_CHECK_NE(expr, nullptr);
+  GOOGLESQL_RET_CHECK_NE(expr, nullptr);
   // Create a deep copy visitor
-  zetasql::ResolvedASTDeepCopyVisitor deep_copy_visitor;
+  googlesql::ResolvedASTDeepCopyVisitor deep_copy_visitor;
   // Accept the visitor on the expression
-  ZETASQL_RETURN_IF_ERROR(expr->Accept(&deep_copy_visitor));
+  GOOGLESQL_RETURN_IF_ERROR(expr->Accept(&deep_copy_visitor));
   // Consume the copied expression
-  ZETASQL_ASSIGN_OR_RETURN(
-      std::unique_ptr<zetasql::ResolvedExpr> copied_expr,
-      deep_copy_visitor.ConsumeRootNode<zetasql::ResolvedExpr>());
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      std::unique_ptr<googlesql::ResolvedExpr> copied_expr,
+      deep_copy_visitor.ConsumeRootNode<googlesql::ResolvedExpr>());
 
   // Get the return type from the output column list of stmt
-  const zetasql::ResolvedQueryStmt* query_stmt =
-      stmt->GetAs<zetasql::ResolvedQueryStmt>();
-  ZETASQL_RET_CHECK_NE(query_stmt, nullptr);
-  const zetasql::Type* return_type =
+  const googlesql::ResolvedQueryStmt* query_stmt =
+      stmt->GetAs<googlesql::ResolvedQueryStmt>();
+  GOOGLESQL_RET_CHECK_NE(query_stmt, nullptr);
+  const googlesql::Type* return_type =
       query_stmt->output_column_list()[0]->column().type();
 
-  zetasql::FunctionArgumentTypeList arg_list;
+  googlesql::FunctionArgumentTypeList arg_list;
   for (const std::string& param_name : input_params) {
     auto it = param_types_map.find(param_name);
     if (it == param_types_map.end()) {
@@ -271,14 +288,14 @@ WrapInResolvedCreateFunctionStmt(
     arg_list.push_back(it->second);
   }
   auto signature =
-      std::make_unique<zetasql::FunctionSignature>(return_type, arg_list,
+      std::make_unique<googlesql::FunctionSignature>(return_type, arg_list,
                                                      /*context_id=*/0);
   // Create the ResolvedCreateFunctionStmt to validate the expression.
-  std::unique_ptr<zetasql::ResolvedCreateFunctionStmt> create_function_stmt =
-      zetasql::MakeResolvedCreateFunctionStmt(
+  std::unique_ptr<googlesql::ResolvedCreateFunctionStmt> create_function_stmt =
+      googlesql::MakeResolvedCreateFunctionStmt(
           /*name_path=*/{"foo"},
-          zetasql::ResolvedCreateStatement::CREATE_DEFAULT_SCOPE,
-          zetasql::ResolvedCreateStatement::CREATE_DEFAULT,
+          googlesql::ResolvedCreateStatement::CREATE_DEFAULT_SCOPE,
+          googlesql::ResolvedCreateStatement::CREATE_DEFAULT,
           /*has_explicit_return_type=*/true, return_type, input_params,
           *signature,
           /*is_aggregate=*/false,
@@ -287,18 +304,18 @@ WrapInResolvedCreateFunctionStmt(
           /*aggregate_expression_list=*/{},
           /*function_expression=*/std::move(copied_expr),
           /*option_list=*/{},
-          zetasql::ResolvedCreateStatement::SQL_SECURITY_UNSPECIFIED,
-          zetasql::ResolvedCreateStatement::DETERMINISM_UNSPECIFIED,
+          googlesql::ResolvedCreateStatement::SQL_SECURITY_UNSPECIFIED,
+          googlesql::ResolvedCreateStatement::DETERMINISM_UNSPECIFIED,
           /*is_remote=*/false,
           /*connection=*/nullptr);
   return create_function_stmt;
 }
 
-absl::StatusOr<std::unique_ptr<zetasql::AnalyzerOutput>>
+absl::StatusOr<std::unique_ptr<googlesql::AnalyzerOutput>>
 SpangresTranslator::TranslateQuery(interfaces::TranslateQueryParams params) {
-  ZETASQL_ASSIGN_OR_RETURN(interfaces::ParserSingleOutput parser_single_output,
+  GOOGLESQL_ASSIGN_OR_RETURN(interfaces::ParserSingleOutput parser_single_output,
                    GetQueryParserOutput(params));
-  ZETASQL_ASSIGN_OR_RETURN(interfaces::ParserOutput parser_output,
+  GOOGLESQL_ASSIGN_OR_RETURN(interfaces::ParserOutput parser_output,
                    std::move(*parser_single_output.mutable_output()));
   return TranslateParsedQuery(interfaces::TranslateParsedQueryParams(
       std::move(parser_output), params.TransferCommonParams()));
@@ -307,7 +324,7 @@ SpangresTranslator::TranslateQuery(interfaces::TranslateQueryParams params) {
 // Update the query if it's a simple scenario that isn't supported by the
 // current implementation but can be rewritten to a supported form.
 // TODO: Refactor code to remove the two function parameters.
-absl::StatusOr<std::unique_ptr<zetasql::AnalyzerOutput>>
+absl::StatusOr<std::unique_ptr<googlesql::AnalyzerOutput>>
 SpangresTranslator::TranslateParsedTree(
     interfaces::TranslateParsedQueryParams& params,
     std::function<decltype(GetParserQueryOutput)> parser_output_getter,
@@ -323,10 +340,16 @@ SpangresTranslator::TranslateParsedTree(
   std::unique_ptr<interfaces::PGArena> arena;
   absl::StatusOr<interfaces::ParserOutput> parser_output(
       parser_output_getter(params, arena));
-  ZETASQL_RETURN_IF_ERROR(parser_output.status());
+  GOOGLESQL_RETURN_IF_ERROR(parser_output.status());
   if (list_length(parser_output->parse_tree()) != 1) {
     return absl::InvalidArgumentError(
         "SQL queries are limited to single statements");
+  }
+
+  RawStmt* raw_stmt = linitial_node(RawStmt, parser_output->parse_tree());
+  if (IsA(raw_stmt->stmt, MergeStmt)) {
+    return absl::UnimplementedError(
+        "[ERROR] statement type \"MergeStmt\" is not supported");
   }
 
   if (progress != nullptr) {
@@ -335,13 +358,13 @@ SpangresTranslator::TranslateParsedTree(
 
   // Set the default time zone. This time zone will be used to parse TIMESTAMPTZ
   // literals.
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       auto time_zone_scope,
       TimeZoneScope::Create(
           params.googlesql_analyzer_options().default_time_zone()));
 
   // Set the EngineSystemCatalog singleton.
-  ZETASQL_ASSIGN_OR_RETURN(bool initialized_catalog,
+  GOOGLESQL_ASSIGN_OR_RETURN(bool initialized_catalog,
                    SpangresSystemCatalog::TryInitializeEngineSystemCatalog(
                        params.TransferEngineBuiltinFunctionCatalog(),
                        params.googlesql_analyzer_options().language()));
@@ -355,14 +378,14 @@ SpangresTranslator::TranslateParsedTree(
   // features.
   auto engine_user_catalog =
       std::make_unique<SpangresUserCatalog>(params.engine_provided_catalog());
-  ZETASQL_ASSIGN_OR_RETURN(auto catalog_adapter_holder,
+  GOOGLESQL_ASSIGN_OR_RETURN(auto catalog_adapter_holder,
                    CatalogAdapterHolder::Create(
                        std::move(engine_user_catalog),
                        EngineSystemCatalog::GetEngineSystemCatalog(),
                        params.googlesql_analyzer_options(),
                        parser_output->token_locations()));
 
-  RawStmt* raw_stmt = linitial_node(RawStmt, parser_output->parse_tree());
+  raw_stmt = linitial_node(RawStmt, parser_output->parse_tree());
   std::vector<std::string> input_arguments;
   if (IsA(raw_stmt->stmt, CreateFunctionStmt)) {
     CreateFunctionStmt* create_function_stmt =
@@ -390,37 +413,37 @@ SpangresTranslator::TranslateParsedTree(
     }
   }
 
-  // Transform the prepared statement parameter types from ZetaSQL types to
+  // Transform the prepared statement parameter types from GoogleSQL types to
   // PostgreSQL type oids.
   CatalogAdapter* catalog_adapter;
-  ZETASQL_ASSIGN_OR_RETURN(catalog_adapter, GetCatalogAdapter());
-  zetasql::QueryParametersMap gsql_param_types =
+  GOOGLESQL_ASSIGN_OR_RETURN(catalog_adapter, GetCatalogAdapter());
+  googlesql::QueryParametersMap gsql_param_types =
       params.googlesql_analyzer_options().query_parameters();
 
   Oid* pg_param_types;
   int num_params = 0;
-  ZETASQL_ASSIGN_OR_RETURN(pg_param_types,
+  GOOGLESQL_ASSIGN_OR_RETURN(pg_param_types,
                    Transformer::BuildPgParameterTypeList(
                        *catalog_adapter, gsql_param_types, &num_params));
 
   // We need null-termination on the SQL expression, which absl::string_view
   // doesn't guarantee.
   std::string original_sql(params.sql_expression());
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       Query * pg_query,
       CheckedPgParseAnalyzeVarparams(raw_stmt, original_sql.c_str(),
                                      &pg_param_types, &num_params));
-  ZETASQL_RET_CHECK_NE(pg_query, nullptr) << "analyzed query not found";
+  GOOGLESQL_RET_CHECK_NE(pg_query, nullptr) << "analyzed query not found";
 
   if (progress != nullptr) {
     *progress = interfaces::TranslationProgress::ANALYZER;
   }
   if (params.pg_query_callback()) {
-    ZETASQL_RETURN_IF_ERROR(params.pg_query_callback()(pg_query));
+    GOOGLESQL_RETURN_IF_ERROR(params.pg_query_callback()(pg_query));
   }
 
   if (query_deparser_callback) {
-    ZETASQL_RETURN_IF_ERROR(query_deparser_callback(pg_query));
+    GOOGLESQL_RETURN_IF_ERROR(query_deparser_callback(pg_query));
   }
 
   bool is_create_function_stmt = IsA(raw_stmt->stmt, CreateFunctionStmt);
@@ -432,31 +455,31 @@ SpangresTranslator::TranslateParsedTree(
           "Set returning expressions in CREATE FUNCTION statements are not "
           "supported.");
     }
-    ZETASQL_RETURN_IF_ERROR(RewriteSimpleSrfInSelect(pg_query));
+    GOOGLESQL_RETURN_IF_ERROR(RewriteSimpleSrfInSelect(pg_query));
   }
 
   auto transformer = std::make_unique<postgres_translator::ForwardTransformer>(
       catalog_adapter_holder->ReleaseCatalogAdapter(), input_arguments,
       is_create_function_stmt);
-  ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<zetasql::ResolvedStatement> stmt,
+  GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<googlesql::ResolvedStatement> stmt,
                    transformer->BuildGsqlResolvedStatement(*pg_query));
 
   gsql_param_types = transformer->query_parameter_types();
 
-    zetasql::Validator validator(
+    googlesql::Validator validator(
         params.googlesql_analyzer_options().language());
 
     if (is_create_function_stmt) {
-      ZETASQL_ASSIGN_OR_RETURN(std::unique_ptr<zetasql::ResolvedCreateFunctionStmt>
+      GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<googlesql::ResolvedCreateFunctionStmt>
                            create_function_stmt,
                        WrapInResolvedCreateFunctionStmt(
                            stmt.get(), input_arguments,
                            transformer->create_func_arg_types()));
 
-      ZETASQL_RETURN_IF_ERROR(
+      GOOGLESQL_RETURN_IF_ERROR(
           validator.ValidateResolvedStatement(create_function_stmt.get()));
     } else {
-      ZETASQL_RETURN_IF_ERROR(validator.ValidateResolvedStatement(stmt.get()));
+      GOOGLESQL_RETURN_IF_ERROR(validator.ValidateResolvedStatement(stmt.get()));
     }
 
   int max_column_id = transformer->catalog_adapter().max_column_id();
@@ -465,38 +488,38 @@ SpangresTranslator::TranslateParsedTree(
     *progress = interfaces::TranslationProgress::COMPLETE;
   }
 
-  auto analyzer_output = std::make_unique<zetasql::AnalyzerOutput>(
+  auto analyzer_output = std::make_unique<googlesql::AnalyzerOutput>(
       params.googlesql_analyzer_options().id_string_pool(),
       params.googlesql_analyzer_options().arena(), std::move(stmt),
-      zetasql::AnalyzerOutputProperties(),
+      googlesql::AnalyzerOutputProperties(),
       /*parser_output=*/nullptr,
       /*deprecation_warnings=*/std::vector<absl::Status>(), gsql_param_types,
-      /*undeclared_position_parameters=*/std::vector<const zetasql::Type*>(),
+      /*undeclared_position_parameters=*/std::vector<const googlesql::Type*>(),
       max_column_id);
   // TODO: Gate this check behind a schema flag.
   if (enable_rewrite) {
     // NOTE: Unnecessary to rewrite the expression for the extracted expression
     // in the create function statement.
     if (!is_create_function_stmt) {
-      ZETASQL_RETURN_IF_ERROR(RewriteTranslatedTree(analyzer_output.get(), params));
+      GOOGLESQL_RETURN_IF_ERROR(RewriteTranslatedTree(analyzer_output.get(), params));
     }
   }
   return analyzer_output;
 }
 
 absl::Status SpangresTranslator::RewriteTranslatedTree(
-    zetasql::AnalyzerOutput* analyzer_output,
+    googlesql::AnalyzerOutput* analyzer_output,
     interfaces::TranslateParsedQueryParams& params) {
   auto analyzer_options = params.googlesql_analyzer_options();
   analyzer_options.set_enabled_rewrites({
-      zetasql::REWRITE_BUILTIN_FUNCTION_INLINER,
+      googlesql::REWRITE_BUILTIN_FUNCTION_INLINER,
   });
-  return zetasql::RewriteResolvedAst(
+  return googlesql::RewriteResolvedAst(
       analyzer_options, params.sql_expression(),
       params.engine_provided_catalog(), GetTypeFactory(), *analyzer_output);
 }
 
-absl::StatusOr<std::unique_ptr<zetasql::AnalyzerOutput>>
+absl::StatusOr<std::unique_ptr<googlesql::AnalyzerOutput>>
 SpangresTranslator::TranslateParsedQuery(
     interfaces::TranslateParsedQueryParams params) {
   return TranslateParsedTree(params, GetParserQueryOutput);
@@ -508,20 +531,20 @@ SpangresTranslator::TranslateExpression(
     std::optional<absl::string_view> table_name) {
   std::string wrapped_expression;
   // Wrap the expression in SELECT <expression> FROM <table_name>.
-  ZETASQL_ASSIGN_OR_RETURN(wrapped_expression,
+  GOOGLESQL_ASSIGN_OR_RETURN(wrapped_expression,
                    WrapExpressionInSelect(params.sql_expression(), table_name));
 
   // Get the parser to construct a new instance of TranslateQueryParams.
-  ZETASQL_ASSIGN_OR_RETURN(interfaces::ParserInterface * parser, params.parser());
+  GOOGLESQL_ASSIGN_OR_RETURN(interfaces::ParserInterface * parser, params.parser());
   interfaces::TranslateQueryParams wrapped_params(
       wrapped_expression, parser, params.engine_provided_catalog(),
       params.TransferEngineBuiltinFunctionCatalog());
-  ZETASQL_ASSIGN_OR_RETURN(interfaces::ParserSingleOutput parser_single_output,
+  GOOGLESQL_ASSIGN_OR_RETURN(interfaces::ParserSingleOutput parser_single_output,
                    GetQueryParserOutput(wrapped_params));
 
   // Get the parser output to construct the instance of
   // TranslateParsedQueryParams.
-  ZETASQL_ASSIGN_OR_RETURN(interfaces::ParserOutput parser_output,
+  GOOGLESQL_ASSIGN_OR_RETURN(interfaces::ParserOutput parser_output,
                    std::move(*parser_single_output.mutable_output()));
 
   return TranslateParsedExpression(
@@ -540,7 +563,7 @@ SpangresTranslator::TranslateParsedExpression(
     std::optional<absl::string_view> table_name) {
   static auto expression_deparser = [](std::string* deparsed_expression,
                                        Query* query) -> absl::Status {
-    ZETASQL_RET_CHECK_NE(query->targetList, nullptr)
+    GOOGLESQL_RET_CHECK_NE(query->targetList, nullptr)
         << "Target list should be empty in query";
 
     // The Pg analyzer may generate two target entries from one expression, for
@@ -555,12 +578,12 @@ SpangresTranslator::TranslateParsedExpression(
       // problematic expression.
       return absl::InvalidArgumentError("Unsupported expression in statement.");
     }
-    ZETASQL_RET_CHECK(list_length(query->targetList) == 1)
+    GOOGLESQL_RET_CHECK(list_length(query->targetList) == 1)
         << "Target list's size should be one";
 
     void* obj = list_head(query->targetList)->ptr_value;
     Expr* expr = internal::PostgresCastNode(TargetEntry, obj)->expr;
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         absl::string_view deparsed,
         CheckedPgDeparseExprInQuery(internal::PostgresCastToNode(expr), query));
     // The deparsed expression may have extra parenthesis, this is consistent
@@ -570,7 +593,7 @@ SpangresTranslator::TranslateParsedExpression(
   };
 
   std::string deparsed_expression;
-  std::unique_ptr<zetasql::AnalyzerOutput> analyzer_output;
+  std::unique_ptr<googlesql::AnalyzerOutput> analyzer_output;
 
   // Choose how to get the parsed expression based on the value passed in
   // in the `params`. If serialized_parse_tree() is not null, then use the
@@ -585,7 +608,7 @@ SpangresTranslator::TranslateParsedExpression(
     parser_output_getter = std::bind(
         GetParserQueryOutput, std::placeholders::_1, std::placeholders::_2);
   }
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       analyzer_output,
       TranslateParsedTree(params, parser_output_getter,
                           std::bind(expression_deparser, &deparsed_expression,
@@ -594,7 +617,7 @@ SpangresTranslator::TranslateParsedExpression(
                           // disable the rewriter.
                           /*enable_rewrite=*/false));
 
-  const zetasql::ResolvedStatement* stmt =
+  const googlesql::ResolvedStatement* stmt =
       analyzer_output->resolved_statement();
   // Default SQLBuilder will print the ColumnRef by using a random generated
   // column name
@@ -604,20 +627,21 @@ SpangresTranslator::TranslateParsedExpression(
         : SQLBuilder(options) {}
 
     absl::Status VisitResolvedColumnRef(
-        const zetasql::ResolvedColumnRef* node) {
+        const googlesql::ResolvedColumnRef* node) {
       PushQueryFragment(node,
                         // Identifier requires quoteing if necessary.
-                        zetasql::ToIdentifierLiteral(node->column().name()));
+                        googlesql::ToIdentifierLiteral(node->column().name()));
       return absl::OkStatus();
     }
   };
-  ColumnRefSQLBuilder builder{SQLBuilder::SQLBuilderOptions()};
+  ColumnRefSQLBuilder builder{
+      SQLBuilder::SQLBuilderOptions(googlesql::PRODUCT_EXTERNAL)};
 
-  const zetasql::ResolvedQueryStmt* query =
-      stmt->GetAs<zetasql::ResolvedQueryStmt>();
+  const googlesql::ResolvedQueryStmt* query =
+      stmt->GetAs<googlesql::ResolvedQueryStmt>();
   // Process and extract the ResolvedExpr from statement.
-  const zetasql::ResolvedProjectScan* ps =
-      query->query()->GetAs<zetasql::ResolvedProjectScan>();
+  const googlesql::ResolvedProjectScan* ps =
+      query->query()->GetAs<googlesql::ResolvedProjectScan>();
 
   // It is possible a parser valid node which supposed to be an expression
   // is actually not a valid expression. Pg relies on analysis phase to catch
@@ -626,10 +650,39 @@ SpangresTranslator::TranslateParsedExpression(
   // in ddl's context like: <CREATE TABLE>.
   // TODO: Fix the error message in google sql analyzer.
   if (ps->expr_list().size() == 1) {
-    const zetasql::ResolvedExpr* expr = ps->expr_list(0)->expr();
-    ZETASQL_RET_CHECK_NE(expr, nullptr) << "Expr in ResolvedExpr should not be null";
+    const googlesql::ResolvedExpr* expr = ps->expr_list(0)->expr();
+    GOOGLESQL_RET_CHECK_NE(expr, nullptr) << "Expr in ResolvedExpr should not be null";
 
-    ZETASQL_RET_CHECK_OK(builder.Process(*expr));
+    // If the PG analyzer coerced an untyped NULL expression (e.g., DEFAULT
+    // NULL) to text/STRING type because it was analyzed in a SELECT statement,
+    // we want to simplify it back to an untyped GoogleSQL "NULL".
+    // This allows Spanner's DDL compiler to implicitly coerce it to the correct
+    // column type. However, we must NOT simplify explicit type-casts (e.g.
+    // DEFAULT CAST(NULL AS text)) because they should trigger a type mismatch
+    // error in Spanner for PG compatibility. Thus, we deserialize the raw PG
+    // AST to verify if it was indeed a raw untyped NULL constant.
+    // Note that this has a limition because unwrapping casts would not work
+    // for more complex expressions, e.g., `DEFAULT NULL*2`, which is a valid
+    // expression in OSS PG but not in Spangres.
+    const googlesql::ResolvedExpr* unwrapped = UnwrapCasts(expr);
+    if (unwrapped->node_kind() == googlesql::RESOLVED_LITERAL &&
+        unwrapped->GetAs<googlesql::ResolvedLiteral>()->value().is_null() &&
+        params.serialized_parse_tree() != nullptr) {
+      std::unique_ptr<interfaces::PGArena> arena;
+      auto arena_status =
+          MemoryContextPGArena::Init(GetMemoryReservationManager(params));
+      if (arena_status.ok()) {
+        arena = std::move(arena_status.value());
+        auto raw_expr_or_status =
+            DeserializeParseExpression(*params.serialized_parse_tree());
+        if (raw_expr_or_status.ok() &&
+            IsRawNullConstant(raw_expr_or_status.value())) {
+          return interfaces::ExpressionTranslateResult{"NULL", "NULL"};
+        }
+      }
+    }
+
+    GOOGLESQL_RET_CHECK_OK(builder.Process(*expr));
 
     return interfaces::ExpressionTranslateResult{deparsed_expression,
                                                  builder.sql()};
@@ -640,7 +693,7 @@ SpangresTranslator::TranslateParsedExpression(
     // list in the resolved query statement.
     return interfaces::ExpressionTranslateResult{
         deparsed_expression,
-        zetasql::ToIdentifierLiteral(ps->column_list(0).name())};
+        googlesql::ToIdentifierLiteral(ps->column_list(0).name())};
   }
 
   return absl::InvalidArgumentError("Expression in the statement is not valid");
@@ -651,14 +704,14 @@ SpangresTranslator::GetParserExpressionOutput(
     std::optional<absl::string_view> table_name,
     interfaces::TranslateParsedQueryParams& params,
     std::unique_ptr<interfaces::PGArena>& arena) {
-  ZETASQL_RET_CHECK_NE(params.serialized_parse_tree(), nullptr)
+  GOOGLESQL_RET_CHECK_NE(params.serialized_parse_tree(), nullptr)
       << "Expression can not be null";
-  ZETASQL_ASSIGN_OR_RETURN(
+  GOOGLESQL_ASSIGN_OR_RETURN(
       arena, MemoryContextPGArena::Init(GetMemoryReservationManager(params)));
-  ZETASQL_ASSIGN_OR_RETURN(Node * expression,
+  GOOGLESQL_ASSIGN_OR_RETURN(Node * expression,
                    DeserializeParseExpression(*params.serialized_parse_tree()));
 
-  ZETASQL_ASSIGN_OR_RETURN(List * parse_tree,
+  GOOGLESQL_ASSIGN_OR_RETURN(List * parse_tree,
                    WrapExpressionInSelect(expression, table_name));
   return interfaces::ParserOutput(
       parse_tree,
@@ -673,7 +726,7 @@ absl::StatusOr<std::string> SpangresTranslator::WrapExpressionInSelect(
   static constexpr char select_template_with_table[] =
       R"(SELECT ($0) from "$1")";
   static constexpr char select_template_without_table[] = R"(SELECT ($0))";
-  ZETASQL_RET_CHECK(!expression.empty()) << "Expression can not be null or empty";
+  GOOGLESQL_RET_CHECK(!expression.empty()) << "Expression can not be null or empty";
   return table_name.has_value()
              ? absl::Substitute(select_template_with_table, expression,
                                 table_name.value())
@@ -682,28 +735,28 @@ absl::StatusOr<std::string> SpangresTranslator::WrapExpressionInSelect(
 
 absl::StatusOr<List*> SpangresTranslator::WrapExpressionInSelect(
     Node* expression, std::optional<absl::string_view> table_name) {
-  ZETASQL_RET_CHECK_NE(expression, nullptr) << "Expression can not be null";
+  GOOGLESQL_RET_CHECK_NE(expression, nullptr) << "Expression can not be null";
 
   // List of statements
-  ZETASQL_ASSIGN_OR_RETURN(RawStmt * raw_stmt, CheckedPgMakeNode(RawStmt));
-  ZETASQL_ASSIGN_OR_RETURN(List * wrapped_tree,
+  GOOGLESQL_ASSIGN_OR_RETURN(RawStmt * raw_stmt, CheckedPgMakeNode(RawStmt));
+  GOOGLESQL_ASSIGN_OR_RETURN(List * wrapped_tree,
                    CheckedPgLappend(/*list=*/nullptr, raw_stmt));
 
   // SELECT
-  ZETASQL_ASSIGN_OR_RETURN(SelectStmt * select, CheckedPgMakeNode(SelectStmt));
+  GOOGLESQL_ASSIGN_OR_RETURN(SelectStmt * select, CheckedPgMakeNode(SelectStmt));
   raw_stmt->stmt = internal::PostgresCastToNode(select);
 
   // Set expression as SELECT's target
-  ZETASQL_ASSIGN_OR_RETURN(ResTarget * rt, CheckedPgMakeNode(ResTarget));
+  GOOGLESQL_ASSIGN_OR_RETURN(ResTarget * rt, CheckedPgMakeNode(ResTarget));
   rt->val = expression;
-  ZETASQL_ASSIGN_OR_RETURN(List * target_list, CheckedPgLappend(/*list=*/nullptr, rt));
+  GOOGLESQL_ASSIGN_OR_RETURN(List * target_list, CheckedPgLappend(/*list=*/nullptr, rt));
   select->targetList = target_list;
 
   if (table_name.has_value()) {
     // Set table name in SELECT's FROM clause
-    ZETASQL_ASSIGN_OR_RETURN(RangeVar * relation, CheckedPgMakeNode(RangeVar));
-    ZETASQL_ASSIGN_OR_RETURN(relation->relname, CheckedPgPstrdup(table_name->data()));
-    ZETASQL_ASSIGN_OR_RETURN(List * from_clause, CheckedPgLappend(nullptr, relation));
+    GOOGLESQL_ASSIGN_OR_RETURN(RangeVar * relation, CheckedPgMakeNode(RangeVar));
+    GOOGLESQL_ASSIGN_OR_RETURN(relation->relname, CheckedPgPstrdup(table_name->data()));
+    GOOGLESQL_ASSIGN_OR_RETURN(List * from_clause, CheckedPgLappend(nullptr, relation));
     RawStmt* raw_stmt =
         internal::PostgresCastNode(RawStmt, linitial(wrapped_tree));
     SelectStmt* select = internal::PostgresCastNode(SelectStmt, raw_stmt->stmt);
@@ -724,8 +777,8 @@ absl::StatusOr<bool> SpangresTranslator::IsBuiltinFunction(
   }
 
   // Initialize the engine system catalog if it is not already initialized.
-  const zetasql::LanguageOptions language_options;
-  ZETASQL_ASSIGN_OR_RETURN(bool initialized_catalog,
+  const googlesql::LanguageOptions language_options;
+  GOOGLESQL_ASSIGN_OR_RETURN(bool initialized_catalog,
                    SpangresSystemCatalog::TryInitializeEngineSystemCatalog(
                        std::move(builtin_function_catalog),
                        /*language_options=*/language_options));
@@ -736,9 +789,9 @@ absl::StatusOr<bool> SpangresTranslator::IsBuiltinFunction(
   // Check if the function is in the engine system catalog.
   postgres_translator::EngineSystemCatalog* system_catalog =
       SpangresSystemCatalog::GetEngineSystemCatalog();
-  ZETASQL_RET_CHECK_NE(system_catalog, nullptr)
+  GOOGLESQL_RET_CHECK_NE(system_catalog, nullptr)
       << "EngineSystemCatalog is not initialized";
-  const zetasql::Function* function = nullptr;
+  const googlesql::Function* function = nullptr;
   absl::Status results =
       system_catalog->FindFunction({std::string(function_name)},
                                    /*function=*/&function);
@@ -748,7 +801,7 @@ absl::StatusOr<bool> SpangresTranslator::IsBuiltinFunction(
 absl::StatusOr<interfaces::ParserSingleOutput>
 SpangresTranslator::GetQueryParserOutput(
     interfaces::TranslateQueryParams& params) {
-  ZETASQL_VLOG(4) << params.sql_expression();
+  GOOGLESQL_VLOG(4) << params.sql_expression();
   if (params.sql_expression().size() >
       absl::GetFlag(FLAGS_spangres_sql_length_limit)) {
     return absl::InvalidArgumentError(absl::Substitute(
@@ -763,18 +816,18 @@ SpangresTranslator::GetQueryParserOutput(
     *progress = interfaces::TranslationProgress::NONE;
   }
 
-  ZETASQL_RET_CHECK_NE(params.engine_provided_catalog(), nullptr)
-      << "ZetaSQL provided catalog cannot be null";
+  GOOGLESQL_RET_CHECK_NE(params.engine_provided_catalog(), nullptr)
+      << "GoogleSQL provided catalog cannot be null";
 
-  ZETASQL_ASSIGN_OR_RETURN(interfaces::ParserInterface * parser, params.parser());
-  ZETASQL_RET_CHECK_NE(parser, nullptr);
+  GOOGLESQL_ASSIGN_OR_RETURN(interfaces::ParserInterface * parser, params.parser());
+  GOOGLESQL_RET_CHECK_NE(parser, nullptr);
   interfaces::ParserSingleOutput parser_single_output(ParseQuery(
       parser, params.sql_expression(), GetMemoryReservationManager(params),
       params.parser_statistics_callback()));
 
-  ZETASQL_RETURN_IF_ERROR(parser_single_output.output().status());
+  GOOGLESQL_RETURN_IF_ERROR(parser_single_output.output().status());
   if (params.pg_raw_stmt_callback()) {
-    ZETASQL_RETURN_IF_ERROR(params.pg_raw_stmt_callback()(
+    GOOGLESQL_RETURN_IF_ERROR(params.pg_raw_stmt_callback()(
         linitial_node(RawStmt, parser_single_output.output()->parse_tree())));
   }
   return parser_single_output;
@@ -783,9 +836,9 @@ SpangresTranslator::GetQueryParserOutput(
 absl::StatusOr<interfaces::ExpressionTranslateResult>
 SpangresTranslator::TranslateQueryInView(
     interfaces::TranslateQueryParams params) {
-  ZETASQL_ASSIGN_OR_RETURN(interfaces::ParserSingleOutput parser_single_output,
+  GOOGLESQL_ASSIGN_OR_RETURN(interfaces::ParserSingleOutput parser_single_output,
                    GetQueryParserOutput(params));
-  ZETASQL_ASSIGN_OR_RETURN(interfaces::ParserOutput parser_output,
+  GOOGLESQL_ASSIGN_OR_RETURN(interfaces::ParserOutput parser_output,
                    std::move(*parser_single_output.mutable_output()));
   return TranslateParsedQueryInView(interfaces::TranslateParsedQueryParams(
       std::move(parser_output), params.TransferCommonParams()));
@@ -796,20 +849,21 @@ SpangresTranslator::TranslateParsedQueryInView(
     interfaces::TranslateParsedQueryParams params) {
   static auto query_deparser = [](std::string* deparsed_query,
                                   Query* query) -> absl::Status {
-    ZETASQL_RET_CHECK_NE(query, nullptr) << "Query should not be null";
-    ZETASQL_ASSIGN_OR_RETURN(absl::string_view deparsed, CheckedPgDeparseQuery(query));
+    GOOGLESQL_RET_CHECK_NE(query, nullptr) << "Query should not be null";
+    GOOGLESQL_ASSIGN_OR_RETURN(absl::string_view deparsed, CheckedPgDeparseQuery(query));
     deparsed_query->assign(deparsed);
     return absl::OkStatus();
   };
   std::string deparsed_query;
-  ZETASQL_ASSIGN_OR_RETURN(
-      std::unique_ptr<zetasql::AnalyzerOutput> analyzer_output,
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      std::unique_ptr<googlesql::AnalyzerOutput> analyzer_output,
       TranslateParsedTree(
           params, GetParserQueryOutput,
           bind(query_deparser, &deparsed_query, std::placeholders::_1)));
 
-  SQLBuilder builder;
-  ZETASQL_RETURN_IF_ERROR(
+  SQLBuilder builder{
+      SQLBuilder::SQLBuilderOptions(googlesql::PRODUCT_EXTERNAL)};
+  GOOGLESQL_RETURN_IF_ERROR(
       builder.Process(*analyzer_output.get()->resolved_statement()));
 
   return interfaces::ExpressionTranslateResult{deparsed_query, builder.sql()};
@@ -818,9 +872,9 @@ SpangresTranslator::TranslateParsedQueryInView(
 absl::StatusOr<interfaces::ExpressionTranslateResult>
 SpangresTranslator::TranslateFunctionBody(
     interfaces::TranslateQueryParams params) {
-  ZETASQL_ASSIGN_OR_RETURN(interfaces::ParserSingleOutput parser_single_output,
+  GOOGLESQL_ASSIGN_OR_RETURN(interfaces::ParserSingleOutput parser_single_output,
                    GetQueryParserOutput(params));
-  ZETASQL_ASSIGN_OR_RETURN(interfaces::ParserOutput parser_output,
+  GOOGLESQL_ASSIGN_OR_RETURN(interfaces::ParserOutput parser_output,
                    std::move(*parser_single_output.mutable_output()));
   return TranslateParsedFunctionBody(interfaces::TranslateParsedQueryParams(
       std::move(parser_output), params.TransferCommonParams()));
@@ -832,12 +886,12 @@ SpangresTranslator::TranslateParsedFunctionBody(
   // Deparse the query to standardize the formatting of the string
   auto query_deparser = [&params](std::string* deparsed_query,
                                   Query* query) -> absl::Status {
-    ZETASQL_RET_CHECK_NE(query, nullptr) << "Query should not be null";
-    ZETASQL_RET_CHECK_NE(params.function_name, nullptr)
+    GOOGLESQL_RET_CHECK_NE(query, nullptr) << "Query should not be null";
+    GOOGLESQL_RET_CHECK_NE(params.function_name, nullptr)
         << "Function name should not be null";
     char* funcName = strVal(llast(params.function_name));
 
-    ZETASQL_ASSIGN_OR_RETURN(
+    GOOGLESQL_ASSIGN_OR_RETURN(
         absl::string_view deparsed,
         CheckedPgDeparseFunctionBody(query, params.input_argument_names,
                                      params.num_input_arguments, funcName));
@@ -849,31 +903,32 @@ SpangresTranslator::TranslateParsedFunctionBody(
   };
 
   std::string deparsed_query;
-  ZETASQL_ASSIGN_OR_RETURN(
-      std::unique_ptr<zetasql::AnalyzerOutput> analyzer_output,
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      std::unique_ptr<googlesql::AnalyzerOutput> analyzer_output,
       TranslateParsedTree(
           params, GetParserQueryOutput,
           bind(query_deparser, &deparsed_query, std::placeholders::_1), true));
 
   // pull the expression out of the select statement
-  const zetasql::ResolvedQueryStmt* query =
+  const googlesql::ResolvedQueryStmt* query =
       analyzer_output->resolved_statement()
-          ->GetAs<zetasql::ResolvedQueryStmt>();
+          ->GetAs<googlesql::ResolvedQueryStmt>();
   // Process and extract the ResolvedExpr from statement.
-  const zetasql::ResolvedProjectScan* project_scan =
-      query->query()->GetAs<zetasql::ResolvedProjectScan>();
+  const googlesql::ResolvedProjectScan* project_scan =
+      query->query()->GetAs<googlesql::ResolvedProjectScan>();
 
   // Note that here for function creation we explicitly execute the statement
   // to take advantage of the input validations found there.
   // TODO: Fix the error message in google sql analyzer.
-  ZETASQL_RET_CHECK_EQ(project_scan->expr_list().size(), 1)
+  GOOGLESQL_RET_CHECK_EQ(project_scan->expr_list().size(), 1)
       << "Expected 1 expression in scan from function body";
-  const zetasql::ResolvedExpr* expr = project_scan->expr_list(0)->expr();
-  ZETASQL_RET_CHECK_NE(expr, nullptr) << "Expr in ResolvedExpr should not be null";
+  const googlesql::ResolvedExpr* expr = project_scan->expr_list(0)->expr();
+  GOOGLESQL_RET_CHECK_NE(expr, nullptr) << "Expr in ResolvedExpr should not be null";
 
-  SQLBuilder builder;
-  ZETASQL_RETURN_IF_ERROR(builder.Process(*expr));
-  ZETASQL_ASSIGN_OR_RETURN(std::string sql, builder.GetSql());
+  SQLBuilder builder{
+      SQLBuilder::SQLBuilderOptions(googlesql::PRODUCT_EXTERNAL)};
+  GOOGLESQL_RETURN_IF_ERROR(builder.Process(*expr));
+  GOOGLESQL_ASSIGN_OR_RETURN(std::string sql, builder.GetSql());
 
   return interfaces::ExpressionTranslateResult{deparsed_query, sql};
 }

@@ -42,7 +42,7 @@ cc_binary(
         "@com_google_absl//absl/flags:parse",
         "@com_google_absl//absl/flags:usage",
         "@com_google_absl//absl/strings",
-        "@com_google_zetasql//zetasql/base",
+        "@com_google_googlesql//googlesql/base",
     ],
 )
 

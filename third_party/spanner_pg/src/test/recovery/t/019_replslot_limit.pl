@@ -1,5 +1,5 @@
 
-# Copyright (c) 2021-2022, PostgreSQL Global Development Group
+# Copyright (c) 2021-2023, PostgreSQL Global Development Group
 
 # Test for replication slot limit
 # Ensure that max_slot_wal_keep_size limits the number of WAL files to
@@ -9,8 +9,6 @@ use warnings;
 
 use PostgreSQL::Test::Utils;
 use PostgreSQL::Test::Cluster;
-
-use File::Path qw(rmtree);
 use Test::More;
 use Time::HiRes qw(usleep);
 
@@ -183,11 +181,10 @@ $node_primary->safe_psql('postgres',
 	'ALTER SYSTEM RESET max_wal_size; SELECT pg_reload_conf()');
 $node_primary->safe_psql('postgres', "CHECKPOINT;");
 my $invalidated = 0;
-for (my $i = 0; $i < 10000; $i++)
+for (my $i = 0; $i < 10 * $PostgreSQL::Test::Utils::timeout_default; $i++)
 {
 	if ($node_primary->log_contains(
-			"invalidating slot \"rep1\" because its restart_lsn [0-9A-F/]+ exceeds max_slot_wal_keep_size",
-			$logstart))
+			'invalidating obsolete replication slot "rep1"', $logstart))
 	{
 		$invalidated = 1;
 		last;
@@ -206,7 +203,7 @@ is($result, "rep1|f|t|lost|",
 
 # Wait until current checkpoint ends
 my $checkpoint_ended = 0;
-for (my $i = 0; $i < 10000; $i++)
+for (my $i = 0; $i < 10 * $PostgreSQL::Test::Utils::timeout_default; $i++)
 {
 	if ($node_primary->log_contains("checkpoint complete: ", $logstart))
 	{
@@ -236,7 +233,7 @@ $logstart = get_log_size($node_standby);
 $node_standby->start;
 
 my $failed = 0;
-for (my $i = 0; $i < 10000; $i++)
+for (my $i = 0; $i < 10 * $PostgreSQL::Test::Utils::timeout_default; $i++)
 {
 	if ($node_standby->log_contains(
 			"requested WAL segment [0-9A-F]+ has already been removed",
@@ -353,8 +350,7 @@ while (1)
 		stderr => \$stderr);
 	diag $stdout, $stderr;
 
-	# unlikely that the problem would resolve after 15s, so give up at point
-	if ($i++ == 150)
+	if ($i++ == 10 * $PostgreSQL::Test::Utils::timeout_default)
 	{
 		# An immediate shutdown may hide evidence of a locking bug. If
 		# retrying didn't resolve the issue, shut down in fast mode.
@@ -378,6 +374,7 @@ $logstart = get_log_size($node_primary3);
 kill 'STOP', $senderpid, $receiverpid;
 advance_wal($node_primary3, 2);
 
+my $msg_logged = 0;
 my $max_attempts = $PostgreSQL::Test::Utils::timeout_default;
 while ($max_attempts-- >= 0)
 {
@@ -385,11 +382,12 @@ while ($max_attempts-- >= 0)
 			"terminating process $senderpid to release replication slot \"rep3\"",
 			$logstart))
 	{
-		ok(1, "walsender termination logged");
+		$msg_logged = 1;
 		last;
 	}
 	sleep 1;
 }
+ok($msg_logged, "walsender termination logged");
 
 # Now let the walsender continue; slot should be killed now.
 # (Must not let walreceiver run yet; otherwise the standby could start another
@@ -400,17 +398,19 @@ $node_primary3->poll_query_until('postgres',
 	"lost")
   or die "timed out waiting for slot to be lost";
 
+$msg_logged = 0;
 $max_attempts = $PostgreSQL::Test::Utils::timeout_default;
 while ($max_attempts-- >= 0)
 {
 	if ($node_primary3->log_contains(
-			'invalidating slot "rep3" because its restart_lsn', $logstart))
+			'invalidating obsolete replication slot "rep3"', $logstart))
 	{
-		ok(1, "slot invalidation logged");
+		$msg_logged = 1;
 		last;
 	}
 	sleep 1;
 }
+ok($msg_logged, "slot invalidation logged");
 
 # Now let the walreceiver continue, so that the node can be stopped cleanly
 kill 'CONT', $receiverpid;
@@ -424,7 +424,7 @@ sub advance_wal
 {
 	my ($node, $n) = @_;
 
-	# Advance by $n segments (= (16 * $n) MB) on primary
+	# Advance by $n segments (= (wal_segment_size * $n) bytes) on primary.
 	for (my $i = 0; $i < $n; $i++)
 	{
 		$node->safe_psql('postgres',
