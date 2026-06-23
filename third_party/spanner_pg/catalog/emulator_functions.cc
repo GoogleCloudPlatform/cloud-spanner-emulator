@@ -199,7 +199,10 @@ using ::postgres_translator::function_evaluators::PgToDate;
 using ::postgres_translator::function_evaluators::RegexpMatch;
 using ::postgres_translator::function_evaluators::RegexpSplitToArray;
 using ::postgres_translator::function_evaluators::Subtract;
+using ::postgres_translator::function_evaluators::Texticlike;
+using ::postgres_translator::function_evaluators::Texticnlike;
 using ::postgres_translator::function_evaluators::Textregexne;
+
 using ::postgres_translator::function_evaluators::Textregexsubstr;
 using ::postgres_translator::function_evaluators::ToTimestamp;
 using ::postgres_translator::function_evaluators::Trunc;
@@ -314,6 +317,58 @@ std::unique_ptr<googlesql::Function> TextregexneFunction(
       EvalTextregexne, InitializePGTimezoneToDefault, CleanupRegexCache));
   return std::make_unique<googlesql::Function>(
       kPGTextregexneFunctionName, catalog_name, googlesql::Function::SCALAR,
+      std::vector<googlesql::FunctionSignature>{googlesql::FunctionSignature{
+          gsql_bool, {gsql_string, gsql_string}, /*context_ptr=*/nullptr}},
+      function_options);
+}
+
+absl::StatusOr<googlesql::Value> EvalPgILike(
+    absl::Span<const googlesql::Value> args) {
+  GOOGLESQL_RET_CHECK(args.size() == 2);
+  if (args[0].is_null() || args[1].is_null()) {
+    return googlesql::Value::NullBool();
+  }
+
+  GOOGLESQL_ASSIGN_OR_RETURN(bool result,
+                   Texticlike(args[0].string_value(), args[1].string_value()));
+  return googlesql::Value::Bool(result);
+}
+
+std::unique_ptr<googlesql::Function> PgILikeFunction(
+    absl::string_view catalog_name) {
+  googlesql::FunctionOptions function_options;
+  function_options.set_supports_safe_error_mode(false);
+  function_options.set_arguments_are_coercible(true);
+  function_options.set_evaluator(PGFunctionEvaluator(
+      EvalPgILike, InitializePGTimezoneToDefault, CleanupRegexCache));
+  return std::make_unique<googlesql::Function>(
+      kPGILikeFunctionName, catalog_name, googlesql::Function::SCALAR,
+      std::vector<googlesql::FunctionSignature>{googlesql::FunctionSignature{
+          gsql_bool, {gsql_string, gsql_string}, /*context_ptr=*/nullptr}},
+      function_options);
+}
+
+absl::StatusOr<googlesql::Value> EvalPgNotILike(
+    absl::Span<const googlesql::Value> args) {
+  GOOGLESQL_RET_CHECK(args.size() == 2);
+  if (args[0].is_null() || args[1].is_null()) {
+    return googlesql::Value::NullBool();
+  }
+
+  GOOGLESQL_ASSIGN_OR_RETURN(bool result,
+                   Texticnlike(args[0].string_value(), args[1].string_value()));
+  return googlesql::Value::Bool(result);
+}
+
+std::unique_ptr<googlesql::Function> PgNotILikeFunction(
+    absl::string_view catalog_name) {
+  googlesql::FunctionOptions function_options;
+  function_options.set_supports_safe_error_mode(false);
+  function_options.set_arguments_are_coercible(true);
+  function_options.set_evaluator(PGFunctionEvaluator(
+      EvalPgNotILike, InitializePGTimezoneToDefault, CleanupRegexCache));
+  return std::make_unique<googlesql::Function>(
+      kPGNotILikeFunctionName, catalog_name, googlesql::Function::SCALAR,
       std::vector<googlesql::FunctionSignature>{googlesql::FunctionSignature{
           gsql_bool, {gsql_string, gsql_string}, /*context_ptr=*/nullptr}},
       function_options);
@@ -4829,6 +4884,12 @@ SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name) {
   auto least_greatest_funcs = LeastGreatestFunctions(catalog_name);
   functions.push_back(std::move(least_greatest_funcs.first));   // least
   functions.push_back(std::move(least_greatest_funcs.second));  // greatest
+
+  auto pg_ilike_func = PgILikeFunction(catalog_name);
+  functions.push_back(std::move(pg_ilike_func));
+
+  auto pg_not_ilike_func = PgNotILikeFunction(catalog_name);
+  functions.push_back(std::move(pg_not_ilike_func));
 
   auto pg_min_agg = PgMinAggregator(catalog_name);
   functions.push_back(std::move(pg_min_agg));

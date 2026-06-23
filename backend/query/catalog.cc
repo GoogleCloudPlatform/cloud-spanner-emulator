@@ -57,12 +57,13 @@
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/sequence.h"
 #include "common/errors.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 #include "third_party/spanner_pg/datatypes/extended/conversion_finder.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_oid_type.h"
 #include "google/protobuf/descriptor.h"
-#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -196,14 +197,25 @@ class PGFunctionCatalog : public googlesql::Catalog {
   backend::Catalog* root_catalog_;
 };
 
-Catalog::Catalog(const Schema* schema, const FunctionCatalog* function_catalog,
-                 googlesql::TypeFactory* type_factory,
-                 const googlesql::AnalyzerOptions& options, RowReader* reader,
-                 QueryEvaluator* query_evaluator,
-                 std::optional<std::string> change_stream_internal_lookup)
+Catalog::Catalog(
+    const Schema* schema, const FunctionCatalog* function_catalog,
+    googlesql::TypeFactory* type_factory,
+    const googlesql::AnalyzerOptions& options, RowReader* reader,
+    QueryEvaluator* query_evaluator,
+    std::optional<std::string> change_stream_internal_lookup,
+    const absl::flat_hash_map<std::string, google::protobuf::Value>&
+        secure_context)
     : schema_(schema),
       function_catalog_(function_catalog),
-      type_factory_(type_factory) {
+      type_factory_(type_factory),
+      secure_context_(secure_context) {
+  // SECURE_CONTEXT is query-specific because it accesses query-level
+  // secure parameters. We construct it here using the query-specific
+  // secure_context_ map and store it in the Catalog. We do not register
+  // it in the global FunctionCatalog to ensure it is only accessible
+  // when a query context is available.
+  secure_context_function_ =
+      CreateSecureContextFunction("Spanner", secure_context_);
   for (const auto* named_schema : schema->named_schemas()) {
     named_schemas_[named_schema->Name()] =
         std::make_unique<QueryableNamedSchema>(named_schema);
@@ -480,6 +492,11 @@ absl::Status Catalog::FindTableValuedFunction(
 absl::Status Catalog::GetFunction(const std::string& name,
                                   const googlesql::Function** function,
                                   const FindOptions& options) {
+  if (absl::EqualsIgnoreCase(name, "SECURE_CONTEXT")) {
+    *function = secure_context_function_.get();
+    return absl::OkStatus();
+  }
+
   auto it = udfs_.find(name);
   if (it != udfs_.end()) {
     *function = it->second.get();
@@ -572,6 +589,9 @@ absl::Status Catalog::GetFunctions(
   for (const auto& [unused_name, function] : udfs_) {
     output->insert(function.get());
   }
+  GOOGLESQL_RET_CHECK(secure_context_function_ != nullptr)
+      << "SECURE_CONTEXT function must be initialized";
+  output->insert(secure_context_function_.get());
 
   function_catalog_->GetFunctions(output);
   return absl::OkStatus();

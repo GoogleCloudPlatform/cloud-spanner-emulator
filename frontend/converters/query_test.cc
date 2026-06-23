@@ -14,14 +14,20 @@
 // limitations under the License.
 //
 
-#ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_FRONTEND_CONVERTERS_QUERY_H_
-#define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_FRONTEND_CONVERTERS_QUERY_H_
+#include "frontend/converters/query.h"
 
+#include <map>
+#include <memory>
 #include <string>
+#include <utility>
 
 #include "google/protobuf/struct.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
-#include "absl/status/statusor.h"
+#include "googlesql/public/types/type_factory.h"
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
+#include "googlesql/base/testing/status_matchers.h"
+#include "tests/common/proto_matchers.h"
 #include "backend/query/query_engine.h"
 #include "backend/schema/catalog/proto_bundle.h"
 
@@ -29,19 +35,24 @@ namespace google {
 namespace spanner {
 namespace emulator {
 namespace frontend {
+namespace {
 
-// Converts the sql, params into backend query using given type factory.
-absl::StatusOr<backend::Query> QueryFromProto(
-    std::string sql, const google::protobuf::Struct& params,
-    google::protobuf::Map<std::string, google::spanner::v1::Type> param_types,
-    googlesql::TypeFactory* type_factory,
-    std::shared_ptr<const backend::ProtoBundle> proto_bundle,
-    const google::protobuf::Map<std::string, google::protobuf::Value>& secure_context =
-        {});
+TEST(QueryConverterTest, QueryFromProtoCompiles) {
+  googlesql::TypeFactory type_factory;
+  auto proto_bundle = backend::ProtoBundle::CreateEmpty();
+  auto shared_proto_bundle =
+      std::shared_ptr<const backend::ProtoBundle>(std::move(proto_bundle));
+  auto result = QueryFromProto("SELECT 1", {}, {}, &type_factory,
+                               shared_proto_bundle, {});
+  GOOGLESQL_ASSERT_OK(result.status());
 
+  const auto& query = result.value();
+  EXPECT_EQ(query.sql, "SELECT 1");
+  EXPECT_TRUE(query.secure_context.empty());
+}
+
+}  // namespace
 }  // namespace frontend
 }  // namespace emulator
 }  // namespace spanner
 }  // namespace google
-
-#endif  // THIRD_PARTY_CLOUD_SPANNER_EMULATOR_FRONTEND_CONVERTERS_QUERY_H_

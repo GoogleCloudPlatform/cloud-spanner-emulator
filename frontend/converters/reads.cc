@@ -45,8 +45,8 @@
 #include "frontend/converters/types.h"
 #include "frontend/converters/values.h"
 #include "frontend/proto/partition_token.pb.h"
-#include "absl/status/status.h"
 #include "googlesql/base/status_macros.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {

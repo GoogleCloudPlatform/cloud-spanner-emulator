@@ -35,8 +35,8 @@
 #include "frontend/converters/values.h"
 #include "tests/common/proto_matchers.h"
 #include "tests/common/test_env.h"
-#include "grpcpp/client_context.h"
 #include "googlesql/base/status_macros.h"
+#include "grpcpp/client_context.h"
 
 namespace google {
 namespace spanner {

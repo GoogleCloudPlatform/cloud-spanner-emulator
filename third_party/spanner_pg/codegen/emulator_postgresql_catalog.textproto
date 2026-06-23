@@ -7597,6 +7597,40 @@ functions {
 functions {
   mapped_name_path {
     name_path: "pg"
+    name_path: "ilike"
+  }
+  signatures {
+    return_type {
+      oid: 16
+      name: "bool"
+    }
+    arguments {
+      type {
+        oid: 25
+        name: "text"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 25
+        name: "text"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_paths {
+      name_path: "pg"
+      name_path: "texticlike"
+    }
+    deprecated: false
+  }
+  mode: SCALAR
+}
+functions {
+  mapped_name_path {
+    name_path: "pg"
     name_path: "interval_add"
   }
   postgresql_name_paths {
@@ -8780,6 +8814,40 @@ functions {
     postgresql_name_paths {
       name_path: "pg"
       name_path: "map_float_to_int"
+    }
+    deprecated: false
+  }
+  mode: SCALAR
+}
+functions {
+  mapped_name_path {
+    name_path: "pg"
+    name_path: "not_ilike"
+  }
+  signatures {
+    return_type {
+      oid: 16
+      name: "bool"
+    }
+    arguments {
+      type {
+        oid: 25
+        name: "text"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 25
+        name: "text"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    postgresql_name_paths {
+      name_path: "pg"
+      name_path: "texticnlike"
     }
     deprecated: false
   }
@@ -10757,6 +10825,28 @@ functions {
     postgresql_name_paths {
       name_path: "spanner"
       name_path: "search_substring"
+    }
+    deprecated: false
+  }
+  mode: SCALAR
+}
+functions {
+  mapped_name_path {
+    name_path: "session_user"
+  }
+  postgresql_name_paths {
+    name_path: "spanner"
+    name_path: "session_user"
+  }
+  signatures {
+    return_type {
+      oid: 25
+      name: "text"
+    }
+    oid: 50101
+    postgresql_name_paths {
+      name_path: "spanner"
+      name_path: "session_user"
     }
     deprecated: false
   }

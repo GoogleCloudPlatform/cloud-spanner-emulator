@@ -40,6 +40,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/cord.h"
+#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
@@ -519,6 +520,54 @@ ParseFullyQualifiedColumnPath(const std::string& qualified_column_path) {
                            /*column_name=*/parts[2]);
   }
   return std::nullopt;
+}
+
+absl::StatusOr<googlesql::Value> EvalSecureContext(
+    absl::Span<const googlesql::Value> args,
+    const absl::flat_hash_map<std::string, google::protobuf::Value>&
+        secure_context) {
+  GOOGLESQL_RET_CHECK(args.size() == 1);
+  if (args[0].is_null()) {
+    return absl::InvalidArgumentError(
+        "The argument to SECURE_CONTEXT() cannot be NULL.");
+  }
+  GOOGLESQL_RET_CHECK(args[0].type()->IsString());
+  const std::string& key = args[0].string_value();
+  absl::flat_hash_map<std::string, google::protobuf::Value>::const_iterator it =
+      secure_context.find(key);
+  if (it == secure_context.end()) {
+    // If we didn't find an exact match, try a case-insensitive lookup.
+    for (auto const& [k, v] : secure_context) {
+      if (absl::EqualsIgnoreCase(k, key)) {
+        it = secure_context.find(k);
+        break;
+      }
+    }
+  }
+  if (it == secure_context.end()) {
+    return absl::InvalidArgumentError(
+        absl::StrCat("Missing secure parameter: ", key));
+  }
+  const google::protobuf::Value& val = it->second;
+  if (val.has_string_value()) {
+    return googlesql::Value::StringValue(val.string_value());
+  }
+  if (val.has_null_value()) {
+    return googlesql::Value::NullString();
+  }
+  return absl::InvalidArgumentError(
+      "Secure parameters must be string or null values.");
+}
+
+std::unique_ptr<googlesql::Function> SecureContextFunction(
+    absl::string_view catalog_name, const googlesql::FunctionOptions& options) {
+  return std::make_unique<googlesql::Function>(
+      "SECURE_CONTEXT", catalog_name, googlesql::Function::SCALAR,
+      std::vector<googlesql::FunctionSignature>{
+          googlesql::FunctionSignature{googlesql::types::StringType(),
+                                       {googlesql::types::StringType()},
+                                       nullptr}},
+      options);
 }
 }  // namespace
 
@@ -1108,6 +1157,21 @@ FunctionCatalog::GetNextSequenceValueFunction(const std::string& catalog_name) {
                                        {googlesql::types::StringType()},
                                        nullptr}},
       function_options);
+}
+
+std::unique_ptr<googlesql::Function> CreateSecureContextFunction(
+    absl::string_view catalog_name,
+    const absl::flat_hash_map<std::string, google::protobuf::Value>&
+        secure_context) {
+  googlesql::FunctionOptions function_options;
+  function_options.set_arguments_are_coercible(false);
+  function_options.set_supports_safe_error_mode(false);
+  function_options.set_evaluator(googlesql::FunctionEvaluator(
+      [secure_context](absl::Span<const googlesql::Value> args)
+          -> absl::StatusOr<googlesql::Value> {
+        return EvalSecureContext(args, secure_context);
+      }));
+  return SecureContextFunction(catalog_name, function_options);
 }
 
 }  // namespace backend

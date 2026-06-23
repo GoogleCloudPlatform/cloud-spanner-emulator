@@ -23,6 +23,7 @@
 
 #include "googlesql/public/builtin_function.h"
 #include "googlesql/public/types/type_factory.h"
+#include "googlesql/public/value.h"
 #include "googlesql/resolved_ast/make_node_vector.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
 #include "gmock/gmock.h"
@@ -329,6 +330,216 @@ TEST_F(QueryValidatorTest, ValidateJoinMethodHintInvalidValueReturnsError) {
   QueryEngineOptions opts;
   QueryValidator validator{{.schema = schema()}, &opts};
   EXPECT_THAT(resolved_join_scan->Accept(&validator),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+// Tests for ignore_unknown_hints
+TEST_F(QueryValidatorTest, IgnoreUnknownHints_SpannerQualifierFails) {
+  QueryableTable table{schema()->FindTable("test_table"), /*reader=*/nullptr};
+  std::unique_ptr<googlesql::ResolvedTableScan> resolved_table_scan =
+      googlesql::MakeResolvedTableScan(/*column_list=*/{}, &table,
+                                       /*for_system_time_expr=*/nullptr);
+  std::unique_ptr<googlesql::ResolvedQueryStmt> resolved_query_stmt =
+      googlesql::MakeResolvedQueryStmt(/*output_column_list=*/{},
+                                       /*is_value_table=*/false,
+                                       std::move(resolved_table_scan));
+  // Using spanner qualifier for ignore_unknown_hints should fail
+  resolved_query_stmt->add_hint_list(googlesql::MakeResolvedOption(
+      /*qualifier=*/"spanner", /*name=*/"ignore_unknown_hints",
+      googlesql::MakeResolvedLiteral(googlesql::Value::Bool(true))));
+
+  QueryEngineOptions opts;
+  QueryValidator validator{{.schema = schema()}, &opts};
+  ASSERT_THAT(resolved_query_stmt->Accept(&validator),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST_F(QueryValidatorTest, IgnoreUnknownHints_EmptyQualifierFails) {
+  QueryableTable table{schema()->FindTable("test_table"), /*reader=*/nullptr};
+  std::unique_ptr<googlesql::ResolvedTableScan> resolved_table_scan =
+      googlesql::MakeResolvedTableScan(/*column_list=*/{}, &table,
+                                       /*for_system_time_expr=*/nullptr);
+  std::unique_ptr<googlesql::ResolvedQueryStmt> resolved_query_stmt =
+      googlesql::MakeResolvedQueryStmt(/*output_column_list=*/{},
+                                       /*is_value_table=*/false,
+                                       std::move(resolved_table_scan));
+  // Using empty qualifier for ignore_unknown_hints should fail
+  resolved_query_stmt->add_hint_list(googlesql::MakeResolvedOption(
+      /*qualifier=*/"", /*name=*/"ignore_unknown_hints",
+      googlesql::MakeResolvedLiteral(googlesql::Value::Bool(true))));
+
+  QueryEngineOptions opts;
+  QueryValidator validator{{.schema = schema()}, &opts};
+  ASSERT_THAT(resolved_query_stmt->Accept(&validator),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST_F(QueryValidatorTest, IgnoreUnknownHints_EnabledSucceedsWithUnknownHint) {
+  QueryableTable table{schema()->FindTable("test_table"), /*reader=*/nullptr};
+  std::unique_ptr<googlesql::ResolvedTableScan> resolved_table_scan =
+      googlesql::MakeResolvedTableScan(/*column_list=*/{}, &table,
+                                       /*for_system_time_expr=*/nullptr);
+  std::unique_ptr<googlesql::ResolvedQueryStmt> resolved_query_stmt =
+      googlesql::MakeResolvedQueryStmt(/*output_column_list=*/{},
+                                       /*is_value_table=*/false,
+                                       std::move(resolved_table_scan));
+  resolved_query_stmt->add_hint_list(googlesql::MakeResolvedOption(
+      /*qualifier=*/"spanner_emulator", /*name=*/"ignore_unknown_hints",
+      googlesql::MakeResolvedLiteral(googlesql::Value::Bool(true))));
+  resolved_query_stmt->add_hint_list(googlesql::MakeResolvedOption(
+      /*qualifier=*/"", /*name=*/"unknown_hint",
+      googlesql::MakeResolvedLiteral(googlesql::Value::Bool(true))));
+
+  QueryEngineOptions opts;
+  QueryValidator validator{{.schema = schema()}, &opts};
+  GOOGLESQL_ASSERT_OK(resolved_query_stmt->Accept(&validator));
+}
+
+TEST_F(QueryValidatorTest, IgnoreUnknownHints_AppliesToChildNodes) {
+  QueryableTable table{schema()->FindTable("test_table"), /*reader=*/nullptr};
+  std::unique_ptr<googlesql::ResolvedTableScan> resolved_table_scan =
+      googlesql::MakeResolvedTableScan(/*column_list=*/{}, &table,
+                                       /*for_system_time_expr=*/nullptr);
+  resolved_table_scan->add_hint_list(googlesql::MakeResolvedOption(
+      /*qualifier=*/"", /*name=*/"unknown_hint",
+      googlesql::MakeResolvedLiteral(googlesql::Value::Bool(true))));
+
+  std::unique_ptr<googlesql::ResolvedQueryStmt> resolved_query_stmt =
+      googlesql::MakeResolvedQueryStmt(/*output_column_list=*/{},
+                                       /*is_value_table=*/false,
+                                       std::move(resolved_table_scan));
+  resolved_query_stmt->add_hint_list(googlesql::MakeResolvedOption(
+      /*qualifier=*/"spanner_emulator", /*name=*/"ignore_unknown_hints",
+      googlesql::MakeResolvedLiteral(googlesql::Value::Bool(true))));
+
+  QueryEngineOptions opts;
+  QueryValidator validator{{.schema = schema()}, &opts};
+  GOOGLESQL_ASSERT_OK(resolved_query_stmt->Accept(&validator));
+}
+
+TEST_F(QueryValidatorTest, IgnoreUnknownHints_DisabledAppliesToChildNodes) {
+  QueryableTable table{schema()->FindTable("test_table"), /*reader=*/nullptr};
+  std::unique_ptr<googlesql::ResolvedTableScan> resolved_table_scan =
+      googlesql::MakeResolvedTableScan(/*column_list=*/{}, &table,
+                                       /*for_system_time_expr=*/nullptr);
+  resolved_table_scan->add_hint_list(googlesql::MakeResolvedOption(
+      /*qualifier=*/"", /*name=*/"unknown_hint",
+      googlesql::MakeResolvedLiteral(googlesql::Value::Bool(true))));
+
+  std::unique_ptr<googlesql::ResolvedQueryStmt> resolved_query_stmt =
+      googlesql::MakeResolvedQueryStmt(/*output_column_list=*/{},
+                                       /*is_value_table=*/false,
+                                       std::move(resolved_table_scan));
+  resolved_query_stmt->add_hint_list(googlesql::MakeResolvedOption(
+      /*qualifier=*/"spanner_emulator", /*name=*/"ignore_unknown_hints",
+      googlesql::MakeResolvedLiteral(googlesql::Value::Bool(false))));
+
+  QueryEngineOptions opts;
+  QueryValidator validator{{.schema = schema()}, &opts};
+  ASSERT_THAT(resolved_query_stmt->Accept(&validator),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST_F(QueryValidatorTest, IgnoreUnknownHints_InvalidValueTypeFails) {
+  QueryableTable table{schema()->FindTable("test_table"), /*reader=*/nullptr};
+  std::unique_ptr<googlesql::ResolvedTableScan> resolved_table_scan =
+      googlesql::MakeResolvedTableScan(/*column_list=*/{}, &table,
+                                       /*for_system_time_expr=*/nullptr);
+  std::unique_ptr<googlesql::ResolvedQueryStmt> resolved_query_stmt =
+      googlesql::MakeResolvedQueryStmt(/*output_column_list=*/{},
+                                       /*is_value_table=*/false,
+                                       std::move(resolved_table_scan));
+  resolved_query_stmt->add_hint_list(googlesql::MakeResolvedOption(
+      /*qualifier=*/"spanner_emulator", /*name=*/"ignore_unknown_hints",
+      googlesql::MakeResolvedLiteral(googlesql::Value::Int64(1))));
+
+  QueryEngineOptions opts;
+  QueryValidator validator{{.schema = schema()}, &opts};
+  ASSERT_THAT(resolved_query_stmt->Accept(&validator),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST_F(QueryValidatorTest, IgnoreUnknownHints_KnownHintInvalidValueStillFails) {
+  QueryableTable table{schema()->FindTable("test_table"), /*reader=*/nullptr};
+  std::unique_ptr<googlesql::ResolvedTableScan> resolved_table_scan =
+      googlesql::MakeResolvedTableScan(/*column_list=*/{}, &table,
+                                       /*for_system_time_expr=*/nullptr);
+  resolved_table_scan->add_hint_list(googlesql::MakeResolvedOption(
+      /*qualifier=*/"", /*name=*/"force_index",
+      googlesql::MakeResolvedLiteral(googlesql::Value::Bool(true))));
+
+  std::unique_ptr<googlesql::ResolvedQueryStmt> resolved_query_stmt =
+      googlesql::MakeResolvedQueryStmt(/*output_column_list=*/{},
+                                       /*is_value_table=*/false,
+                                       std::move(resolved_table_scan));
+  resolved_query_stmt->add_hint_list(googlesql::MakeResolvedOption(
+      /*qualifier=*/"spanner_emulator", /*name=*/"ignore_unknown_hints",
+      googlesql::MakeResolvedLiteral(googlesql::Value::Bool(true))));
+
+  QueryEngineOptions opts;
+  QueryValidator validator{{.schema = schema()}, &opts};
+  ASSERT_THAT(resolved_query_stmt->Accept(&validator),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST_F(QueryValidatorTest,
+       IgnoreUnknownHints_InSubqueryDoesNotLeakToRootQuery) {
+  QueryableTable table{schema()->FindTable("test_table"), /*reader=*/nullptr};
+  std::unique_ptr<googlesql::ResolvedTableScan> resolved_table_scan =
+      googlesql::MakeResolvedTableScan(/*column_list=*/{}, &table,
+                                       /*for_system_time_expr=*/nullptr);
+
+  std::unique_ptr<googlesql::ResolvedSubqueryExpr> subquery_expr =
+      googlesql::MakeResolvedSubqueryExpr();
+  subquery_expr->add_hint_list(googlesql::MakeResolvedOption(
+      /*qualifier=*/"spanner_emulator", /*name=*/"ignore_unknown_hints",
+      googlesql::MakeResolvedLiteral(googlesql::Value::Bool(true))));
+
+  std::unique_ptr<googlesql::ResolvedFilterScan> filter_scan =
+      googlesql::MakeResolvedFilterScan(
+          /*column_list=*/{}, std::move(resolved_table_scan),
+          /*filter_expr=*/std::move(subquery_expr));
+
+  std::unique_ptr<googlesql::ResolvedQueryStmt> resolved_query_stmt =
+      googlesql::MakeResolvedQueryStmt(/*output_column_list=*/{},
+                                       /*is_value_table=*/false,
+                                       std::move(filter_scan));
+
+  resolved_query_stmt->add_hint_list(googlesql::MakeResolvedOption(
+      /*qualifier=*/"", /*name=*/"unknown_hint",
+      googlesql::MakeResolvedLiteral(googlesql::Value::Bool(true))));
+
+  QueryEngineOptions opts;
+  QueryValidator validator{{.schema = schema()}, &opts};
+  ASSERT_THAT(resolved_query_stmt->Accept(&validator),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST_F(QueryValidatorTest, IgnoreUnknownHints_InSubqueryIsInvalid) {
+  QueryableTable table{schema()->FindTable("test_table"), /*reader=*/nullptr};
+  std::unique_ptr<googlesql::ResolvedTableScan> resolved_table_scan =
+      googlesql::MakeResolvedTableScan(/*column_list=*/{}, &table,
+                                       /*for_system_time_expr=*/nullptr);
+
+  std::unique_ptr<googlesql::ResolvedSubqueryExpr> subquery_expr =
+      googlesql::MakeResolvedSubqueryExpr();
+  subquery_expr->add_hint_list(googlesql::MakeResolvedOption(
+      /*qualifier=*/"spanner_emulator", /*name=*/"ignore_unknown_hints",
+      googlesql::MakeResolvedLiteral(googlesql::Value::Bool(true))));
+
+  std::unique_ptr<googlesql::ResolvedFilterScan> filter_scan =
+      googlesql::MakeResolvedFilterScan(
+          /*column_list=*/{}, std::move(resolved_table_scan),
+          /*filter_expr=*/std::move(subquery_expr));
+
+  std::unique_ptr<googlesql::ResolvedQueryStmt> resolved_query_stmt =
+      googlesql::MakeResolvedQueryStmt(/*output_column_list=*/{},
+                                       /*is_value_table=*/false,
+                                       std::move(filter_scan));
+
+  QueryEngineOptions opts;
+  QueryValidator validator{{.schema = schema()}, &opts};
+  ASSERT_THAT(resolved_query_stmt->Accept(&validator),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 

@@ -58,10 +58,10 @@
 #include "backend/schema/graph/schema_node.h"
 #include "backend/schema/parser/ddl_parser.h"
 #include "backend/schema/parser/ddl_reserved_words.h"
+#include "googlesql/base/status_macros.h"
 #include "third_party/spanner_pg/ddl/spangres_direct_schema_printer_impl.h"
 #include "third_party/spanner_pg/ddl/spangres_schema_printer.h"
 #include "google/protobuf/repeated_ptr_field.h"
-#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -226,12 +226,14 @@ std::string PrintIndexFilter(const Index* index) {
 
 std::string PrintIndex(const Index* index) {
   std::string ddl_string;
-  absl::StrAppend(&ddl_string, "CREATE", (index->is_unique() ? " UNIQUE" : ""),
-                  (index->is_search_index() ? " SEARCH" : ""),
-                  (index->is_vector_index() ? " VECTOR" : ""),
-                  (index->is_null_filtered() ? " NULL_FILTERED" : ""),
-                  " INDEX ", PrintName(index->Name()), " ON ",
-                  PrintName(index->indexed_table()->Name()), "(");
+  absl::StrAppend(
+      &ddl_string, "CREATE",
+      (index->is_unique() && !index->is_search_index() ? " UNIQUE" : ""),
+      (index->is_search_index() ? " SEARCH" : ""),
+      (index->is_vector_index() ? " VECTOR" : ""),
+      (index->is_null_filtered() ? " NULL_FILTERED" : ""), " INDEX ",
+      PrintName(index->Name()), " ON ",
+      PrintName(index->indexed_table()->Name()), "(");
 
   std::vector<std::string> pk_clause;
   pk_clause.reserve(index->key_columns().size());

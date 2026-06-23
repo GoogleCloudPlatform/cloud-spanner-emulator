@@ -96,6 +96,16 @@ absl::StatusOr<bool> Textregexeq(absl::string_view string,
 absl::StatusOr<bool> Textregexne(absl::string_view string,
                                  absl::string_view pattern);
 
+// Returns `true` if the given `string` matches the given case-insensitive
+// pattern. Returns `false` otherwise.
+absl::StatusOr<bool> Texticlike(absl::string_view string,
+                                absl::string_view pattern);
+
+// Returns `true` if the given `string` does NOT match the given
+// case-insensitive pattern. Returns `false` otherwise.
+absl::StatusOr<bool> Texticnlike(absl::string_view string,
+                                 absl::string_view pattern);
+
 // Returns the substring matching the POSIX regular expression given. If there
 // are no matches, `NULL` is returned.
 absl::StatusOr<std::unique_ptr<std::string>> Textregexsubstr(

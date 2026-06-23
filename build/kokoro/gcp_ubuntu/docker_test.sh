@@ -15,15 +15,15 @@
 #
 
 #!/bin/bash
-base_SHA=831539c8fb46acf3dbd952f80e596f2d89a068c9d208dd850d2b39c7ad7f19bc
-cpp_SHA=904b562ea6c1a75892a34fbabed2ae25f130a375826e5aebedc226e1315697b8
-csharp_SHA=3f9108c182b5d67b9ed0f40ff69a367ad0cbacf1b66aad47914206574fb2ef1f
-go_SHA=1b445f62611768ddee91891fed36b630461a7145643616e1145dcb6ff8e8be74
-java_SHA=ace2f1de1da9de4a555d16494bf14aca67c085a701841ef1fa8cf521953b3bc2
-nodejs_SHA=f0f3f455ee90ff19a55ba0d69c296b9888e069e49550a242384b13f2a36e2556
-php_SHA=4598a819b287ced5bb55cfa0887817ed737a4fcf9390eee6bb80c36c044c0c9c
-py_SHA=f8f1c7b79133f7b50eecae5d2efa7534cd542616e24640eea58afaf44aba5e9c
-ruby_SHA=4f1a19b115f71f7945bb8814ba5b92059cdca5a1859b3ed68784e65290d51c22
+base_SHA=80d7d869af1137a89e83f67f70155ba9d3c91214c5a0455da031cf352cb99f1f
+cpp_SHA=421c1b78c6f581bbf06e4de42315170c52e70d1fb06d35ba55da4164e1093b06
+csharp_SHA=699796d9d635f7982f7e52be6a2c5a94f1e5d71fd730e4e4b1aa46b607bb0d43
+go_SHA=95713530657718a22d761ba342128d82c07ba7de0b069fdb1001018ab4921057
+java_SHA=4077022af872b7c3187c056f387cb1e2d0045d6848fdf19b610accc373749c00
+nodejs_SHA=bc224cf096ed19ef2772f0f38a5882467d4b570ec0d514a52519542b31e15f62
+php_SHA=b3ecb57801813fca5beed4c25f5e93e0ae9014caf99f1d4be70ec325c0907d0f
+py_SHA=48ea303856f949d4543c3d0d574543bcd9f730cd38dd15b4ffa16542877a862c
+ruby_SHA=d62ea525bf7ee07079a434979e98b815f69665d19139ab6448f0ee8183d20c6e
 
 if [[ "$#" -eq 0 ]]; then
   echo "Running client library integration tests."
@@ -57,7 +57,7 @@ declare SRC_DIR=""
 if [[ -n "${KOKORO_ARTIFACTS_DIR}" ]]; then
   # Switch to source root.
   SRC_DIR="${KOKORO_ARTIFACTS_DIR}/git/cloud-spanner-emulator"
-  cd $SCR_DIR
+  cd $SRC_DIR
   # On kokoro, script runs inside a Docker container as root, so $HOME
   # should point to the correct config.
   GCLOUD_CONFIG_DIR=${HOME}/.config/gcloud

@@ -1158,6 +1158,17 @@ ForwardTransformer::BuildGsqlResolvedLimitOffsetScan(
 
   GOOGLESQL_RET_CHECK(limit_node != nullptr || offset_node != nullptr);
 
+  // From PG16, a missing LIMIT clause with an OFFSET clause is represented as a
+  // NULL Const. We want to synthesize a LIMIT to prevent int64_t overflow by
+  // falling into the else branch.
+  if (limit_node != nullptr && offset_node != nullptr &&
+      IsA(limit_node, Const)) {
+    const Const* limit_const = PostgresConstCastNode(Const, limit_node);
+    if (limit_const->constisnull) {
+      limit_node = nullptr;
+    }
+  }
+
   // If a limit clause is provided then we validate it and also validate an
   // offset clause if it is provided.
   if (limit_node != nullptr) {

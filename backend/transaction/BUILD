@@ -79,6 +79,7 @@ cc_library(
         "@com_google_absl//absl/time",
         "@com_google_absl//absl/types:span",
         "@com_google_googlesql//googlesql/base:ret_check",
+        "@com_google_googlesql//googlesql/base:status",
         "@com_google_googlesql//googlesql/public:value",
     ],
 )
@@ -185,6 +186,7 @@ cc_library(
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
+        "@com_google_googlesql//googlesql/base:status",
     ],
 )
 
@@ -326,6 +328,7 @@ cc_library(
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/time",
         "@com_google_absl//absl/types:span",
+        "@com_google_googlesql//googlesql/base:status",
         "@com_google_googlesql//googlesql/public:value",
     ],
 )
@@ -382,6 +385,7 @@ cc_library(
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/time",
         "@com_google_absl//absl/types:span",
+        "@com_google_googlesql//googlesql/base:status",
         "@com_google_googlesql//googlesql/public:json_value",
         "@com_google_googlesql//googlesql/public:options_cc_proto",
         "@com_google_googlesql//googlesql/public:type",

@@ -50,9 +50,9 @@
 #include "frontend/proto/partition_token.pb.h"
 #include "frontend/server/handler.h"
 #include "frontend/server/request_context.h"
+#include "googlesql/base/status_macros.h"
 #include "farmhash.h"
 #include "absl/status/status.h"
-#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
@@ -170,12 +170,14 @@ absl::Status AddUndeclaredParametersFromQueryResult(
 
 absl::StatusOr<backend::QueryResult> ExecuteQuery(
     const spanner_api::ExecuteBatchDmlRequest_Statement& statement,
-    std::shared_ptr<Transaction> txn) {
-  GOOGLESQL_ASSIGN_OR_RETURN(const backend::Query query,
-                   QueryFromProto(statement.sql(), statement.params(),
-                                  statement.param_types(),
-                                  txn->query_engine()->type_factory(),
-                                  txn->schema()->proto_bundle()));
+    std::shared_ptr<Transaction> txn,
+    const google::protobuf::Map<std::string, google::protobuf::Value>& secure_context) {
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      const backend::Query query,
+      QueryFromProto(statement.sql(), statement.params(),
+                     statement.param_types(),
+                     txn->query_engine()->type_factory(),
+                     txn->schema()->proto_bundle(), secure_context));
   return txn->ExecuteSql(query);
 }
 
@@ -285,11 +287,13 @@ absl::Status ExecuteSql(RequestContext* ctx,
         }
 
         // Convert and execute provided SQL statement.
-        GOOGLESQL_ASSIGN_OR_RETURN(const backend::Query query,
-                         QueryFromProto(request->sql(), request->params(),
-                                        request->param_types(),
-                                        txn->query_engine()->type_factory(),
-                                        txn->schema()->proto_bundle()));
+        GOOGLESQL_ASSIGN_OR_RETURN(
+            const backend::Query query,
+            QueryFromProto(
+                request->sql(), request->params(), request->param_types(),
+                txn->query_engine()->type_factory(),
+                txn->schema()->proto_bundle(),
+                request->request_options().client_context().secure_context()));
         auto maybe_result = txn->ExecuteSql(query, request->query_mode());
         if (!maybe_result.ok()) {
           absl::Status error = maybe_result.status();
@@ -462,11 +466,13 @@ absl::Status ExecuteStreamingSql(
               read_timestamp, ctx->env()->clock()->Now()));
         }
         // Convert and execute provided SQL statement.
-        GOOGLESQL_ASSIGN_OR_RETURN(const backend::Query query,
-                         QueryFromProto(request->sql(), request->params(),
-                                        request->param_types(),
-                                        txn->query_engine()->type_factory(),
-                                        txn->schema()->proto_bundle()));
+        GOOGLESQL_ASSIGN_OR_RETURN(
+            const backend::Query query,
+            QueryFromProto(
+                request->sql(), request->params(), request->param_types(),
+                txn->query_engine()->type_factory(),
+                txn->schema()->proto_bundle(),
+                request->request_options().client_context().secure_context()));
         bool in_read_write_txn = txn->IsReadWrite() || txn->IsPartitionedDml();
         GOOGLESQL_ASSIGN_OR_RETURN(change_stream_metadata,
                          backend::QueryEngine::TryGetChangeStreamMetadata(
@@ -649,7 +655,9 @@ absl::Status ExecuteBatchDml(RequestContext* ctx,
         return absl::OkStatus();
       }
 
-      const auto maybe_result = ExecuteQuery(statement, txn);
+      const auto maybe_result = ExecuteQuery(
+          statement, txn,
+          request->request_options().client_context().secure_context());
       if (!maybe_result.ok() &&
           maybe_result.status().code() != absl::StatusCode::kAborted) {
         absl::Status error = maybe_result.status();

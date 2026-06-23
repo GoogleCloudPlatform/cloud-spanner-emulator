@@ -89,7 +89,7 @@ absl::StatusOr<std::shared_ptr<Database>> DatabaseManager::CreateDatabase(
   // Now update the database manager state. We could do the validation checks
   // at the top of this function, but we would have to do it here again anyway,
   // so we don't bother optimizing that case.
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
 
   // Check that a database with this name does not already exist.
   auto itr = database_map_.find(database_uri);
@@ -114,7 +114,7 @@ absl::StatusOr<std::shared_ptr<Database>> DatabaseManager::CreateDatabase(
 
 absl::StatusOr<std::shared_ptr<Database>> DatabaseManager::GetDatabase(
     const std::string& database_uri) const {
-  absl::MutexLock lock(&mu_);
+  absl::ReaderMutexLock lock(mu_);
   auto itr = database_map_.find(database_uri);
   if (itr == database_map_.end()) {
     return error::DatabaseNotFound(database_uri);
@@ -123,7 +123,7 @@ absl::StatusOr<std::shared_ptr<Database>> DatabaseManager::GetDatabase(
 }
 
 absl::Status DatabaseManager::DeleteDatabase(const std::string& database_uri) {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   if (database_map_.erase(database_uri) > 0) {
     absl::string_view project_id, instance_id, database_id;
     GOOGLESQL_RETURN_IF_ERROR(ParseDatabaseUri(database_uri, &project_id, &instance_id,
@@ -136,7 +136,7 @@ absl::Status DatabaseManager::DeleteDatabase(const std::string& database_uri) {
 
 absl::StatusOr<std::vector<std::shared_ptr<Database>>>
 DatabaseManager::ListDatabases(const std::string& instance_uri) const {
-  absl::MutexLock lock(&mu_);
+  absl::ReaderMutexLock lock(mu_);
   return GetDatabasesByInstance(database_map_, instance_uri);
 }
 

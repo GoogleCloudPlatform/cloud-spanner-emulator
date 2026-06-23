@@ -68,6 +68,16 @@ absl::StatusOr<bool> Textregexne(absl::string_view string,
   return absl::UnimplementedError("invoked stub Textregexne");
 }
 
+absl::StatusOr<bool> Texticlike(absl::string_view string,
+                                absl::string_view pattern) {
+  return absl::UnimplementedError("invoked stub Texticlike");
+}
+
+absl::StatusOr<bool> Texticnlike(absl::string_view string,
+                                 absl::string_view pattern) {
+  return absl::UnimplementedError("invoked stub Texticnlike");
+}
+
 absl::StatusOr<std::unique_ptr<std::string>> Textregexsubstr(
     absl::string_view string, absl::string_view pattern) {
   return absl::UnimplementedError("invoked stub Textregexsubstr");

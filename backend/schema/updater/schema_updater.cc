@@ -3998,7 +3998,7 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateSearchIndex(
   bool is_null_filtered = ddl_index.null_filtered();
   return CreateIndexHelper(
       ddl_index.index_name(), ddl_index.index_base_name(),
-      /*is_unique=*/false, is_null_filtered, interleave_in_table, table_pk,
+      /*is_unique=*/true, is_null_filtered, interleave_in_table, table_pk,
       ddl_index.stored_column_definition(),
       /*is_search_index=*/true, false, &ddl_index.partition_by(),
       &ddl_index.order_by(), &ddl_index.null_filtered_column(),
@@ -4472,6 +4472,8 @@ absl::StatusOr<Udf::Builder> SchemaUpdaterImpl::CreateFunctionBuilder(
             return Udf::SqlSecurity::SQL_SECURITY_UNSPECIFIED;
           case ddl::Function::INVOKER:
             return Udf::SqlSecurity::INVOKER;
+          case ddl::Function::DEFINER:
+            return Udf::SqlSecurity::DEFINER;
         }
       }());
   if (ddl_function.has_sql_body_origin() &&
@@ -4518,6 +4520,8 @@ absl::StatusOr<View::Builder> SchemaUpdaterImpl::CreateFunctionBuilder(
             return View::SqlSecurity::UNSPECIFIED;
           case ddl::Function::INVOKER:
             return View::SqlSecurity::INVOKER;
+          case ddl::Function::DEFINER:
+            return View::SqlSecurity::DEFINER;
         }
       }())
       .set_sql_body(ddl_function.sql_body());
@@ -6946,7 +6950,9 @@ absl::StatusOr<std::unique_ptr<ddl::DDLStatement>> ParseDDLByDialect(
                                    .flags()
                                    .enable_serial_auto_increment,
         .enable_uuid_type = true,
-        // TODO: Remove this tag after the feature is enabled.
+        .enable_alter_table_if_exists = EmulatorFeatureFlags::instance()
+                                            .flags()
+                                            .enable_alter_table_if_exists,
     };
     GOOGLESQL_ASSIGN_OR_RETURN(ddl::DDLStatementList ddl_statement_list,
                      translator->TranslateForEmulator(parser_output, options));

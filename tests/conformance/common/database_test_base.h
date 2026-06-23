@@ -33,6 +33,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "google/cloud/spanner/admin/database_admin_client.h"
 #include "google/cloud/spanner/client.h"
@@ -227,6 +228,16 @@ class DatabaseTest : public ::testing::Test {
   DatabaseAdminStub* raw_database_client() {
     return database_admin_stub_.get();
   }
+
+  // Returns the long-operation identified by `operation_uri` in `op`.
+  absl::Status GetOperation(absl::string_view operation_uri,
+                            operations_api::Operation* op);
+
+  // Waits for the long-running operation identified by `operation_uri` to
+  // finish.
+  absl::Status WaitForOperation(absl::string_view operation_uri,
+                                operations_api::Operation* op,
+                                absl::Duration deadline = absl::Seconds(50));
 
   // The client library requires explicit construction of Value objects which
   // is cumbersome for unit tests. This class acts as a proxy for implicitly

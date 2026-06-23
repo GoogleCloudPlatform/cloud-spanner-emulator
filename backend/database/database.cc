@@ -48,8 +48,8 @@
 #include "backend/transaction/read_write_transaction.h"
 #include "common/clock.h"
 #include "common/errors.h"
-#include "absl/status/status.h"
 #include "googlesql/base/status_macros.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {

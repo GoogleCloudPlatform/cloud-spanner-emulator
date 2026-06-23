@@ -336,6 +336,7 @@ message Function {
   enum SqlSecurity {
     UNSPECIFIED_SQL_SECURITY = 0;
     INVOKER = 2;
+    DEFINER = 3;
   }
 
   message Parameter {

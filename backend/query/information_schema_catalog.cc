@@ -27,7 +27,9 @@
 
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "googlesql/public/catalog.h"
+#include "googlesql/public/simple_catalog.h"
 #include "googlesql/public/types/type.h"
+#include "googlesql/public/types/type_factory.h"
 #include "googlesql/public/value.h"
 #include "googlesql/base/no_destructor.h"
 #include "absl/container/flat_hash_map.h"
@@ -35,6 +37,7 @@
 #include "absl/log/check.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
+#include "absl/strings/cord.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
@@ -58,6 +61,7 @@
 #include "third_party/spanner_pg/catalog/spangres_type.h"
 #include "third_party/spanner_pg/ddl/spangres_direct_schema_printer_impl.h"
 #include "third_party/spanner_pg/ddl/spangres_schema_printer.h"
+#include "google/protobuf/descriptor.h"
 #include "google/protobuf/util/json_util.h"
 
 namespace google {
@@ -110,6 +114,7 @@ static constexpr char kSpannerState[] = "SPANNER_STATE";
 static constexpr char kColumns[] = "COLUMNS";
 static constexpr char kSchemaName[] = "SCHEMA_NAME";
 static constexpr char kSchemata[] = "SCHEMATA";
+static constexpr char kProtoBundle[] = "PROTO_BUNDLE";
 static constexpr char kSequences[] = "SEQUENCES";
 static constexpr char kSequenceOptions[] = "SEQUENCE_OPTIONS";
 static constexpr char kSpannerStatistics[] = "SPANNER_STATISTICS";
@@ -148,6 +153,7 @@ static constexpr char kDepenentColumn[] = "DEPENDENT_COLUMN";
 static constexpr char kIndexes[] = "INDEXES";
 static constexpr char kIndex[] = "INDEX";
 static constexpr char kVectorIndex[] = "VECTOR";
+static constexpr char kSearchIndex[] = "SEARCH";
 static constexpr char kIndexName[] = "INDEX_NAME";
 static constexpr char kIndexType[] = "INDEX_TYPE";
 static constexpr char kIsUnique[] = "IS_UNIQUE";
@@ -336,6 +342,14 @@ const ColumnsMetaEntry& GetColumnMetadata(const DatabaseDialect& dialect,
 
   auto m = FindMetadata(ColumnsMetadata(), table->Name(), column->Name());
   if (m == ColumnsMetadata().end()) {
+    if (table->Name() == kSchemata && column->Name() == kProtoBundle) {
+      // PROTO_BUNDLE is added dynamically to the SCHEMATA table and is not
+      // present in the static ColumnsMetadata CSV. We return a hardcoded
+      // metadata entry for it here.
+      static const ColumnsMetaEntry kProtoBundleMetadata = {
+          kSchemata, kProtoBundle, "YES", "PROTO<proto2.FileDescriptorSet>"};
+      return kProtoBundleMetadata;
+    }
     ABSL_LOG(FATAL) << error << table->Name() << "." << column->Name();
   }
   return *m;
@@ -408,8 +422,14 @@ absl::flat_hash_map<std::string, googlesql::Value> GetColumnsWithDefault(
   absl::flat_hash_map<std::string, googlesql::Value> row;
   for (int i = 0; i < table->NumColumns(); ++i) {
     auto column = table->GetColumn(i);
-    row[column->Name()] =
-        kGSQLTypeKindToDefaultValue->at(column->GetType()->kind());
+    if (column->GetType()->kind() == googlesql::TypeKind::TYPE_PROTO) {
+      // Proto columns default to NULL as they don't have a simple default
+      // value.
+      row[column->Name()] = googlesql::Value::Null(column->GetType());
+    } else {
+      row[column->Name()] =
+          kGSQLTypeKindToDefaultValue->at(column->GetType()->kind());
+    }
   }
   return row;
 }
@@ -493,11 +513,43 @@ std::vector<googlesql::Value> GetRowFromRowKVs(
 
 std::vector<googlesql::Value> GetSchemaRow(const googlesql::Table* table,
                                            googlesql::Value tableCatalog,
-                                           googlesql::Value schemaName) {
+                                           googlesql::Value schemaName,
+                                           googlesql::Value protoBundle) {
   absl::flat_hash_map<std::string, googlesql::Value> specific_kvs;
   specific_kvs[kCatalogName] = tableCatalog;
   specific_kvs[kSchemaName] = schemaName;
+  if (table->FindColumnByName(kProtoBundle) != nullptr) {
+    specific_kvs[kProtoBundle] = protoBundle;
+  }
   return GetRowFromRowKVs(table, specific_kvs);
+}
+
+googlesql::Value GetSearchPartitionBy(const Index* index) {
+  if (!index->is_search_index() || index->partition_by().empty()) {
+    return googlesql::Value::Null(googlesql::types::StringArrayType());
+  }
+  std::vector<googlesql::Value> values;
+  for (const Column* column : index->partition_by()) {
+    values.push_back(googlesql::Value::String(column->Name()));
+  }
+  absl::StatusOr<googlesql::Value> array_val =
+      googlesql::Value::MakeArray(googlesql::types::StringArrayType(), values);
+  ABSL_CHECK_OK(array_val.status());  // crash ok
+  return array_val.value();
+}
+
+googlesql::Value GetSearchOrderBy(const Index* index) {
+  if (!index->is_search_index() || index->order_by().empty()) {
+    return googlesql::Value::Null(googlesql::types::StringArrayType());
+  }
+  std::vector<googlesql::Value> values;
+  for (const KeyColumn* column : index->order_by()) {
+    values.push_back(googlesql::Value::String(column->column()->Name()));
+  }
+  absl::StatusOr<googlesql::Value> array_val =
+      googlesql::Value::MakeArray(googlesql::types::StringArrayType(), values);
+  ABSL_CHECK_OK(array_val.status());  // crash ok
+  return array_val.value();
 }
 
 }  // namespace
@@ -525,6 +577,8 @@ InformationSchemaCatalog::InformationSchemaCatalog(
     tables_by_name_ = AddTablesFromMetadata(
         ColumnsMetadata(), *kSpannerTypeToGSQLType, *kSupportedGSQLTables);
   }
+
+  AddProtoBundleToSchemataTable();
 
   for (auto& [name, table] : tables_by_name_) {
     auto full_name = absl::StrCat(catalog_name, ".", name);
@@ -605,33 +659,87 @@ InformationSchemaCatalog::GetSchemaAndNameForInformationSchema(
                         std::string(name_part));
 }
 
+void InformationSchemaCatalog::AddProtoBundleToSchemataTable() {
+  // Add PROTO_BUNDLE column to SCHEMATA table for GoogleSQL dialect.
+  // We add it dynamically here because the static metadata system (CSV based)
+  // does not support PROTO types.
+  if (dialect_ != DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    return;
+  }
+
+  auto schemata_it = tables_by_name_.find(GetNameForDialect(kSchemata));
+  if (schemata_it != tables_by_name_.end()) {
+    auto* schemata_table = schemata_it->second.get();
+    const google::protobuf::Descriptor* descriptor =
+        google::protobuf::FileDescriptorSet::descriptor();
+    const googlesql::Type* proto_type;
+    ABSL_CHECK_OK(  // crash ok
+        type_factory()->MakeProtoType(descriptor, &proto_type));
+    auto proto_bundle_column = std::make_unique<googlesql::SimpleColumn>(
+        schemata_table->Name(), kProtoBundle, proto_type);
+    ABSL_CHECK_OK(  // crash ok
+        schemata_table->AddColumn(std::move(proto_bundle_column)));
+  }
+}
+
+googlesql::Value InformationSchemaCatalog::GetProtoBundleValue() {
+  if (dialect_ == DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    const google::protobuf::Descriptor* descriptor =
+        google::protobuf::FileDescriptorSet::descriptor();
+    const googlesql::Type* proto_type;
+    ABSL_CHECK_OK(  // crash ok
+        type_factory()->MakeProtoType(descriptor, &proto_type));
+
+    // Fetch the serialized proto descriptor bytes from the schema's proto
+    // bundle.
+    auto proto_descriptor_bytes_or =
+        default_schema_->proto_bundle()->GetProtoDescriptorBytes();
+    // If we successfully got the bytes and they are not empty, populate the
+    // column. Empty bytes mean no protos are loaded, so we treat it as NULL.
+    if (proto_descriptor_bytes_or.ok() &&
+        !proto_descriptor_bytes_or.value().empty()) {
+      return googlesql::Value::Proto(
+          proto_type->AsProto(), absl::Cord(proto_descriptor_bytes_or.value()));
+    } else {
+      return googlesql::Value::Null(proto_type);
+    }
+  } else {
+    return googlesql::Value::Null(googlesql::types::BytesType());
+  }
+}
+
 void InformationSchemaCatalog::FillSchemataTable() {
   auto table = tables_by_name_.at(GetNameForDialect(kSchemata)).get();
   std::vector<std::vector<googlesql::Value>> rows;
 
+  const googlesql::Value proto_bundle_val = GetProtoBundleValue();
+
   // Row for the unnamed default schema.
-  rows.push_back(
-      GetSchemaRow(table, DialectTableCatalog(), DialectDefaultSchema()));
+  rows.push_back(GetSchemaRow(table, DialectTableCatalog(),
+                              DialectDefaultSchema(), proto_bundle_val));
 
   // Row for the information schema.
   rows.push_back(GetSchemaRow(table, DialectTableCatalog(),
-                              String(GetNameForDialect(kInformationSchema))));
+                              String(GetNameForDialect(kInformationSchema)),
+                              proto_bundle_val));
 
   // Row for the spanner_sys schema.
-  rows.push_back(
-      GetSchemaRow(table, DialectTableCatalog(),
-                   String(GetNameForDialect(SpannerSysCatalog::kName))));
+  rows.push_back(GetSchemaRow(
+      table, DialectTableCatalog(),
+      String(GetNameForDialect(SpannerSysCatalog::kName)), proto_bundle_val));
 
   // Row for the pg_catalog schema for PG databases.
   if (dialect_ == DatabaseDialect::POSTGRESQL) {
     rows.push_back(GetSchemaRow(table, DialectTableCatalog(),
-                                String(GetNameForDialect(kPGCatalog))));
+                                String(GetNameForDialect(kPGCatalog)),
+                                proto_bundle_val));
   }
 
   // Row for each named schema.
   for (const auto& named_schema : default_schema_->named_schemas()) {
     rows.push_back(GetSchemaRow(table, DialectTableCatalog(),
-                                String(named_schema->Name())));
+                                String(named_schema->Name()),
+                                proto_bundle_val));
   }
 
   table->SetContents(rows);
@@ -1205,7 +1313,9 @@ void InformationSchemaCatalog::FillIndexesTable() {
           // index_name
           String(SDLObjectName::GetInSchemaName(index->Name())),
           // index_type
-          String(index->is_vector_index() ? kVectorIndex : kIndex),
+          String(index->is_vector_index()   ? kVectorIndex
+                 : index->is_search_index() ? kSearchIndex
+                                            : kIndex),
           // parent_table_name
           String(index->parent()
                      ? SDLObjectName::GetInSchemaName(index->parent()->Name())
@@ -1222,6 +1332,10 @@ void InformationSchemaCatalog::FillIndexesTable() {
               : String(PrintIndexFilter(index)),
           // spanner_is_managed
           DialectBoolValue(index->is_managed()),
+          // search_partition_by
+          GetSearchPartitionBy(index),
+          // search_order_by
+          GetSearchOrderBy(index),
       });
       if (dialect_ == DatabaseDialect::POSTGRESQL) {
         // Swap option_type and option_value as the order is different.
@@ -1253,6 +1367,10 @@ void InformationSchemaCatalog::FillIndexesTable() {
         NullString(),
         // spanner_is_managed
         DialectBoolValue(false),
+        // search_partition_by
+        googlesql::Value::Null(googlesql::types::StringArrayType()),
+        // search_order_by
+        googlesql::Value::Null(googlesql::types::StringArrayType()),
     });
     if (dialect_ == DatabaseDialect::POSTGRESQL) {
       // Swap option_type and option_value as the order is different.
@@ -1288,6 +1406,10 @@ void InformationSchemaCatalog::FillIndexesTable() {
           NullString(),
           // spanner_is_managed
           Bool(false),
+          // search_partition_by
+          googlesql::Value::Null(googlesql::types::StringArrayType()),
+          // search_order_by
+          googlesql::Value::Null(googlesql::types::StringArrayType()),
       });
     }
   }
@@ -1320,31 +1442,85 @@ void InformationSchemaCatalog::FillIndexColumnsTable() {
       int pos = 1;
       // Add key columns.
       for (const KeyColumn* key_column : index->key_columns()) {
-        rows.push_back(
-            {// table_catalog
-             DialectTableCatalog(),
-             // table_schema
-             String(table_schema_part),
-             // table_name
-             String(table_name_part),
-             // index_name
-             String(SDLObjectName::GetInSchemaName(index->Name())),
-             // index_type
-             String(index->is_vector_index() ? kVectorIndex : kIndex),
-             // column_name
-             String(key_column->column()->Name()),
-             // ordinal_position
-             Int64(pos++),
-             // column_ordering
-             index->is_vector_index() ? NullString()
-                                      : DialectColumnOrdering(key_column),
-             // is_nullable
-             String(key_column->column()->is_nullable() &&
-                            !index->is_null_filtered()
-                        ? kYes
-                        : kNo),
-             // spanner_type
-             GetSpannerType(key_column->column())});
+        rows.push_back({// table_catalog
+                        DialectTableCatalog(),
+                        // table_schema
+                        String(table_schema_part),
+                        // table_name
+                        String(table_name_part),
+                        // index_name
+                        String(SDLObjectName::GetInSchemaName(index->Name())),
+                        // index_type
+                        String(index->is_vector_index()   ? kVectorIndex
+                               : index->is_search_index() ? kSearchIndex
+                                                          : kIndex),
+                        // column_name
+                        String(key_column->column()->Name()),
+                        // ordinal_position
+                        Int64(pos++),
+                        // column_ordering
+                        index->is_vector_index() || index->is_search_index()
+                            ? NullString()
+                            : DialectColumnOrdering(key_column),
+                        // is_nullable
+                        String(key_column->column()->is_nullable() &&
+                                       !index->is_null_filtered()
+                                   ? kYes
+                                   : kNo),
+                        // spanner_type
+                        GetSpannerType(key_column->column())});
+      }
+      if (index->is_search_index()) {
+        // Add partition columns.
+        for (const Column* column : index->partition_by()) {
+          rows.push_back({
+              // table_catalog
+              DialectTableCatalog(),
+              // table_schema
+              String(table_schema_part),
+              // table_name
+              String(table_name_part),
+              // index_name
+              String(SDLObjectName::GetInSchemaName(index->Name())),
+              // index_type
+              String(kSearchIndex),
+              // column_name
+              String(column->Name()),
+              // ordinal_position
+              Int64(pos++),
+              // column_ordering
+              String("ASC"),
+              // is_nullable
+              String(column->is_nullable() ? kYes : kNo),
+              // spanner_type
+              GetSpannerType(column),
+          });
+        }
+        // Add order columns.
+        for (const KeyColumn* key_column : index->order_by()) {
+          rows.push_back({
+              // table_catalog
+              DialectTableCatalog(),
+              // table_schema
+              String(table_schema_part),
+              // table_name
+              String(table_name_part),
+              // index_name
+              String(SDLObjectName::GetInSchemaName(index->Name())),
+              // index_type
+              String(kSearchIndex),
+              // column_name
+              String(key_column->column()->Name()),
+              // ordinal_position
+              Int64(pos++),
+              // column_ordering
+              DialectColumnOrdering(key_column),
+              // is_nullable
+              String(key_column->column()->is_nullable() ? kYes : kNo),
+              // spanner_type
+              GetSpannerType(key_column->column()),
+          });
+        }
       }
       // Add storing columns.
       for (const Column* column : index->stored_columns()) {
@@ -1637,7 +1813,7 @@ void InformationSchemaCatalog::FillTableConstraintsTable() {
           // initially_deferred,
           String(kNo),
           // enforced,
-          String(kYes),
+          foreign_key->enforced() ? String(kYes) : String(kNo),
       });
 
       // Add the foreign key's unique backing index as a unique constraint.

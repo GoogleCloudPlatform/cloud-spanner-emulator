@@ -87,6 +87,9 @@ class InformationSchemaCatalog : public googlesql::SimpleCatalog {
   inline std::pair<std::string, std::string>
   GetSchemaAndNameForInformationSchema(std::string table_name);
 
+  void AddProtoBundleToSchemataTable();
+  googlesql::Value GetProtoBundleValue();
+
   void FillSchemataTable();
   void FillSpannerStatisticsTable();
   void FillDatabaseOptionsTable();

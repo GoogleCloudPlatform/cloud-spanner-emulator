@@ -68,14 +68,14 @@ TranslatorCommonParams::googlesql_analyzer_options() const {
 TranslateParsedQueryParams::TranslateParsedQueryParams(
     ParserOutput parser_output, TranslatorCommonParams common_params)
     : common_params_(std::move(common_params)),
-      parser_output_(absl::in_place_type_t<ParserOutput>(),
+      parser_output_(std::in_place_type_t<ParserOutput>(),
                      std::move(parser_output)) {}
 
 TranslateParsedQueryParams::TranslateParsedQueryParams(
     const std::string& serialized_parse_tree,
     TranslatorCommonParams common_params)
     : common_params_(std::move(common_params)),
-      parser_output_(absl::in_place_type_t<const std::string*>(),
+      parser_output_(std::in_place_type_t<const std::string*>(),
                      &serialized_parse_tree) {}
 
 ParserOutput* TranslateParsedQueryParams::mutable_parser_output() {

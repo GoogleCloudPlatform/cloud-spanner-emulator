@@ -914,15 +914,21 @@ AllocSetAlloc(MemoryContext context, Size size)
 	if (block == NULL)
 	{
 		Size		required_size;
+		/* SPANGRES BEGIN */
+		Size		nextBlockSize;
+		/* SPANGRES END */
 
 		/*
 		 * The first such block has size initBlockSize, and we double the
 		 * space in each succeeding block, but not more than maxBlockSize.
 		 */
 		blksize = set->nextBlockSize;
-		set->nextBlockSize <<= 1;
-		if (set->nextBlockSize > set->maxBlockSize)
-			set->nextBlockSize = set->maxBlockSize;
+		/* SPANGRES BEGIN */
+		// Postpone doubling of nextBlockSize until block allocation succeeds.
+		nextBlockSize = blksize << 1;
+		if (nextBlockSize > set->maxBlockSize)
+			nextBlockSize = set->maxBlockSize;
+		/* SPANGRES END */
 
 		/*
 		 * If initBlockSize is less than ALLOC_CHUNK_LIMIT, we could need more
@@ -949,6 +955,11 @@ AllocSetAlloc(MemoryContext context, Size size)
 
 		if (block == NULL)
 			return NULL;
+
+		/* SPANGRES BEGIN */
+		// Allocation succeeded, update nextBlockSize.
+		set->nextBlockSize = nextBlockSize;
+		/* SPANGRES END */
 
 		context->mem_allocated += blksize;
 

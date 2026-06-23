@@ -51,6 +51,7 @@ cc_library(
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/time",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
+        "@com_google_googlesql//googlesql/base:status",
     ],
 )
 
@@ -163,6 +164,7 @@ cc_library(
         "@com_google_absl//absl/types:variant",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
         "@com_google_googlesql//googlesql/base:ret_check",
+        "@com_google_googlesql//googlesql/base:status",
         "@com_google_googlesql//googlesql/base:time_proto_util",
         "@com_google_googlesql//googlesql/public:value",
         "@com_google_protobuf//:cc_wkt_protos",

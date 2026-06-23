@@ -48,8 +48,8 @@
 #include "common/constants.h"
 #include "common/errors.h"
 #include "common/limits.h"
-#include "nlohmann/json.hpp"
 #include "googlesql/base/status_macros.h"
+#include "nlohmann/json.hpp"
 
 namespace google {
 namespace spanner {

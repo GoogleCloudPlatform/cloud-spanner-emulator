@@ -20,10 +20,12 @@
 #include <memory>
 #include <string>
 
+#include "google/protobuf/struct.pb.h"
 #include "googlesql/public/function.h"
 #include "googlesql/public/table_valued_function.h"
 #include "googlesql/public/type.h"
 #include "googlesql/public/types/type_factory.h"
+#include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "backend/common/case.h"
 #include "backend/schema/catalog/schema.h"
@@ -34,6 +36,11 @@ namespace emulator {
 namespace backend {
 
 constexpr char kCloudSpannerEmulatorFunctionCatalogName[] = "Spanner";
+
+std::unique_ptr<googlesql::Function> CreateSecureContextFunction(
+    absl::string_view catalog_name,
+    const absl::flat_hash_map<std::string, google::protobuf::Value>&
+        secure_context);
 
 // A catalog of all SQL functions.
 //

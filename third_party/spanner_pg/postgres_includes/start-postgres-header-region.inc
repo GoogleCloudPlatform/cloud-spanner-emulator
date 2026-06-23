@@ -91,6 +91,23 @@ extern "C" {
 #pragma push_macro("WEEK")
 #undef WEEK
 
+#pragma push_macro("vsnprintf")
+#undef vsnprintf
+#pragma push_macro("snprintf")
+#undef snprintf
+#pragma push_macro("vsprintf")
+#undef vsprintf
+#pragma push_macro("sprintf")
+#undef sprintf
+#pragma push_macro("vfprintf")
+#undef vfprintf
+#pragma push_macro("fprintf")
+#undef fprintf
+#pragma push_macro("vprintf")
+#undef vprintf
+#pragma push_macro("printf")
+#undef printf
+
 // gettext and friends are defined to null in Postgres unless you configure the
 // build with --enable-nls (i.e. language translations). We don't do that.
 #pragma push_macro("gettext")

@@ -82,33 +82,6 @@ class OperationsTest
     return metadata;
   }
 
-  // Waits for the long-running operation identified by `operation_uri` to
-  // finish.
-  absl::Status WaitForOperation(absl::string_view operation_uri,
-                                operations_api::Operation* op) {
-    absl::Duration deadline = absl::Seconds(50);
-    absl::Time start = absl::Now();
-    while (true) {
-      GOOGLESQL_RETURN_IF_ERROR(GetOperation(operation_uri, op));
-      if (op->done()) return absl::OkStatus();
-      if (absl::Now() - start > deadline) {
-        return absl::Status(absl::StatusCode::kDeadlineExceeded,
-                            "Exceeded deadline while waiting for operation " +
-                                op->name() + " to complete.");
-      }
-      absl::SleepFor(absl::Milliseconds(1));
-    }
-  }
-
-  // Returns the long-operation identified by `operation_uri` in `op`.
-  absl::Status GetOperation(absl::string_view operation_uri,
-                            operations_api::Operation* op) {
-    longrunning::GetOperationRequest request;
-    request.set_name(std::string(operation_uri));  // NOLINT
-    grpc::ClientContext context;
-    return raw_operations_client()->GetOperation(&context, request, op);
-  }
-
   // Lists all long-running operations whose status may be currently maintained
   // by the database.
   absl::StatusOr<std::vector<operations_api::Operation>>

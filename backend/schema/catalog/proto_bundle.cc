@@ -32,10 +32,10 @@
 #include "absl/strings/substitute.h"
 #include "absl/types/span.h"
 #include "common/errors.h"
-#include "google/protobuf/descriptor.h"
-#include "google/protobuf/descriptor_database.h"
 #include "googlesql/base/ret_check.h"
 #include "googlesql/base/status_macros.h"
+#include "google/protobuf/descriptor.h"
+#include "google/protobuf/descriptor_database.h"
 
 namespace google {
 namespace spanner {

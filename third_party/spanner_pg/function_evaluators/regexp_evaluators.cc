@@ -42,6 +42,7 @@
 #include "third_party/spanner_pg/postgres_includes/all.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
 #include "third_party/spanner_pg/src/backend/catalog/pg_type_d.h"
+#include "third_party/spanner_pg/src/backend/utils/fmgroids.h"
 #include "googlesql/base/status_macros.h"
 
 namespace postgres_translator::function_evaluators {
@@ -224,6 +225,38 @@ absl::StatusOr<bool> Textregexne(absl::string_view string,
                        F_TEXTREGEXNE, string_in_datum, pattern_in_datum));
 
   return DatumGetBool(is_no_match);
+}
+
+absl::StatusOr<bool> Texticlike(absl::string_view string,
+                                absl::string_view pattern) {
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      Datum string_in_datum,
+      CheckedPgStringToDatum(std::string(string).c_str(), TEXTOID));
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      Datum pattern_in_datum,
+      CheckedPgStringToDatum(std::string(pattern).c_str(), TEXTOID));
+
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum result_datum,
+                   postgres_translator::CheckedOidFunctionCall2(
+                       F_TEXTICLIKE, string_in_datum, pattern_in_datum));
+
+  return DatumGetBool(result_datum);
+}
+
+absl::StatusOr<bool> Texticnlike(absl::string_view string,
+                                 absl::string_view pattern) {
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      Datum string_in_datum,
+      CheckedPgStringToDatum(std::string(string).c_str(), TEXTOID));
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      Datum pattern_in_datum,
+      CheckedPgStringToDatum(std::string(pattern).c_str(), TEXTOID));
+
+  GOOGLESQL_ASSIGN_OR_RETURN(Datum result_datum,
+                   postgres_translator::CheckedOidFunctionCall2(
+                       F_TEXTICNLIKE, string_in_datum, pattern_in_datum));
+
+  return DatumGetBool(result_datum);
 }
 
 absl::StatusOr<std::unique_ptr<std::string>> Textregexsubstr(

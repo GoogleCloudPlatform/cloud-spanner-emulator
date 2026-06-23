@@ -38,6 +38,7 @@
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/evaluator.h"
 #include "googlesql/public/evaluator_table_iterator.h"
+#include "googlesql/public/function_signature.h"
 #include "googlesql/public/language_options.h"
 #include "googlesql/public/options.pb.h"
 #include "googlesql/public/parse_helpers.h"
@@ -45,6 +46,7 @@
 #include "googlesql/public/types/type_factory.h"
 #include "googlesql/public/value.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_ast_deep_copy_visitor.h"
 #include "googlesql/resolved_ast/resolved_ast_enums.pb.h"
 #include "googlesql/resolved_ast/resolved_column.h"
 #include "googlesql/resolved_ast/resolved_node.h"
@@ -979,27 +981,51 @@ bool IsDMLStmtWitoutSelect(
   return true;
 }
 
+class QueryASTRewriter : public googlesql::ResolvedASTDeepCopyVisitor {
+ public:
+  explicit QueryASTRewriter(googlesql::Catalog* database_catalog)
+      : database_catalog_(database_catalog) {}
+
+  absl::Status VisitResolvedFunctionCall(
+      const googlesql::ResolvedFunctionCall* node) override {
+    GOOGLESQL_RETURN_IF_ERROR(CopyVisitResolvedFunctionCall(node));
+    if (database_catalog_ != nullptr) {
+      googlesql::ResolvedFunctionCall* copied_node =
+          GetUnownedTopOfStack<googlesql::ResolvedFunctionCall>();
+      const googlesql::Function* db_function = nullptr;
+      absl::Status status = database_catalog_->FindFunction(
+          {copied_node->function()->Name()}, &db_function);
+      if (status.ok() && db_function != nullptr) {
+        copied_node->set_function(db_function);
+      }
+    }
+    return absl::OkStatus();
+  }
+
+ private:
+  googlesql::Catalog* database_catalog_;
+};
+
 absl::StatusOr<std::unique_ptr<googlesql::ResolvedStatement>>
 ExtractValidatedResolvedStatementAndOptions(
     const googlesql::AnalyzerOutput* analyzer_output,
-    const QueryContext& context, bool in_partition_query = false,
+    const QueryContext& context, googlesql::Catalog* database_catalog,
+    bool in_partition_query = false,
     QueryEngineOptions* query_engine_options = nullptr) {
   GOOGLESQL_RET_CHECK_NE(analyzer_output->resolved_statement(), nullptr);
 
-  // Rewrite query hints to use only the 'spanner' prefix.
+  // Step 1: Rewrite query hints to use only the 'spanner' prefix.
   HintRewriter rewriter;
   GOOGLESQL_RETURN_IF_ERROR(analyzer_output->resolved_statement()->Accept(&rewriter));
   GOOGLESQL_ASSIGN_OR_RETURN(auto statement,
                    rewriter.ConsumeRootNode<googlesql::ResolvedStatement>());
 
-  // Validate the query and extract and return any options specified
-  // through hint if the caller requested them.
+  // Step 2: Validate the query and extract options.
   QueryEngineOptions options;
   std::unique_ptr<QueryValidator> query_validator =
       IsDMLStmtWitoutSelect(analyzer_output->resolved_statement())
           ? std::make_unique<DMLQueryValidator>(context, &options)
           : std::make_unique<QueryValidator>(context, &options);
-  // In Cloud Spanner, batch query is using PartitionQuery function.
   query_validator->set_in_partition_query(in_partition_query);
 
   GOOGLESQL_RETURN_IF_ERROR(statement->Accept(query_validator.get()));
@@ -1007,7 +1033,7 @@ ExtractValidatedResolvedStatementAndOptions(
     *query_engine_options = options;
   }
 
-  // Validate the index hints.
+  // Step 3: Validate the index hints.
   bool allow_search_indexes_in_transaction =
       IsSearchQueryAllowed(&options, context);
   bool in_select_for_update_query =
@@ -1020,6 +1046,7 @@ ExtractValidatedResolvedStatementAndOptions(
       in_select_for_update_query};
   GOOGLESQL_RETURN_IF_ERROR(statement->Accept(&index_hint_validator));
 
+  // Step 4: Rewrite ANN functions.
   ANNFunctionsRewriter ann_functions_rewriter;
   GOOGLESQL_RETURN_IF_ERROR(statement->Accept(&ann_functions_rewriter));
   GOOGLESQL_ASSIGN_OR_RETURN(
@@ -1036,6 +1063,16 @@ ExtractValidatedResolvedStatementAndOptions(
             ann_function->function()->Name());
       }
     }
+  }
+
+  // Step 5: Dynamically resolve PG catalog functions.
+  if (context.schema != nullptr &&
+      context.schema->dialect() == database_api::DatabaseDialect::POSTGRESQL &&
+      database_catalog != nullptr) {
+    QueryASTRewriter pg_rewriter(database_catalog);
+    GOOGLESQL_RETURN_IF_ERROR(statement->Accept(&pg_rewriter));
+    GOOGLESQL_ASSIGN_OR_RETURN(
+        statement, pg_rewriter.ConsumeRootNode<googlesql::ResolvedStatement>());
   }
 
   // Check the query size limits
@@ -1075,14 +1112,19 @@ class ExtractDmlTargetTableVisitor : public googlesql::ResolvedASTVisitor {
 // A QueryEvaluator instance against a specific QueryEngine and QueryContext.
 class QueryEvaluatorForEngine : public QueryEvaluator {
  public:
-  QueryEvaluatorForEngine(const QueryEngine& query_engine,
-                          const QueryContext& query_context)
-      : query_engine_(query_engine), query_context_(query_context) {}
+  QueryEvaluatorForEngine(
+      const QueryEngine& query_engine, const QueryContext& query_context,
+      const absl::flat_hash_map<std::string, google::protobuf::Value>&
+          secure_context)
+      : query_engine_(query_engine),
+        query_context_(query_context),
+        secure_context_(secure_context) {}
   ~QueryEvaluatorForEngine() override = default;
 
   absl::StatusOr<std::unique_ptr<RowCursor>> Evaluate(
       const std::string& query) override {
     Query q{/*sql=*/query, /*declared_params=*/{}, /*undeclared_params=*/{}};
+    q.secure_context = secure_context_;
 
     GOOGLESQL_ASSIGN_OR_RETURN(auto result,
                      query_engine_.ExecuteSql(q, query_context_,
@@ -1093,6 +1135,8 @@ class QueryEvaluatorForEngine : public QueryEvaluator {
  private:
   const QueryEngine& query_engine_;
   const QueryContext& query_context_;
+  const absl::flat_hash_map<std::string, google::protobuf::Value>&
+      secure_context_;
 };
 
 // Normalizes parameter names in queries (currently only for PostgreSQL).
@@ -1134,7 +1178,7 @@ absl::StatusOr<std::string> QueryEngine::GetDmlTargetTable(
                    ExtractParameters(normalized_query, analyzer_output.get()));
   GOOGLESQL_ASSIGN_OR_RETURN(auto statement,
                    ExtractValidatedResolvedStatementAndOptions(
-                       analyzer_output.get(), {.schema = schema}));
+                       analyzer_output.get(), {.schema = schema}, &catalog));
 
   ExtractDmlTargetTableVisitor visitor;
   GOOGLESQL_RETURN_IF_ERROR(statement->Accept(&visitor));
@@ -1194,7 +1238,7 @@ absl::StatusOr<QueryResult> QueryEngine::ExecuteInsertOnConflictDml(
 
       GOOGLESQL_ASSIGN_OR_RETURN(auto insert_or_update_stmt,
                        ExtractValidatedResolvedStatementAndOptions(
-                           insert_or_update_dml.get(), context));
+                           insert_or_update_dml.get(), context, &catalog));
 
       GOOGLESQL_ASSIGN_OR_RETURN(
           auto insert_or_update_result,
@@ -1325,11 +1369,13 @@ absl::StatusOr<QueryResult> QueryEngine::ExecuteSql(
                        GetTimeZone(function_catalog_.GetLatestSchema())));
   analyzer_options.set_prune_unused_columns(true);
 
-  QueryEvaluatorForEngine view_evaluator(*this, context);
+  QueryEvaluatorForEngine view_evaluator(*this, context,
+                                         normalized_query.secure_context);
   auto catalog = std::make_unique<Catalog>(
       context.schema, &function_catalog_, type_factory_, analyzer_options,
       context.reader, &view_evaluator,
-      normalized_query.change_stream_internal_lookup);
+      normalized_query.change_stream_internal_lookup,
+      normalized_query.secure_context);
 
   std::unique_ptr<const googlesql::AnalyzerOutput> analyzer_output;
   if (context.schema->dialect() == database_api::DatabaseDialect::POSTGRESQL &&
@@ -1361,7 +1407,7 @@ absl::StatusOr<QueryResult> QueryEngine::ExecuteSql(
 
   GOOGLESQL_ASSIGN_OR_RETURN(auto resolved_statement,
                    ExtractValidatedResolvedStatementAndOptions(
-                       analyzer_output.get(), context));
+                       analyzer_output.get(), context, catalog.get()));
 
   // Change stream queries are not directly executed via this generic ExecuteSql
   // function in query engine. If a change stream query reaches here, it is from
@@ -1400,7 +1446,7 @@ absl::StatusOr<QueryResult> QueryEngine::ExecuteSql(
     }
     GOOGLESQL_ASSIGN_OR_RETURN(resolved_statement,
                      ExtractValidatedResolvedStatementAndOptions(
-                         analyzer_output.get(), context));
+                         analyzer_output.get(), context, catalog.get()));
 
     // Only execute the SQL statement if the user did not request PLAN mode.
     if (query_mode != v1::ExecuteSqlRequest::PLAN) {
@@ -1509,7 +1555,7 @@ absl::Status QueryEngine::IsPartitionable(const Query& query,
   QueryEngineOptions options;
   GOOGLESQL_ASSIGN_OR_RETURN(auto resolved_statement,
                    ExtractValidatedResolvedStatementAndOptions(
-                       analyzer_output.get(), context,
+                       analyzer_output.get(), context, &catalog,
                        /*in_partition_query=*/true, &options));
   if (options.disable_query_partitionability_check) {
     return absl::OkStatus();
@@ -1541,7 +1587,7 @@ absl::Status QueryEngine::IsValidPartitionedDML(
 
   GOOGLESQL_ASSIGN_OR_RETURN(auto resolved_statement,
                    ExtractValidatedResolvedStatementAndOptions(
-                       analyzer_output.get(), context,
+                       analyzer_output.get(), context, &catalog,
                        /*in_partition_query=*/true));
 
   // Check that the DML statement is partitionable.
@@ -1588,7 +1634,8 @@ QueryEngine::TryGetChangeStreamMetadata(const Query& query,
       ExtractValidatedResolvedStatementAndOptions(
           analyzer_output.get(),
           QueryContext{.schema = schema,
-                       .allow_read_write_only_functions = in_read_write_txn}));
+                       .allow_read_write_only_functions = in_read_write_txn},
+          &catalog));
 
   ChangeStreamQueryValidator validator{
       schema, start_time,

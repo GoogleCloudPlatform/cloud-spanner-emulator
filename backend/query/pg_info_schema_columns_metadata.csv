@@ -152,6 +152,8 @@ indexes,is_null_filtered,YES,character varying
 indexes,index_state,YES,character varying
 indexes,spanner_is_managed,YES,character varying
 indexes,filter,YES,character varying
+indexes,search_partition_by,YES,character varying[]
+indexes,search_order_by,YES,character varying[]
 information_schema_catalog_name,catalog_name,YES,character varying
 key_column_usage,constraint_catalog,YES,character varying
 key_column_usage,constraint_schema,YES,character varying

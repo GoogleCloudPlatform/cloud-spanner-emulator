@@ -91,6 +91,23 @@
 #undef WEEK
 #pragma pop_macro("WEEK")
 
+#undef vsnprintf
+#pragma pop_macro("vsnprintf")
+#undef snprintf
+#pragma pop_macro("snprintf")
+#undef vsprintf
+#pragma pop_macro("vsprintf")
+#undef sprintf
+#pragma pop_macro("sprintf")
+#undef vfprintf
+#pragma pop_macro("vfprintf")
+#undef fprintf
+#pragma pop_macro("fprintf")
+#undef vprintf
+#pragma pop_macro("vprintf")
+#undef printf
+#pragma pop_macro("printf")
+
 // undef all conflicting symbols so future google3-headers use/define/declare
 // the real symbols.
 #undef File

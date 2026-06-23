@@ -322,12 +322,23 @@ ALTER TABLE Users ADD COLUMN newcol bigint PRIMARY KEY;
 ERROR: Primary keys cannot be added via <ALTER TABLE> statement.
 ==
 
-# TODO Enable this test once IF EXISTS is supported
-# in PostgreSQL and Emulator
-# ALTER TABLE IF EXISTS Users ADD COLUMN newcol bigint;
-# --
-# ERROR: <IF [NOT] EXISTS> is not supported in <ALTER> statement.
-# ==
+# --regex
+ALTER TABLE IF EXISTS DoesNotExist ADD COLUMN newcol bigint;
+--
+^;$
+==
+
+CREATE TABLE Users (
+  id bigint PRIMARY KEY
+);
+ALTER TABLE IF EXISTS Users ADD COLUMN newcol bigint;
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  newcol bigint,
+  PRIMARY KEY(id)
+);
+==
 
 ALTER TABLE Users ADD COLUMN fk bigint CONSTRAINT ref REFERENCES Roles(id);
 --

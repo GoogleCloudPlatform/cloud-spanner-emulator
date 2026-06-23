@@ -131,6 +131,10 @@ class QueryValidator : public googlesql::ResolvedASTVisitor {
   // Validates the child hint nodes of `node`.
   absl::Status ValidateHints(const googlesql::ResolvedNode* node);
 
+  // Sets `ignore_unknown_hints_` if `spanner_emulator.ignore_unknown_hints` is
+  // set to true in the query.
+  absl::Status MaybeSetIgnoreUnknownHints(const googlesql::ResolvedNode* node);
+
   // Returns an OK if `name` is a supported hint name for nodes with kind
   // `node_kind`; otherwise, returns an invalid argument error.
   absl::Status CheckSpannerHintName(
@@ -210,6 +214,9 @@ class QueryValidator : public googlesql::ResolvedASTVisitor {
   // part of a query can be combined with features used in another part of the
   // query.
   QueryFeatures query_features_;
+
+  // If true, unknown hints are ignored instead of causing an error.
+  bool ignore_unknown_hints_ = false;
 };
 
 }  // namespace backend

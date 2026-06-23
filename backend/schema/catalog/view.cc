@@ -36,9 +36,9 @@
 #include "backend/schema/catalog/index.h"
 #include "common/errors.h"
 #include "common/limits.h"
+#include "googlesql/base/status_macros.h"
 #include "googlesql/base/ret_check.h"
 #include "absl/status/status.h"
-#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {

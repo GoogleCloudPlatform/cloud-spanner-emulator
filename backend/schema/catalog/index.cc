@@ -29,8 +29,8 @@
 #include "backend/schema/catalog/locality_group.h"
 #include "backend/schema/catalog/table.h"
 #include "common/errors.h"
-#include "absl/status/status.h"
 #include "googlesql/base/status_macros.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {

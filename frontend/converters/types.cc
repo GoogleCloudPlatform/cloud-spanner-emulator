@@ -31,12 +31,12 @@
 #include "absl/strings/str_cat.h"
 #include "backend/schema/catalog/proto_bundle.h"
 #include "common/errors.h"
+#include "googlesql/base/ret_check.h"
+#include "googlesql/base/status_macros.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_oid_type.h"
 #include "third_party/spanner_pg/datatypes/extended/spanner_extended_type.h"
-#include "googlesql/base/ret_check.h"
-#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {

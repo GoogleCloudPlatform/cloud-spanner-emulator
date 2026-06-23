@@ -24,9 +24,14 @@ options {
   USER_CHAR_STREAM = true;
   NODE_EXTENDS = "QueryNodeBase";
   NAMESPACE = "google::spanner::emulator::backend::query::search";
+  // TODO: Remove.
   TOKEN_INCLUDES =
     "backend/query/search/query_char_stream.h";
+  TOKEN_INCLUDE =
+    "backend/query/search/query_char_stream.h";
+  // TODO: Remove.
   TOKEN_EXTENDS = "QueryTokenBase";
+  TOKEN_SUPER_CLASS = "QueryTokenBase";
   COMMON_TOKEN_ACTION = true;
   DEBUG_PARSER = false;
 }

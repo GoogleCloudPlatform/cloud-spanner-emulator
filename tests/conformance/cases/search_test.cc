@@ -195,6 +195,115 @@ TEST_P(SearchTest, SearchFunctionWrongArguments) {
                                                : "function spanner.search")));
 }
 
+TEST_P(SearchTest, SearchFunctionDefaultDialect) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(summary_tokens, "global OR US")
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)),
+              IsOkAndHoldsRows({{1}, {2}, {4}, {7}}));
+}
+
+TEST_P(SearchTest, SearchFunctionRQueryDialect) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(summary_tokens, "global OR US", dialect=>"rquery")
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)),
+              IsOkAndHoldsRows({{1}, {2}, {4}, {7}}));
+}
+
+TEST_P(SearchTest, SearchFunctionWordsDialect) {
+  // No match because "foo" is not present in the documents.
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(summary_tokens, "global foo", dialect=>"words")
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({}));
+
+  // No match because "or" is a normal term and not present in the documents.
+  query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(summary_tokens, "top OR global", dialect=>"words")
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({}));
+
+  query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(summary_tokens, "top global", dialect=>"words")
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({{1}, {2}}));
+}
+
+TEST_P(SearchTest, SearchFunctionWordsPhraseDialect) {
+  // No match because terms are not in order.
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(summary_tokens, "top global", dialect=>"words_phrase")
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({}));
+
+  query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(summary_tokens, "top 50", dialect=>"words_phrase")
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({{1}}));
+}
+
+TEST_P(SearchTest, SearchFunctionDialectIsCaseInsensitive) {
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(summary_tokens, "top global", dialect=>"WORDS")
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({{1}, {2}}));
+
+  query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(summary_tokens, "top 50", dialect=>"WoRdS_PhRaSe")
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)), IsOkAndHoldsRows({{1}}));
+
+  query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(summary_tokens, "global | US", dialect=>"RQuery")
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)),
+              IsOkAndHoldsRows({{1}, {2}, {4}, {7}}));
+}
+
+TEST_P(SearchTest, SearchFunctionInvalidDialect) {
+  // Test invalid dialect value
+  std::string query = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(summary_tokens, "top 50", dialect=>"invalid_dialect")
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Invalid dialect: invalid_dialect")));
+}
+
 TEST_P(SearchTest, SearchSubStringRelativeSearch) {
   std::string query = R"sql(
           SELECT albumid
@@ -899,6 +1008,51 @@ TEST_P(SearchTest, ScoreFunctionWrongArguments) {
                             ? absl::StatusCode::kNotFound
                             : absl::StatusCode::kInvalidArgument;
   EXPECT_THAT(Query(GetSqlQueryString(query)), StatusIs(expected_error));
+}
+
+TEST_P(SearchTest, ScoreFunctionDefaultDialectArgument) {
+  // The `dialect` argument is not specified.
+  std::string query = R"sql(
+      SELECT SCORE(summary_tokens, 'top')
+      FROM albums
+      WHERE userid = 1 AND SEARCH(summary_tokens, 'top'))sql";
+  GOOGLESQL_EXPECT_OK(Query(GetSqlQueryString(query)));
+
+  query = R"sql(
+      SELECT SCORE(summary_tokens, 'top', dialect=>CAST(NULL AS STRING))
+      FROM albums
+      WHERE userid = 1 AND SEARCH(summary_tokens, 'top'))sql";
+  GOOGLESQL_EXPECT_OK(Query(GetSqlQueryString(query)));
+}
+
+TEST_P(SearchTest, ScoreFunctionSupportsDialectArgument) {
+  std::string query = R"sql(
+      SELECT SCORE(summary_tokens, 'top', dialect=>'rquery')
+      FROM albums
+      WHERE userid = 1 AND SEARCH(summary_tokens, 'top'))sql";
+  GOOGLESQL_EXPECT_OK(Query(GetSqlQueryString(query)));
+
+  query = R"sql(
+      SELECT SCORE(summary_tokens, 'top', dialect=>'WORDS')
+      FROM albums
+      WHERE userid = 1 AND SEARCH(summary_tokens, 'top'))sql";
+  GOOGLESQL_EXPECT_OK(Query(GetSqlQueryString(query)));
+
+  query = R"sql(
+      SELECT SCORE(summary_tokens, 'top', dialect=>'Words_Phrase')
+      FROM albums
+      WHERE userid = 1 AND SEARCH(summary_tokens, 'top'))sql";
+  GOOGLESQL_EXPECT_OK(Query(GetSqlQueryString(query)));
+}
+
+TEST_P(SearchTest, ScoreFunctionInvalidDialect) {
+  std::string query = R"sql(
+      SELECT SCORE(summary_tokens, 'top', dialect=>'invalid_dialect')
+      FROM albums
+      WHERE userid = 1 AND SEARCH(summary_tokens, 'top'))sql";
+  EXPECT_THAT(Query(GetSqlQueryString(query)),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Invalid dialect: invalid_dialect")));
 }
 
 TEST_P(SearchTest, BasicScoreNgrams) {

@@ -50,8 +50,8 @@
 #include "backend/query/search/snippet_evaluator.h"
 #include "backend/query/search/substring_tokenizer.h"
 #include "backend/query/search/tokenlist_concat.h"
-#include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "googlesql/base/status_macros.h"
+#include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 
 namespace google {
 namespace spanner {
@@ -471,7 +471,8 @@ std::unique_ptr<googlesql::Function> SearchFunction(
   // Signature: SEARCH(tokenlist value,
   //                   string query,
   //                   bool enhance_query = false,
-  //                   string language_tag = NULL)
+  //                   string language_tag = NULL,
+  //                   string dialect = NULL)
   return std::make_unique<googlesql::Function>(
       kSearchFunctionName, catalog_name, googlesql::Function::SCALAR,
       std::vector<googlesql::FunctionSignature>{
@@ -481,7 +482,8 @@ std::unique_ptr<googlesql::Function> SearchFunction(
                 GetRequiredArgumentTypeOptions("tokens", false)},
                {string_type, GetRequiredArgumentTypeOptions("query")},
                {bool_type, GetNamedOptionalArgTypeOptions("enhance_query")},
-               {string_type, GetNamedOptionalArgTypeOptions("language_tag")}},
+               {string_type, GetNamedOptionalArgTypeOptions("language_tag")},
+               {string_type, GetNamedOptionalArgTypeOptions("dialect")}},
               nullptr},
       },
       function_options);
@@ -547,6 +549,7 @@ std::unique_ptr<googlesql::Function> ScoreFunction(
   //                  string query,
   //                  bool enhance_query = false,
   //                  string language_tag = NULL,
+  //                  string dialect = NULL,
   //                  json options = NULL)
   return std::make_unique<googlesql::Function>(
       kScoreFunctionName, catalog_name, googlesql::Function::SCALAR,
@@ -559,6 +562,7 @@ std::unique_ptr<googlesql::Function> ScoreFunction(
                   {string_type, GetRequiredArgumentTypeOptions("query")},
                   {bool_type, GetNamedOptionalArgTypeOptions("enhance_query")},
                   {string_type, GetNamedOptionalArgTypeOptions("language_tag")},
+                  {string_type, GetNamedOptionalArgTypeOptions("dialect")},
                   {json_type, GetNamedOptionalArgTypeOptions("options", false)},
               },
               nullptr},
@@ -570,6 +574,7 @@ std::unique_ptr<googlesql::Function> ScoreFunction(
                   {bytes_type, GetRequiredArgumentTypeOptions("query")},
                   {bool_type, GetNamedOptionalArgTypeOptions("enhance_query")},
                   {string_type, GetNamedOptionalArgTypeOptions("language_tag")},
+                  {string_type, GetNamedOptionalArgTypeOptions("dialect")},
                   {json_type, GetNamedOptionalArgTypeOptions("options", false)},
               },
               nullptr},

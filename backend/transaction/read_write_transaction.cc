@@ -71,10 +71,10 @@
 #include "common/config.h"
 #include "common/constants.h"
 #include "common/errors.h"
-#include "third_party/spanner_pg/interface/pg_arena.h"
-#include "third_party/spanner_pg/shims/memory_context_pg_arena.h"
 #include "googlesql/base/ret_check.h"
 #include "googlesql/base/status_macros.h"
+#include "third_party/spanner_pg/interface/pg_arena.h"
+#include "third_party/spanner_pg/shims/memory_context_pg_arena.h"
 
 namespace google {
 namespace spanner {

@@ -126,12 +126,12 @@ absl::StatusOr<MemoryContext> MemoryContextManager::CreateDefaultMemoryContext(
 }
 
 ActiveMemoryContext::ActiveMemoryContext() {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   active_memory_context_ = &CurrentMemoryContext;
 }
 
 ActiveMemoryContext::~ActiveMemoryContext() {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   ClearAndLogErrors();
 }
 
@@ -158,14 +158,14 @@ void ActiveMemoryContext::ClearAndLogErrors() {
 ActiveMemoryContext::ActiveMemoryContext(ActiveMemoryContext&& other) noexcept {
   // Either order works, since nothing else can possibly be trying to grab the
   // lock for this->mu_ yet.
-  absl::MutexLock my_lock(&mu_);
-  absl::MutexLock other_lock(&other.mu_);
+  absl::MutexLock my_lock(mu_);
+  absl::MutexLock other_lock(other.mu_);
   active_memory_context_ = other.active_memory_context_;
   other.active_memory_context_ = absl::nullopt;
 }
 
 absl::optional<MemoryContext*> ActiveMemoryContext::Release() {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   absl::optional<MemoryContext*> ctx(active_memory_context_);
   active_memory_context_ = absl::nullopt;
   return ctx;
@@ -178,14 +178,14 @@ ActiveMemoryContext& ActiveMemoryContext::operator=(
   }
 
   absl::optional<MemoryContext*> other_ctx = other.Release();
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   ClearAndLogErrors();
   active_memory_context_ = other_ctx;
   return *this;
 }
 
 absl::Status ActiveMemoryContext::Clear() {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   return ClearLocked();
 }
 
@@ -201,7 +201,7 @@ absl::Status ActiveMemoryContext::ClearLocked() {
 }
 
 absl::Status ActiveMemoryContext::Reset() {
-  absl::ReaderMutexLock lock(&mu_);
+  absl::ReaderMutexLock lock(mu_);
 
   GOOGLESQL_RETURN_IF_ERROR(CheckSameThread());
 
@@ -213,7 +213,7 @@ absl::Status ActiveMemoryContext::Reset() {
 }
 
 bool ActiveMemoryContext::IsActive() const {
-  absl::ReaderMutexLock lock(&mu_);
+  absl::ReaderMutexLock lock(mu_);
   return active_memory_context_.has_value();
 }
 
