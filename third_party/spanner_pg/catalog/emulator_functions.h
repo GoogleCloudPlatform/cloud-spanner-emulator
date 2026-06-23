@@ -96,6 +96,8 @@ namespace postgres_translator {
 
   // PG comparison functions.
   inline constexpr char kPGTextregexneFunctionName[] = "pg.textregexne";
+  inline constexpr char kPGILikeFunctionName[] = "pg.ilike";
+  inline constexpr char kPGNotILikeFunctionName[] = "pg.not_ilike";
 
   // PG datetime functions.
   inline constexpr char kPGDateMiFunctionName[] = "pg.date_mi";

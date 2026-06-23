@@ -23,6 +23,7 @@
 #include <utility>
 #include <vector>
 
+#include "google/longrunning/operations.pb.h"
 #include "absl/flags/declare.h"
 #include "absl/flags/flag.h"
 #include "absl/memory/memory.h"
@@ -31,6 +32,9 @@
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
+#include "absl/strings/string_view.h"
+#include "absl/time/clock.h"
+#include "absl/time/time.h"
 #include "google/cloud/options.h"
 #include "google/cloud/spanner/admin/database_admin_client.h"
 #include "google/cloud/spanner/backoff_policy.h"
@@ -45,6 +49,7 @@
 #include "common/constants.h"
 #include "tests/common/file_based_schema_reader.h"
 #include "tests/conformance/common/environment.h"
+#include "grpcpp/client_context.h"
 #include "absl/status/status.h"
 
 namespace google {
@@ -368,6 +373,31 @@ absl::StatusOr<CommitResult> DatabaseTest::MultiReplace(
     mutation_builder.AddRow(row);
   }
   return Commit({mutation_builder.Build()});
+}
+
+absl::Status DatabaseTest::GetOperation(absl::string_view operation_uri,
+                                        operations_api::Operation* op) {
+  longrunning::GetOperationRequest request;
+  request.set_name(std::string(operation_uri));  // NOLINT
+  grpc::ClientContext context;
+  return raw_operations_client()->GetOperation(&context, request, op);
+}
+
+absl::Status DatabaseTest::WaitForOperation(absl::string_view operation_uri,
+                                            operations_api::Operation* op,
+                                            absl::Duration deadline) {
+  absl::Time start = absl::Now();
+  while (true) {
+    GOOGLESQL_RETURN_IF_ERROR(GetOperation(operation_uri, op));
+    if (op->done()) return absl::OkStatus();
+    if (absl::Now() - start > deadline) {
+      return absl::Status(absl::StatusCode::kDeadlineExceeded,
+                          absl::StrCat("Exceeded deadline while waiting "
+                                       "for operation ",
+                                       op->name(), " to complete."));
+    }
+    absl::SleepFor(absl::Milliseconds(1));
+  }
 }
 
 }  // namespace test

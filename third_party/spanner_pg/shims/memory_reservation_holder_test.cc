@@ -151,9 +151,14 @@ TEST_F(TrackedMemoryReservationTest, RejectedReservation) {
   EXPECT_EQ(res_manager->GetReservedBytes(), kAllocatorOverhead);
   // This allocation should trigger a new block request and fail. The
   // rejection request revokes our full grant, reducing the reserved size to
-  // 0.
+  // 0. However, the subsequent error-reporting path triggers preparatory
+  // allocations in the active context (TestMemoryContext) before switching to
+  // ErrorContext. Since postponed doubling is active, nextBlockSize remains
+  // 8192 (instead of being prematurely doubled to 16384), so the allocator
+  // requests an 8192-byte block. This fits exactly within our mock limit,
+  // succeeding and leaving the reserved size at kAllocatorOverhead (8192).
   EXPECT_FALSE(CheckedPgPalloc(kBlockSize).ok());
-  EXPECT_EQ(res_manager->GetReservedBytes(), 0);
+  EXPECT_EQ(res_manager->GetReservedBytes(), kAllocatorOverhead);
   // This allocation should trigger a new 100MB block request and fail. No new
   // grant is created.
   EXPECT_FALSE(CheckedPgPalloc(100 * 1024 * 1024).ok());

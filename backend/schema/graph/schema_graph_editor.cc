@@ -28,8 +28,8 @@
 #include "absl/strings/str_join.h"
 #include "backend/schema/graph/schema_node.h"
 #include "googlesql/base/ret_check.h"
-#include "absl/status/status.h"
 #include "googlesql/base/status_macros.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {

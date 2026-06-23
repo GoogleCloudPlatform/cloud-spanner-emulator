@@ -28,6 +28,7 @@
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/strings/match.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "backend/query/feature_filter/gsql_supported_functions.h"
@@ -119,6 +120,9 @@ constexpr absl::string_view kHintJoinTypeNestedLoopDeprecated = "loop_join";
 // Emulator-specific hints that can be used to set QueryEngineOptions.
 constexpr absl::string_view kEmulatorQueryEngineHintPrefix = "spanner_emulator";
 
+// Emulator-specific hint to ignore unknown spanner and emulator hints.
+constexpr absl::string_view kHintIgnoreUnknownHints = "ignore_unknown_hints";
+
 constexpr absl::string_view kHintDisableQueryPartitionabilityCheck =
     "disable_query_partitionability_check";
 
@@ -135,6 +139,7 @@ constexpr absl::string_view kEnhanceQueryTimeoutMs = "enhance_query_timeout_ms";
 constexpr absl::string_view kScanMethod = "scan_method";
 constexpr absl::string_view kScanMethodBatch = "batch";
 constexpr absl::string_view kScanMethodRow = "row";
+constexpr absl::string_view kHintPDMLMaxParallelism = "pdml_max_parallelism";
 
 absl::Status CollectHintsForNode(
     const googlesql::ResolvedOption* hint,
@@ -175,6 +180,10 @@ bool IsSelectForUpdateQuery(const googlesql::ResolvedNode& node) {
 
 absl::Status QueryValidator::ValidateHints(
     const googlesql::ResolvedNode* node) {
+  // Update the ignore_unknown_hints_ option if it is specified before
+  // processing other hints.
+  GOOGLESQL_RETURN_IF_ERROR(MaybeSetIgnoreUnknownHints(node));
+
   std::vector<const googlesql::ResolvedNode*> child_nodes;
   node->GetChildNodes(&child_nodes);
   // Process the hints for each node, using maps to keep track of
@@ -188,11 +197,27 @@ absl::Status QueryValidator::ValidateHints(
       if (absl::EqualsIgnoreCase(hint->qualifier(),
                                  kSpannerQueryEngineHintPrefix) ||
           hint->qualifier().empty()) {
-        GOOGLESQL_RETURN_IF_ERROR(CheckSpannerHintName(hint->name(), node->node_kind()));
+        absl::Status status =
+            CheckSpannerHintName(hint->name(), node->node_kind());
+        if (!status.ok()) {
+          if (ignore_unknown_hints_) {
+            hint->value()->MarkFieldsAccessed();
+            continue;
+          }
+          return status;
+        }
         GOOGLESQL_RETURN_IF_ERROR(CollectHintsForNode(hint, &hint_map));
       } else if (absl::EqualsIgnoreCase(hint->qualifier(),
                                         kEmulatorQueryEngineHintPrefix)) {
-        GOOGLESQL_RETURN_IF_ERROR(CheckEmulatorHintName(hint->name(), node->node_kind()));
+        absl::Status status =
+            CheckEmulatorHintName(hint->name(), node->node_kind());
+        if (!status.ok()) {
+          if (ignore_unknown_hints_) {
+            hint->value()->MarkFieldsAccessed();
+            continue;
+          }
+          return status;
+        }
         GOOGLESQL_RETURN_IF_ERROR(CollectHintsForNode(hint, &emulator_hint_map));
       } else {
         // Ignore hints intended for other engines. Mark the value used so an
@@ -214,6 +239,43 @@ absl::Status QueryValidator::ValidateHints(
   return ExtractEmulatorOptionsForNode(emulator_hint_map);
 }
 
+absl::Status QueryValidator::MaybeSetIgnoreUnknownHints(
+    const googlesql::ResolvedNode* node) {
+  if (node->node_kind() != googlesql::RESOLVED_QUERY_STMT &&
+      node->node_kind() != googlesql::RESOLVED_INSERT_STMT &&
+      node->node_kind() != googlesql::RESOLVED_UPDATE_STMT &&
+      node->node_kind() != googlesql::RESOLVED_DELETE_STMT) {
+    return absl::OkStatus();
+  }
+
+  std::vector<const googlesql::ResolvedNode*> child_nodes;
+  node->GetChildNodes(&child_nodes);
+  for (const googlesql::ResolvedNode* child_node : child_nodes) {
+    if (child_node->node_kind() == googlesql::RESOLVED_OPTION) {
+      const googlesql::ResolvedOption* hint =
+          child_node->GetAs<googlesql::ResolvedOption>();
+      if (absl::EqualsIgnoreCase(hint->name(), kHintIgnoreUnknownHints) &&
+          absl::EqualsIgnoreCase(hint->qualifier(),
+                                 kEmulatorQueryEngineHintPrefix)) {
+        const googlesql::ResolvedLiteral* hint_value =
+            hint->value()->Is<googlesql::ResolvedLiteral>()
+                ? hint->value()->GetAs<googlesql::ResolvedLiteral>()
+                : nullptr;
+        if (hint_value != nullptr && hint_value->value().type()->IsBool() &&
+            !hint_value->value().is_null()) {
+          ignore_unknown_hints_ = hint_value->value().bool_value();
+        } else {
+          std::string long_name =
+              absl::StrCat(kEmulatorQueryEngineHintPrefix, ".", hint->name());
+          return error::InvalidEmulatorHintValue(long_name,
+                                                 hint->value()->DebugString());
+        }
+      }
+    }
+  }
+  return absl::OkStatus();
+}
+
 absl::Status QueryValidator::CheckSpannerHintName(
     absl::string_view name, const googlesql::ResolvedNodeKind node_kind) const {
   static const auto* supported_hints = new const absl::flat_hash_map<
@@ -233,9 +295,7 @@ absl::Status QueryValidator::CheckSpannerHintName(
         kHintJoinBatch, kHintJoinForceOrder}},
       {googlesql::RESOLVED_INSERT_STMT, {kHintLockScannedRanges}},
       {googlesql::RESOLVED_UPDATE_STMT,
-       {
-           kHintLockScannedRanges,
-       }},
+       {kHintLockScannedRanges, kHintPDMLMaxParallelism}},
       {googlesql::RESOLVED_DELETE_STMT, {kHintLockScannedRanges}},
       {googlesql::RESOLVED_QUERY_STMT,
        {
@@ -280,7 +340,10 @@ absl::Status QueryValidator::CheckEmulatorHintName(
        {kHintDisableQueryNullFilteredIndexCheck}},
       {googlesql::RESOLVED_QUERY_STMT,
        {kHintDisableQueryPartitionabilityCheck,
-        kHintDisableQueryNullFilteredIndexCheck}},
+        kHintDisableQueryNullFilteredIndexCheck, kHintIgnoreUnknownHints}},
+      {googlesql::RESOLVED_INSERT_STMT, {kHintIgnoreUnknownHints}},
+      {googlesql::RESOLVED_UPDATE_STMT, {kHintIgnoreUnknownHints}},
+      {googlesql::RESOLVED_DELETE_STMT, {kHintIgnoreUnknownHints}},
   };
 
   const auto& iter = supported_hints->find(node_kind);
@@ -318,6 +381,7 @@ absl::Status QueryValidator::CheckHintValue(
           {kRequireEnhanceQuery, googlesql::types::BoolType()},
           {kEnhanceQueryTimeoutMs, googlesql::types::Int64Type()},
           {kScanMethod, googlesql::types::StringType()},
+          {kHintPDMLMaxParallelism, googlesql::types::Int64Type()},
       }};
 
   const auto& iter = supported_hint_types->find(name);
@@ -610,6 +674,19 @@ absl::Status QueryValidator::VisitResolvedFunctionCall(
           node->function()->FullName(/*include_group=*/false))) {
     return error::ReadOnlyTransactionDoesNotSupportReadWriteOnlyFunctions(
         node->function()->FullName(/*include_group=*/false));
+  }
+
+  for (int i = 0; i < node->argument_list_size(); ++i) {
+    // PENDING_COMMIT_TIMESTAMP() is allowed as a top level function call,
+    // so DMLQueryValidator::VisitResolvedFunctionCall does not return an error
+    // for it. However, it is not allowed as an argument to another function so
+    // it must be explicitly checked here.
+    const googlesql::ResolvedExpr* arg = node->argument_list(i);
+    if (arg->Is<googlesql::ResolvedFunctionCall>() &&
+        arg->GetAs<googlesql::ResolvedFunctionCall>()->function()->FullName(
+            false) == kPendingCommitTimestampFunctionName) {
+      return error::PendingCommitTimestampDmlValueOnly();
+    }
   }
 
   return DefaultVisit(node);

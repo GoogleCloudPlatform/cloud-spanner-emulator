@@ -27,6 +27,7 @@
 #include "googlesql/public/type.h"
 #include "googlesql/public/value.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
+#include "absl/container/flat_hash_map.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -54,6 +55,9 @@ struct Query {
   // Parameters that did not have a type supplied. They will be deserialized in
   // the backend once the GoogleSQL analyzer provides types.
   std::map<std::string, google::protobuf::Value> undeclared_params;
+
+  // Secure context parameters for Parameterized Secure Views.
+  absl::flat_hash_map<std::string, google::protobuf::Value> secure_context;
 
   // If not empty,the current query is an internal query against a non public
   // partition or data table of this change stream

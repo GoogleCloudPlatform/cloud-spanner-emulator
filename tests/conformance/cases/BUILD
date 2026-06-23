@@ -76,6 +76,7 @@ cc_library(
         "read_your_writes.cc",
         "schema_changes.cc",
         "search_test.cc",
+        "secure_context.cc",
         "select_for_update.cc",
         "sequence_read_write.cc",
         "sessions.cc",
@@ -109,6 +110,7 @@ cc_library(
         "//tests/common:file_based_test_runner",
         "//tests/common:proto_matchers",
         "//tests/common:scoped_feature_flags_setter",
+        "//tests/common:test_cc_proto",
         "//tests/conformance/common:database_test_base",
         "//tests/conformance/common:environment",
         "//tests/conformance/common:query_translator",
@@ -117,6 +119,7 @@ cc_library(
         "@com_github_googleapis_google_cloud_cpp//:spanner",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/container:btree",
+        "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",  # buildcleaner: keep
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/log:check",

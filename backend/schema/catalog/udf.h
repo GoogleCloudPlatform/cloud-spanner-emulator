@@ -45,6 +45,7 @@ class Udf : public SchemaNode {
   enum SqlSecurity {
     SQL_SECURITY_UNSPECIFIED,
     INVOKER,
+    DEFINER,
   };
 
   enum Language {

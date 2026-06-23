@@ -35,10 +35,10 @@
 #include "absl/types/span.h"
 #include "backend/schema/catalog/proto_bundle.h"
 #include "tests/common/proto_matchers.h"
+#include "googlesql/base/status_macros.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_jsonb_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_numeric_type.h"
 #include "third_party/spanner_pg/datatypes/extended/pg_oid_type.h"
-#include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {

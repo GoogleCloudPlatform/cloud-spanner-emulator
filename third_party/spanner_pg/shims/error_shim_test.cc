@@ -348,6 +348,5 @@ TEST_F(ErrorShimTest, CheckedPgDefGetInt64) {
   GOOGLESQL_ASSERT_OK_AND_ASSIGN(int64_t value, CheckedPgDefGetInt64(defElem));
   EXPECT_EQ(value, 9223372036854775807);
 }
-
 }  // namespace
 }  // namespace postgres_translator

@@ -60,6 +60,7 @@ class View : public SchemaNode {
   enum SqlSecurity {
     UNSPECIFIED,
     INVOKER,
+    DEFINER,
   };
 
   // Returns the name of the view.

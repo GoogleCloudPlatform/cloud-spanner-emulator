@@ -18,6 +18,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -25,6 +26,8 @@
 #include "google/spanner/v1/type.pb.h"
 #include "googlesql/public/type.h"
 #include "googlesql/public/value.h"
+#include "absl/container/flat_hash_map.h"
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "backend/schema/catalog/proto_bundle.h"
 #include "frontend/converters/types.h"
@@ -39,10 +42,9 @@ namespace frontend {
 absl::StatusOr<backend::Query> QueryFromProto(
     std::string sql, const google::protobuf::Struct& params,
     google::protobuf::Map<std::string, google::spanner::v1::Type> param_types,
-    googlesql::TypeFactory* type_factory
-    ,
-    std::shared_ptr<const backend::ProtoBundle> proto_bundle
-) {
+    googlesql::TypeFactory* type_factory,
+    std::shared_ptr<const backend::ProtoBundle> proto_bundle,
+    const google::protobuf::Map<std::string, google::protobuf::Value>& secure_context) {
   std::map<std::string, googlesql::Value> declared;
   std::map<std::string, google::protobuf::Value> undeclared;
   for (const auto& [name, proto_value] : params.fields()) {
@@ -61,7 +63,17 @@ absl::StatusOr<backend::Query> QueryFromProto(
       GOOGLESQL_ASSIGN_OR_RETURN(declared[name], ValueFromProto(proto_value, type));
     }
   }
-  return backend::Query{sql, std::move(declared), std::move(undeclared)};
+  absl::flat_hash_map<std::string, google::protobuf::Value> secure_context_map;
+  for (const auto& [name, value] : secure_context) {
+    if (!value.has_string_value() && !value.has_null_value()) {
+      return absl::InvalidArgumentError(
+          "Secure parameters must be string or null values.");
+    }
+    secure_context_map.insert({name, value});
+  }
+  return backend::Query{sql, std::move(declared), std::move(undeclared),
+                        std::move(secure_context_map),
+                        /*change_stream_internal_lookup=*/std::nullopt};
 }
 
 }  // namespace frontend

@@ -15,12 +15,14 @@
 //
 
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
+#include "google/protobuf/descriptor.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "googlesql/base/testing/status_matchers.h"
@@ -37,8 +39,11 @@
 #include "google/cloud/spanner/value.h"
 #include "backend/schema/catalog/property_graph.pb.h"
 #include "tests/common/scoped_feature_flags_setter.h"
+#include "tests/common/test.pb.h"
 #include "tests/conformance/common/database_test_base.h"
+#include "grpcpp/client_context.h"
 #include "google/protobuf/util/json_util.h"
+#include "re2/re2.h"
 
 namespace google {
 namespace spanner {
@@ -304,6 +309,40 @@ TEST_P(InformationSchemaTest, Schemata) {
   }
 }
 
+TEST_P(InformationSchemaTest, SearchColumnsInIndexes) {
+  {
+    auto results = Query(R"(
+        select
+          i.search_partition_by IS NULL,
+          i.search_order_by IS NULL
+        from
+          information_schema.indexes AS i
+        where i.index_name = 'PRIMARY_KEY'
+        limit 1
+      )");
+    LogResults(results);
+    auto expected = std::vector<ValueRow>({{true, true}});
+    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+  }
+  {
+    std::string index_name = GetNameForDialect("base_search_idx");
+    auto results = Query(absl::Substitute(R"(
+        select
+          i.search_partition_by,
+          i.search_order_by
+        from
+          information_schema.indexes AS i
+        where i.index_name = '$0'
+      )",
+                                          index_name));
+    LogResults(results);
+    auto expected =
+        std::vector<ValueRow>({{std::vector<std::string>({"key1"}),
+                                std::vector<std::string>({"int_value"})}});
+    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+  }
+}
+
 TEST_P(InformationSchemaTest, MetaTables) {
   // The documented set of tables that should be returned is at:
   // GoogleSQL: https://cloud.google.com/spanner/docs/information-schema
@@ -563,6 +602,8 @@ TEST_P(InformationSchemaTest, GSQLMetaColumns) {
     {"", "INFORMATION_SCHEMA", "INDEXES", "IS_NULL_FILTERED", Ns(), Ns(), "NO", "BOOL", "NEVER", Ns(), Ns(), Ns(), false, Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "INDEXES", "IS_UNIQUE", Ns(), Ns(), "NO", "BOOL", "NEVER", Ns(), Ns(), Ns(), false, Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "INDEXES", "PARENT_TABLE_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false, Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "INDEXES", "SEARCH_ORDER_BY", Ns(), Ns(), "YES", "ARRAY<STRING(MAX)>", "NEVER", Ns(), Ns(), Ns(), false, Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "INDEXES", "SEARCH_PARTITION_BY", Ns(), Ns(), "YES", "ARRAY<STRING(MAX)>", "NEVER", Ns(), Ns(), Ns(), false, Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "INDEXES", "SPANNER_IS_MANAGED", Ns(), Ns(), "NO", "BOOL", "NEVER", Ns(), Ns(), Ns(), false, Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "INDEXES", "TABLE_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false, Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "INDEXES", "TABLE_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false, Ns()},  // NOLINT
@@ -630,6 +671,7 @@ TEST_P(InformationSchemaTest, GSQLMetaColumns) {
     {"", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "UNIQUE_CONSTRAINT_SCHEMA", Ns(), Ns(), "YES", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false, Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "UPDATE_RULE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false, Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "SCHEMATA", "CATALOG_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false, Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "SCHEMATA", "PROTO_BUNDLE", Ns(), Ns(), "YES", "PROTO<proto2.FileDescriptorSet>", "NEVER", Ns(), Ns(), Ns(), false, Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "SCHEMATA", "SCHEMA_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false, Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "SEQUENCES", "CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false, Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "SEQUENCES", "DATA_TYPE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false, Ns()},  // NOLINT
@@ -663,6 +705,21 @@ TEST_P(InformationSchemaTest, GSQLMetaColumns) {
     {"", "INFORMATION_SCHEMA", "TABLE_CONSTRAINTS", "TABLE_SCHEMA", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false, Ns()},  // NOLINT
   });
   // clang-format on
+  // The following rows are filtered out in prod because the column
+  // PROTO_BUNDLE does not exist in SCHEMATA in prod yet. Running it against
+  // prod in this CL will fail the test.
+  if (in_prod_env()) {
+    std::vector<ValueRow> filtered_expected;
+    for (const auto& row : expected) {
+      if (row.values()[2].get<std::string>().value() == "SCHEMATA" &&
+          row.values()[3].get<std::string>().value() == "PROTO_BUNDLE") {
+        continue;
+      }
+      filtered_expected.push_back(row);
+    }
+    expected = std::move(filtered_expected);
+  }
+
   CheckResultsAgainstExpected(results, expected);
 }
 
@@ -2262,6 +2319,7 @@ TEST_P(InformationSchemaTest, GSQLDefaultColumns) {
     {"", "", "base", "identity_no_params_col", 23, Ns(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "base", "identity_col", 24, Ns(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "base", "on_update_col", 25, "PENDING_COMMIT_TIMESTAMP()", Ns(), "YES", "TIMESTAMP", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
+    {"", "", "base", "str_value_tokens", 26, Ns(), Ns(), "YES", "TOKENLIST", "ALWAYS", "TOKEN(str_value)", "NO", "COMMITTED"},  // NOLINT
     {"", "", "base_view", "key1", 1, Ns(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "cascade_child", "key1", 1, Ns(), Ns(), "YES", "INT64", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
     {"", "", "cascade_child", "key2", 2, Ns(), Ns(), "YES", "STRING(256)", "NEVER", Ns(), Ns(), "COMMITTED"},  // NOLINT
@@ -2354,6 +2412,7 @@ TEST_P(InformationSchemaTest, PGDefaultColumns) {
     {"public", "base", "identity_no_params_col", 23, Ns(), "bigint", "YES", "bigint", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), 64, 2, 0},  // NOLINT
     {"public", "base", "identity_col", 24, Ns(), "bigint", "YES", "bigint", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), 64, 2, 0},  // NOLINT
     {"public", "base", "on_update_col", 25, "spanner.pending_commit_timestamp()", "spanner.commit_timestamp", "YES", "spanner.commit_timestamp", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
+    {"public", "base", "str_value_tokens", 26, Ns(), "spanner.tokenlist", "YES", "spanner.tokenlist", "ALWAYS", "spanner.token(str_value)", "YES", "COMMITTED", Ni(), Ni(), Ni(), Ni()},  // NOLINT
     {"public", "base_view", "key1", 1, Ns(), "bigint", "YES", "bigint", "NEVER", Ns(), Ns(), "COMMITTED", Ni(), 64, 2, 0},  // NOLINT
   });
   // clang-format on
@@ -2449,6 +2508,7 @@ TEST_P(InformationSchemaTest, DefaultIndexes) {
     auto expected = ExpectedRows(results, {
       {TableCatalogForDialect(), "public", "base", "IDX_base_bool_value_key2_N_\\w{16}", "INDEX", "", "NO", "YES", "READ_WRITE", "YES"},  // NOLINT
       {TableCatalogForDialect(), "public", "base", "PRIMARY_KEY", "PRIMARY_KEY", "", "YES", "NO", Ns(), "NO"},  // NOLINT
+      {TableCatalogForDialect(), "public", "base", "base_search_idx", "SEARCH", "", "YES", "NO", "READ_WRITE", "NO"},  // NOLINT
       {TableCatalogForDialect(), "public", "base", "remote_index_int", "INDEX", "row_deletion_policy", "NO", "NO", "READ_WRITE", "NO"},  // NOLINT
       {TableCatalogForDialect(), "public", "cascade_child", "IDX_cascade_child_child_key_value1_U_\\w{16}", "INDEX", "", "YES", "NO", "READ_WRITE", "YES"},  // NOLINT
       {TableCatalogForDialect(), "public", "cascade_child", "PRIMARY_KEY", "PRIMARY_KEY", "", "YES", "NO", Ns(), "NO"},  // NOLINT
@@ -2471,6 +2531,7 @@ TEST_P(InformationSchemaTest, DefaultIndexes) {
     auto expected = ExpectedRows(results, {
         {"", "", "base", "IDX_base_bool_value_key2_N_\\w{16}", "INDEX", "", false, true, "READ_WRITE", true},  // NOLINT
         {"", "", "base", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
+        {"", "", "base", "base_search_idx", "SEARCH", "", true, false, "READ_WRITE", false},  // NOLINT
         {"", "", "base", "remote_index_int", "INDEX", "row_deletion_policy", false, false, "READ_WRITE", false},  // NOLINT
         {"", "", "cascade_child", "IDX_cascade_child_child_key_value1_U_\\w{16}", "INDEX", "", true, true, "READ_WRITE", true},  // NOLINT
         {"", "", "cascade_child", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
@@ -2578,6 +2639,9 @@ TEST_P(InformationSchemaTest, DefaultIndexColumns) {
       {TableCatalogForDialect(), "public", "base", "IDX_base_bool_value_key2_N_\\w{16}", "key2", 2, "ASC", "NO", "character varying(256)"},  // NOLINT
       {TableCatalogForDialect(), "public", "base", "PRIMARY_KEY", "key1", 1, "ASC", "NO", "bigint"},  // NOLINT
       {TableCatalogForDialect(), "public", "base", "PRIMARY_KEY", "key2", 2, "ASC", "NO", "character varying(256)"},  // NOLINT
+      {TableCatalogForDialect(), "public", "base", "base_search_idx", "str_value_tokens", 1, Ns(), "YES", "spanner.tokenlist"},  // NOLINT
+      {TableCatalogForDialect(), "public", "base", "base_search_idx", "key1", 2, "ASC", "NO", "bigint"},  // NOLINT
+      {TableCatalogForDialect(), "public", "base", "base_search_idx", "int_value", 3, "ASC", "NO", "bigint"},  // NOLINT
       {TableCatalogForDialect(), "public", "base", "remote_index_int", "int_value", 1, "ASC", "NO", "bigint"},  // NOLINT
       {TableCatalogForDialect(), "public", "cascade_child", "IDX_cascade_child_child_key_value1_U_\\w{16}", "child_key", 1, "ASC", "NO", "boolean"},  // NOLINT
       {TableCatalogForDialect(), "public", "cascade_child", "IDX_cascade_child_child_key_value1_U_\\w{16}", "value1", 2, "ASC NULLS FIRST", "NO", "character varying(256)"},  // NOLINT
@@ -2612,6 +2676,9 @@ TEST_P(InformationSchemaTest, DefaultIndexColumns) {
         {"", "", "base", "IDX_base_bool_value_key2_N_\\w{16}", "key2", 2, "DESC", "NO", "STRING(256)"},  // NOLINT
         {"", "", "base", "PRIMARY_KEY", "key1", 1, "ASC", "YES", "INT64"},  // NOLINT
         {"", "", "base", "PRIMARY_KEY", "key2", 2, "DESC", "YES", "STRING(256)"},  // NOLINT
+        {"", "", "base", "base_search_idx", "str_value_tokens", 1, Ns(), "YES", "TOKENLIST"},  // NOLINT
+        {"", "", "base", "base_search_idx", "key1", 2, "ASC", "YES", "INT64"},  // NOLINT
+        {"", "", "base", "base_search_idx", "int_value", 3, "ASC", "NO", "INT64"},  // NOLINT
         {"", "", "base", "remote_index_int", "int_value", 1, "ASC", "NO", "INT64"},  // NOLINT
         {"", "", "cascade_child", "IDX_cascade_child_child_key_value1_U_\\w{16}", "child_key", 1, "ASC", "NO", "BOOL"},  // NOLINT
         {"", "", "cascade_child", "IDX_cascade_child_child_key_value1_U_\\w{16}", "value1", 2, "ASC", "NO", "STRING(MAX)"},  // NOLINT
@@ -4450,6 +4517,151 @@ TEST_P(InformationSchemaTest, IndexesFilter) {
        "v1 IS NOT NULL AND v2 IS NOT NULL"},
   });
   // clang-format on
+
+  EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+}
+
+TEST_P(InformationSchemaTest, ForeignKeyEnforcementReporting) {
+  if (GetParam() == POSTGRESQL) {
+    return;
+  }
+
+  GOOGLESQL_ASSERT_OK(UpdateSchema({R"(
+    CREATE TABLE ref_table (
+      id INT64 NOT NULL,
+    ) PRIMARY KEY (id)
+  )",
+                          R"(
+    CREATE TABLE fk_table (
+      id INT64 NOT NULL,
+      ref_id INT64,
+      CONSTRAINT fk_unenforced FOREIGN KEY (ref_id)
+        REFERENCES ref_table (id) NOT ENFORCED,
+    ) PRIMARY KEY (id)
+  )"}));
+
+  auto results = Query(R"(
+      SELECT
+        constraint_name,
+        enforced
+      FROM
+        information_schema.table_constraints
+      WHERE
+        table_name = 'fk_table'
+        AND constraint_type = 'FOREIGN KEY'
+    )");
+
+  EXPECT_THAT(results, IsOkAndHoldsRow({"fk_unenforced", "NO"}));
+}
+
+// Verifies that the PROTO_BUNDLE column exists in INFORMATION_SCHEMA.COLUMNS
+// for the SCHEMATA table and has the correct type for GSQL dialect.
+// For PG dialect, verifies that the PROTO_BUNDLE column does not exist.
+TEST_P(InformationSchemaTest, SchemataProtoBundleColumn) {
+  if (in_prod_env()) {
+    GTEST_SKIP() << "Skipping in prod environment temporarily until the column "
+                    "is active in prod.";
+  }
+
+  auto results = Query(absl::Substitute(R"(
+      SELECT
+        table_name,
+        column_name,
+        spanner_type
+      FROM
+        information_schema.columns
+      WHERE
+        table_name = '$0'
+        AND column_name = '$1'
+    )",
+                                        GetNameForDialect("SCHEMATA"),
+                                        GetNameForDialect("PROTO_BUNDLE")));
+  LogResults(results);
+
+  std::vector<ValueRow> expected;
+  if (GetParam() != POSTGRESQL) {
+    expected = std::vector<ValueRow>(
+        {{"SCHEMATA", "PROTO_BUNDLE", "PROTO<proto2.FileDescriptorSet>"}});
+  }
+
+  EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+}
+
+// Verifies that the PROTO_BUNDLE column returns NULL when no proto bundle
+// has been defined in the database.
+TEST_P(InformationSchemaTest, SchemataProtoBundleQuery) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP() << "PROTO_BUNDLE is only added for GoogleSQL dialect.";
+  }
+  if (in_prod_env()) {
+    GTEST_SKIP() << "Skipping in prod environment temporarily.";
+  }
+
+  auto results = Query(R"(
+      SELECT
+        catalog_name,
+        schema_name,
+        proto_bundle IS NULL
+      FROM
+        information_schema.schemata
+      WHERE
+        schema_name = ''
+    )");
+  LogResults(results);
+
+  auto expected = std::vector<ValueRow>({{"", "", true}});
+
+  EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+}
+
+// Verifies that the PROTO_BUNDLE column returns a non-NULL value when a proto
+// bundle has been defined in the database.
+TEST_P(InformationSchemaTest, SchemataWithProtoBundleQuery) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP() << "PROTO_BUNDLE is only added for GoogleSQL dialect.";
+  }
+  if (in_prod_env()) {
+    GTEST_SKIP() << "Skipping in prod environment temporarily.";
+  }
+
+  // Define a proto bundle.
+  google::protobuf::FileDescriptorSet file_descriptor_set;
+  ::emulator::tests::common::Simple::descriptor()->file()->CopyTo(
+      file_descriptor_set.add_file());
+  std::string proto_descriptors = file_descriptor_set.SerializeAsString();
+
+  database_api::UpdateDatabaseDdlRequest request;
+  request.set_database(database()->FullName());
+  request.add_statements(R"sql(
+    CREATE PROTO BUNDLE (
+      emulator.tests.common.Simple
+    )
+  )sql");
+  request.set_proto_descriptors(proto_descriptors);
+
+  operations_api::Operation operation;
+  grpc::ClientContext context;
+  GOOGLESQL_ASSERT_OK(
+      raw_database_client()->UpdateDatabaseDdl(&context, request, &operation));
+
+  GOOGLESQL_ASSERT_OK(WaitForOperation(operation.name(), &operation));
+  ASSERT_FALSE(operation.error().code())
+      << "DDL operation failed: " << operation.error().message();
+
+  // Proto bundle should be populated now. "IS NOT NULL" should be true.
+  auto results = Query(R"(
+      SELECT
+        catalog_name,
+        schema_name,
+        proto_bundle IS NOT NULL
+      FROM
+        information_schema.schemata
+      WHERE
+        schema_name = ''
+    )");
+  LogResults(results);
+
+  auto expected = std::vector<ValueRow>({{"", "", true}});
 
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
 }

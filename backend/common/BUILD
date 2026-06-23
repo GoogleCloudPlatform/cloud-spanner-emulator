@@ -69,6 +69,7 @@ cc_library(
         "//common:limits",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
+        "@com_google_googlesql//googlesql/base:status",
         "@com_google_googlesql//googlesql/public:value",
     ],
 )

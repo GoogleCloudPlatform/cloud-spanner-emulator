@@ -16,17 +16,22 @@
 
 #include "backend/query/search/search_evaluator.h"
 
+#include <cstddef>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "googlesql/public/value.h"
+#include "absl/algorithm/container.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/numbers.h"
+#include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "backend/query/search/SearchQueryParserTreeConstants.h"
 #include "backend/query/search/search_evaluator_helpers.h"
+#include "backend/query/search/search_util.h"
+#include "backend/query/search/tokenizer.h"
 #include "common/errors.h"
 #include "googlesql/base/ret_check.h"
 #include "googlesql/base/status_macros.h"
@@ -37,6 +42,45 @@ namespace emulator {
 namespace backend {
 namespace query {
 namespace search {
+
+namespace {
+
+absl::StatusOr<bool> EvaluateWordsDialect(const absl::string_view query,
+                                          const TokenMap& token_map) {
+  GOOGLESQL_ASSIGN_OR_RETURN(const std::vector<std::string> terms,
+                   GetNormalizedTerms(query));
+  if (terms.empty()) {
+    return false;
+  }
+  for (const auto& term : terms) {
+    if (!token_map.contains(term)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+absl::StatusOr<bool> EvaluateWordsPhraseDialect(
+    const absl::string_view query, const googlesql::Value& tokenlist) {
+  GOOGLESQL_ASSIGN_OR_RETURN(const std::vector<std::string> terms,
+                   GetNormalizedTerms(query));
+  if (terms.empty()) {
+    return false;
+  }
+  GOOGLESQL_ASSIGN_OR_RETURN(std::vector<std::string> tokens,
+                   StringsFromTokenList(tokenlist));
+  if (tokens.size() < terms.size()) {
+    return false;
+  }
+  for (size_t i = 0; i <= tokens.size() - terms.size(); ++i) {
+    if (absl::c_equal(terms, absl::MakeSpan(tokens).subspan(i, terms.size()))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+}  // namespace
 
 absl::StatusOr<MatchResult> SearchEvaluator::MatchQueryTerm(
     const SimpleNode* root, const TokenMap& tokenmap, bool in_phrase) {
@@ -76,6 +120,10 @@ absl::StatusOr<std::vector<MatchResult>> SearchEvaluator::MatchChildren(
 
 absl::StatusOr<MatchResult> SearchEvaluator::MatchQueryNode(
     const SimpleNode* root, const TokenMap& tokenmap, bool in_phrase) {
+  if (root == nullptr) {
+    return MatchResult::NoMatch();
+  }
+
   int node_id = root->getId();
   switch (node_id) {
     case JJTNUMBER:
@@ -254,6 +302,24 @@ absl::StatusOr<googlesql::Value> SearchEvaluator::Evaluate(
     return googlesql::Value::Bool(false);
   }
 
+  Dialect dialect = Dialect::RQUERY;
+  if (args.size() > 4 && !args[4].is_null()) {
+    GOOGLESQL_ASSIGN_OR_RETURN(dialect, ParseDialect(args[4].string_value()));
+  }
+
+  if (dialect == Dialect::WORDS) {
+    GOOGLESQL_ASSIGN_OR_RETURN(
+        const bool result,
+        EvaluateWordsDialect(query_string.string_value(), token_map));
+    return googlesql::Value::Bool(result);
+  } else if (dialect == Dialect::WORDS_PHRASE) {
+    GOOGLESQL_ASSIGN_OR_RETURN(
+        const bool result,
+        EvaluateWordsPhraseDialect(query_string.string_value(), tokenlist));
+    return googlesql::Value::Bool(result);
+  }
+
+  GOOGLESQL_RET_CHECK(dialect == Dialect::RQUERY);
   GOOGLESQL_ASSIGN_OR_RETURN(SimpleNode * search_query,
                    SearchQueryCache::GetInstance()->GetParsedQuery(
                        query_string.string_value()));

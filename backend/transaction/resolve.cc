@@ -36,8 +36,8 @@
 #include "common/change_stream.h"
 #include "common/constants.h"
 #include "common/errors.h"
-#include "absl/status/status.h"
 #include "googlesql/base/status_macros.h"
+#include "absl/status/status.h"
 
 namespace google {
 namespace spanner {

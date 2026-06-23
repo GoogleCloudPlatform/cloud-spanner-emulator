@@ -620,6 +620,7 @@ void PGCatalog::FillPGAttributeTable() {
       });
     }
     for (const Index* index : table->indexes()) {
+      if (index->is_search_index()) continue;
       if (!index->postgresql_oid().has_value()) {
         GOOGLESQL_VLOG(1) << "Index " << index->Name()
                 << " does not have a PostgreSQL OID.";
@@ -982,6 +983,7 @@ void PGCatalog::FillPGClassTable() {
 
     // Add indexes.
     for (const Index* index : table->indexes()) {
+      if (index->is_search_index()) continue;
       const auto& [index_schema_part, index_name_part] =
           GetSchemaAndNameForPGCatalog(index->Name());
       if (!index->postgresql_oid().has_value()) {
@@ -1665,6 +1667,7 @@ void PGCatalog::FillPGIndexTable() {
       column_name_to_index[table->columns()[i]->Name()] = i + 1;
     }
     for (const Index* index : table->indexes()) {
+      if (index->is_search_index()) continue;
       std::vector<int64_t> key_columns;
       key_columns.reserve(index->key_columns().size());
       for (const auto& key_column : index->key_columns()) {
@@ -1784,6 +1787,7 @@ void PGCatalog::FillPGIndexesTable() {
         GetSchemaAndNameForPGCatalog(table->Name());
     // Add normal indexes.
     for (const Index* index : table->indexes()) {
+      if (index->is_search_index()) continue;
       const auto& [index_schema, index_name] =
           GetSchemaAndNameForPGCatalog(index->Name());
       rows.push_back({

@@ -6599,6 +6599,10 @@ TEST_P(TimestampKeyTest, OnConflictDoUpdateCannotReadCommitTimestampValue) {
       GetParam() == database_api::DatabaseDialect::POSTGRESQL
           ? "excluded.ts_val + INTERVAL '1 SECOND'"
           : "TIMESTAMP_ADD(excluded.ts_val, INTERVAL 1 SECOND)";
+  std::string timestamp_pct_add_interval =
+      GetParam() == database_api::DatabaseDialect::POSTGRESQL
+          ? "SPANNER.PENDING_COMMIT_TIMESTAMP() + INTERVAL '1 SECOND'"
+          : "TIMESTAMP_ADD(PENDING_COMMIT_TIMESTAMP(), INTERVAL 1 SECOND)";
   MockRowWriter writer;
   // Cannot reference the commit timestamp value in expressions in SET clause.
   EXPECT_THAT(
@@ -6618,6 +6622,20 @@ TEST_P(TimestampKeyTest, OnConflictDoUpdateCannotReadCommitTimestampValue) {
               "cannot be used in SELECT, or as the input to any other scalar "
               "expression.")));
 
+  EXPECT_THAT(
+      query_engine().ExecuteSql(
+          Query{absl::Substitute("UPDATE timestamp_key_table SET ts_val = $0 "
+                                 "WHERE k = 1",
+                                 timestamp_pct_add_interval)},
+          QueryContext{schema(), reader(), &writer}),
+      StatusIs(
+          StatusCode::kInvalidArgument,
+          HasSubstr(
+              "The PENDING_COMMIT_TIMESTAMP() function may only be used as a "
+              "value for INSERT or UPDATE of an appropriately typed column. It "
+              "cannot be used in SELECT, or as the input to any other scalar "
+              "expression.")));
+
   // Cannot reference the commit timestamp value in WHERE clause.
   EXPECT_THAT(
       query_engine().ExecuteSql(
@@ -6627,6 +6645,20 @@ TEST_P(TimestampKeyTest, OnConflictDoUpdateCannotReadCommitTimestampValue) {
                                  "DO UPDATE "
                                  "SET ts_val = '2025-01-01' "
                                  "WHERE excluded.ts_val IS NOT NULL",
+                                 pct_function)},
+          QueryContext{schema(), reader(), &writer}),
+      StatusIs(
+          StatusCode::kInvalidArgument,
+          HasSubstr(
+              "The PENDING_COMMIT_TIMESTAMP() function may only be used as a "
+              "value for INSERT or UPDATE of an appropriately typed column. It "
+              "cannot be used in SELECT, or as the input to any other scalar "
+              "expression.")));
+
+  EXPECT_THAT(
+      query_engine().ExecuteSql(
+          Query{absl::Substitute("UPDATE timestamp_key_table SET ts_val = $0() "
+                                 "WHERE ts_val <> $0()",
                                  pct_function)},
           QueryContext{schema(), reader(), &writer}),
       StatusIs(

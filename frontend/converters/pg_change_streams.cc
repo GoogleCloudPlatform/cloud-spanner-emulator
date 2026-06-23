@@ -35,8 +35,8 @@
 #include "frontend/converters/change_streams.h"
 #include "frontend/converters/chunking.h"
 #include "frontend/converters/values.h"
-#include "nlohmann/json.hpp"
 #include "googlesql/base/status_macros.h"
+#include "nlohmann/json.hpp"
 
 namespace google {
 namespace spanner {

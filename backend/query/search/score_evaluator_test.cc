@@ -16,6 +16,7 @@
 
 #include "backend/query/search/score_evaluator.h"
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -78,6 +79,7 @@ TEST(ScoreEvaluatorTest, EvaluateOnWrongTokenList) {
 struct ScoreEvaluatorTestCase {
   std::string original_doc;
   std::string query;
+  std::optional<std::string> dialect;
   double expected_result;
 };
 
@@ -95,6 +97,13 @@ TEST_P(ScoreEvaluatorTest, TestEvaluation) {
   std::vector<googlesql::Value> args;
   args.push_back(tokenlist);
   args.push_back(googlesql::Value::String(test_case.query));
+  args.push_back(googlesql::Value::NullBool());    // enhance_query
+  args.push_back(googlesql::Value::NullString());  // language_tag
+  if (!test_case.dialect.has_value()) {
+    args.push_back(googlesql::Value::NullString());
+  } else {
+    args.push_back(googlesql::Value::String(*test_case.dialect));
+  }
 
   absl::StatusOr<googlesql::Value> result = ScoreEvaluator::Evaluate(args);
   GOOGLESQL_EXPECT_OK(result.status());
@@ -106,14 +115,80 @@ TEST_P(ScoreEvaluatorTest, TestEvaluation) {
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    ScoreEvaluatorTest, ScoreEvaluatorTest,
-    testing::ValuesIn<ScoreEvaluatorTestCase>(
-        {{"", "foo", 0.0},
-         {"foo", "", 0.0},
-         {"foo", "foo", 1.0},
-         {"foo, foo, bar, foo, baz, foo, blah", "foo", 4.0},
-         {"foo, foo, bar, foo, baz, foo, blah", "foo bar", 5.0},
-         {"foo, foo, bar, foo, baz, foo, blah", "baz | blah", 2.0}}));
+    DefaultDialectBasicTests, ScoreEvaluatorTest,
+    testing::ValuesIn<ScoreEvaluatorTestCase>({
+        {"", "foo", std::nullopt, 0.0},
+        {"foo", "", std::nullopt, 0.0},
+        {"foo", "foo", std::nullopt, 1.0},
+        {"foo, foo, bar, foo, baz, foo, blah", "foo", std::nullopt, 4.0},
+        {"foo, foo, bar, foo, baz, foo, blah", "foo bar", std::nullopt, 5.0},
+        {"foo, foo, bar, foo, baz, foo, blah", "baz | blah", std::nullopt, 2.0},
+    }));
+
+INSTANTIATE_TEST_SUITE_P(
+    DefaultDialectCaseInsensitivityTests, ScoreEvaluatorTest,
+    testing::ValuesIn<ScoreEvaluatorTestCase>({
+        {"foo, foo, bar, foo, baz, foo, blah", "FOO", std::nullopt, 4.0},
+        {"foo, foo, bar, foo, baz, foo, blah", "FOO BAR", std::nullopt, 5.0},
+    }));
+
+INSTANTIATE_TEST_SUITE_P(
+    WordsDialectBasicTests, ScoreEvaluatorTest,
+    testing::ValuesIn<ScoreEvaluatorTestCase>({
+        {"foo", "", "words", 0.0},
+        {"foo", "##", "words", 0.0},
+        {"foo, foo, bar, foo, baz, foo, blah", "foo", "words", 4.0},
+        {"foo, foo, bar, foo, baz, foo, blah", "foo bar", "WORDS", 5.0},
+        {"foo, foo, bar, foo, baz, foo, blah", "baz | blah", "WoRdS", 2.0},
+    }));
+
+INSTANTIATE_TEST_SUITE_P(
+    WordsDialectCaseInsensitivityTests, ScoreEvaluatorTest,
+    testing::ValuesIn<ScoreEvaluatorTestCase>({
+        {"foo, foo, bar, foo, baz, foo, blah", "FOO", "words", 4.0},
+        {"foo, foo, bar, foo, baz, foo, blah", "FOO BAR", "words", 5.0},
+    }));
+
+INSTANTIATE_TEST_SUITE_P(
+    WordsPhraseDialectBasicTests, ScoreEvaluatorTest,
+    testing::ValuesIn<ScoreEvaluatorTestCase>({
+        {"foo", "", "words_phrase", 0.0},
+        {"foo", "##", "words_phrase", 0.0},
+        {"foo, foo, bar, foo, baz, foo, blah", "foo bar", "words_phrase", 1.0},
+        {"foo, foo, bar, foo, baz, foo, blah", "foo foo", "WORDS_PHRASE", 1.0},
+        {"foo, foo, bar, foo, baz, foo, blah", "foo baz", "Words_Phrase", 1.0},
+        {"foo, foo, bar, foo, baz, foo, blah", "foo other", "words_phrase",
+         0.0},
+        {"foo, foo, foo", "foo foo", "words_phrase", 2.0},
+        {"foo, foo, foo, foo", "foo foo", "words_phrase", 3.0},
+    }));
+
+INSTANTIATE_TEST_SUITE_P(
+    WordsPhraseDialectCaseInsensitivityTests, ScoreEvaluatorTest,
+    testing::ValuesIn<ScoreEvaluatorTestCase>({
+        {"foo, foo, bar, foo, baz, foo, blah", "FOO BAR", "words_phrase", 1.0},
+        {"foo, foo, bar, foo, baz, foo, blah", "FOO FOO", "words_phrase", 1.0},
+    }));
+
+INSTANTIATE_TEST_SUITE_P(
+    WordsPhraseDialectNoSubstringMatchingTests, ScoreEvaluatorTest,
+    testing::ValuesIn<ScoreEvaluatorTestCase>({
+        {"cloud emulator", "cloud emu", "words_phrase", 0.0},
+        {"cloud emulator", "emu", "words_phrase", 0.0},
+    }));
+
+INSTANTIATE_TEST_SUITE_P(
+    RQueryDialectBasicTests, ScoreEvaluatorTest,
+    testing::ValuesIn<ScoreEvaluatorTestCase>({
+        {"foo, foo, bar, foo, baz, foo, blah", "foo bar", "rquery", 5.0},
+        {"foo, foo, bar, foo, baz, foo, blah", "baz | blah", "RQUERY", 2.0},
+    }));
+
+INSTANTIATE_TEST_SUITE_P(
+    RQueryDialectCaseInsensitivityTests, ScoreEvaluatorTest,
+    testing::ValuesIn<ScoreEvaluatorTestCase>({
+        {"foo, foo, bar, foo, baz, foo, blah", "FOO BAR", "rquery", 5.0},
+    }));
 
 }  // namespace search
 }  // namespace query

@@ -28,9 +28,9 @@
 #include "frontend/entities/instance.h"
 #include "frontend/entities/operation.h"
 #include "frontend/server/handler.h"
+#include "googlesql/base/status_macros.h"
 #include "re2/re2.h"
 #include "absl/status/status.h"
-#include "googlesql/base/status_macros.h"
 
 namespace instance_api = ::google::spanner::admin::instance::v1;
 namespace operations_api = ::google::longrunning;

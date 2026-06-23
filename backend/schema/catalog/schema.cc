@@ -258,7 +258,7 @@ void Schema::DumpIndex(const Index* index,
   ABSL_CHECK_NE(index, nullptr);  // Crash OK
   create_index.set_index_name(index->Name());
   create_index.set_index_base_name(index->indexed_table()->Name());
-  create_index.set_unique(index->is_unique());
+  create_index.set_unique(index->is_unique() && !index->is_search_index());
   if (index->parent() != nullptr) {
     create_index.set_interleave_in_table(index->parent()->Name());
   }

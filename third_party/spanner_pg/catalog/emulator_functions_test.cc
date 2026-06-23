@@ -1618,6 +1618,44 @@ INSTANTIATE_TEST_SUITE_P(
             {googlesql::values::String("abcdefg"), kNullStringValue},
             googlesql::values::NullBool()},
 
+        PGScalarFunctionTestCase{kPGILikeFunctionName,
+                                 {googlesql::values::String("abcdefg"),
+                                  googlesql::values::String("ABC%")},
+                                 googlesql::values::Bool(true)},
+        PGScalarFunctionTestCase{kPGILikeFunctionName,
+                                 {googlesql::values::String("abcdefg"),
+                                  googlesql::values::String("abc")},
+                                 googlesql::values::Bool(false)},
+        PGScalarFunctionTestCase{kPGILikeFunctionName,
+                                 {googlesql::values::String("abcdefg"),
+                                  googlesql::values::String("A_C%")},
+                                 googlesql::values::Bool(true)},
+        PGScalarFunctionTestCase{
+            kPGILikeFunctionName,
+            {kNullStringValue, googlesql::values::String("abc%")},
+            googlesql::values::NullBool()},
+        PGScalarFunctionTestCase{
+            kPGILikeFunctionName,
+            {googlesql::values::String("abcdefg"), kNullStringValue},
+            googlesql::values::NullBool()},
+
+        PGScalarFunctionTestCase{kPGNotILikeFunctionName,
+                                 {googlesql::values::String("abcdefg"),
+                                  googlesql::values::String("ABC%")},
+                                 googlesql::values::Bool(false)},
+        PGScalarFunctionTestCase{kPGNotILikeFunctionName,
+                                 {googlesql::values::String("abcdefg"),
+                                  googlesql::values::String("abc")},
+                                 googlesql::values::Bool(true)},
+        PGScalarFunctionTestCase{
+            kPGNotILikeFunctionName,
+            {kNullStringValue, googlesql::values::String("abc%")},
+            googlesql::values::NullBool()},
+        PGScalarFunctionTestCase{
+            kPGNotILikeFunctionName,
+            {googlesql::values::String("abcdefg"), kNullStringValue},
+            googlesql::values::NullBool()},
+
         PGScalarFunctionTestCase{
             kPGDateMiFunctionName,
             {googlesql::values::Date(0), googlesql::values::Date(1)},

@@ -49,6 +49,7 @@ static const googlesql_base::NoDestructor<
         {"STRING(MAX)", googlesql::types::StringType()},
         {"TIMESTAMP", googlesql::types::TimestampType()},
         {"JSON", googlesql::types::JsonType()},
+        {"ARRAY<STRING(MAX)>", googlesql::types::StringArrayType()},
     }};
 
 // Maps the type specified in the information catalog metadata for a Spanner

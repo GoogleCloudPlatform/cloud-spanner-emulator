@@ -332,6 +332,161 @@ TEST_P(QueryHintsTest, DisableNullFilteredIndexAtStatementLevel) {
   }
 }
 
+TEST_P(QueryHintsTest, IgnoreUnknownHintsFailsOnUnknownHintByDefault) {
+  if (in_prod_env()) {
+    GTEST_SKIP() << "ignore_unknown_hints is a spanner_emulator only hint";
+  }
+  if (dialect_ == database_api::DatabaseDialect::POSTGRESQL) {
+    // In PG, Spanner-specific hints must use the '/*@ ... */' syntax (no space
+    // after '/*'). If there is a space (like '/* @'), it is treated as a
+    // regular comment and ignored.
+
+    // Unknown hint alone should fail.
+    EXPECT_THAT(Query("/*@ unknown_hint=true */ SELECT ID FROM Users"),
+                StatusIs(absl::StatusCode::kInvalidArgument));
+  } else {
+    // Google Standard SQL
+    EXPECT_THAT(Query("@{unknown_hint=true} SELECT ID FROM Users"),
+                StatusIs(absl::StatusCode::kInvalidArgument));
+  }
+}
+
+TEST_P(QueryHintsTest, IgnoreUnknownHintsInvalidQualifierFails) {
+  if (in_prod_env()) {
+    GTEST_SKIP() << "ignore_unknown_hints is a spanner_emulator only hint";
+  }
+  if (dialect_ == database_api::DatabaseDialect::POSTGRESQL) {
+    // Using spanner qualifier (or empty) for ignore_unknown_hints should fail
+    // (since it's an emulator-only hint).
+    EXPECT_THAT(
+        Query("/*@ ignore_unknown_hints=true, unknown_hint=true */ SELECT ID "
+              "FROM Users"),
+        StatusIs(absl::StatusCode::kInvalidArgument));
+    EXPECT_THAT(
+        Query("/*@ spanner.ignore_unknown_hints=true, unknown_hint=true */ "
+              "SELECT ID FROM Users"),
+        StatusIs(absl::StatusCode::kInvalidArgument));
+  } else {
+    // Using spanner qualifier (or empty) for ignore_unknown_hints should fail.
+    EXPECT_THAT(
+        Query("@{ignore_unknown_hints=true, unknown_hint=true} SELECT ID FROM "
+              "Users"),
+        StatusIs(absl::StatusCode::kInvalidArgument));
+    EXPECT_THAT(
+        Query("@{spanner.ignore_unknown_hints=true, unknown_hint=true} SELECT "
+              "ID FROM Users"),
+        StatusIs(absl::StatusCode::kInvalidArgument));
+  }
+}
+
+TEST_P(QueryHintsTest, IgnoreUnknownHintsValidHintIgnoresUnknowns) {
+  if (in_prod_env()) {
+    GTEST_SKIP() << "ignore_unknown_hints is a spanner_emulator only hint";
+  }
+  if (dialect_ == database_api::DatabaseDialect::POSTGRESQL) {
+    // Unknown hint with spanner_emulator.ignore_unknown_hints=true should
+    // succeed.
+    GOOGLESQL_EXPECT_OK(Query(
+        "/*@ spanner_emulator.ignore_unknown_hints=true, unknown_hint=true */ "
+        "SELECT ID FROM Users"));
+
+    // Unknown hint with spanner_emulator.ignore_unknown_hints=true should
+    // succeed.
+    GOOGLESQL_EXPECT_OK(
+        Query("/*@ spanner_emulator.ignore_unknown_hints=true, "
+              "spanner.unknown_hint=true */ "
+              "SELECT ID FROM Users"));
+  } else {
+    // Unknown hint with spanner_emulator.ignore_unknown_hints=true should
+    // succeed.
+    GOOGLESQL_EXPECT_OK(Query(
+        "@{spanner_emulator.ignore_unknown_hints=true, unknown_hint=true} "
+        "SELECT ID FROM Users"));
+    GOOGLESQL_EXPECT_OK(
+        Query("@{spanner_emulator.ignore_unknown_hints=true, "
+              "spanner.unknown_hint=true} "
+              "SELECT ID FROM Users"));
+  }
+}
+
+TEST_P(QueryHintsTest, IgnoreUnknownHintsAppliesToChildNodes) {
+  if (in_prod_env()) {
+    GTEST_SKIP() << "ignore_unknown_hints is a spanner_emulator only hint";
+  }
+  if (dialect_ == database_api::DatabaseDialect::POSTGRESQL) {
+    // Statement level should apply to scan hints.
+    // In PG, table hints are attached to the table reference: Users /*@
+    // force_index=... */.
+    GOOGLESQL_EXPECT_OK(Query(
+        "/*@ spanner_emulator.ignore_unknown_hints=true */ SELECT ID FROM "
+        "Users /*@ unknown_hint=true */"));
+  } else {
+    // Statement level should apply to scan hints
+    GOOGLESQL_EXPECT_OK(
+        Query("@{spanner_emulator.ignore_unknown_hints=true} SELECT ID FROM "
+              "Users@{unknown_hint=true}"));
+  }
+}
+
+TEST_P(QueryHintsTest, IgnoreUnknownHintsExplicitlyDisabledFails) {
+  if (in_prod_env()) {
+    GTEST_SKIP() << "ignore_unknown_hints is a spanner_emulator only hint";
+  }
+  if (dialect_ == database_api::DatabaseDialect::POSTGRESQL) {
+    // Explicitly disabled should still fail.
+    EXPECT_THAT(
+        Query("/*@ spanner_emulator.ignore_unknown_hints=false */ SELECT ID "
+              "FROM Users /*@ unknown_hint=true */"),
+        StatusIs(absl::StatusCode::kInvalidArgument));
+  } else {
+    // Explicitly disabled should still fail
+    EXPECT_THAT(
+        Query("@{spanner_emulator.ignore_unknown_hints=false} SELECT ID "
+              "FROM Users@{unknown_hint=true}"),
+        StatusIs(absl::StatusCode::kInvalidArgument));
+  }
+}
+
+TEST_P(QueryHintsTest, IgnoreUnknownHintsInvalidTypeFails) {
+  if (in_prod_env()) {
+    GTEST_SKIP() << "ignore_unknown_hints is a spanner_emulator only hint";
+  }
+  if (dialect_ == database_api::DatabaseDialect::POSTGRESQL) {
+    // Invalid value type for ignore_unknown_hints should fail.
+    EXPECT_THAT(
+        Query("/*@ spanner_emulator.ignore_unknown_hints=1 */ SELECT ID FROM "
+              "Users"),
+        StatusIs(absl::StatusCode::kInvalidArgument));
+  } else {
+    // Invalid value type for ignore_unknown_hints should fail
+    EXPECT_THAT(
+        Query("@{spanner_emulator.ignore_unknown_hints=1} SELECT ID FROM "
+              "Users"),
+        StatusIs(absl::StatusCode::kInvalidArgument));
+  }
+}
+
+TEST_P(QueryHintsTest, IgnoreUnknownHintsKnownHintInvalidValueFails) {
+  if (in_prod_env()) {
+    GTEST_SKIP() << "ignore_unknown_hints is a spanner_emulator only hint";
+  }
+  if (dialect_ == database_api::DatabaseDialect::POSTGRESQL) {
+    // Known hint with invalid value should still fail even with
+    // ignore_unknown_hints=true. (force_index expects string, got bool)
+    EXPECT_THAT(
+        Query("/*@ spanner_emulator.ignore_unknown_hints=true */ SELECT ID "
+              "FROM Users /*@ force_index=true */"),
+        StatusIs(absl::StatusCode::kInvalidArgument));
+  } else {
+    // Known hint with invalid value should still fail even with
+    // ignore_unknown_hints=true.
+    EXPECT_THAT(
+        Query("@{spanner_emulator.ignore_unknown_hints=true} SELECT ID FROM "
+              "Users@{force_index=true}"),
+        StatusIs(absl::StatusCode::kInvalidArgument));
+  }
+}
+
 }  // namespace
 
 }  // namespace test

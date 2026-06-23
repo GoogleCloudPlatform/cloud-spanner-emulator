@@ -49,9 +49,9 @@
 #include "frontend/converters/types.h"
 #include "frontend/converters/values.h"
 #include "frontend/entities/database.h"
+#include "googlesql/base/status_macros.h"
 #include "googlesql/base/ret_check.h"
 #include "absl/status/status.h"
-#include "googlesql/base/status_macros.h"
 #include "googlesql/base/time_proto_util.h"
 
 namespace google {

@@ -22,6 +22,7 @@
 #include <string>
 #include <string_view>
 
+#include "google/protobuf/struct.pb.h"
 #include "googlesql/public/analyzer_options.h"
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/function.h"
@@ -29,6 +30,7 @@
 #include "googlesql/public/types/type.h"
 #include "googlesql/public/types/type_factory.h"
 #include "absl/base/thread_annotations.h"
+#include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/synchronization/mutex.h"
@@ -69,7 +71,9 @@ class Catalog : public googlesql::EnumerableCatalog {
       const googlesql::AnalyzerOptions& options =
           MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone),
       RowReader* reader = nullptr, QueryEvaluator* query_evaluator = nullptr,
-      std::optional<std::string> change_stream_internal_lookup = std::nullopt);
+      std::optional<std::string> change_stream_internal_lookup = std::nullopt,
+      const absl::flat_hash_map<std::string, google::protobuf::Value>&
+          secure_context = {});
 
   std::string FullName() const override {
     // The name of the root catalog is "".
@@ -238,6 +242,12 @@ class Catalog : public googlesql::EnumerableCatalog {
 
   // User defined functions available.
   CaseInsensitiveStringMap<std::unique_ptr<googlesql::Function>> udfs_;
+
+  // Secure context parameters for the query.
+  absl::flat_hash_map<std::string, google::protobuf::Value> secure_context_;
+
+  // Function for SECURE_CONTEXT.
+  std::unique_ptr<googlesql::Function> secure_context_function_;
 };
 
 }  // namespace backend

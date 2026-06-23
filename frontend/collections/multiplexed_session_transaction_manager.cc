@@ -55,7 +55,7 @@ MultiplexedSessionTransactionManager::MultiplexedSessionTransactionManager(
 absl::Status MultiplexedSessionTransactionManager::AddToCurrentTransactions(
     std::shared_ptr<Transaction> txn, const std::string& database_uri,
     backend::TransactionID txn_id) {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   current_transactions_.emplace(std::make_pair(database_uri, txn_id), txn);
   return absl::OkStatus();
 }
@@ -63,7 +63,7 @@ absl::Status MultiplexedSessionTransactionManager::AddToCurrentTransactions(
 absl::StatusOr<std::shared_ptr<Transaction>>
 MultiplexedSessionTransactionManager::GetCurrentTransactionOnMultiplexedSession(
     const std::string& database_uri, backend::TransactionID txn_id) {
-  absl::MutexLock lock(&mu_);
+  absl::ReaderMutexLock lock(mu_);
   auto it = current_transactions_.find(std::make_pair(database_uri, txn_id));
   if (it != current_transactions_.end()) {
     // Transaction exists
@@ -93,12 +93,12 @@ void MultiplexedSessionTransactionManager::ClearOldTransactionsLocked() {
 }
 
 void MultiplexedSessionTransactionManager::ClearOldTransactions() {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   ClearOldTransactionsLocked();
 }
 
 void MultiplexedSessionTransactionManager::MaybeClearOldTransactions() {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   if (absl::Now() - last_clear_time_ > staleness_check_duration_) {
     ClearOldTransactionsLocked();
     last_clear_time_ = absl::Now();

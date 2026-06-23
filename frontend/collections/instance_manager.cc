@@ -40,7 +40,7 @@ namespace instance_api = ::google::spanner::admin::instance::v1;
 
 absl::StatusOr<std::vector<std::shared_ptr<Instance>>>
 InstanceManager::ListInstances(const std::string& project_uri) const {
-  absl::MutexLock lock(&mu_);
+  absl::ReaderMutexLock lock(mu_);
   std::vector<std::shared_ptr<Instance>> instances;
   // Find all instance that belongs to the project.
   auto itr = instances_.lower_bound(absl::StrCat(project_uri, "/"));
@@ -57,7 +57,7 @@ InstanceManager::ListInstances(const std::string& project_uri) const {
 
 absl::StatusOr<std::shared_ptr<Instance>> InstanceManager::GetInstance(
     const std::string& instance_uri) const {
-  absl::MutexLock lock(&mu_);
+  absl::ReaderMutexLock lock(mu_);
   auto itr = instances_.find(instance_uri);
   if (itr == instances_.end()) {
     return error::InstanceNotFound(instance_uri);

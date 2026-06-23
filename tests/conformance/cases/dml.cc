@@ -181,6 +181,25 @@ TEST_P(DmlTest, CanUpdateWithNullValue) {
               IsOkAndHoldsRows({}));
 }
 
+TEST_P(DmlTest, CanUpdateWithPDMLMaxParallelism) {
+  // pdml_max_parallelism hint is not supported with PG dialect.
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  GOOGLESQL_ASSERT_OK(
+      CommitDml({SqlStatement("INSERT INTO users(id, name, age) "
+                              "VALUES (1, 'Levin', 27)")}));
+  ASSERT_THAT(Query("SELECT id, name, age FROM users WHERE name IS NOT NULL"),
+              IsOkAndHoldsRows({{1, "Levin", 27}}));
+
+  // Update statement with pdml_max_parallelism.
+  GOOGLESQL_ASSERT_OK(
+      CommitDml({SqlStatement("@{pdml_max_parallelism=3} UPDATE users "
+                              "SET name = NULL WHERE true")}));
+  EXPECT_THAT(Query("SELECT id, name, age FROM users WHERE name IS NOT NULL"),
+              IsOkAndHoldsRows({}));
+}
+
 TEST_P(DmlTest, CanInsertIntoTableWithNullableKey) {
   // Spanner PG dialect doesn't support nullable primary keys.
   if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
