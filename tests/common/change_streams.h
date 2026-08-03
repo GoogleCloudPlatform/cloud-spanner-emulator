@@ -22,6 +22,7 @@
 
 #include "google/protobuf/struct.pb.h"
 #include "google/spanner/admin/database/v1/common.pb.h"
+#include "google/spanner/v1/change_stream.pb.h"
 #include "google/spanner/v1/result_set.pb.h"
 #include "google/spanner/v1/spanner.grpc.pb.h"
 #include "absl/status/status.h"
@@ -148,9 +149,22 @@ struct ChildPartitionRecord {
 };
 
 struct ChangeStreamRecords {
+  // Records for immutable key range change streams.
   std::vector<DataChangeRecord> data_change_records;
   std::vector<HeartbeatRecord> heartbeat_records;
   std::vector<ChildPartitionRecord> child_partition_records;
+
+  // Records for mutable key range change streams.
+  std::vector<google::spanner::v1::ChangeStreamRecord::DataChangeRecord>
+      mutable_key_range_data_change_records;
+  std::vector<google::spanner::v1::ChangeStreamRecord::HeartbeatRecord>
+      mutable_key_range_heartbeat_records;
+  std::vector<google::spanner::v1::ChangeStreamRecord::PartitionStartRecord>
+      partition_start_records;
+  std::vector<google::spanner::v1::ChangeStreamRecord::PartitionEventRecord>
+      partition_event_records;
+  std::vector<google::spanner::v1::ChangeStreamRecord::PartitionEndRecord>
+      partition_end_records;
 };
 
 absl::StatusOr<ChangeStreamRecords> GetChangeStreamRecordsFromResultSet(
@@ -174,9 +188,11 @@ absl::Status ReadFromClientReader(
     std::unique_ptr<grpc::ClientReader<spanner_api::PartialResultSet>> reader,
     std::vector<spanner_api::PartialResultSet>* response);
 
+// Executes a change stream query and returns the parsed change stream records.
 absl::StatusOr<test::ChangeStreamRecords> ExecuteChangeStreamQuery(
     absl::string_view sql, absl::string_view session_uri, SpannerStub* client);
 
+// Executes the initial change stream query to retrieve active partition tokens.
 absl::StatusOr<std::vector<std::string>> GetActiveTokenFromInitialQuery(
     admin::database::v1::DatabaseDialect dialect, absl::Time start,
     absl::string_view change_stream_name, absl::string_view session_uri,

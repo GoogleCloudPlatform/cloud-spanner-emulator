@@ -19,7 +19,7 @@
 
 #include <string>
 
-#include "googlesql/base/no_destructor.h"
+#include "absl/base/no_destructor.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
@@ -48,7 +48,8 @@ extern const char kChangeStreamExcludeUpdateOptionName[];
 extern const char kChangeStreamExcludeDeleteOptionName[];
 extern const char kChangeStreamExcludeTtlDeletesOptionName[];
 extern const char kChangeStreamAllowTxnExclusionOptionName[];
-extern const googlesql_base::NoDestructor<absl::flat_hash_set<std::string>>
+extern const char kChangeStreamPartitionModeOptionName[];
+extern const absl::NoDestructor<absl::flat_hash_set<std::string>>
     kChangeStreamBooleanOptions;
 
 extern const char kModelColumnRequiredOptionName[];
@@ -63,6 +64,7 @@ extern const char kVersionRetentionPeriodOptionName[];
 extern const char kDefaultSequenceKindOptionName[];
 extern const char kDefaultTimeZoneOptionName[];
 extern const char kColumnarPolicyOptionName[];
+extern const char kFulltextDictionaryTableOptionName[];
 
 extern const char kLocalityGroupOptionName[];
 extern const char kLocalityGroupStorageOptionName[];

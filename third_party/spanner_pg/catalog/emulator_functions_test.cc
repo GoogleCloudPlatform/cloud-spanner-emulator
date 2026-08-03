@@ -3473,9 +3473,8 @@ TEST_F(EmulatorFunctionsTest, CastToNumericWithInfinityDoubleError) {
 
 // The following test is known to produce different error messages compared to
 // Spanner PROD.
-TEST_F(
-    EmulatorFunctionsTest,
-    DISABLED_CastToNumericWithInfinityStringError_KnownProdEmulatorErrorMessageMismatches) {
+TEST_F(EmulatorFunctionsTest,
+       DISABLED_CastToNumericWithInfinityStringError_KnownProdMismatch) {
   const googlesql::Function* function =
       functions_[kPGCastToNumericFunctionName].get();
   GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
@@ -3718,9 +3717,8 @@ TEST_F(EmulatorFunctionsTest, CastToNumericWithInvalidStringError) {
 
 // The following test is known to produce different errors/results compared to
 // Spanner PROD.
-TEST_F(
-    EmulatorFunctionsTest,
-    DISABLED_CastToNumericWithTooLargeStringExponentError_KnownProdEmulatorMismatches) {
+TEST_F(EmulatorFunctionsTest,
+       DISABLED_CastToNumericWithTooLargeStringExponentError_Mismatch) {
   const googlesql::Function* function =
       functions_[kPGCastToNumericFunctionName].get();
   GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(
@@ -3795,9 +3793,8 @@ TEST_F(EmulatorFunctionsTest,
 
 // The following test is known to produce different error messages compared to
 // Spanner PROD.
-TEST_F(
-    EmulatorFunctionsTest,
-    DISABLED_CastToNumericWithTooLargeStringValueError_KnownProdEmulatorErrorMessageMismatches) {
+TEST_F(EmulatorFunctionsTest,
+       DISABLED_CastToNumericWithTooLargeStringValueError_Mismatch) {
   const googlesql::Function* function =
       functions_[kPGCastToNumericFunctionName].get();
   GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_, (function->GetFunctionEvaluatorFactory())(

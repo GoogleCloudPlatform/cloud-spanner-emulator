@@ -267,7 +267,7 @@ MlPredictTableValuedFunction::MlPredictTableValuedFunction(bool safe)
                   googlesql::FunctionArgumentType::AnyModel(),
                   googlesql::FunctionArgumentType::AnyRelation(),
                   {
-                      /*kind=*/googlesql::ARG_STRUCT_ANY,
+                      /*kind=*/googlesql::ARG_KIND_EXPR_STRUCT_ANY,
                       /*options=*/
                       googlesql::FunctionArgumentTypeOptions(
                           googlesql::FunctionArgumentType::OPTIONAL),

@@ -63,7 +63,8 @@ std::unique_ptr<const backend::Schema>
 CreateSchemaWithOneTableAndOneChangeStream(
     googlesql::TypeFactory* type_factory,
     database_api::DatabaseDialect dialect =
-        database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
+        database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
+    bool is_mutable_key_range = false);
 
 std::unique_ptr<const backend::Schema> CreateSchemaWithOneTableAndOnePlacement(
     googlesql::TypeFactory* type_factory,

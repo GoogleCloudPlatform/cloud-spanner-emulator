@@ -2,15 +2,6 @@ diff --git a/MODULE.bazel b/MODULE.bazel
 index 25456185..4c063db5 100644
 --- a/MODULE.bazel
 +++ b/MODULE.bazel
-@@ -16,7 +16,7 @@
- 
- module(
-     name = "googlesql",
--    version = "2026.01.1",
-+    version = "2026.1.1",
- )
- 
- GOOGLESQL_JAVA_ARTIFACTS = [
 @@ -102,6 +102,12 @@ go_deps.from_file(go_mod = "//:go.mod")
  use_repo(go_deps, "com_github_inspirer_textmapper")
  
@@ -37,20 +28,19 @@ index e057a93d..b26784a8 100644
  )
  
  filegroup(
-diff --git a/googlesql/analyzer/expr_resolver_helper.cc b/googlesql/analyzer/expr_resolver_helper.cc
-index b0fd5438..5e4265cd 100644
---- a/googlesql/analyzer/expr_resolver_helper.cc
-+++ b/googlesql/analyzer/expr_resolver_helper.cc
-@@ -458,7 +458,8 @@ ExprResolutionInfo::ExprResolutionInfo(
-     : ExprResolutionInfo(
-           query_resolution_info_in, name_scope_in, aggregate_name_scope_in,
-           analytic_name_scope_in,
--          {.allows_aggregation = allows_aggregation_in,
-+          ExprResolutionInfoOptions{
-+           .allows_aggregation = allows_aggregation_in,
-            .allows_analytic = allows_analytic_in,
-            .use_post_grouping_columns = use_post_grouping_columns_in,
-            .clause_name = clause_name_in,
+diff --git a/googlesql/analyzer/graph_query_resolver.cc b/googlesql/analyzer/graph_query_resolver.cc
+index c8f3edbd..97ccdf33 100644
+--- a/googlesql/analyzer/graph_query_resolver.cc
++++ b/googlesql/analyzer/graph_query_resolver.cc
+@@ -3693,7 +3693,7 @@ GraphTableQueryResolver::ResolveGqlOperatorList(
+     scan_list.pop_back();
+     GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<const ResolvedFinishScan> finish_scan,
+                      ResolvedFinishScanBuilder()
+-                         .set_column_list({})
++                         .set_column_list(std::vector<ResolvedColumn>{})
+                          .set_input_scan(std::move(last_scan))
+                          .Build());
+     scan_list.push_back(std::move(finish_scan));
 diff --git a/googlesql/analyzer/name_scope.cc b/googlesql/analyzer/name_scope.cc
 index 0931909e..38fd61f8 100644
 --- a/googlesql/analyzer/name_scope.cc
@@ -98,10 +88,10 @@ index 624a0b58..169a7307 100644
      return CopyVisitResolvedJoinScan(node);
    }
 diff --git a/googlesql/base/BUILD b/googlesql/base/BUILD
-index 264d00fb..0b522806 100644
+index da713437..14b55907 100644
 --- a/googlesql/base/BUILD
 +++ b/googlesql/base/BUILD
-@@ -19,7 +19,7 @@ load("@rules_cc//cc:cc_test.bzl", "cc_test")
+@@ -20,7 +20,7 @@ load("@rules_cc//cc:cc_test.bzl", "cc_test")
  
  licenses(["notice"])
  
@@ -110,6 +100,22 @@ index 264d00fb..0b522806 100644
  
  package_group(
      name = "googlesql_implementation",
+@@ -82,6 +82,15 @@ cc_library(
+     deps = [":check"],
+ )
+ 
++cc_library(
++    name = "no_destructor",
++    hdrs = ["no_destructor.h"],
++    visibility = ["//visibility:public"],
++    deps = [
++        "@com_google_absl//absl/base:no_destructor",
++    ],
++)
++
+ cc_library(
+     name = "arena",
+     srcs = ["arena.cc"],
 diff --git a/googlesql/base/logging.h b/googlesql/base/logging.h
 index 730ccdcb..46fe06b0 100644
 --- a/googlesql/base/logging.h
@@ -132,6 +138,40 @@ index 730ccdcb..46fe06b0 100644
  // Overrides for char types provide readable values for unprintable
  // characters.
  template <>
+diff --git a/googlesql/base/no_destructor.h b/googlesql/base/no_destructor.h
+new file mode 100644
+index 00000000..2d476a0e
+--- /dev/null
++++ b/googlesql/base/no_destructor.h
+@@ -0,0 +1,28 @@
++// Copyright 2026 Google LLC
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++//
++//      http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++// See the License for the specific language governing permissions and
++// limitations under the License.
++//
++
++#ifndef GOOGLESQL_BASE_NO_DESTRUCTOR_H_
++#define GOOGLESQL_BASE_NO_DESTRUCTOR_H_
++
++#include "absl/base/no_destructor.h"
++
++namespace googlesql_base {
++
++template <typename T>
++using NoDestructor = absl::NoDestructor<T>;
++
++}  // namespace googlesql_base
++
++#endif  // GOOGLESQL_BASE_NO_DESTRUCTOR_H_
 diff --git a/googlesql/base/testing/BUILD b/googlesql/base/testing/BUILD
 index a5be680b..7c0b63ed 100644
 --- a/googlesql/base/testing/BUILD
@@ -162,15 +202,12 @@ index a5be680b..7c0b63ed 100644
  )
  
 diff --git a/googlesql/common/BUILD b/googlesql/common/BUILD
-index 262ad738..35cd35e4 100644
+index 12e38abe..7e18a475 100644
 --- a/googlesql/common/BUILD
 +++ b/googlesql/common/BUILD
-@@ -13,10 +13,8 @@
- # See the License for the specific language governing permissions and
- # limitations under the License.
+@@ -18,7 +18,7 @@ load("@rules_cc//cc:cc_test.bzl", "cc_test")
+ load(":builddefs.bzl", "gen_module_test")
  
--load("@rules_cc//cc:cc_test.bzl", "cc_test")
--
  package(
 -    default_visibility = ["//googlesql/base:googlesql_implementation"],
 +    default_visibility = ["//visibility:public"],
@@ -230,31 +267,31 @@ index 946183b0..177a5dfd 100644
    // Returns whether or not this Constant is a specific constant interface or
    // implementation.
 diff --git a/googlesql/public/function_signature.h b/googlesql/public/function_signature.h
-index 91796b86..a7fe0cc1 100644
+index 2655a3cc..3aac8e2c 100644
 --- a/googlesql/public/function_signature.h
 +++ b/googlesql/public/function_signature.h
-@@ -739,7 +739,7 @@ class FunctionArgumentType {
-   // Returns NULL if kind_ is not ARG_TYPE_FIXED or ARG_TYPE_LAMBDA. If kind_ is
-   // ARG_TYPE_LAMBDA, returns the type of lambda body type, which could be NULL
-   // if the body type is templated.
+@@ -765,7 +765,7 @@ class FunctionArgumentType {
+   // Returns NULL if kind_ is not ARG_KIND_EXPR_FIXED or ARG_KIND_LAMBDA.
+   // If kind_ is ARG_KIND_LAMBDA, returns the type of lambda body type, which
+   // could be NULL if the body type is templated.
 -  const Type* type() const { return type_; }
 +  const googlesql::Type* type() const { return type_; }
  
    SignatureArgumentKind kind() const { return kind_; }
  
 diff --git a/googlesql/public/input_argument_type.h b/googlesql/public/input_argument_type.h
-index bc4da261..2a3733c0 100644
+index 5dc60a10..ff79ef86 100644
 --- a/googlesql/public/input_argument_type.h
 +++ b/googlesql/public/input_argument_type.h
-@@ -100,7 +100,7 @@ class InputArgumentType {
+@@ -138,7 +138,7 @@ class InputArgumentType {
    ~InputArgumentType() = default;
  
    // This may return nullptr (such as for lambda).
--  const Type* type() const { return type_; }
-+  const googlesql::Type* type() const { return type_; }
- 
-   const std::vector<InputArgumentType>& field_types() const;
-   size_t field_types_size() const;
+-  const Type* type() const { return annotated_type().type; }
++  const googlesql::Type* type() const { return annotated_type().type; }
+   const AnnotationMap* annotation_map() const {
+     return annotated_type().annotation_map;
+   }
 diff --git a/googlesql/public/property_graph.h b/googlesql/public/property_graph.h
 index 6f23b6de..5a1c730b 100644
 --- a/googlesql/public/property_graph.h
@@ -333,32 +370,19 @@ index a2b55415..e7a54798 100644
          if (has_floating_point_fields) {
            h = H::combine(std::move(h), TYPE_PROTO, has_floating_point_fields);
            break;
-diff --git a/googlesql/public/types/internal_utils.h b/googlesql/public/types/internal_utils.h
-index 308813af..e0794184 100644
---- a/googlesql/public/types/internal_utils.h
-+++ b/googlesql/public/types/internal_utils.h
-@@ -123,7 +123,7 @@ int64_t GetRawHashSetExternallyAllocatedMemoryEstimate(
-   // Control state is kept for each slot. Last table is spit into groups of 16
-   // control bytes, table is padded with group size + 1 byte.
-   constexpr int control_state_padding = 17;
--  return GetArrayAllocationMemoryEstimate<typename SetT::slot_type>(capacity) +
-+  return GetArrayAllocationMemoryEstimate<typename SetT::value_type>(capacity) +
-          GetArrayAllocationMemoryEstimate<uint8_t>(capacity +
-                                                    control_state_padding);
- }
 diff --git a/googlesql/public/types/type.h b/googlesql/public/types/type.h
-index 38dc2738..8b79a16d 100644
+index cbf8807d..2721a679 100644
 --- a/googlesql/public/types/type.h
 +++ b/googlesql/public/types/type.h
-@@ -661,6 +661,8 @@ class Type {
+@@ -701,6 +701,8 @@ class Type {
      std::optional<int64_t> file_descriptor_sets_max_size_bytes = std::nullopt;
    };
  
 +  bool has_floating_point_fields() const { return HasFloatingPointFields(); }
 +
   protected:
-   // Types can only be created and destroyed by TypeFactory.
-   Type(const TypeFactoryBase* factory, TypeKind kind);
+   Type(const TypeFactoryBase& factory, TypeKind kind);
+   virtual ~Type() = default;
 diff --git a/googlesql/public/value.cc b/googlesql/public/value.cc
 index d5b35c63..dc236d12 100644
 --- a/googlesql/public/value.cc

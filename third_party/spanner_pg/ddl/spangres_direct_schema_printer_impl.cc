@@ -1580,22 +1580,9 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateFunction(
       }
 
       std::string as_definition = "";
-      if (!statement.options().empty()) {
-        absl::StrAppend(&as_definition, " AS $${");
-        bool first = true;
-
-        for (const auto& option :
-             statement.sql_options()
-        ) {
-          // Currently only strings and numbers are supported, so sql_value
-          // format is equivalent to JSON and no extra formatting is needed.
-          absl::StrAppend(&as_definition, first ? "" : ",", " \"");
-          first = false;
-          absl::StrAppend(&as_definition, option.name(),
-                          "\": ", option.sql_value());
-        }
-
-        absl::StrAppend(&as_definition, " }$$");
+      if (statement.has_original_definition()) {
+        absl::StrAppend(&as_definition, " AS ",
+                        QuoteStringLiteral(statement.original_definition()));
       }
 
       std::string sql_body = "";

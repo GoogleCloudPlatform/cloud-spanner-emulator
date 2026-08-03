@@ -95,6 +95,10 @@ constexpr char kDatabaseResourceType[] =
 constexpr char kInstanceResourceType[] =
     "type.googleapis.com/google.spanner.admin.instance.v1.Instance";
 
+// Instance partition resource type.
+constexpr char kInstancePartitionResourceType[] =
+    "type.googleapis.com/google.spanner.admin.instance.v1.InstancePartition";
+
 // The default timezone used by the query engine.
 constexpr char kDefaultTimeZone[] = "America/Los_Angeles";
 
@@ -137,6 +141,8 @@ constexpr char kChangeStreamTvfOutputFormat[] = R"(ARRAY<STRUCT<
 constexpr char kChangeStreamTvfStructPrefix[] = "READ_";
 // Prefix for change stream tvf in postgres dialect
 constexpr char kChangeStreamTvfJsonPrefix[] = "read_json_";
+// Prefix for change stream tvf in postgres dialect for mutable change streams.
+constexpr char kChangeStreamTvfProtoBytesPrefix[] = "read_proto_bytes_";
 // Prefix for change stream data table
 static constexpr char kChangeStreamDataTablePrefix[] = "_change_stream_data_";
 // Prefix for change stream partition table

@@ -84,7 +84,7 @@ maven.install(
         "io.opencensus:opencensus-api:0.31.0",
         "io.opencensus:opencensus-contrib-grpc-metrics:0.31.0",
         "junit:junit:4.13.2",
-        "net.java.dev.javacc:javacc:7.0.3",
+        "net.java.dev.javacc:javacc:7.0.13",
     ],
     known_contributing_modules = [
         "cloud_spanner_emulator",
@@ -228,17 +228,16 @@ http_archive(
 )
 
 bazel_dep(name = "google_benchmark", version = "1.8.3", repo_name = "com_github_google_benchmark")
-bazel_dep(name = "googlesql", version = "2026.1.1", repo_name = "com_google_googlesql")
+bazel_dep(name = "googlesql", version = "2026.7.2", repo_name = "com_google_googlesql")
 archive_override(
     module_name = "googlesql",
     # Patches applied:
     # - Give visibility to GoogleSQL's base library to reuse some utilities
-    # - Correct the module version to semantic versioning format (2026.01.1 -> 2026.1.1)
-    integrity = "sha256-ZnGi8IIn5G5QnV4sjP57k3ZVvSzmaPWcLSsMtvrWUTg=",
+    integrity = "sha256-9zT65nfWcsYaJ41WJHO/iuLQF/R9TdKzf6Jh5RNoUng=",
     patch_strip = 1,
     patches = ["//build/bazel:googlesql.patch"],
-    strip_prefix = "googlesql-2026.01.1",
-    urls = ["https://github.com/google/googlesql/archive/refs/tags/2026.01.1.zip"],
+    strip_prefix = "googlesql-2026.7.2",
+    urls = ["https://github.com/google/googlesql/archive/refs/tags/2026.7.2.zip"],
 )
 
 ################################################################################

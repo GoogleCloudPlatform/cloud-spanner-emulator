@@ -51,6 +51,7 @@ static const CaseInsensitiveStringSet* const reserved_words =
     "CURRENT",
     "DEFAULT",
     "DEFINE",
+    "DEFINER",
     "DESC",
     "DISTINCT",
     "ELSE",

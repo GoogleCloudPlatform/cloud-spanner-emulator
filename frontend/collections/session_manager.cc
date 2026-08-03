@@ -43,7 +43,7 @@ absl::StatusOr<std::shared_ptr<Session>> SessionManager::CreateSession(
     const Labels& labels, const bool multiplexed,
     std::shared_ptr<Database> database,
     MultiplexedSessionTransactionManager* mux_txn_manager) {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   const std::string session_id = absl::StrCat(next_session_id_++);
   std::string session_uri =
       MakeSessionUri(database->database_uri(), session_id);
@@ -60,7 +60,7 @@ absl::StatusOr<std::shared_ptr<Session>> SessionManager::CreateSession(
 
 absl::StatusOr<std::shared_ptr<Session>> SessionManager::GetSession(
     const std::string& session_uri) {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   auto itr = session_map_.find(session_uri);
   if (itr == session_map_.end()) {
     return error::SessionNotFound(session_uri);
@@ -81,7 +81,7 @@ absl::StatusOr<std::shared_ptr<Session>> SessionManager::GetSession(
 absl::StatusOr<std::vector<std::shared_ptr<Session>>>
 SessionManager::ListSessions(const std::string& database_uri,
                              bool include_multiplex_sessions) const {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   std::string session_uri_prefix = absl::StrCat(database_uri, "/");
   std::vector<std::shared_ptr<Session>> sessions;
   for (auto itr = session_map_.lower_bound(session_uri_prefix);
@@ -110,7 +110,7 @@ SessionManager::ListSessions(const std::string& database_uri,
 
 absl::Status SessionManager::DeleteSession(const std::string& session_uri,
                                            bool delete_multiplex_sessions) {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   auto itr = session_map_.find(session_uri);
   if (itr != session_map_.end()) {
     std::shared_ptr<Session> session = itr->second;

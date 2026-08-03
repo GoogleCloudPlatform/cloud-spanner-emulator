@@ -22,7 +22,6 @@
 #include <vector>
 
 #include "googlesql/public/table_valued_function.h"
-#include "backend/schema/catalog/change_stream.h"
 
 namespace google {
 namespace spanner {
@@ -40,7 +39,7 @@ class QueryableChangeStreamTvf : public googlesql::TableValuedFunction {
   static absl::StatusOr<std::unique_ptr<QueryableChangeStreamTvf>> Create(
       const std::string& tvf_name, googlesql::AnalyzerOptions options,
       googlesql::Catalog* catalog, googlesql::TypeFactory* type_factory,
-      bool is_pg);
+      bool is_pg, bool is_mutable_key_range);
 
   static constexpr char kChangeStreamTvfStartTimestamp[] = "start_timestamp";
   static constexpr char kChangeStreamTvfEndTimestamp[] = "end_timestamp";

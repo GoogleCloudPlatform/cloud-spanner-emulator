@@ -20,19 +20,12 @@ options {
   IGNORE_CASE = true;  // Case is preserved, but ignored during token matching
   NODE_SCOPE_HOOK = true;
   VISITOR = true;
-  // TODO: Remove.
-  TOKEN_MANAGER_INCLUDES =
-      "backend/schema/parser/ddl_token_validation.h";
   TOKEN_MANAGER_INCLUDE =
       "backend/schema/parser/ddl_token_validation.h";
   USER_CHAR_STREAM = true;
   NODE_EXTENDS = "NodeBase";
   NAMESPACE = "google::spanner::emulator::backend::ddl";
-  // TODO: Remove.
-  TOKEN_INCLUDES = "backend/schema/parser/ddl_char_stream.h";
   TOKEN_INCLUDE = "backend/schema/parser/ddl_char_stream.h";
-  // TODO: Remove.
-  TOKEN_EXTENDS = "TokenBase";
   TOKEN_SUPER_CLASS = "TokenBase";
   COMMON_TOKEN_ACTION = true;
 }

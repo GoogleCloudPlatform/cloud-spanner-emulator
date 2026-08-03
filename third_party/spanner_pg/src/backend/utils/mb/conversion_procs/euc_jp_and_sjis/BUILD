@@ -41,7 +41,7 @@ package(
     ],
 )
 
-licenses(["restricted"])
+licenses(["notice"])
 
 cc_binary(
     name = "euc_jp_and_sjis.so",

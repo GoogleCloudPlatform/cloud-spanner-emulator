@@ -31,7 +31,7 @@
 #include "googlesql/public/types/type.h"
 #include "googlesql/public/types/type_factory.h"
 #include "googlesql/public/value.h"
-#include "googlesql/base/no_destructor.h"
+#include "absl/base/no_destructor.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/log/check.h"
@@ -204,6 +204,7 @@ static constexpr char kPositionInUniqueConstraint[] =
     "POSITION_IN_UNIQUE_CONSTRAINT";
 static constexpr char kViews[] = "VIEWS";
 static constexpr char kViewDefinition[] = "VIEW_DEFINITION";
+static constexpr char kSecurityType[] = "SECURITY_TYPE";
 static constexpr char kCharacterMaximumLength[] = "CHARACTER_MAXIMUM_LENGTH";
 static constexpr char kNumericPrecision[] = "NUMERIC_PRECISION";
 static constexpr char kNumericPrecisionRadix[] = "NUMERIC_PRECISION_RADIX";
@@ -232,7 +233,7 @@ static int kBigintNumericPrecision = 64;
 static int kBinaryRepresentedNumericPrecisionRadix = 2;
 static int kDecimalRepresentedNumericPrecisionRadix = 10;
 
-static const googlesql_base::NoDestructor<absl::flat_hash_set<std::string>>
+static const absl::NoDestructor<absl::flat_hash_set<std::string>>
     // For now, this is a set of tables that are created from metadata. Once the
     // migration to auto-create tables is complete, it'll be the tables from
     // https://cloud.google.com/spanner/docs/information-schema.
@@ -267,7 +268,7 @@ static const googlesql_base::NoDestructor<absl::flat_hash_set<std::string>>
         kPropertyGraphs,
     }};
 
-static const googlesql_base::NoDestructor<absl::flat_hash_set<std::string>>
+static const absl::NoDestructor<absl::flat_hash_set<std::string>>
     // For now, this is a set of tables that are created from metadata. Once the
     // migration to auto-create tables is complete, it'll be the tables from
     // https://cloud.google.com/spanner/docs/information-schema-pg.
@@ -297,7 +298,7 @@ static const googlesql_base::NoDestructor<absl::flat_hash_set<std::string>>
         absl::AsciiStrToLower(kViews),
     }};
 
-static const googlesql_base::NoDestructor<
+static const absl::NoDestructor<
     absl::flat_hash_map<googlesql::TypeKind, googlesql::Value>>
     kGSQLTypeKindToDefaultValue{{
         {googlesql::TypeKind::TYPE_STRING, String("")},
@@ -1321,7 +1322,7 @@ void InformationSchemaCatalog::FillIndexesTable() {
                      ? SDLObjectName::GetInSchemaName(index->parent()->Name())
                      : ""),
           // is_unique
-          DialectBoolValue(index->is_unique()),
+          DialectBoolValue(index->is_unique() || index->is_search_index()),
           // is_null_filtered
           DialectBoolValue(index->is_null_filtered()),
           // index_state
@@ -2590,6 +2591,8 @@ void InformationSchemaCatalog::FillViewsTable() {
     } else {
       specific_kvs[kViewDefinition] = String(view->body());
     }
+    specific_kvs[kSecurityType] =
+        String(view->security() == View::DEFINER ? "DEFINER" : "INVOKER");
     rows.push_back(GetRowFromRowKVs(views, specific_kvs));
     specific_kvs.clear();
   }
@@ -2721,6 +2724,22 @@ void InformationSchemaCatalog::FillChangeStreamOptionsTable() {
           String(string_type),
           // option_value
           String(change_stream->value_capture_type().value()),
+      });
+    }
+    if (change_stream->partition_mode().has_value()) {
+      rows.push_back({
+          // change_stream_catalog
+          DialectTableCatalog(),
+          // change_stream_schema
+          DialectDefaultSchema(),
+          // change_stream_name
+          String(change_stream->Name()),
+          // option_name
+          String(ddl::kChangeStreamPartitionModeOptionName),
+          // option_type
+          String(string_type),
+          // option_value
+          String(change_stream->partition_mode().value()),
       });
     }
   }

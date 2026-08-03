@@ -208,6 +208,11 @@ absl::Status ChangeStreamPartitionChurner::ChurnPartitions(
   for (const auto& [churn_type, partition_tokens] : churned_partitions) {
     // Churn the tokens retrieved above.
     if (churn_type == "MOVE") {
+      // Skip MOVE churning for mutable key range change streams.
+      if (change_stream->partition_mode() ==
+          kChangeStreamPartitionModeMutableKeyRange) {
+        continue;
+      }
       // Make sure to move each partition.
       for (const auto& partition_token : partition_tokens) {
         GOOGLESQL_RETURN_IF_ERROR(

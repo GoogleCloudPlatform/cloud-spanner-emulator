@@ -108,7 +108,8 @@ EngineSystemCatalog::BuildMappedFunction(
   GOOGLESQL_RET_CHECK_NE(mapped_function, nullptr);
   for (const googlesql::FunctionSignature& googlesql_signature :
        mapped_function->signatures()) {
-    if (googlesql_signature.result_type().kind() == googlesql::ARG_TYPE_FIXED &&
+    if (googlesql_signature.result_type().kind() ==
+            googlesql::ARG_KIND_EXPR_FIXED &&
         !TypesMatch(googlesql_signature.result_type().type(),
                     postgres_signature.result_type().type())) {
       // The return type is specified and does not match.
@@ -342,7 +343,7 @@ EngineSystemCatalog::GetFunctionAndSignature(
                               &result_signature, language_options)) {
             // We return the result signature instead of the mapped signature
             // because the Function Signature Matcher fills in the actual types
-            // if the original signature had ARG_TYPE_ANY_1 input or output
+            // if the original signature had ARG_KIND_EXPR_ANY_1 input or output
             // types.
             return FunctionAndSignature(signature->mapped_function(),
                                         *result_signature);
@@ -371,8 +372,8 @@ EngineSystemCatalog::GetFunctionAndSignature(
                            language_options)) {
         // We return the result signature instead of the mapped signature
         // because the the Function Signature Matcher fills in the actual
-        // types if the original signature had ARG_TYPE_ANY_1 input or output
-        // types.
+        // types if the original signature had ARG_KIND_EXPR_ANY_1 input or
+        // output types.
         return FunctionAndSignature(builtin_function, *result_signature);
       }
     }
@@ -705,15 +706,15 @@ absl::StatusOr<googlesql::FunctionArgumentType>
 EngineSystemCatalog::BuildGsqlFunctionArgumentType(
     Oid type_oid, googlesql::FunctionEnums::ArgumentCardinality cardinality) {
   if (type_oid == ANYOID || type_oid == ANYELEMENTOID ||
-      // Technically this is more permissive than we should be (ARG_TYPE_ANY_1
-      // would actually accept an array type too), but the specific function
-      // signatures we register handle this because they refer to specific,
-      // non-pseudo types.
+      // Technically this is more permissive than we should be
+      // (ARG_KIND_EXPR_ANY_1 would actually accept an array type too), but the
+      // specific function signatures we register handle this because they refer
+      // to specific, non-pseudo types.
       type_oid == ANYNONARRAYOID) {
-    return googlesql::FunctionArgumentType(googlesql::ARG_TYPE_ANY_1,
+    return googlesql::FunctionArgumentType(googlesql::ARG_KIND_EXPR_ANY_1,
                                            cardinality);
   } else if (type_oid == ANYARRAYOID || type_oid == ANYCOMPATIBLEARRAYOID) {
-    return googlesql::FunctionArgumentType(googlesql::ARG_ARRAY_TYPE_ANY_1,
+    return googlesql::FunctionArgumentType(googlesql::ARG_KIND_EXPR_ARRAY_ANY_1,
                                            cardinality);
   } else {
     // Get the PostgresTypeMapping.
@@ -1111,7 +1112,7 @@ absl::Status EngineSystemCatalog::AddCastOverrideFunction(
         result_signature->result_type().type()->Equals(target_type)) {
       // We store the result signature instead of the mapped signature
       // because the the Function Signature Matcher fills in the actual
-      // types if the original signature had ARG_TYPE_ANY_1 input or output
+      // types if the original signature had ARG_KIND_EXPR_ANY_1 input or output
       // types.
       GOOGLESQL_RET_CHECK(!pg_cast_to_builtin_function_.contains(cast_pair))
           << "Attempting to insert duplicate cast function.";

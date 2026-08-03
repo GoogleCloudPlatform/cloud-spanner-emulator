@@ -21,5 +21,7 @@
 { oid => '14', oid_symbol => 'SQLlanguageId',
   descr => 'SQL-language functions',
   lanname => 'sql', lanpltrusted => 't', lanvalidator => 'fmgr_sql_validator' },
-
+{ oid => '50108', oid_symbol => 'REMOTElanguageId',
+  descr => 'REMOTE functions',
+  lanname => 'remote', lanpltrusted => 't', lanvalidator => 'fmgr_remote_validator' },
 ]

@@ -101,6 +101,11 @@ class ChangeStream::Builder {
     return *this;
   }
 
+  Builder& set_partition_mode(std::optional<std::string> partition_mode) {
+    instance_->partition_mode_ = partition_mode;
+    return *this;
+  }
+
   Builder& set_for_clause(const ddl::ChangeStreamForClause& for_clause) {
     instance_->for_clause_ = for_clause;
     return *this;
@@ -175,6 +180,11 @@ class ChangeStream::Editor {
   Editor& set_value_capture_type(
       std::optional<std::string> value_capture_type) {
     instance_->value_capture_type_ = value_capture_type;
+    return *this;
+  }
+
+  Editor& set_partition_mode(std::optional<std::string> partition_mode) {
+    instance_->partition_mode_ = partition_mode;
     return *this;
   }
 

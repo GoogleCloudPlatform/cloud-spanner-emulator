@@ -248,6 +248,26 @@ class InstanceAdminService : public instance_api::InstanceAdmin::Service {
   DEFINE_GRPC_METHOD(InstanceAdmin, DeleteInstance,
                      instance_api::DeleteInstanceRequest, protobuf_api::Empty);
 
+  // Instance partitions.
+  DEFINE_GRPC_METHOD(InstanceAdmin, ListInstancePartitions,
+                     instance_api::ListInstancePartitionsRequest,
+                     instance_api::ListInstancePartitionsResponse);
+  DEFINE_GRPC_METHOD(InstanceAdmin, GetInstancePartition,
+                     instance_api::GetInstancePartitionRequest,
+                     instance_api::InstancePartition);
+  DEFINE_GRPC_METHOD(InstanceAdmin, CreateInstancePartition,
+                     instance_api::CreateInstancePartitionRequest,
+                     operations_api::Operation);
+  DEFINE_GRPC_METHOD(InstanceAdmin, UpdateInstancePartition,
+                     instance_api::UpdateInstancePartitionRequest,
+                     operations_api::Operation);
+  DEFINE_GRPC_METHOD(InstanceAdmin, DeleteInstancePartition,
+                     instance_api::DeleteInstancePartitionRequest,
+                     protobuf_api::Empty);
+  DEFINE_GRPC_METHOD(InstanceAdmin, ListInstancePartitionOperations,
+                     instance_api::ListInstancePartitionOperationsRequest,
+                     instance_api::ListInstancePartitionOperationsResponse);
+
   // Policies.
   DEFINE_GRPC_METHOD(InstanceAdmin, SetIamPolicy, iam_api::SetIamPolicyRequest,
                      iam_api::Policy);

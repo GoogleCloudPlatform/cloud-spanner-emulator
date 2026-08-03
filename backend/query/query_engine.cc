@@ -85,8 +85,10 @@
 #include "backend/query/query_engine_util.h"
 #include "backend/query/query_validator.h"
 #include "backend/query/queryable_column.h"
+#include "backend/query/queryable_table.h"
 #include "backend/query/queryable_view.h"
 #include "backend/schema/catalog/schema.h"
+#include "backend/schema/catalog/table.h"
 #include "backend/transaction/commit_timestamp.h"
 #include "common/config.h"
 #include "common/constants.h"
@@ -849,7 +851,7 @@ absl::StatusOr<ExecuteUpdateResult> EvaluateUpdate(
   }
 }
 
-absl::StatusOr<std::unique_ptr<RowCursor>> ResolveCallStatement() {
+absl::StatusOr<std::unique_ptr<RowCursor>> ResolveNoopStatement() {
   std::vector<std::string> names;
   std::vector<const googlesql::Type*> types;
   std::vector<std::vector<googlesql::Value>> values;
@@ -866,11 +868,12 @@ absl::StatusOr<std::unique_ptr<RowCursor>> EvaluateQuery(
     googlesql::TypeFactory* type_factory, int64_t* num_output_rows,
     const v1::ExecuteSqlRequest_QueryMode query_mode,
     const std::string time_zone) {
-  if (resolved_statement->node_kind() == googlesql::RESOLVED_CALL_STMT) {
-    // Evaluation of a CALL statement is currently a no-op. This is added to
-    // ensure the emulator doesn't error out when the customer tries the CALL
-    // statement.
-    return ResolveCallStatement();
+  if (resolved_statement->node_kind() == googlesql::RESOLVED_CALL_STMT ||
+      resolved_statement->node_kind() == googlesql::RESOLVED_EXPORT_DATA_STMT) {
+    // Evaluation of a CALL or EXPORT DATA statement is currently a no-op. This
+    // is added to ensure the emulator doesn't error out when the customer tries
+    // the statement.
+    return ResolveNoopStatement();
   }
   GOOGLESQL_RET_CHECK_EQ(resolved_statement->node_kind(), googlesql::RESOLVED_QUERY_STMT)
       << "input is not a query statement";

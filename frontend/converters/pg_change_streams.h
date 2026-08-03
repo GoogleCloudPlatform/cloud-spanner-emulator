@@ -23,6 +23,7 @@
 
 #include "google/spanner/v1/result_set.pb.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "backend/access/read.h"
 #include "nlohmann/json.hpp"
@@ -72,31 +73,70 @@ static constexpr char kChildPartitions[] = "child_partitions";
 static constexpr char kToken[] = "token";
 static constexpr char kParentPartitionTokens[] = "parent_partition_tokens";
 
-// Takes a timestamp and convert the timestamp into a heartbeat record partial
-// result set as JSON.
+// Used by immutable key range change streams. Takes a timestamp and convert the
+// timestamp into a heartbeat record partial result set as JSON.
 absl::StatusOr<std::vector<spanner_api::PartialResultSet>>
 ConvertHeartbeatTimestampToJson(absl::Time timestamp,
-                                const std::string& tvf_name,
+                                absl::string_view tvf_name,
                                 bool expect_metadata = false);
 
-// Takes a row cursor for a change stream partition table, and convert the row
-// cursor into a child partition record partial result set as JSON. If
-// initial_start_time is not empty, current row cursor is yielded from initial
-// change stream query. Start time of all change stream partition tokens will be
-// set to the user passed start time in the metadata instead of the actual
-// partition token start time in partition table.
+// Used by immutable key range change streams. Takes a row cursor for a change
+// stream partition table, and convert the row cursor into a child partition
+// record partial result set as JSON. If initial_start_time is not empty,
+// current row cursor is yielded from initial change stream query. Start time of
+// all change stream partition tokens will be set to the user passed start time
+// in the metadata instead of the actual partition token start time in partition
+// table.
 absl::StatusOr<std::vector<spanner_api::PartialResultSet>>
 ConvertPartitionTableRowCursorToJson(
     backend::RowCursor* row_cursor,
-    std::optional<absl::Time> initial_start_time, const std::string& tvf_name,
+    std::optional<absl::Time> initial_start_time, absl::string_view tvf_name,
     bool expect_metadata = false);
 
-// Takes a row cursor from data table and convert all rows into partial result
-// set as JSON.
+// Used by immutable key range change streams. Takes a row cursor from data
+// table and convert all rows into partial result set as JSON.
 absl::StatusOr<std::vector<spanner_api::PartialResultSet>>
 ConvertDataTableRowCursorToJson(backend::RowCursor* row_cursor,
-                                const std::string& tvf_name,
+                                absl::string_view tvf_name,
                                 bool expect_metadata = false);
+
+// Used by mutable key range change streams. Takes a row cursor for a change
+// stream partition table, and convert the row cursor into partition records
+// (start, end, or event) partial result set as serialized proto bytes. If
+// initial_start_time is not empty, current row cursor is yielded from initial
+// change stream query. Start time of all change stream partition tokens will be
+// set to the user passed start time in the metadata.
+absl::StatusOr<std::vector<spanner_api::PartialResultSet>>
+ConvertPartitionTableRowCursorToBytes(
+    backend::RowCursor* row_cursor,
+    std::optional<absl::Time> initial_start_time,
+    absl::string_view partition_token, absl::string_view tvf_name,
+    bool expect_metadata = false);
+
+// Used by mutable key range change streams. Takes a row cursor for a change
+// stream partition table when the partition query starts at a time <=
+// partition start time. And convert the row cursor into partition event records
+// partial result set as serialized proto bytes.
+absl::StatusOr<std::vector<spanner_api::PartialResultSet>>
+ConvertQueryStartPartitionTableRowCursorToBytes(backend::RowCursor* row_cursor,
+                                                absl::Time query_start_time,
+                                                absl::string_view tvf_name,
+                                                bool expect_metadata = false);
+
+// Used by mutable key range change streams. Takes a timestamp and convert the
+// timestamp into a heartbeat record partial result set as serialized proto
+// bytes.
+absl::StatusOr<std::vector<spanner_api::PartialResultSet>>
+ConvertHeartbeatTimestampToBytes(absl::Time timestamp,
+                                 absl::string_view tvf_name,
+                                 bool expect_metadata = false);
+
+// Used by mutable key range change streams. Takes a row cursor from data table
+// and convert all rows into partial result set as serialized proto bytes.
+absl::StatusOr<std::vector<spanner_api::PartialResultSet>>
+ConvertDataTableRowCursorToBytes(backend::RowCursor* row_cursor,
+                                 absl::string_view tvf_name,
+                                 bool expect_metadata = false);
 
 }  // namespace frontend
 }  // namespace emulator

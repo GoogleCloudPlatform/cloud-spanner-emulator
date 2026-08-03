@@ -226,14 +226,12 @@ std::string PrintIndexFilter(const Index* index) {
 
 std::string PrintIndex(const Index* index) {
   std::string ddl_string;
-  absl::StrAppend(
-      &ddl_string, "CREATE",
-      (index->is_unique() && !index->is_search_index() ? " UNIQUE" : ""),
-      (index->is_search_index() ? " SEARCH" : ""),
-      (index->is_vector_index() ? " VECTOR" : ""),
-      (index->is_null_filtered() ? " NULL_FILTERED" : ""), " INDEX ",
-      PrintName(index->Name()), " ON ",
-      PrintName(index->indexed_table()->Name()), "(");
+  absl::StrAppend(&ddl_string, "CREATE", (index->is_unique() ? " UNIQUE" : ""),
+                  (index->is_search_index() ? " SEARCH" : ""),
+                  (index->is_vector_index() ? " VECTOR" : ""),
+                  (index->is_null_filtered() ? " NULL_FILTERED" : ""),
+                  " INDEX ", PrintName(index->Name()), " ON ",
+                  PrintName(index->indexed_table()->Name()), "(");
 
   std::vector<std::string> pk_clause;
   pk_clause.reserve(index->key_columns().size());
@@ -356,8 +354,9 @@ std::string PrintIndex(const Index* index) {
 std::string PrintView(const View* view) {
   std::string view_string =
       absl::Substitute("CREATE VIEW $0", PrintName(view->Name()));
-  if (view->security() == View::SqlSecurity::INVOKER) {
-    absl::StrAppend(&view_string, " SQL SECURITY INVOKER");
+  if (view->security() != View::SqlSecurity::UNSPECIFIED) {
+    absl::StrAppend(&view_string, " SQL SECURITY ",
+                    SqlSecurityToString(view->security()));
   }
   absl::StrAppend(&view_string, " AS ", view->body());
   return view_string;

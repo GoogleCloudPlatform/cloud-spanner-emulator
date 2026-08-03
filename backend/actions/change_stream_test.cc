@@ -36,6 +36,7 @@
 #include "absl/log/log.h"
 #include "absl/strings/escaping.h"
 #include "absl/strings/str_cat.h"
+#include "absl/time/time.h"
 #include "absl/types/span.h"
 #include "absl/types/variant.h"
 #include "backend/actions/ops.h"
@@ -1382,6 +1383,71 @@ TEST_F(ChangeStreamTest, ProtoValueAndTypes) {
             googlesql::Value(String(
                 absl::StrCat("{\"proto_arr\":[\"", encoded_proto,
                              "\"],\"proto_col\":\"", encoded_proto, "\"}"))));
+}
+
+TEST_F(ChangeStreamTest, TimestampValueAndTypes) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto t_schema, emulator::test::CreateSchemaFromDDL(
+                                          {
+                                              R"(
+              CREATE TABLE TimestampTable (
+                commit_ts TIMESTAMP NOT NULL,
+                k INT64
+              ) PRIMARY KEY (commit_ts, k)
+          )",
+                                              R"(
+              CREATE CHANGE STREAM ChangeStream_TimestampTable FOR TimestampTable OPTIONS ( value_capture_type = 'NEW_VALUES' )
+          )"},
+                                          &type_factory_));
+
+  const Table* t_table = t_schema->FindTable("TimestampTable");
+  const ChangeStream* t_stream =
+      t_schema->FindChangeStream("ChangeStream_TimestampTable");
+
+  set_up_partition_token_for_change_stream_partition_table(t_stream, store());
+
+  // Insert base table entries with fractional timestamp.
+  absl::Time time1;
+  std::string err;
+  ASSERT_TRUE(absl::ParseTime("%Y-%m-%dT%H:%M:%E*SZ",
+                              "1970-01-21T14:09:51.123456789Z", &time1, &err))
+      << err;
+  googlesql::Value ts_val1 = googlesql::Value::Timestamp(time1);
+
+  absl::Time time2;
+  ASSERT_TRUE(absl::ParseTime("%Y-%m-%dT%H:%M:%E*SZ",
+                              "1970-01-21T14:09:51.123000000Z", &time2, &err))
+      << err;
+  googlesql::Value ts_val2 = googlesql::Value::Timestamp(time2);
+
+  std::vector<WriteOp> buffered_write_ops;
+  buffered_write_ops.push_back(Insert(t_table, Key({ts_val1, Int64(42)}),
+                                      t_table->columns(),
+                                      {ts_val1, Int64(42)}));
+  buffered_write_ops.push_back(Insert(t_table, Key({ts_val2, Int64(43)}),
+                                      t_table->columns(),
+                                      {ts_val2, Int64(43)}));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      std::vector<WriteOp> change_stream_write_ops,
+      BuildChangeStreamWriteOps(t_schema.get(), buffered_write_ops, store(), 1,
+                                /*exclude_txn_from_change_streams=*/false));
+
+  // Verify change stream entry is added to the transaction buffer.
+  ASSERT_EQ(change_stream_write_ops.size(), 1);
+  WriteOp op = change_stream_write_ops[0];
+  auto* operation = std::get_if<InsertOp>(&op);
+  ASSERT_NE(operation, nullptr);
+
+  // Verify elements in the primary key show correct formatted timestamp
+  // preserving fractional digits and trailing Z.
+  googlesql::Value mod_keys = operation->values[10];
+  ASSERT_EQ(mod_keys.num_elements(), 2);
+  ASSERT_EQ(
+      mod_keys.element(0),
+      googlesql::Value(String(
+          "{\"commit_ts\":\"1970-01-21T14:09:51.123456789Z\",\"k\":\"42\"}")));
+  ASSERT_EQ(mod_keys.element(1),
+            googlesql::Value(String(
+                "{\"commit_ts\":\"1970-01-21T14:09:51.123Z\",\"k\":\"43\"}")));
 }
 
 }  // namespace

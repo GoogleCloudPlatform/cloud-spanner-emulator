@@ -35,6 +35,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/strip.h"
 #include "absl/time/time.h"
+#include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/schema.h"
 #include "common/constants.h"
 
@@ -50,7 +51,8 @@ class ChangeStreamQueryValidator : public googlesql::ResolvedASTVisitor {
   struct ChangeStreamMetadata {
     ChangeStreamMetadata() { is_change_stream_query = false; }
     ChangeStreamMetadata(absl::string_view tvf_name,
-                         std::vector<googlesql::Value>& args, bool is_pg)
+                         std::vector<googlesql::Value>& args, bool is_pg,
+                         const Schema* schema)
         : tvf_name(tvf_name), is_pg(is_pg) {
       start_timestamp = args[0].ToTime();
       end_timestamp = args[1].is_null()
@@ -61,13 +63,23 @@ class ChangeStreamQueryValidator : public googlesql::ResolvedASTVisitor {
                             : args[2].string_value();
       heartbeat_milliseconds = args[3].int64_value();
       change_stream_name =
-          absl::StripPrefix(tvf_name, is_pg ? kChangeStreamTvfJsonPrefix
-                                            : kChangeStreamTvfStructPrefix);
+          is_pg
+              ? (absl::StartsWith(tvf_name, kChangeStreamTvfProtoBytesPrefix)
+                     ? absl::StripPrefix(tvf_name,
+                                         kChangeStreamTvfProtoBytesPrefix)
+                     : absl::StripPrefix(tvf_name, kChangeStreamTvfJsonPrefix))
+              : absl::StripPrefix(tvf_name, kChangeStreamTvfStructPrefix);
       partition_table =
           absl::StrCat(kChangeStreamPartitionTablePrefix, change_stream_name);
       data_table =
           absl::StrCat(kChangeStreamDataTablePrefix, change_stream_name);
       is_change_stream_query = true;
+      const ChangeStream* change_stream =
+          schema->FindChangeStream(change_stream_name);
+      if (change_stream != nullptr &&
+          change_stream->partition_mode().has_value()) {
+        partition_mode = change_stream->partition_mode().value();
+      }
     }
 
     absl::Time start_timestamp;
@@ -79,6 +91,8 @@ class ChangeStreamQueryValidator : public googlesql::ResolvedASTVisitor {
     std::string tvf_name;
     std::string change_stream_name;
     bool is_pg;
+    std::string partition_mode =
+        std::string(kChangeStreamPartitionModeImmutableKeyRange);
     // If current query is not a change stream query, all the other fields will
     // be null and this bool is set to false. Vice versa, all the other fields
     // are assigned and this bool will be true.

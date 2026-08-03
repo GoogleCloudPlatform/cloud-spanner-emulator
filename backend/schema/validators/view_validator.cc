@@ -59,7 +59,7 @@ absl::Status ValidateViewSignatureChange(absl::string_view modify_action,
   absl::flat_hash_set<const SchemaNode*> unused_new_deps;
   auto status = AnalyzeViewDefinition(
       dependent_view->Name(), dependent_view->body(), temp_new_schema,
-      type_factory, &new_columns, &unused_new_deps);
+      type_factory, &new_columns, &unused_new_deps, dependent_view->security());
   if (!status.ok()) {
     return error::DependentViewBecomesInvalid(modify_action, dependency_name,
                                               dependent_view->Name(),

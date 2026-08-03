@@ -38,6 +38,7 @@
 #include "absl/strings/substitute.h"
 #include "google/cloud/spanner/value.h"
 #include "backend/schema/catalog/property_graph.pb.h"
+#include "common/feature_flags.h"
 #include "tests/common/scoped_feature_flags_setter.h"
 #include "tests/common/test.pb.h"
 #include "tests/conformance/common/database_test_base.h"
@@ -269,6 +270,7 @@ class InformationSchemaTest
   cloud::spanner::Value Nb() { return Null<Bytes>(); }
   cloud::spanner::Value Ns() { return Null<std::string>(); }
   cloud::spanner::Value Ni() { return Null<std::int64_t>(); }
+  cloud::spanner::Value Nvs() { return Null<std::vector<std::string>>(); }
 };
 
 INSTANTIATE_TEST_SUITE_P(
@@ -305,40 +307,6 @@ TEST_P(InformationSchemaTest, Schemata) {
   } else {
     auto expected = std::vector<ValueRow>(
         {{"", ""}, {"", "INFORMATION_SCHEMA"}, {"", "SPANNER_SYS"}});
-    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
-  }
-}
-
-TEST_P(InformationSchemaTest, SearchColumnsInIndexes) {
-  {
-    auto results = Query(R"(
-        select
-          i.search_partition_by IS NULL,
-          i.search_order_by IS NULL
-        from
-          information_schema.indexes AS i
-        where i.index_name = 'PRIMARY_KEY'
-        limit 1
-      )");
-    LogResults(results);
-    auto expected = std::vector<ValueRow>({{true, true}});
-    EXPECT_THAT(results, IsOkAndHoldsRows(expected));
-  }
-  {
-    std::string index_name = GetNameForDialect("base_search_idx");
-    auto results = Query(absl::Substitute(R"(
-        select
-          i.search_partition_by,
-          i.search_order_by
-        from
-          information_schema.indexes AS i
-        where i.index_name = '$0'
-      )",
-                                          index_name));
-    LogResults(results);
-    auto expected =
-        std::vector<ValueRow>({{std::vector<std::string>({"key1"}),
-                                std::vector<std::string>({"int_value"})}});
     EXPECT_THAT(results, IsOkAndHoldsRows(expected));
   }
 }
@@ -2491,7 +2459,9 @@ TEST_P(InformationSchemaTest, DefaultIndexes) {
         t.is_unique,
         t.is_null_filtered,
         t.index_state,
-        t.spanner_is_managed
+        t.spanner_is_managed,
+        t.search_partition_by,
+        t.search_order_by
       from
         information_schema.indexes AS t
       where
@@ -2506,21 +2476,21 @@ TEST_P(InformationSchemaTest, DefaultIndexes) {
   if (GetParam() == POSTGRESQL) {
     // clang-format off
     auto expected = ExpectedRows(results, {
-      {TableCatalogForDialect(), "public", "base", "IDX_base_bool_value_key2_N_\\w{16}", "INDEX", "", "NO", "YES", "READ_WRITE", "YES"},  // NOLINT
-      {TableCatalogForDialect(), "public", "base", "PRIMARY_KEY", "PRIMARY_KEY", "", "YES", "NO", Ns(), "NO"},  // NOLINT
-      {TableCatalogForDialect(), "public", "base", "base_search_idx", "SEARCH", "", "YES", "NO", "READ_WRITE", "NO"},  // NOLINT
-      {TableCatalogForDialect(), "public", "base", "remote_index_int", "INDEX", "row_deletion_policy", "NO", "NO", "READ_WRITE", "NO"},  // NOLINT
-      {TableCatalogForDialect(), "public", "cascade_child", "IDX_cascade_child_child_key_value1_U_\\w{16}", "INDEX", "", "YES", "NO", "READ_WRITE", "YES"},  // NOLINT
-      {TableCatalogForDialect(), "public", "cascade_child", "PRIMARY_KEY", "PRIMARY_KEY", "", "YES", "NO", Ns(), "NO"},  // NOLINT
-      {TableCatalogForDialect(), "public", "cascade_child", "cascade_child_by_value", "INDEX", "base", "YES", "NO", "READ_WRITE", "NO"},  // NOLINT
-      {TableCatalogForDialect(), "public", "filter_test", "PRIMARY_KEY", "PRIMARY_KEY", "", "YES", "NO", Ns(), "NO"},  // NOLINT
-      {TableCatalogForDialect(), "public", "filter_test", "idx_normal", "INDEX", "", "NO", "NO", "READ_WRITE", "NO"},  // NOLINT
-      {TableCatalogForDialect(), "public", "filter_test", "idx_partial", "INDEX", "", "NO", "NO", "READ_WRITE", "NO"},  // NOLINT
-      {TableCatalogForDialect(), "public", "filter_test", "idx_partial_multi", "INDEX", "", "NO", "NO", "READ_WRITE", "NO"},  // NOLINT
-      {TableCatalogForDialect(), "public", "no_action_child", "PRIMARY_KEY", "PRIMARY_KEY", "", "YES", "NO", Ns(), "NO"},  // NOLINT
-      {TableCatalogForDialect(), "public", "no_action_child", "no_action_child_by_value", "INDEX", "", "NO", "NO", "READ_WRITE", "NO"},  // NOLINT
-      {TableCatalogForDialect(), "public", "npi_child", "PRIMARY_KEY", "PRIMARY_KEY", "", "YES", "NO", Ns(), "NO"},  // NOLINT
-      {TableCatalogForDialect(), "public", "row_deletion_policy", "PRIMARY_KEY", "PRIMARY_KEY", "", "YES", "NO", Ns(), "NO"},  // NOLINT
+      {TableCatalogForDialect(), "public", "base", "IDX_base_bool_value_key2_N_\\w{16}", "INDEX", "", "NO", "YES", "READ_WRITE", "YES", Nvs(), Nvs()},  // NOLINT
+      {TableCatalogForDialect(), "public", "base", "PRIMARY_KEY", "PRIMARY_KEY", "", "YES", "NO", Ns(), "NO", Nvs(), Nvs()},  // NOLINT
+      {TableCatalogForDialect(), "public", "base", "base_search_idx", "SEARCH", "", "YES", "NO", "READ_WRITE", "NO", std::vector<std::string>({"key1"}), std::vector<std::string>({"int_value"})},  // NOLINT
+      {TableCatalogForDialect(), "public", "base", "remote_index_int", "INDEX", "row_deletion_policy", "NO", "NO", "READ_WRITE", "NO", Nvs(), Nvs()},  // NOLINT
+      {TableCatalogForDialect(), "public", "cascade_child", "IDX_cascade_child_child_key_value1_U_\\w{16}", "INDEX", "", "YES", "NO", "READ_WRITE", "YES", Nvs(), Nvs()},  // NOLINT
+      {TableCatalogForDialect(), "public", "cascade_child", "PRIMARY_KEY", "PRIMARY_KEY", "", "YES", "NO", Ns(), "NO", Nvs(), Nvs()},  // NOLINT
+      {TableCatalogForDialect(), "public", "cascade_child", "cascade_child_by_value", "INDEX", "base", "YES", "NO", "READ_WRITE", "NO", Nvs(), Nvs()},  // NOLINT
+      {TableCatalogForDialect(), "public", "filter_test", "PRIMARY_KEY", "PRIMARY_KEY", "", "YES", "NO", Ns(), "NO", Nvs(), Nvs()},  // NOLINT
+      {TableCatalogForDialect(), "public", "filter_test", "idx_normal", "INDEX", "", "NO", "NO", "READ_WRITE", "NO", Nvs(), Nvs()},  // NOLINT
+      {TableCatalogForDialect(), "public", "filter_test", "idx_partial", "INDEX", "", "NO", "NO", "READ_WRITE", "NO", Nvs(), Nvs()},  // NOLINT
+      {TableCatalogForDialect(), "public", "filter_test", "idx_partial_multi", "INDEX", "", "NO", "NO", "READ_WRITE", "NO", Nvs(), Nvs()},  // NOLINT
+      {TableCatalogForDialect(), "public", "no_action_child", "PRIMARY_KEY", "PRIMARY_KEY", "", "YES", "NO", Ns(), "NO", Nvs(), Nvs()},  // NOLINT
+      {TableCatalogForDialect(), "public", "no_action_child", "no_action_child_by_value", "INDEX", "", "NO", "NO", "READ_WRITE", "NO", Nvs(), Nvs()},  // NOLINT
+      {TableCatalogForDialect(), "public", "npi_child", "PRIMARY_KEY", "PRIMARY_KEY", "", "YES", "NO", Ns(), "NO", Nvs(), Nvs()},  // NOLINT
+      {TableCatalogForDialect(), "public", "row_deletion_policy", "PRIMARY_KEY", "PRIMARY_KEY", "", "YES", "NO", Ns(), "NO", Nvs(), Nvs()},  // NOLINT
     });
     // clang-format on
     // Remove the table_catalog column from the expected results since we don't
@@ -2529,25 +2499,25 @@ TEST_P(InformationSchemaTest, DefaultIndexes) {
   } else {
     // clang-format off
     auto expected = ExpectedRows(results, {
-        {"", "", "base", "IDX_base_bool_value_key2_N_\\w{16}", "INDEX", "", false, true, "READ_WRITE", true},  // NOLINT
-        {"", "", "base", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
-        {"", "", "base", "base_search_idx", "SEARCH", "", true, false, "READ_WRITE", false},  // NOLINT
-        {"", "", "base", "remote_index_int", "INDEX", "row_deletion_policy", false, false, "READ_WRITE", false},  // NOLINT
-        {"", "", "cascade_child", "IDX_cascade_child_child_key_value1_U_\\w{16}", "INDEX", "", true, true, "READ_WRITE", true},  // NOLINT
-        {"", "", "cascade_child", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
-        {"", "", "cascade_child", "cascade_child_by_value", "INDEX", "base", true, true, "READ_WRITE", false},  // NOLINT
-        {"", "", "filter_test", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
-        {"", "", "filter_test", "idx_normal", "INDEX", "", false, false, "READ_WRITE", false},  // NOLINT
-        {"", "", "filter_test", "idx_partial", "INDEX", "", false, false, "READ_WRITE", false},  // NOLINT
-        {"", "", "filter_test", "idx_partial_multi", "INDEX", "", false, false, "READ_WRITE", false},  // NOLINT
-        {"", "", "no_action_child", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
-        {"", "", "no_action_child", "no_action_child_by_value", "INDEX", "", false, false, "READ_WRITE", false},  // NOLINT
-        {"", "", "npi_child", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
-        {"", "", "row_deletion_policy", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
-        {"", "", "edge_table", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
-        {"", "", "node_table", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
-        {"", "", "vector_table", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false},  // NOLINT
-        {"", "", "vector_table", "vec_index", "VECTOR", "", false, false, "READ_WRITE", false},  // NOLINT
+        {"", "", "base", "IDX_base_bool_value_key2_N_\\w{16}", "INDEX", "", false, true, "READ_WRITE", true, Nvs(), Nvs()},  // NOLINT
+        {"", "", "base", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false, Nvs(), Nvs()},  // NOLINT
+        {"", "", "base", "base_search_idx", "SEARCH", "", true, false, "READ_WRITE", false, std::vector<std::string>({"key1"}), std::vector<std::string>({"int_value"})},  // NOLINT
+        {"", "", "base", "remote_index_int", "INDEX", "row_deletion_policy", false, false, "READ_WRITE", false, Nvs(), Nvs()},  // NOLINT
+        {"", "", "cascade_child", "IDX_cascade_child_child_key_value1_U_\\w{16}", "INDEX", "", true, true, "READ_WRITE", true, Nvs(), Nvs()},  // NOLINT
+        {"", "", "cascade_child", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false, Nvs(), Nvs()},  // NOLINT
+        {"", "", "cascade_child", "cascade_child_by_value", "INDEX", "base", true, true, "READ_WRITE", false, Nvs(), Nvs()},  // NOLINT
+        {"", "", "filter_test", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false, Nvs(), Nvs()},  // NOLINT
+        {"", "", "filter_test", "idx_normal", "INDEX", "", false, false, "READ_WRITE", false, Nvs(), Nvs()},  // NOLINT
+        {"", "", "filter_test", "idx_partial", "INDEX", "", false, false, "READ_WRITE", false, Nvs(), Nvs()},  // NOLINT
+        {"", "", "filter_test", "idx_partial_multi", "INDEX", "", false, false, "READ_WRITE", false, Nvs(), Nvs()},  // NOLINT
+        {"", "", "no_action_child", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false, Nvs(), Nvs()},  // NOLINT
+        {"", "", "no_action_child", "no_action_child_by_value", "INDEX", "", false, false, "READ_WRITE", false, Nvs(), Nvs()},  // NOLINT
+        {"", "", "npi_child", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false, Nvs(), Nvs()},  // NOLINT
+        {"", "", "row_deletion_policy", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false, Nvs(), Nvs()},  // NOLINT
+        {"", "", "edge_table", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false, Nvs(), Nvs()},  // NOLINT
+        {"", "", "node_table", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false, Nvs(), Nvs()},  // NOLINT
+        {"", "", "vector_table", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns(), false, Nvs(), Nvs()},  // NOLINT
+        {"", "", "vector_table", "vec_index", "VECTOR", "", false, false, "READ_WRITE", false, Nvs(), Nvs()},  // NOLINT
     });
     // clang-format on
     CheckResultsAgainstExpected(results, expected);
@@ -4094,6 +4064,17 @@ TEST_P(InformationSchemaTest, DefaultChangeStreamTables) {
 }
 
 TEST_P(InformationSchemaTest, DefaultChangeStreamsOptions) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_mutable_key_range_change_stream = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+
+  GOOGLESQL_ASSERT_OK(UpdateSchema(
+      {GetParam() == POSTGRESQL
+           ? "CREATE CHANGE STREAM test_mutable_key_range_stream WITH "
+             "(partition_mode = 'MUTABLE_KEY_RANGE')"
+           : "CREATE CHANGE STREAM test_mutable_key_range_stream OPTIONS "
+             "(partition_mode = 'MUTABLE_KEY_RANGE')"}));
+
   auto results = Query(absl::Substitute(
       R"(
       select
@@ -4111,6 +4092,8 @@ TEST_P(InformationSchemaTest, DefaultChangeStreamsOptions) {
       (GetParam() == POSTGRESQL) ? "character varying" : "STRING";
   if (GetParam() == POSTGRESQL) {
     auto expected = std::vector<ValueRow>({
+        {TableCatalogForDialect(), "public", "test_mutable_key_range_stream",
+         "partition_mode", type, "MUTABLE_KEY_RANGE"},
         {TableCatalogForDialect(), "public", "test_stream", "retention_period",
          type, "36h"},
         {TableCatalogForDialect(), "public", "test_stream2", "retention_period",
@@ -4121,6 +4104,8 @@ TEST_P(InformationSchemaTest, DefaultChangeStreamsOptions) {
     EXPECT_THAT(results, IsOkAndHoldsRows(expected));
   } else {
     auto expected = std::vector<ValueRow>({
+        {"", "", "test_mutable_key_range_stream", "partition_mode", type,
+         "MUTABLE_KEY_RANGE"},
         {"", "", "test_stream", "retention_period", type, "36h"},
         {"", "", "test_stream2", "retention_period", type, "2d"},
         {"", "", "test_stream2", "value_capture_type", type,

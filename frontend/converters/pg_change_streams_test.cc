@@ -16,6 +16,7 @@
 
 #include "frontend/converters/pg_change_streams.h"
 
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
@@ -28,6 +29,7 @@
 #include "gtest/gtest.h"
 #include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "absl/status/status.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
 #include "absl/time/clock.h"
@@ -56,6 +58,8 @@ using googlesql::values::String;
 using googlesql::values::Timestamp;
 using testing::ElementsAre;
 using test::EqualsProto;
+using test::proto::Partially;
+using ::googlesql_base::testing::StatusIs;
 
 class PgChangeStreamResultConverterTest : public testing::Test {
  protected:
@@ -76,6 +80,7 @@ class PgChangeStreamResultConverterTest : public testing::Test {
   absl::Time now_;
   absl::Time one_min_from_now_;
   static constexpr char kDummyChangeStreamJsonTvf[] = "read_json_dummy_cs";
+  static constexpr char kDummyChangeStreamBytesTvf[] = "read_bytes_dummy_cs";
 };
 
 TEST_F(PgChangeStreamResultConverterTest,
@@ -446,6 +451,526 @@ TEST_F(PgChangeStreamResultConverterTest,
   ASSERT_EQ(change_recods.child_partition_records.size(), 0);
   ASSERT_EQ(change_recods.heartbeat_records.size(), 0);
   ASSERT_EQ(change_recods.data_change_records.size(), 1);
+}
+
+TEST_F(PgChangeStreamResultConverterTest,
+       PopulateBytesMetadataForFirstResponse) {
+  std::vector<PartialResultSet> results;
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(results,
+                       ConvertHeartbeatTimestampToBytes(
+                           now_, /*tvf_name=*/kDummyChangeStreamBytesTvf,
+                           /*expect_metadata=*/true));
+  EXPECT_THAT(results, ElementsAre(Partially(EqualsProto(absl::Substitute(
+                           R"pb(metadata {
+                                  row_type {
+                                    fields {
+                                      name: "$0"
+                                      type { code: BYTES }
+                                    }
+                                  }
+                                })pb",
+                           kDummyChangeStreamBytesTvf)))));
+}
+
+TEST_F(PgChangeStreamResultConverterTest,
+       ConvertInitialPartitionToMultipleChangeRecords_MutableKeyRange) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      auto parents_array_val,
+      googlesql::Value::MakeArray(StringArrayType(), {String("parent1")}));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      auto parents_array_val2,
+      googlesql::Value::MakeArray(StringArrayType(), {String("parent2")}));
+  TestRowCursor cursor(
+      {"start_time", "partition_token", "parents"},
+      {TimestampType(), StringType(), StringArrayType()},
+      {{Timestamp(now_), String("token1"), parents_array_val},
+       {Timestamp(now_), String("token2"), parents_array_val2}});
+  std::vector<PartialResultSet> results;
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(results,
+                       ConvertPartitionTableRowCursorToBytes(
+                           &cursor, /*initial_start_time=*/one_min_from_now_,
+                           /*partition_token=*/"",
+                           /*tvf_name=*/kDummyChangeStreamBytesTvf,
+                           /*expect_metadata=*/true));
+  EXPECT_FALSE(results.empty());
+  EXPECT_EQ(results[0].resume_token(), kChangeStreamDummyResumeToken);
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto result_set, backend::test::MergePartialResultSets(
+                                            results, /*columns_per_row=*/1));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_records,
+                       test::GetChangeStreamRecordsFromResultSet(result_set));
+  int64_t s = absl::ToUnixSeconds(one_min_from_now_);
+  int64_t ns =
+      absl::ToInt64Nanoseconds(one_min_from_now_ - absl::FromUnixSeconds(s));
+  ASSERT_EQ(change_records.partition_start_records.size(), 2);
+  EXPECT_THAT(
+      change_records.partition_start_records[0],
+      EqualsProto(absl::Substitute(R"pb(
+                                     start_timestamp { seconds: $0 nanos: $1 }
+                                     record_sequence: "00000000"
+                                     partition_tokens: "token1"
+                                   )pb",
+                                   s, ns)));
+  EXPECT_THAT(
+      change_records.partition_start_records[1],
+      EqualsProto(absl::Substitute(R"pb(
+                                     start_timestamp { seconds: $0 nanos: $1 }
+                                     record_sequence: "00000001"
+                                     partition_tokens: "token2"
+                                   )pb",
+                                   s, ns)));
+  ASSERT_EQ(change_records.partition_event_records.size(), 0);
+  ASSERT_EQ(change_records.partition_end_records.size(), 0);
+  ASSERT_EQ(change_records.data_change_records.size(), 0);
+  ASSERT_EQ(change_records.heartbeat_records.size(), 0);
+}
+
+TEST_F(PgChangeStreamResultConverterTest,
+       ConvertMoveEventPartitionToChangeRecord_MutableKeyRange) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      auto parents_array_val,
+      googlesql::Value::MakeArray(StringArrayType(), {String("move_token1")}));
+  TestRowCursor cursor(
+      {"start_time", "partition_token", "parents"},
+      {TimestampType(), StringType(), StringArrayType()},
+      {{Timestamp(now_), String("token1"), parents_array_val}});
+  EXPECT_THAT(ConvertPartitionTableRowCursorToBytes(
+                  &cursor, /*initial_start_time=*/std::nullopt,
+                  /*partition_token=*/"move_token1",
+                  /*tvf_name=*/kDummyChangeStreamBytesTvf,
+                  /*expect_metadata=*/true),
+              StatusIs(absl::StatusCode::kInternal));
+}
+
+TEST_F(PgChangeStreamResultConverterTest,
+       ConvertMergeEventPartitionFirstParentToChangeRecord_MutableKeyRange) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      auto parents_array_val,
+      googlesql::Value::MakeArray(
+          StringArrayType(), {String("merge_token1"), String("merge_token2")}));
+  TestRowCursor cursor(
+      {"start_time", "partition_token", "parents"},
+      {TimestampType(), StringType(), StringArrayType()},
+      {{Timestamp(now_), String("token1"), parents_array_val}});
+  std::vector<PartialResultSet> results;
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(results,
+                       ConvertPartitionTableRowCursorToBytes(
+                           &cursor, /*initial_start_time=*/std::nullopt,
+                           /*partition_token=*/"merge_token1",
+                           /*tvf_name=*/kDummyChangeStreamBytesTvf,
+                           /*expect_metadata=*/true));
+  EXPECT_FALSE(results.empty());
+  EXPECT_EQ(results[0].resume_token(), kChangeStreamDummyResumeToken);
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto result_set, backend::test::MergePartialResultSets(
+                                            results, /*columns_per_row=*/1));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_records,
+                       test::GetChangeStreamRecordsFromResultSet(result_set));
+
+  int64_t s = absl::ToUnixSeconds(now_);
+  int64_t ns = absl::ToInt64Nanoseconds(now_ - absl::FromUnixSeconds(s));
+  ASSERT_EQ(change_records.partition_start_records.size(), 1);
+  EXPECT_THAT(
+      change_records.partition_start_records[0],
+      EqualsProto(absl::Substitute(R"pb(
+                                     start_timestamp { seconds: $0 nanos: $1 }
+                                     record_sequence: "00000000"
+                                     partition_tokens: "token1"
+                                   )pb",
+                                   s, ns)));
+
+  ASSERT_EQ(change_records.partition_event_records.size(), 1);
+  EXPECT_THAT(change_records.partition_event_records[0],
+              EqualsProto(absl::Substitute(
+                  R"pb(
+                    commit_timestamp { seconds: $0 nanos: $1 }
+                    record_sequence: "00000001"
+                    partition_token: "merge_token1"
+                    move_out_events { destination_partition_token: "token1" }
+                  )pb",
+                  s, ns)));
+
+  ASSERT_EQ(change_records.partition_end_records.size(), 1);
+  EXPECT_THAT(
+      change_records.partition_end_records[0],
+      EqualsProto(absl::Substitute(R"pb(
+                                     end_timestamp { seconds: $0 nanos: $1 }
+                                     record_sequence: "00000002"
+                                     partition_token: "merge_token1"
+                                   )pb",
+                                   s, ns)));
+
+  ASSERT_EQ(change_records.data_change_records.size(), 0);
+  ASSERT_EQ(change_records.heartbeat_records.size(), 0);
+}
+
+TEST_F(PgChangeStreamResultConverterTest,
+       ConvertMergeEventPartitionSecondParentToChangeRecord_MutableKeyRange) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      auto parents_array_val,
+      googlesql::Value::MakeArray(
+          StringArrayType(), {String("merge_token1"), String("merge_token2")}));
+  TestRowCursor cursor(
+      {"start_time", "partition_token", "parents"},
+      {TimestampType(), StringType(), StringArrayType()},
+      {{Timestamp(now_), String("token1"), parents_array_val}});
+  std::vector<PartialResultSet> results;
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(results,
+                       ConvertPartitionTableRowCursorToBytes(
+                           &cursor, /*initial_start_time=*/std::nullopt,
+                           /*partition_token=*/"merge_token2",
+                           /*tvf_name=*/kDummyChangeStreamBytesTvf,
+                           /*expect_metadata=*/true));
+  EXPECT_FALSE(results.empty());
+  EXPECT_EQ(results[0].resume_token(), kChangeStreamDummyResumeToken);
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto result_set, backend::test::MergePartialResultSets(
+                                            results, /*columns_per_row=*/1));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_records,
+                       test::GetChangeStreamRecordsFromResultSet(result_set));
+
+  int64_t s = absl::ToUnixSeconds(now_);
+  int64_t ns = absl::ToInt64Nanoseconds(now_ - absl::FromUnixSeconds(s));
+  ASSERT_EQ(change_records.partition_start_records.size(), 0);
+
+  ASSERT_EQ(change_records.partition_event_records.size(), 1);
+  EXPECT_THAT(change_records.partition_event_records[0],
+              EqualsProto(absl::Substitute(
+                  R"pb(
+                    commit_timestamp { seconds: $0 nanos: $1 }
+                    record_sequence: "00000000"
+                    partition_token: "merge_token2"
+                    move_out_events { destination_partition_token: "token1" }
+                  )pb",
+                  s, ns)));
+
+  ASSERT_EQ(change_records.partition_end_records.size(), 1);
+  EXPECT_THAT(
+      change_records.partition_end_records[0],
+      EqualsProto(absl::Substitute(R"pb(
+                                     end_timestamp { seconds: $0 nanos: $1 }
+                                     record_sequence: "00000001"
+                                     partition_token: "merge_token2"
+                                   )pb",
+                                   s, ns)));
+
+  ASSERT_EQ(change_records.data_change_records.size(), 0);
+  ASSERT_EQ(change_records.heartbeat_records.size(), 0);
+}
+
+TEST_F(PgChangeStreamResultConverterTest,
+       ConvertSplitEventPartitionToChangeRecord_MutableKeyRange) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      auto parents_array_val,
+      googlesql::Value::MakeArray(StringArrayType(), {String("parent_token")}));
+  TestRowCursor cursor(
+      {"start_time", "partition_token", "parents"},
+      {TimestampType(), StringType(), StringArrayType()},
+      {{Timestamp(now_), String("split_token1"), parents_array_val},
+       {Timestamp(now_), String("split_token2"), parents_array_val}});
+  std::vector<PartialResultSet> results;
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(results,
+                       ConvertPartitionTableRowCursorToBytes(
+                           &cursor, /*initial_start_time=*/std::nullopt,
+                           /*partition_token=*/"parent_token",
+                           /*tvf_name=*/kDummyChangeStreamBytesTvf,
+                           /*expect_metadata=*/true));
+  EXPECT_FALSE(results.empty());
+  EXPECT_EQ(results[0].resume_token(), kChangeStreamDummyResumeToken);
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto result_set, backend::test::MergePartialResultSets(
+                                            results, /*columns_per_row=*/1));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_records,
+                       test::GetChangeStreamRecordsFromResultSet(result_set));
+
+  int64_t s = absl::ToUnixSeconds(now_);
+  int64_t ns = absl::ToInt64Nanoseconds(now_ - absl::FromUnixSeconds(s));
+  ASSERT_EQ(change_records.partition_start_records.size(), 2);
+  EXPECT_THAT(
+      change_records.partition_start_records[0],
+      EqualsProto(absl::Substitute(R"pb(
+                                     start_timestamp { seconds: $0 nanos: $1 }
+                                     record_sequence: "00000000"
+                                     partition_tokens: "split_token1"
+                                   )pb",
+                                   s, ns)));
+  EXPECT_THAT(
+      change_records.partition_start_records[1],
+      EqualsProto(absl::Substitute(R"pb(
+                                     start_timestamp { seconds: $0 nanos: $1 }
+                                     record_sequence: "00000001"
+                                     partition_tokens: "split_token2"
+                                   )pb",
+                                   s, ns)));
+
+  ASSERT_EQ(change_records.partition_event_records.size(), 1);
+  EXPECT_THAT(
+      change_records.partition_event_records[0],
+      EqualsProto(absl::Substitute(
+          R"pb(
+            commit_timestamp { seconds: $0 nanos: $1 }
+            record_sequence: "00000002"
+            partition_token: "parent_token"
+            move_out_events { destination_partition_token: "split_token1" }
+            move_out_events { destination_partition_token: "split_token2" }
+          )pb",
+          s, ns)));
+
+  ASSERT_EQ(change_records.partition_end_records.size(), 1);
+  EXPECT_THAT(
+      change_records.partition_end_records[0],
+      EqualsProto(absl::Substitute(R"pb(
+                                     end_timestamp { seconds: $0 nanos: $1 }
+                                     record_sequence: "00000003"
+                                     partition_token: "parent_token"
+                                   )pb",
+                                   s, ns)));
+
+  ASSERT_EQ(change_records.data_change_records.size(), 0);
+  ASSERT_EQ(change_records.heartbeat_records.size(), 0);
+}
+
+TEST_F(
+    PgChangeStreamResultConverterTest,
+    ConvertQueryStartPartitionTableRowCursorToBytes_QueryStartBeforePartition) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto parents_array_val,
+                       googlesql::Value::MakeArray(
+                           StringArrayType(),
+                           {String("parent_token1"), String("parent_token2")}));
+  TestRowCursor cursor(
+      {"start_time", "partition_token", "parents"},
+      {TimestampType(), StringType(), StringArrayType()},
+      {{Timestamp(now_), String("child_token1"), parents_array_val}});
+  std::vector<PartialResultSet> results;
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(results, ConvertQueryStartPartitionTableRowCursorToBytes(
+                                    &cursor, now_,
+                                    /*tvf_name=*/kDummyChangeStreamBytesTvf,
+                                    /*expect_metadata=*/true));
+  EXPECT_FALSE(results.empty());
+  EXPECT_EQ(results[0].resume_token(), kChangeStreamDummyResumeToken);
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto result_set, backend::test::MergePartialResultSets(
+                                            results, /*columns_per_row=*/1));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_records,
+                       test::GetChangeStreamRecordsFromResultSet(result_set));
+
+  int64_t s = absl::ToUnixSeconds(now_);
+  int64_t ns = absl::ToInt64Nanoseconds(now_ - absl::FromUnixSeconds(s));
+  ASSERT_EQ(change_records.partition_event_records.size(), 1);
+  EXPECT_THAT(change_records.partition_event_records[0],
+              EqualsProto(absl::Substitute(
+                  R"pb(
+                    commit_timestamp { seconds: $0 nanos: $1 }
+                    record_sequence: "00000000"
+                    partition_token: "child_token1"
+                    move_in_events { source_partition_token: "parent_token1" }
+                    move_in_events { source_partition_token: "parent_token2" }
+                  )pb",
+                  s, ns)));
+
+  ASSERT_EQ(change_records.partition_start_records.size(), 0);
+  ASSERT_EQ(change_records.partition_end_records.size(), 0);
+  ASSERT_EQ(change_records.data_change_records.size(), 0);
+}
+
+TEST_F(
+    PgChangeStreamResultConverterTest,
+    ConvertQueryStartPartitionTableRowCursorToBytes_QueryStartAfterPartition) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto parents_array_val,
+                       googlesql::Value::MakeArray(
+                           StringArrayType(),
+                           {String("parent_token1"), String("parent_token2")}));
+  TestRowCursor cursor(
+      {"start_time", "partition_token", "parents"},
+      {TimestampType(), StringType(), StringArrayType()},
+      {{Timestamp(now_), String("child_token1"), parents_array_val}});
+  std::vector<PartialResultSet> results;
+  absl::Time query_start_time = now_ + absl::Seconds(10);
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(results, ConvertQueryStartPartitionTableRowCursorToBytes(
+                                    &cursor, query_start_time,
+                                    /*tvf_name=*/kDummyChangeStreamBytesTvf,
+                                    /*expect_metadata=*/true));
+  EXPECT_TRUE(results.empty());
+}
+
+TEST_F(PgChangeStreamResultConverterTest,
+       ConvertQueryStartPartitionTableRowCursorToBytes_QueryStartAfterStart) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto parents_array_val,
+                       googlesql::Value::MakeArray(
+                           StringArrayType(),
+                           {String("parent_token1"), String("parent_token2")}));
+  TestRowCursor cursor(
+      {"start_time", "partition_token", "parents"},
+      {TimestampType(), StringType(), StringArrayType()},
+      {{Timestamp(now_), String("child_token1"), parents_array_val}});
+  std::vector<PartialResultSet> results;
+  absl::Time query_start_time = now_ + absl::Seconds(10);
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(results, ConvertQueryStartPartitionTableRowCursorToBytes(
+                                    &cursor, query_start_time,
+                                    /*tvf_name=*/kDummyChangeStreamBytesTvf,
+                                    /*expect_metadata=*/true));
+  EXPECT_TRUE(results.empty());
+}
+
+TEST_F(PgChangeStreamResultConverterTest,
+       HearbeatTimestampToChangeRecordProto_MutableKeyRange) {
+  std::vector<PartialResultSet> results;
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(results,
+                       ConvertHeartbeatTimestampToBytes(
+                           now_, /*tvf_name=*/kDummyChangeStreamBytesTvf,
+                           /*expect_metadata=*/true));
+  EXPECT_FALSE(results.empty());
+  EXPECT_EQ(results[0].resume_token(), kChangeStreamDummyResumeToken);
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto result_set, backend::test::MergePartialResultSets(
+                                            results, /*columns_per_row=*/1));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_records,
+                       test::GetChangeStreamRecordsFromResultSet(result_set));
+  int64_t s = absl::ToUnixSeconds(now_);
+  int64_t ns = absl::ToInt64Nanoseconds(now_ - absl::FromUnixSeconds(s));
+  EXPECT_THAT(change_records.mutable_key_range_heartbeat_records,
+              ElementsAre(EqualsProto(
+                  absl::Substitute(R"pb(
+                                     timestamp { seconds: $0 nanos: $1 }
+                                   )pb",
+                                   s, ns))));
+}
+
+TEST_F(PgChangeStreamResultConverterTest,
+       ConvertNewValuesDataTableToChangeRecord_MutableKeyRange) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      auto col_types_name_arr_val,
+      googlesql::Value::MakeArray(StringArrayType(),
+                                  {String("IsPrimaryUser"), String("UserId")}));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      auto col_types_type_arr_val,
+      googlesql::Value::MakeArray(
+          StringArrayType(),
+          {String("{\"code\":\"BOOL\"}"), String("{\"code\":\"STRING\"}")}));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      auto col_types_is_primary_key_arr_val,
+      googlesql::Value::MakeArray(googlesql::types::BoolArrayType(),
+                                  {Bool(false), Bool(true)}));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      auto col_types_ordinal_position_arr_val,
+      googlesql::Value::MakeArray(googlesql::types::Int64ArrayType(),
+                                  {Int64(1), Int64(2)}));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      auto mods_keys,
+      googlesql::Value::MakeArray(StringArrayType(),
+                                  {String("{\"UserId\": \"User2\"}"),
+                                   String("{\"UserId\": \"User2\"}")}));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      auto mods_new_values,
+      googlesql::Value::MakeArray(
+          StringArrayType(),
+          {String("{\"IsPrimaryUser\": true,\"UserId\": \"User2\"}"),
+           String("{\"IsPrimaryUser\": false}")}));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto mods_old_values,
+                       googlesql::Value::MakeArray(
+                           StringArrayType(), {String("{}"), String("{}")}));
+  TestRowCursor cursor(
+      {"partition_token", "commit_timestamp", "server_transaction_id",
+       "record_sequence", "is_last_record_in_transaction_in_partition",
+       "table_name", "column_types_name", "column_types_type",
+       "column_type_is_primary_key", "column_types_ordinal_position",
+       "mods_keys", "mods_new_values", "mods_old_values", "mod_type",
+       "value_capture_type", "number_of_records_in_transaction",
+       "number_of_partitions_in_transaction", "transaction_tag",
+       "is_system_transaction"},
+      {StringType(), TimestampType(), StringType(), StringType(), BoolType(),
+       StringType(), StringType(), StringType(), BoolType(), Int64Type(),
+       StringType(), StringType(), StringType(), StringType(), StringType(),
+       Int64Type(), Int64Type(), StringType(), BoolType()},
+      {{String("test_token"), Timestamp(now_), String("test_id"),
+        String("00000001"), Bool(false), String("test_table"),
+        col_types_name_arr_val, col_types_type_arr_val,
+        col_types_is_primary_key_arr_val, col_types_ordinal_position_arr_val,
+        mods_keys, mods_new_values, mods_old_values, String("UPDATE"),
+        String("NEW_VALUES"), Int64(3), Int64(2), String("test_tag"),
+        Bool(false)}});
+  std::vector<PartialResultSet> results;
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(results, ConvertDataTableRowCursorToBytes(
+                                    &cursor,
+                                    /*tvf_name=*/kDummyChangeStreamBytesTvf,
+                                    /*expect_metadata=*/true));
+  EXPECT_FALSE(results.empty());
+  EXPECT_EQ(results[0].resume_token(), kChangeStreamDummyResumeToken);
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto result_set, backend::test::MergePartialResultSets(
+                                            results, /*columns_per_row=*/1));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(test::ChangeStreamRecords change_records,
+                       test::GetChangeStreamRecordsFromResultSet(result_set));
+  int64_t s = absl::ToUnixSeconds(now_);
+  int64_t ns = absl::ToInt64Nanoseconds(now_ - absl::FromUnixSeconds(s));
+  EXPECT_THAT(change_records.mutable_key_range_data_change_records,
+              ElementsAre(Partially(EqualsProto(absl::Substitute(
+                  R"pb(
+                    commit_timestamp { seconds: $0 nanos: $1 }
+                    record_sequence: "00000001"
+                    server_transaction_id: "test_id"
+                    is_last_record_in_transaction_in_partition: false
+                    table: "test_table"
+                    mod_type: UPDATE
+                    value_capture_type: NEW_VALUES
+                    number_of_records_in_transaction: 3
+                    number_of_partitions_in_transaction: 2
+                    transaction_tag: "test_tag"
+                    is_system_transaction: false
+                  )pb",
+                  s, ns)))));
+}
+
+TEST_F(PgChangeStreamResultConverterTest,
+       ConvertDataTableRowCursorToBytes_NoMetadata) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      auto col_types_name_arr_val,
+      googlesql::Value::MakeArray(StringArrayType(),
+                                  {String("IsPrimaryUser"), String("UserId")}));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      auto col_types_type_arr_val,
+      googlesql::Value::MakeArray(
+          StringArrayType(),
+          {String("{\"code\":\"BOOL\"}"), String("{\"code\":\"INT64\"}")}));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      auto col_types_is_primary_key_arr_val,
+      googlesql::Value::MakeArray(googlesql::types::BoolArrayType(),
+                                  {Bool(true), Bool(false)}));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      auto col_types_ordinal_position_arr_val,
+      googlesql::Value::MakeArray(googlesql::types::Int64ArrayType(),
+                                  {Int64(1), Int64(2)}));
+
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      auto mods_keys,
+      googlesql::Value::MakeArray(StringArrayType(),
+                                  {String("{\"IsPrimaryUser\":\"true\"}")}));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto mods_new_values,
+                       googlesql::Value::MakeArray(
+                           StringArrayType(), {String("{\"UserId\":\"10\"}")}));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      auto mods_old_values,
+      googlesql::Value::MakeArray(StringArrayType(), {String("{}")}));
+  TestRowCursor cursor(
+      {"partition_token", "commit_timestamp", "server_transaction_id",
+       "record_sequence", "is_last_record_in_transaction_in_partition",
+       "table_name", "column_types_name", "column_types_type",
+       "column_type_is_primary_key", "column_types_ordinal_position",
+       "mods_keys", "mods_new_values", "mods_old_values", "mod_type",
+       "value_capture_type", "number_of_records_in_transaction",
+       "number_of_partitions_in_transaction", "transaction_tag",
+       "is_system_transaction"},
+      {StringType(), TimestampType(), StringType(), StringType(), BoolType(),
+       StringType(), StringType(), StringType(), BoolType(), Int64Type(),
+       StringType(), StringType(), StringType(), StringType(), StringType(),
+       Int64Type(), Int64Type(), StringType(), BoolType()},
+      {{String("test_token"), Timestamp(now_), String("test_id"),
+        String("00000001"), Bool(false), String("test_table"),
+        col_types_name_arr_val, col_types_type_arr_val,
+        col_types_is_primary_key_arr_val, col_types_ordinal_position_arr_val,
+        mods_keys, mods_new_values, mods_old_values, String("UPDATE"),
+        String("NEW_VALUES"), Int64(3), Int64(2), String("test_tag"),
+        Bool(false)}});
+  std::vector<PartialResultSet> results;
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(results, ConvertDataTableRowCursorToBytes(
+                                    &cursor,
+                                    /*tvf_name=*/kDummyChangeStreamBytesTvf,
+                                    /*expect_metadata=*/false));
+  EXPECT_FALSE(results.empty());
+  EXPECT_FALSE(results[0].has_metadata());
 }
 
 }  // namespace

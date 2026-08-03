@@ -812,7 +812,8 @@ void or_replace() :
 void sql_security() :
 {}
 {
-  <INVOKER>
+    <INVOKER>
+  | <DEFINER>
 }
 
 void create_view_statement() :

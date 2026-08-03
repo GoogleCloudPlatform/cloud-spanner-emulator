@@ -517,6 +517,31 @@ absl::StatusOr<RowMarkClause*> makeRowMarkClause(Index rti,
   return row_mark_clause;
 }
 
+absl::StatusOr<List*> makeQualifiedNameList(char* rawname) {
+  List* result = NIL;
+  List* namelist;
+  ListCell* l;
+
+  GOOGLESQL_ASSIGN_OR_RETURN(bool success,
+                   CheckedPgSplitIdentifierString(rawname, '.', &namelist));
+  if (!success || namelist == NIL) {
+    return absl::InvalidArgumentError("invalid name syntax");
+  }
+
+  foreach (l, namelist) {
+    char* curname = (char*)lfirst(l);
+
+    GOOGLESQL_ASSIGN_OR_RETURN(char* name_val, CheckedPgPstrdup(curname));
+    GOOGLESQL_ASSIGN_OR_RETURN(String * name_part, CheckedPgMakeString(name_val));
+
+    GOOGLESQL_ASSIGN_OR_RETURN(result, CheckedPgLappend(result, name_part));
+  }
+
+  list_free(namelist);
+
+  return result;
+}
+
 bool IsExpr(const Node& input) {
   switch (nodeTag(&input)) {
     case T_Var:

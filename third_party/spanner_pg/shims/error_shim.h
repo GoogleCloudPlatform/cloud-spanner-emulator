@@ -164,6 +164,10 @@ absl::Status CheckedPgGetTyplenbyvalalign(Oid typid, int16_t* typlen,
                                           bool* typbyval, char* typalign);
 absl::StatusOr<ArrayType*> CheckedPgDatumGetArrayTypeP(Datum datum);
 absl::StatusOr<Type> CheckedPgTypeidType(Oid id);
+absl::StatusOr<bool> CheckedPgSplitIdentifierString(char* rawstring,
+                                                    char separator,
+                                                    List** namelist);
+absl::StatusOr<const char*> CheckedPgQuoteIdentifier(const char* ident);
 
 #define CheckedPgMakeNode(_type_) \
   CheckedPgMakeNodeTemplate<_type_>(sizeof(_type_), T_##_type_)

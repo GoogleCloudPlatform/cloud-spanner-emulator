@@ -295,7 +295,7 @@ TEST(FindTable, SchemaNameMappingCaseSensitivity) {
 }
 
 TEST(FindTableValuedFunction, FindChangeStreamTVFNotUDF) {
-  auto catalog = absl::make_unique<SpangresUserCatalog>(
+  auto catalog = std::make_unique<SpangresUserCatalog>(
       GetSpangresTestSpannerUserCatalog());
 
   const googlesql::TableValuedFunction* tvf;

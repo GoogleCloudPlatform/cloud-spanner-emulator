@@ -37,6 +37,8 @@
 #include "backend/transaction/options.h"
 #include "backend/transaction/read_only_transaction.h"
 #include "common/clock.h"
+#include "common/feature_flags.h"
+#include "tests/common/scoped_feature_flags_setter.h"
 #include "googlesql/base/status_macros.h"
 
 namespace google {
@@ -528,6 +530,178 @@ TEST_F(ChangeStreamPartitionChurnerTest, ChangeStreamSplitAndMerge) {
     ASSERT_EQ(stale_and_active_partitions.active_partitions[2].next_churn,
               "MOVE");
   }
+}
+
+TEST_F(ChangeStreamPartitionChurnerTest,
+       MutableKeyRangeChangeStreamNoMoveChurn) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_mutable_key_range_change_stream = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+  absl::SetFlag(&FLAGS_enable_change_stream_churning, false);
+
+  std::string change_stream = "mutable_key_range_change_stream";
+  std::string create_change_stream =
+      "CREATE CHANGE STREAM " + change_stream +
+      " OPTIONS (partition_mode = 'MUTABLE_KEY_RANGE')";
+  std::vector<std::string> update_statements = {create_change_stream};
+
+  absl::Status backfill_status;
+  int completed_statements;
+  absl::Time commit_ts;
+  GOOGLESQL_ASSERT_OK(
+      db_->UpdateSchema(SchemaChangeOperation{.statements = update_statements},
+                        &completed_statements, &commit_ts, &backfill_status));
+
+  // Verify that 2 active partitions are created initially (one SPLIT, one
+  // MOVE).
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(StaleAndActivePartitions stale_and_active_partitions,
+                       GetChangeStreamPartitions(change_stream, db_.get()));
+  ASSERT_EQ(stale_and_active_partitions.stale_partitions.size(), 0);
+  ASSERT_EQ(stale_and_active_partitions.active_partitions.size(), 2);
+
+  std::string split_token;
+  std::string move_token;
+  for (const auto& partition : stale_and_active_partitions.active_partitions) {
+    if (partition.next_churn == "SPLIT") {
+      split_token = partition.partition_token;
+    } else if (partition.next_churn == "MOVE") {
+      move_token = partition.partition_token;
+    }
+  }
+  ASSERT_FALSE(split_token.empty());
+  ASSERT_FALSE(move_token.empty());
+
+  // Sleep to let churning happen.
+  absl::SleepFor(
+      absl::GetFlag(FLAGS_change_stream_churn_thread_sleep_interval) * 5);
+  ChurnPartitionsForChangeStream(change_stream);
+
+  // Verify that:
+  // - The SPLIT partition did churn (it is now stale).
+  // - The MOVE partition did NOT churn (still active, no children, end time is
+  // null).
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(stale_and_active_partitions,
+                       GetChangeStreamPartitions(change_stream, db_.get()));
+
+  // The MOVE partition should still be in active_partitions, and have no
+  // children.
+  bool found_move_partition = false;
+  for (const auto& partition : stale_and_active_partitions.active_partitions) {
+    if (partition.partition_token == move_token) {
+      found_move_partition = true;
+      EXPECT_TRUE(partition.children.empty());
+      EXPECT_EQ(partition.next_churn, "MOVE");
+    }
+  }
+  EXPECT_TRUE(found_move_partition);
+
+  // The MOVE partition should NOT be in stale_partitions.
+  for (const auto& partition : stale_and_active_partitions.stale_partitions) {
+    EXPECT_NE(partition.partition_token, move_token);
+  }
+
+  // The SPLIT partition should now be in stale_partitions.
+  bool found_split_partition_in_stale = false;
+  for (const auto& partition : stale_and_active_partitions.stale_partitions) {
+    if (partition.partition_token == split_token) {
+      found_split_partition_in_stale = true;
+    }
+  }
+  EXPECT_TRUE(found_split_partition_in_stale);
+
+  // Find the children of the split partition.
+  std::vector<std::string> split_children;
+  for (const auto& partition : stale_and_active_partitions.stale_partitions) {
+    if (partition.partition_token == split_token) {
+      split_children = partition.children;
+    }
+  }
+  ASSERT_EQ(split_children.size(), 2);
+
+  // Verify the children are active and have next_churn == "MERGE".
+  std::string merge_token_one = split_children[0];
+  std::string merge_token_two = split_children[1];
+  bool found_merge_one = false;
+  bool found_merge_two = false;
+  std::string active_tokens_str = "";
+  for (const auto& partition : stale_and_active_partitions.active_partitions) {
+    active_tokens_str += "\n  " + partition.partition_token +
+                         " (next_churn: " + partition.next_churn + ")";
+    if (partition.partition_token == merge_token_one) {
+      found_merge_one = true;
+      EXPECT_EQ(partition.next_churn, "MERGE");
+    }
+    if (partition.partition_token == merge_token_two) {
+      found_merge_two = true;
+      EXPECT_EQ(partition.next_churn, "MERGE");
+    }
+  }
+  EXPECT_TRUE(found_merge_one)
+      << "Looking for merge_token_one: " << merge_token_one
+      << "\nActive partitions:" << active_tokens_str;
+  EXPECT_TRUE(found_merge_two)
+      << "Looking for merge_token_two: " << merge_token_two
+      << "\nActive partitions:" << active_tokens_str;
+
+  // Churn again to merge.
+  absl::SleepFor(
+      absl::GetFlag(FLAGS_change_stream_churn_thread_sleep_interval) * 5);
+  ChurnPartitionsForChangeStream(change_stream);
+
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(stale_and_active_partitions,
+                       GetChangeStreamPartitions(change_stream, db_.get()));
+
+  // Verify the MERGE partitions are now stale.
+  found_merge_one = false;
+  found_merge_two = false;
+  for (const auto& partition : stale_and_active_partitions.stale_partitions) {
+    if (partition.partition_token == merge_token_one) {
+      found_merge_one = true;
+    }
+    if (partition.partition_token == merge_token_two) {
+      found_merge_two = true;
+    }
+  }
+  EXPECT_TRUE(found_merge_one);
+  EXPECT_TRUE(found_merge_two);
+
+  // Verify they merged into a new active SPLIT partition.
+  // The stale MERGE partitions should both have the same child.
+  std::string merged_child_one;
+  std::string merged_child_two;
+  for (const auto& partition : stale_and_active_partitions.stale_partitions) {
+    if (partition.partition_token == merge_token_one) {
+      ASSERT_EQ(partition.children.size(), 1);
+      merged_child_one = partition.children[0];
+    }
+    if (partition.partition_token == merge_token_two) {
+      ASSERT_EQ(partition.children.size(), 1);
+      merged_child_two = partition.children[0];
+    }
+  }
+  ASSERT_EQ(merged_child_one, merged_child_two);
+  ASSERT_FALSE(merged_child_one.empty());
+
+  // Verify the merged child is active and has next_churn == "SPLIT".
+  bool found_merged_child = false;
+  for (const auto& partition : stale_and_active_partitions.active_partitions) {
+    if (partition.partition_token == merged_child_one) {
+      found_merged_child = true;
+      EXPECT_EQ(partition.next_churn, "SPLIT");
+    }
+  }
+  EXPECT_TRUE(found_merged_child);
+
+  // Verify the MOVE partition is STILL active and hasn't churned.
+  found_move_partition = false;
+  for (const auto& partition : stale_and_active_partitions.active_partitions) {
+    if (partition.partition_token == move_token) {
+      found_move_partition = true;
+      EXPECT_TRUE(partition.children.empty());
+      EXPECT_EQ(partition.next_churn, "MOVE");
+    }
+  }
+  EXPECT_TRUE(found_move_partition);
 }
 
 }  // namespace backend

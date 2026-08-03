@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "google/protobuf/struct.pb.h"
+#include "google/spanner/v1/keys.pb.h"
 #include "google/spanner/v1/query_plan.pb.h"
 #include "google/spanner/v1/result_set.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
@@ -528,10 +529,12 @@ absl::Status ExecuteStreamingSql(
           }
         }
 
-        if (!request->partition_token().empty()) {
-          GOOGLESQL_ASSIGN_OR_RETURN(
-              auto partition_token,
-              PartitionTokenFromString(request->partition_token()));
+          if (!request->partition_token().empty()) {
+            PartitionToken partition_token;
+            GOOGLESQL_ASSIGN_OR_RETURN(
+                auto parsed_token,
+                PartitionTokenFromString(request->partition_token()));
+            partition_token = std::move(parsed_token);
           GOOGLESQL_RETURN_IF_ERROR(ValidatePartitionToken(partition_token, request));
           if (partition_token.empty_query_partition()) {
             // Clear all partial responses except the first one. Return only

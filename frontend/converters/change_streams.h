@@ -31,28 +31,63 @@ namespace spanner_api = ::google::spanner::v1;
 static constexpr char kChangeStreamDummyResumeToken[] =
     "dummy_resume_token_for_change_streams_on_emulator";
 
-// Takes a row cursor for a change stream partition table, and convert the row
-// cursor into a child partition record partial result set as ARRAY<STRUCT>. If
-// initial_start_time is not empty, current row cursor is yielded from initial
-// change stream query. Start time of all change stream partition tokens will be
-// set to the user passed start time in the metadata instead of the actual
-// partition token start time in partition table.
+// Used by immutable key range change streams. Takes a row cursor for a change
+// stream partition table, and convert the row cursor into a child partition
+// record partial result set as ARRAY<STRUCT>. If initial_start_time is not
+// empty, current row cursor is yielded from initial change stream query. Start
+// time of all change stream partition tokens will be set to the user passed
+// start time in the metadata instead of the actual partition token start time
+// in partition table.
 absl::StatusOr<std::vector<spanner_api::PartialResultSet>>
 ConvertPartitionTableRowCursorToStruct(
     backend::RowCursor* row_cursor,
     std::optional<absl::Time> initial_start_time, bool expect_metadata = false);
 
-// Takes a timestamp and convert the timestamp into a heartbeat record partial
-// result set as ARRAY<STRUCT>.
+// Used by immutable key range change streams. Takes a timestamp and convert the
+// timestamp into a heartbeat record partial result set as ARRAY<STRUCT>.
 absl::StatusOr<std::vector<spanner_api::PartialResultSet>>
 ConvertHeartbeatTimestampToStruct(absl::Time timestamp,
                                   bool expect_metadata = false);
 
-// Takes a row cursor from data table and convert all rows into a vector of
-// partial result set as ARRAY<STRUCT>.
+// Used by immutable key range change streams. Takes a row cursor from data
+// table and convert all rows into a vector of partial result set as
+// ARRAY<STRUCT>.
 absl::StatusOr<std::vector<spanner_api::PartialResultSet>>
 ConvertDataTableRowCursorToStruct(backend::RowCursor* row_cursor,
                                   bool expect_metadata = false);
+
+// Used by mutable key range change streams. Takes a row cursor for a change
+// stream partition table, and convert the row cursor into partition records
+// (start, end, or event) partial result set as proto. If initial_start_time is
+// not empty, current row cursor is yielded from initial change stream query.
+// Start time of all change stream partition tokens will be set to the user
+// passed start time in the metadata.
+absl::StatusOr<std::vector<spanner_api::PartialResultSet>>
+ConvertPartitionTableRowCursorToProto(
+    backend::RowCursor* row_cursor,
+    std::optional<absl::Time> initial_start_time,
+    absl::string_view partition_token, bool expect_metadata = false);
+
+// Used by mutable key range change streams. Takes a row cursor for a change
+// stream partition table when the partition query starts at a time <=
+// partition start time, and populates move-in PartitionEventRecord from
+// source partitions.
+absl::StatusOr<std::vector<spanner_api::PartialResultSet>>
+ConvertQueryStartPartitionTableRowCursorToProto(backend::RowCursor* row_cursor,
+                                                absl::Time query_start_time,
+                                                bool expect_metadata = false);
+
+// Used by mutable key range change streams. Takes a timestamp and convert the
+// timestamp into a heartbeat record partial result set as proto.
+absl::StatusOr<std::vector<spanner_api::PartialResultSet>>
+ConvertHeartbeatTimestampToProto(absl::Time timestamp,
+                                 bool expect_metadata = false);
+
+// Used by mutable key range change streams. Takes a row cursor from data table
+// and convert all rows into partial result set as proto.
+absl::StatusOr<std::vector<spanner_api::PartialResultSet>>
+ConvertDataTableRowCursorToProto(backend::RowCursor* row_cursor,
+                                 bool expect_metadata = false);
 
 }  // namespace frontend
 }  // namespace emulator

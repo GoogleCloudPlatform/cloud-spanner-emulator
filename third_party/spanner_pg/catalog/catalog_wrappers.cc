@@ -41,6 +41,7 @@
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_join.h"
@@ -489,7 +490,7 @@ static absl::StatusOr<std::vector<const FormData_pg_proc*>> BuildPgProcsFromUDF(
   }
   proc->oid = proc_oid;
   GOOGLESQL_RETURN_IF_ERROR(adapter->StoreUDFProc(proc));
-  const std::string udf_name = udf->FullName(/*include_group=*/false);
+  const std::string udf_name = udf->Name();
   GOOGLESQL_RET_CHECK(udf_name.size() < NAMEDATALEN);
   memcpy(NameStr(proc->proname), udf_name.c_str(), udf_name.size() + 1);
 
@@ -507,7 +508,10 @@ static absl::StatusOr<std::vector<const FormData_pg_proc*>> BuildPgProcsFromUDF(
   // These fields are currently unused by the caller, but we might as well fill
   // them in with PG defaults. These defaults come from pg_proc.h.
   proc->proowner = BOOTSTRAP_SUPERUSERID;
-  proc->prolang = INTERNALlanguageId;
+
+  Oid language_oid = INTERNALlanguageId;
+  proc->prolang = language_oid;
+
   proc->procost = 1;
   proc->prorows = 0;
   proc->provariadic = 0;
@@ -1072,12 +1076,15 @@ extern "C" Oid GetNamespaceByNameFromBootstrapCatalog(const char* name) {
       .value_or(InvalidOid);
 }
 
-extern "C" char* GetNamespaceNameByOidFromBootstrapCatalog(Oid namespace_oid) {
-  absl::StatusOr<const char*> namespace_name =
-      postgres_translator::PgBootstrapCatalog::Default()->GetNamespaceName(
-          namespace_oid);
+extern "C" char* GetNamespaceNameByOid(Oid namespace_oid) {
+  postgres_translator::CatalogAdapter* adapter;
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      adapter, postgres_translator::GetCatalogAdapter(),
+      _.LogError().With([](const absl::Status& unused) { return nullptr; }));
+  absl::StatusOr<std::string> namespace_name =
+      adapter->GetNamespaceNameFromOid(namespace_oid);
   if (namespace_name.ok()) {
-    return pstrdup(*namespace_name);
+    return pstrdup(namespace_name->c_str());
   } else {
     return nullptr;
   }

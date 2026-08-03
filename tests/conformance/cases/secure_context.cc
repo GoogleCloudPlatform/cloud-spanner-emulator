@@ -31,6 +31,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "tests/conformance/common/database_test_base.h"
+#include "tests/conformance/common/environment.h"
 #include "grpcpp/client_context.h"
 #include "grpcpp/support/status.h"
 
@@ -337,6 +338,30 @@ TEST_F(SecureContextTest, CaseInsensitiveKeys) {
                                         {{"Foo", MakeStringValue("baz")}});
   GOOGLESQL_ASSERT_OK(results);
   EXPECT_THAT(*results, ElementsAre(ElementsAre("baz")));
+}
+
+TEST_F(SecureContextTest, CreateDefinerView) {
+  // Create a view that uses SECURE_CONTEXT and SQL SECURITY DEFINER
+  GOOGLESQL_ASSERT_OK(
+      UpdateSchema({"CREATE VIEW DefinerView SQL SECURITY DEFINER AS SELECT "
+                    "SECURE_CONTEXT('foo') AS val"})
+          .status());
+
+  // Test reading from the view with a present key
+  absl::StatusOr<std::vector<std::vector<std::string>>> results =
+      ExecuteSqlWithSecureContext("SELECT val FROM DefinerView",
+                                  {{"foo", MakeStringValue("bar")}});
+  GOOGLESQL_ASSERT_OK(results);
+  EXPECT_THAT(*results, ElementsAre(ElementsAre("bar")));
+
+  // Check INFORMATION_SCHEMA.VIEWS to verify it is DEFINER
+  if (!GetConformanceTestGlobals().in_prod_env) {
+    absl::StatusOr<std::vector<ValueRow>> view_results = Query(
+        "SELECT security_type FROM INFORMATION_SCHEMA.VIEWS WHERE table_name = "
+        "'DefinerView'");
+    GOOGLESQL_ASSERT_OK(view_results);
+    EXPECT_THAT(*view_results, ElementsAre(ValueRow(Value("DEFINER"))));
+  }
 }
 
 }  // namespace

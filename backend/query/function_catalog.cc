@@ -49,6 +49,7 @@
 #include "absl/types/span.h"
 #include "backend/common/case.h"
 #include "backend/query/analyzer_options.h"
+#include "backend/query/graph/mock_graph_algo_table_valued_function.h"
 #include "backend/query/ml/ml_predict_row_function.h"
 #include "backend/query/ml/ml_predict_table_valued_function.h"
 #include "backend/query/ml/model_evaluator.h"
@@ -586,6 +587,7 @@ FunctionCatalog::FunctionCatalog(googlesql::TypeFactory* type_factory,
   AddSpannerPGFunctions();
   AddPGLambdaFunctions();
   AddSearchFunctions(type_factory);
+  AddMockGraphAlgoFunctions(table_valued_functions_);
 }
 
 void FunctionCatalog::AddGoogleSQLBuiltInFunctions(
@@ -641,11 +643,11 @@ void FunctionCatalog::AddGraphSafeToJsonSignatures() {
   if (it != functions_.end()) {
     it->second->AddSignature(googlesql::FunctionSignature(
         googlesql::types::JsonType(),
-        {googlesql::FunctionArgumentType(googlesql::ARG_TYPE_GRAPH_NODE)},
+        {googlesql::FunctionArgumentType(googlesql::ARG_KIND_EXPR_GRAPH_NODE)},
         nullptr));
     it->second->AddSignature(googlesql::FunctionSignature(
         googlesql::types::JsonType(),
-        {googlesql::FunctionArgumentType(googlesql::ARG_TYPE_GRAPH_EDGE)},
+        {googlesql::FunctionArgumentType(googlesql::ARG_KIND_EXPR_GRAPH_EDGE)},
         nullptr));
   }
 }

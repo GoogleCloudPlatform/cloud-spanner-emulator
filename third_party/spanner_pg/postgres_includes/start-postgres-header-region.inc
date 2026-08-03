@@ -56,10 +56,16 @@ extern "C" {
 #undef ERROR
 #pragma push_macro("FATAL")
 #undef FATAL
+#pragma push_macro("NOTICE")
+#undef NOTICE
 #pragma push_macro("PANIC")
 #undef PANIC
 #pragma push_macro("INVALID")
 #undef INVALID
+#pragma push_macro("EPOCH")
+#undef EPOCH
+#pragma push_macro("ZULU")
+#undef ZULU
 #pragma push_macro("NOW")
 #undef NOW
 #pragma push_macro("Abs")

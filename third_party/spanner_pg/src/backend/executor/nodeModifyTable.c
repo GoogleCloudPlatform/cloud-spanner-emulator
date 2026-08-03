@@ -2644,14 +2644,6 @@ ExecOnConflictUpdate(ModifyTableContext *context,
 						 errmsg("could not serialize access due to concurrent update")));
 
 			/*
-			 * As long as we don't support an UPDATE of INSERT ON CONFLICT for
-			 * a partitioned table we shouldn't reach to a case where tuple to
-			 * be lock is moved to another partition due to concurrent update
-			 * of the partition key.
-			 */
-			Assert(!ItemPointerIndicatesMovedPartitions(&tmfd.ctid));
-
-			/*
 			 * Tell caller to try again from the very start.
 			 *
 			 * It does not make sense to use the usual EvalPlanQual() style
@@ -2668,7 +2660,6 @@ ExecOnConflictUpdate(ModifyTableContext *context,
 						 errmsg("could not serialize access due to concurrent delete")));
 
 			/* see TM_Updated case */
-			Assert(!ItemPointerIndicatesMovedPartitions(&tmfd.ctid));
 			ExecClearTuple(existing);
 			return false;
 
@@ -3085,6 +3076,11 @@ lmerge_matched:
 					TupleTableSlot *epqslot,
 							   *inputslot;
 					LockTupleMode lockmode;
+
+					if (IsolationUsesXactSnapshot())
+						ereport(ERROR,
+								(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
+								 errmsg("could not serialize access due to concurrent update")));
 
 					/*
 					 * The target tuple was concurrently updated by some other
@@ -3925,8 +3921,12 @@ ExecModifyTable(PlanState *pstate)
 				relkind == RELKIND_MATVIEW ||
 				relkind == RELKIND_PARTITIONED_TABLE)
 			{
-				/* ri_RowIdAttNo refers to a ctid attribute */
-				Assert(AttributeNumberIsValid(resultRelInfo->ri_RowIdAttNo));
+				/*
+				 * ri_RowIdAttNo refers to a ctid attribute.  See the comment
+				 * in ExecInitModifyTable().
+				 */
+				Assert(AttributeNumberIsValid(resultRelInfo->ri_RowIdAttNo) ||
+					   relkind == RELKIND_PARTITIONED_TABLE);
 				datum = ExecGetJunkAttribute(slot,
 											 resultRelInfo->ri_RowIdAttNo,
 											 &isNull);
@@ -4316,7 +4316,16 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 			{
 				resultRelInfo->ri_RowIdAttNo =
 					ExecFindJunkAttributeInTlist(subplan->targetlist, "ctid");
-				if (!AttributeNumberIsValid(resultRelInfo->ri_RowIdAttNo))
+
+				/*
+				 * For heap relations, a ctid junk attribute must be present.
+				 * Partitioned tables should only appear here when all leaf
+				 * partitions were pruned, in which case no rows can be
+				 * produced and ctid is not needed.
+				 */
+				if (relkind == RELKIND_PARTITIONED_TABLE)
+					Assert(nrels == 1);
+				else if (!AttributeNumberIsValid(resultRelInfo->ri_RowIdAttNo))
 					elog(ERROR, "could not find junk ctid column");
 			}
 			else if (relkind == RELKIND_FOREIGN_TABLE)

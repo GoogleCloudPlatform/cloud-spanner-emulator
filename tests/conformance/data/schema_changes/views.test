@@ -226,7 +226,7 @@ ERROR:.* `V` is missing the SQL SECURITY clause.
 # --regex
 CREATE VIEW S1 SQL SECURITY FOO AS SELECT T.K FROM T;
 --
-ERROR: INVALID_ARGUMENT: .* Expecting 'INVOKER' but found 'FOO'
+ERROR: INVALID_ARGUMENT: .* Encountered 'FOO' while parsing: sql_security
 ==
 # Invalid type in view definition.
 # --regex

@@ -14,7 +14,7 @@ package(
     ],
 )
 
-licenses(["restricted"])
+licenses(["notice"])
 
 filegroup(
     name = "tools_perfhash",

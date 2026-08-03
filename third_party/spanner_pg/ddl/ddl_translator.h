@@ -151,6 +151,7 @@ struct TranslationOptions {
   bool enable_serial_types = false;
   // enable_uuid_type allows translation of UUID type.
   bool enable_uuid_type = false;
+  bool enable_tables_without_primary_keys = false;
   // enable_alter_table_if_exists allows the IF EXISTS clause for ALTER TABLE.
   bool enable_alter_table_if_exists = false;
   // enable_hash_sharded_index allows translation of HASH PARTITION KEY.

@@ -16,26 +16,34 @@
 
 #include "frontend/converters/change_streams.h"
 
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
 
 #include "google/protobuf/struct.pb.h"
+#include "google/spanner/v1/change_stream.pb.h"
 #include "google/spanner/v1/result_set.pb.h"
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/json_value.h"
 #include "googlesql/public/simple_catalog.h"
 #include "googlesql/public/type.h"
 #include "googlesql/public/types/array_type.h"
 #include "googlesql/public/types/type.h"
 #include "googlesql/public/types/type_factory.h"
 #include "googlesql/public/value.h"
-#include "googlesql/base/no_destructor.h"
+#include "absl/base/no_destructor.h"
+#include "absl/container/flat_hash_map.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
+#include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
+#include "absl/time/time.h"
+#include "absl/types/span.h"
 #include "backend/access/read.h"
 #include "backend/query/analyzer_options.h"
 #include "common/constants.h"
@@ -45,6 +53,9 @@
 #include "frontend/converters/values.h"
 #include "googlesql/base/ret_check.h"
 #include "googlesql/base/status_macros.h"
+#include "google/protobuf/descriptor.h"
+#include "google/protobuf/json/json.h"
+#include "google/protobuf/repeated_ptr_field.h"
 
 namespace google {
 namespace spanner {
@@ -61,6 +72,7 @@ struct ChangeStreamOutputTypes {
     ConstructChildPartitionRecordTypes();
     ConstructHeartbeatRecordTypes();
     ConstructDataChangeRecordTypes();
+    ConstructChangeStreamRecordProtoType();
   }
 
   googlesql::TypeFactory type_factory;
@@ -87,6 +99,8 @@ struct ChangeStreamOutputTypes {
   const googlesql::StructType* column_types_struct;
   const googlesql::ArrayType* mods_arr;
   const googlesql::StructType* mods_struct;
+  // ChangeStreamRecord Proto Type
+  const googlesql::ProtoType* change_stream_record_proto_type;
 
   void ConstructChangeRecordTypes() {
     ABSL_CHECK_OK(googlesql::AnalyzeType(
@@ -141,11 +155,18 @@ struct ChangeStreamOutputTypes {
                    ->type->AsArray();
     mods_struct = mods_arr->AsArray()->element_type()->AsStruct();
   }
+
+  void ConstructChangeStreamRecordProtoType() {
+    const google::protobuf::Descriptor* descriptor =
+        google::spanner::v1::ChangeStreamRecord::descriptor();
+    ABSL_CHECK_OK(type_factory.MakeProtoType(descriptor,  // Crash OK
+                                        &change_stream_record_proto_type));
+  }
 };
 
 // Singleton static struct that contains all the fixed record types.
 const ChangeStreamOutputTypes* GetChangeStreamOutputTypes() {
-  static const googlesql_base::NoDestructor<ChangeStreamOutputTypes>
+  static const absl::NoDestructor<ChangeStreamOutputTypes>
       kChangeStreamOutputTypes{};
   return kChangeStreamOutputTypes.get();
 }
@@ -458,6 +479,510 @@ ConvertDataTableRowCursorToStruct(backend::RowCursor* row_cursor,
                    ChunkResultSet(result_pb, limits::kMaxStreamingChunkSize));
   if (expect_metadata) {
     GOOGLESQL_RETURN_IF_ERROR(PopulateMetadata(&responses));
+  } else {
+    responses.at(0).clear_metadata();
+  }
+  PopulateFakeResumeTokens(&responses);
+  return responses;
+}
+
+namespace {
+
+absl::Status JsonValueRefToProtoValue(googlesql::JSONValueConstRef ref,
+                                      google::protobuf::Value* proto) {
+  if (ref.IsNull()) {
+    proto->set_null_value(google::protobuf::NullValue::NULL_VALUE);
+  } else if (ref.IsBoolean()) {
+    proto->set_bool_value(ref.GetBoolean());
+  } else if (ref.IsInt64()) {
+    proto->set_number_value(static_cast<double>(ref.GetInt64()));
+  } else if (ref.IsDouble()) {
+    proto->set_number_value(ref.GetDouble());
+  } else if (ref.IsString()) {
+    proto->set_string_value(ref.GetString());
+  } else if (ref.IsArray()) {
+    auto* list = proto->mutable_list_value();
+    for (int i = 0; i < ref.GetArraySize(); ++i) {
+      GOOGLESQL_RETURN_IF_ERROR(
+          JsonValueRefToProtoValue(ref.GetArrayElement(i), list->add_values()));
+    }
+  } else if (ref.IsObject()) {
+    auto* struct_pb = proto->mutable_struct_value();
+    for (const auto& [key, val] : ref.GetMembers()) {
+      GOOGLESQL_RETURN_IF_ERROR(
+          JsonValueRefToProtoValue(val, &(*struct_pb->mutable_fields())[key]));
+    }
+  }
+  return absl::OkStatus();
+}
+
+absl::Status ParseModsJson(
+    absl::string_view json_str,
+    const absl::flat_hash_map<std::string, int32_t>& column_name_to_index,
+    google::protobuf::RepeatedPtrField<
+        spanner_api::ChangeStreamRecord::DataChangeRecord::ModValue>*
+        proto_field) {
+  if (json_str.empty() || json_str == "null") {
+    return absl::OkStatus();
+  }
+  GOOGLESQL_ASSIGN_OR_RETURN(auto json_val,
+                   googlesql::JSONValue::ParseJSONString(json_str));
+  googlesql::JSONValueConstRef ref = json_val.GetConstRef();
+  if (!ref.IsObject()) {
+    return absl::InternalError(
+        absl::StrCat("Expected JSON object for mods, got: ", json_str));
+  }
+  for (const auto& [name, val] : ref.GetMembers()) {
+    auto it = column_name_to_index.find(name);
+    if (it == column_name_to_index.end()) {
+      return absl::InternalError(
+          absl::StrCat("Column ", name, " not found in column_metadata"));
+    }
+    int32_t index = it->second;
+    auto* mod_val = proto_field->Add();
+    mod_val->set_column_metadata_index(index);
+    GOOGLESQL_RETURN_IF_ERROR(JsonValueRefToProtoValue(val, mod_val->mutable_value()));
+  }
+  return absl::OkStatus();
+}
+
+absl::Status RowCursorToProtoDataChangeRecord(
+    backend::RowCursor* cursor,
+    spanner_api::ChangeStreamRecord::DataChangeRecord* proto) {
+  absl::Time commit_time = cursor->ColumnValue(1).ToTime();
+  int64_t s = absl::ToUnixSeconds(commit_time);
+  int64_t ns = absl::ToInt64Nanoseconds(commit_time - absl::FromUnixSeconds(s));
+  proto->mutable_commit_timestamp()->set_seconds(s);
+  proto->mutable_commit_timestamp()->set_nanos(ns);
+
+  proto->set_record_sequence(cursor->ColumnValue(3).string_value());
+  proto->set_server_transaction_id(cursor->ColumnValue(2).string_value());
+  proto->set_is_last_record_in_transaction_in_partition(
+      cursor->ColumnValue(4).bool_value());
+  proto->set_table(cursor->ColumnValue(5).string_value());
+
+  googlesql::Value column_types_name_arr = cursor->ColumnValue(6);
+  googlesql::Value column_types_type_arr = cursor->ColumnValue(7);
+  googlesql::Value column_types_is_primary_key = cursor->ColumnValue(8);
+  googlesql::Value column_types_ordinal_position = cursor->ColumnValue(9);
+  absl::flat_hash_map<std::string, int32_t> column_name_to_index;
+  column_name_to_index.reserve(column_types_name_arr.num_elements());
+  for (int i = 0; i < column_types_name_arr.num_elements(); i++) {
+    std::string col_name = column_types_name_arr.element(i).string_value();
+    column_name_to_index[col_name] = i;
+
+    auto* column_metadata = proto->add_column_metadata();
+    column_metadata->set_name(col_name);
+    column_metadata->set_is_primary_key(
+        column_types_is_primary_key.element(i).bool_value());
+    column_metadata->set_ordinal_position(
+        column_types_ordinal_position.element(i).int64_value());
+
+    std::string type_json_str = column_types_type_arr.element(i).string_value();
+    auto status = google::protobuf::json::JsonStringToMessage(
+        type_json_str, column_metadata->mutable_type());
+    if (!status.ok()) {
+      return absl::InternalError(
+          absl::StrCat("Failed to parse column type JSON: ", type_json_str,
+                       " error: ", status.ToString()));
+    }
+  }
+
+  googlesql::Value mods_keys_arr = cursor->ColumnValue(10);
+  googlesql::Value mods_new_values_arr = cursor->ColumnValue(11);
+  googlesql::Value mods_old_values_arr = cursor->ColumnValue(12);
+  for (int i = 0; i < mods_keys_arr.num_elements(); i++) {
+    auto* mod = proto->add_mods();
+    GOOGLESQL_RETURN_IF_ERROR(ParseModsJson(mods_keys_arr.element(i).string_value(),
+                                  column_name_to_index, mod->mutable_keys()));
+    GOOGLESQL_RETURN_IF_ERROR(ParseModsJson(mods_new_values_arr.element(i).string_value(),
+                                  column_name_to_index,
+                                  mod->mutable_new_values()));
+    GOOGLESQL_RETURN_IF_ERROR(ParseModsJson(mods_old_values_arr.element(i).string_value(),
+                                  column_name_to_index,
+                                  mod->mutable_old_values()));
+  }
+
+  std::string mod_type_str = cursor->ColumnValue(13).string_value();
+  spanner_api::ChangeStreamRecord::DataChangeRecord::ModType mod_type;
+  if (!spanner_api::ChangeStreamRecord_DataChangeRecord_ModType_Parse(
+          mod_type_str, &mod_type)) {
+    return absl::InternalError(
+        absl::StrCat("Failed to parse ModType: ", mod_type_str));
+  }
+  proto->set_mod_type(mod_type);
+
+  std::string value_capture_type_str = cursor->ColumnValue(14).string_value();
+  spanner_api::ChangeStreamRecord::DataChangeRecord::ValueCaptureType
+      value_capture_type;
+  if (!spanner_api::ChangeStreamRecord_DataChangeRecord_ValueCaptureType_Parse(
+          value_capture_type_str, &value_capture_type)) {
+    return absl::InternalError(absl::StrCat(
+        "Failed to parse ValueCaptureType: ", value_capture_type_str));
+  }
+  proto->set_value_capture_type(value_capture_type);
+
+  proto->set_number_of_records_in_transaction(
+      cursor->ColumnValue(15).int64_value());
+  proto->set_number_of_partitions_in_transaction(
+      cursor->ColumnValue(16).int64_value());
+  proto->set_transaction_tag(cursor->ColumnValue(17).string_value());
+  proto->set_is_system_transaction(cursor->ColumnValue(18).bool_value());
+
+  return absl::OkStatus();
+}
+
+absl::Status AddChangeRecordProtoToResultSet(
+    const spanner_api::ChangeStreamRecord& change_record_proto,
+    spanner_api::ResultSet& result_pb) {
+  const googlesql::ProtoType* proto_type =
+      GetChangeStreamOutputTypes()->change_stream_record_proto_type;
+  googlesql::Value change_record_val =
+      googlesql::values::Proto(proto_type, change_record_proto);
+  auto* row_pb = result_pb.add_rows();
+  GOOGLESQL_ASSIGN_OR_RETURN(*row_pb->add_values(), ValueToProto(change_record_val));
+  return absl::OkStatus();
+}
+
+void PopulateProtoPartitionStartRecord(
+    absl::Time start_time, absl::string_view partition_token,
+    int64_t record_sequence,
+    spanner_api::ChangeStreamRecord::PartitionStartRecord* proto) {
+  int64_t s = absl::ToUnixSeconds(start_time);
+  int64_t ns = absl::ToInt64Nanoseconds(start_time - absl::FromUnixSeconds(s));
+  proto->mutable_start_timestamp()->set_seconds(s);
+  proto->mutable_start_timestamp()->set_nanos(ns);
+  proto->set_record_sequence(ToFragmentIdString(record_sequence));
+  proto->add_partition_tokens(std::string(partition_token));
+}
+
+void PopulateProtoPartitionMoveInEventRecord(
+    absl::Time commit_time, absl::string_view partition_token,
+    absl::Span<const std::string> source_partition_tokens,
+    int64_t record_sequence,
+    spanner_api::ChangeStreamRecord::PartitionEventRecord* proto) {
+  int64_t s = absl::ToUnixSeconds(commit_time);
+  int64_t ns = absl::ToInt64Nanoseconds(commit_time - absl::FromUnixSeconds(s));
+  proto->mutable_commit_timestamp()->set_seconds(s);
+  proto->mutable_commit_timestamp()->set_nanos(ns);
+  proto->set_record_sequence(ToFragmentIdString(record_sequence));
+  proto->set_partition_token(std::string(partition_token));
+  for (const auto& src_token : source_partition_tokens) {
+    auto* move_in = proto->add_move_in_events();
+    move_in->set_source_partition_token(src_token);
+  }
+}
+
+void PopulateProtoPartitionMoveOutEventRecord(
+    absl::Time commit_time, absl::string_view partition_token,
+    absl::Span<const std::string> destination_partition_tokens,
+    int64_t record_sequence,
+    spanner_api::ChangeStreamRecord::PartitionEventRecord* proto) {
+  int64_t s = absl::ToUnixSeconds(commit_time);
+  int64_t ns = absl::ToInt64Nanoseconds(commit_time - absl::FromUnixSeconds(s));
+  proto->mutable_commit_timestamp()->set_seconds(s);
+  proto->mutable_commit_timestamp()->set_nanos(ns);
+  proto->set_record_sequence(ToFragmentIdString(record_sequence));
+  proto->set_partition_token(std::string(partition_token));
+  for (const auto& dest_token : destination_partition_tokens) {
+    auto* move_out = proto->add_move_out_events();
+    move_out->set_destination_partition_token(dest_token);
+  }
+}
+
+void PopulateProtoPartitionEndRecord(
+    absl::Time end_time, absl::string_view partition_token,
+    int64_t record_sequence,
+    spanner_api::ChangeStreamRecord::PartitionEndRecord* proto) {
+  int64_t s = absl::ToUnixSeconds(end_time);
+  int64_t ns = absl::ToInt64Nanoseconds(end_time - absl::FromUnixSeconds(s));
+  proto->mutable_end_timestamp()->set_seconds(s);
+  proto->mutable_end_timestamp()->set_nanos(ns);
+  proto->set_record_sequence(ToFragmentIdString(record_sequence));
+  proto->set_partition_token(std::string(partition_token));
+}
+
+absl::Status RowCursorToProtoPartitionStartRecord(
+    backend::RowCursor* cursor, int64_t record_sequence,
+    std::optional<absl::Time> initial_start_timestamp,
+    spanner_api::ChangeStreamRecord::PartitionStartRecord* proto) {
+  absl::Time start_time = initial_start_timestamp.has_value()
+                              ? initial_start_timestamp.value()
+                              : cursor->ColumnValue(0).ToTime();
+  PopulateProtoPartitionStartRecord(start_time,
+                                    cursor->ColumnValue(1).string_value(),
+                                    record_sequence, proto);
+  return absl::OkStatus();
+}
+
+absl::Status PopulateMetadataForProto(
+    std::vector<spanner_api::PartialResultSet>* responses) {
+  auto* result_metadata_pb = responses->at(0).mutable_metadata();
+  auto* field_pb = result_metadata_pb->mutable_row_type()->add_fields();
+  field_pb->set_name(kChangeStreamTvfOutputColumn);
+  GOOGLESQL_RETURN_IF_ERROR(
+      TypeToProto(GetChangeStreamOutputTypes()->change_stream_record_proto_type,
+                  field_pb->mutable_type()));
+  return absl::OkStatus();
+}
+
+// The passed in cursor is guaranteed to have the shape of
+// {start_time(TIMESTAMP), partition_token(STRING), parents(ARRAY<STRING>)}
+// due to the fixed shape of change stream internal partition table.
+struct PartitionRow {
+  absl::Time start_time;
+  std::string child_token;
+  std::vector<std::string> parents;
+};
+
+absl::Status ConvertMergeEventToProto(const PartitionRow& row,
+                                      absl::string_view partition_token,
+                                      spanner_api::ResultSet& result_pb) {
+  int64_t record_sequence = 0;
+
+  bool is_first_parent =
+      !row.parents.empty() && partition_token == row.parents[0];
+
+  // PartitionStartRecord for merged child (only generated in 1st parent).
+  if (is_first_parent) {
+    spanner_api::ChangeStreamRecord start_record_proto;
+    auto* start_proto = start_record_proto.mutable_partition_start_record();
+    PopulateProtoPartitionStartRecord(row.start_time, row.child_token,
+                                      record_sequence++, start_proto);
+    GOOGLESQL_RETURN_IF_ERROR(
+        AddChangeRecordProtoToResultSet(start_record_proto, result_pb));
+  }
+
+  // Key range move out PartitionEventRecord from partition_token to
+  // child_token.
+  {
+    spanner_api::ChangeStreamRecord event_record_proto;
+    auto* event_proto = event_record_proto.mutable_partition_event_record();
+    PopulateProtoPartitionMoveOutEventRecord(row.start_time, partition_token,
+                                             {row.child_token},
+                                             record_sequence++, event_proto);
+    GOOGLESQL_RETURN_IF_ERROR(
+        AddChangeRecordProtoToResultSet(event_record_proto, result_pb));
+  }
+
+  // PartitionEndRecord for partition_token.
+  {
+    spanner_api::ChangeStreamRecord end_record_proto;
+    auto* end_proto = end_record_proto.mutable_partition_end_record();
+    PopulateProtoPartitionEndRecord(row.start_time, partition_token,
+                                    record_sequence++, end_proto);
+    GOOGLESQL_RETURN_IF_ERROR(
+        AddChangeRecordProtoToResultSet(end_record_proto, result_pb));
+  }
+
+  return absl::OkStatus();
+}
+
+absl::Status ConvertSplitEventToProto(const std::vector<PartitionRow>& rows,
+                                      absl::string_view partition_token,
+                                      spanner_api::ResultSet& result_pb) {
+  int64_t record_sequence = 0;
+
+  // PartitionStartRecord for each split child partition.
+  std::vector<std::string> destination_child_tokens;
+  destination_child_tokens.reserve(rows.size());
+  for (const auto& row : rows) {
+    destination_child_tokens.push_back(row.child_token);
+    spanner_api::ChangeStreamRecord start_record_proto;
+    auto* start_proto = start_record_proto.mutable_partition_start_record();
+    PopulateProtoPartitionStartRecord(row.start_time, row.child_token,
+                                      record_sequence++, start_proto);
+    GOOGLESQL_RETURN_IF_ERROR(
+        AddChangeRecordProtoToResultSet(start_record_proto, result_pb));
+  }
+
+  absl::Time event_time = rows[0].start_time;
+
+  // Key range move out PartitionEventRecord from partition_token to child
+  // partitions.
+  {
+    spanner_api::ChangeStreamRecord event_record_proto;
+    auto* event_proto = event_record_proto.mutable_partition_event_record();
+    PopulateProtoPartitionMoveOutEventRecord(event_time, partition_token,
+                                             destination_child_tokens,
+                                             record_sequence++, event_proto);
+    GOOGLESQL_RETURN_IF_ERROR(
+        AddChangeRecordProtoToResultSet(event_record_proto, result_pb));
+  }
+
+  // PartitionEndRecord for partition_token.
+  {
+    spanner_api::ChangeStreamRecord end_record_proto;
+    auto* end_proto = end_record_proto.mutable_partition_end_record();
+    PopulateProtoPartitionEndRecord(event_time, partition_token,
+                                    record_sequence++, end_proto);
+    GOOGLESQL_RETURN_IF_ERROR(
+        AddChangeRecordProtoToResultSet(end_record_proto, result_pb));
+  }
+
+  return absl::OkStatus();
+}
+
+absl::Status RowCursorToProtoPartitionChurningRecord(
+    backend::RowCursor* row_cursor, absl::string_view partition_token,
+    spanner_api::ResultSet& result_pb) {
+  std::vector<PartitionRow> rows;
+  while (row_cursor->Next()) {
+    PartitionRow r;
+    r.start_time = row_cursor->ColumnValue(0).ToTime();
+    r.child_token = row_cursor->ColumnValue(1).string_value();
+    googlesql::Value parents_val = row_cursor->ColumnValue(2);
+    r.parents.reserve(parents_val.num_elements());
+    for (int i = 0; i < parents_val.num_elements(); ++i) {
+      r.parents.push_back(parents_val.element(i).string_value());
+    }
+    rows.push_back(r);
+  }
+
+  if (rows.size() == 1 && rows[0].parents.size() == 1) {
+    return absl::InternalError(
+        "Move event partition churning is not supported in mutable key range "
+        "Change Streams.");
+  }
+  if (rows.size() == 1 && rows[0].parents.size() > 1) {
+    return ConvertMergeEventToProto(rows[0], partition_token, result_pb);
+  }
+  if (rows.size() > 1) {
+    return ConvertSplitEventToProto(rows, partition_token, result_pb);
+  }
+  return absl::OkStatus();
+}
+
+}  // namespace
+
+absl::StatusOr<std::vector<spanner_api::PartialResultSet>>
+ConvertPartitionTableRowCursorToProto(
+    backend::RowCursor* row_cursor,
+    std::optional<absl::Time> initial_start_timestamp,
+    absl::string_view partition_token, bool expect_metadata) {
+  spanner_api::ResultSet result_pb;
+
+  if (initial_start_timestamp.has_value()) {
+    // Initial Query: Return PartitionStartRecord for each partition.
+    int64_t record_sequence = 0;
+    spanner_api::ChangeStreamRecord change_record_proto;
+    while (row_cursor->Next()) {
+      change_record_proto.Clear();
+      auto* start_proto = change_record_proto.mutable_partition_start_record();
+      GOOGLESQL_RETURN_IF_ERROR(RowCursorToProtoPartitionStartRecord(
+          row_cursor, record_sequence++, initial_start_timestamp, start_proto));
+      GOOGLESQL_RETURN_IF_ERROR(
+          AddChangeRecordProtoToResultSet(change_record_proto, result_pb));
+    }
+  } else {
+    // Partition Query: Return PartitionStartRecords, PartitionEventRecords, and
+    // PartitionEndRecords if needed.
+    GOOGLESQL_RETURN_IF_ERROR(RowCursorToProtoPartitionChurningRecord(
+        row_cursor, partition_token, result_pb));
+  }
+
+  GOOGLESQL_ASSIGN_OR_RETURN(auto responses,
+                   ChunkResultSet(result_pb, limits::kMaxStreamingChunkSize));
+  if (expect_metadata) {
+    GOOGLESQL_RETURN_IF_ERROR(PopulateMetadataForProto(&responses));
+  } else {
+    responses.at(0).clear_metadata();
+  }
+  PopulateFakeResumeTokens(&responses);
+  return responses;
+}
+
+absl::StatusOr<std::vector<spanner_api::PartialResultSet>>
+ConvertQueryStartPartitionTableRowCursorToProto(backend::RowCursor* row_cursor,
+                                                absl::Time query_start_time,
+                                                bool expect_metadata) {
+  spanner_api::ResultSet result_pb;
+  int64_t record_sequence = 0;
+  spanner_api::ChangeStreamRecord change_record_proto;
+
+  while (row_cursor->Next()) {
+    absl::Time start_time = row_cursor->ColumnValue(0).ToTime();
+    // Skip emitting PartitionEventRecords with partition start time before
+    // query start time.
+    if (query_start_time > start_time) {
+      continue;
+    }
+    change_record_proto.Clear();
+    std::string partition_token = row_cursor->ColumnValue(1).string_value();
+    std::vector<std::string> source_partition_tokens;
+    googlesql::Value source_partition_tokens_val = row_cursor->ColumnValue(2);
+    source_partition_tokens.reserve(source_partition_tokens_val.num_elements());
+    for (int i = 0; i < source_partition_tokens_val.num_elements(); ++i) {
+      source_partition_tokens.push_back(
+          source_partition_tokens_val.element(i).string_value());
+    }
+
+    auto* event_proto = change_record_proto.mutable_partition_event_record();
+    PopulateProtoPartitionMoveInEventRecord(start_time, partition_token,
+                                            source_partition_tokens,
+                                            record_sequence++, event_proto);
+    GOOGLESQL_RETURN_IF_ERROR(
+        AddChangeRecordProtoToResultSet(change_record_proto, result_pb));
+  }
+  if (result_pb.rows_size() == 0) {
+    return std::vector<spanner_api::PartialResultSet>();
+  }
+  GOOGLESQL_ASSIGN_OR_RETURN(auto responses,
+                   ChunkResultSet(result_pb, limits::kMaxStreamingChunkSize));
+  if (expect_metadata) {
+    GOOGLESQL_RETURN_IF_ERROR(PopulateMetadataForProto(&responses));
+  } else {
+    responses.at(0).clear_metadata();
+  }
+  PopulateFakeResumeTokens(&responses);
+  return responses;
+}
+
+absl::StatusOr<std::vector<spanner_api::PartialResultSet>>
+ConvertHeartbeatTimestampToProto(absl::Time timestamp, bool expect_metadata) {
+  spanner_api::ResultSet result_pb;
+
+  spanner_api::ChangeStreamRecord change_record_proto;
+  auto* heartbeat_record_proto = change_record_proto.mutable_heartbeat_record();
+  int64_t s = absl::ToUnixSeconds(timestamp);
+  int64_t ns = absl::ToInt64Nanoseconds(timestamp - absl::FromUnixSeconds(s));
+  heartbeat_record_proto->mutable_timestamp()->set_seconds(s);
+  heartbeat_record_proto->mutable_timestamp()->set_nanos(ns);
+
+  GOOGLESQL_RETURN_IF_ERROR(
+      AddChangeRecordProtoToResultSet(change_record_proto, result_pb));
+
+  GOOGLESQL_ASSIGN_OR_RETURN(auto responses,
+                   ChunkResultSet(result_pb, limits::kMaxStreamingChunkSize));
+  if (expect_metadata) {
+    GOOGLESQL_RETURN_IF_ERROR(PopulateMetadataForProto(&responses));
+  } else {
+    responses.at(0).clear_metadata();
+  }
+  PopulateFakeResumeTokens(&responses);
+  return responses;
+}
+
+absl::StatusOr<std::vector<spanner_api::PartialResultSet>>
+ConvertDataTableRowCursorToProto(backend::RowCursor* row_cursor,
+                                 bool expect_metadata) {
+  spanner_api::ResultSet result_pb;
+  spanner_api::ChangeStreamRecord change_record_proto;
+  while (row_cursor->Next()) {
+    change_record_proto.Clear();
+    auto* data_change_record_proto =
+        change_record_proto.mutable_data_change_record();
+    GOOGLESQL_RETURN_IF_ERROR(
+        RowCursorToProtoDataChangeRecord(row_cursor, data_change_record_proto));
+
+    GOOGLESQL_RETURN_IF_ERROR(
+        AddChangeRecordProtoToResultSet(change_record_proto, result_pb));
+  }
+
+  GOOGLESQL_ASSIGN_OR_RETURN(auto responses,
+                   ChunkResultSet(result_pb, limits::kMaxStreamingChunkSize));
+  if (expect_metadata) {
+    GOOGLESQL_RETURN_IF_ERROR(PopulateMetadataForProto(&responses));
   } else {
     responses.at(0).clear_metadata();
   }

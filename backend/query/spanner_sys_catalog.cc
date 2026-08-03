@@ -21,7 +21,7 @@
 
 #include "googlesql/public/simple_catalog.h"
 #include "googlesql/public/value.h"
-#include "googlesql/base/no_destructor.h"
+#include "absl/base/no_destructor.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/log/check.h"
 #include "absl/strings/str_cat.h"
@@ -42,7 +42,7 @@ using ::googlesql::values::Int64;
 static constexpr char kSupportedOptimizerVersions[] =
     "SUPPORTED_OPTIMIZER_VERSIONS";
 
-static const googlesql_base::NoDestructor<absl::flat_hash_set<std::string>>
+static const absl::NoDestructor<absl::flat_hash_set<std::string>>
     kSupportedTables{{
         kSupportedOptimizerVersions,
     }};

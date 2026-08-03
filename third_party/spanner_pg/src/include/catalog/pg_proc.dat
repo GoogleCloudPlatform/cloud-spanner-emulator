@@ -12047,4 +12047,14 @@
   proname => 'any_value_transfn', prorettype => 'anyelement',
   proargtypes => 'anyelement anyelement', prosrc => 'any_value_transfn' },
 
+# Spangres: Validator for Spanner REMOTE Language
+{
+  oid => '50109',
+  descr => '(internal)',
+  proname => 'fmgr_remote_validator',
+  provolatile => 's',
+  prorettype => 'void',
+  proargtypes => 'oid',
+  prosrc => 'fmgr_remote_validator'
+},
 ]

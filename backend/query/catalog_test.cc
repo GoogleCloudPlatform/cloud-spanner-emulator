@@ -19,6 +19,7 @@
 #include <cassert>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "google/spanner/admin/database/v1/spanner_database_admin.pb.h"
 #include "googlesql/public/analyzer.h"
@@ -39,6 +40,7 @@
 #include "backend/query/catalog.h"
 #include "backend/query/function_catalog.h"
 #include "backend/query/queryable_named_schema.h"
+#include "backend/query/queryable_sequence.h"
 #include "backend/query/queryable_table.h"
 #include "backend/schema/catalog/schema.h"
 #include "common/constants.h"

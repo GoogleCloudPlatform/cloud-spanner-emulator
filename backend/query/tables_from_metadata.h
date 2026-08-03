@@ -24,7 +24,7 @@
 #include "googlesql/public/simple_catalog.h"
 #include "googlesql/public/types/type.h"
 #include "googlesql/public/types/type_factory.h"
-#include "googlesql/base/no_destructor.h"
+#include "absl/base/no_destructor.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "backend/query/info_schema_columns_metadata_values.h"
@@ -37,7 +37,7 @@ namespace backend {
 
 // Maps the type specified in the information catalog metadata for a Spanner
 // GoogleSQL database to a GoogleSQL type.
-static const googlesql_base::NoDestructor<
+static const absl::NoDestructor<
     absl::flat_hash_map<std::string, const googlesql::Type*>>
     kSpannerTypeToGSQLType{{
         {"BOOL", googlesql::types::BoolType()},
@@ -54,7 +54,7 @@ static const googlesql_base::NoDestructor<
 
 // Maps the type specified in the information catalog metadata for a Spanner
 // PostgreSQL database to a GoogleSQL type.
-static const googlesql_base::NoDestructor<
+static const absl::NoDestructor<
     absl::flat_hash_map<std::string, const googlesql::Type*>>
     kSpannerPGTypeToGSQLType{{
         {"bigint", googlesql::types::Int64Type()},

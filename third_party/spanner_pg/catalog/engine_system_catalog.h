@@ -521,10 +521,10 @@ class EngineSystemCatalog : public googlesql::EnumerableCatalog {
 
  private:
   // Transforms a PostgreSQL type oid into a GoogleSQL FunctionArgumentType.
-  // The PostgreSQL ANYOID type is transformed into a GoogleSQL ARG_TYPE_ANY_1
-  // function argument type.
-  // All other PostgreSQL types are either successfully transformed to a
-  // supported GoogleSQL type or cause an error to be thrown.
+  // The PostgreSQL ANYOID type is transformed into a GoogleSQL
+  // ARG_KIND_EXPR_ANY_1 function argument type. All other PostgreSQL types
+  // are either successfully transformed to a supported GoogleSQL type or cause
+  // an error to be thrown.
   absl::StatusOr<googlesql::FunctionArgumentType> BuildGsqlFunctionArgumentType(
       Oid type_oid, googlesql::FunctionEnums::ArgumentCardinality cardinality);
 

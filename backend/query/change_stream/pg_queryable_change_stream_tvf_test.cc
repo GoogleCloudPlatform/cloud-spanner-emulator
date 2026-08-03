@@ -31,7 +31,9 @@
 #include "backend/query/function_catalog.h"
 #include "backend/schema/catalog/schema.h"
 #include "common/constants.h"
+#include "common/feature_flags.h"
 #include "tests/common/schema_constructor.h"
+#include "tests/common/scoped_feature_flags_setter.h"
 #include "googlesql/base/status_macros.h"
 #include "third_party/spanner_pg/interface/emulator_parser.h"
 #include "third_party/spanner_pg/interface/pg_arena.h"
@@ -67,6 +69,17 @@ class PgQueryableChangeStreamTvfTest : public testing::Test {
             &type_factory_, kCloudSpannerEmulatorFunctionCatalogName,
             schema_.get()));
   }
+
+  absl::StatusOr<std::unique_ptr<const Schema>>
+  CreateMutableKeyRangeChangeStreamSchema() {
+    EmulatorFeatureFlags::Flags flags;
+    flags.enable_mutable_key_range_change_stream = true;
+    test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+    return test::CreateSchemaWithOneTableAndOneChangeStream(
+        &type_factory_, database_api::DatabaseDialect::POSTGRESQL,
+        /*is_mutable_key_range=*/true);
+  }
+
   std::unique_ptr<const Schema> schema_ = nullptr;
   googlesql::TypeFactory type_factory_;
   googlesql::AnalyzerOptions analyzer_options_;
@@ -81,11 +94,33 @@ TEST_F(PgQueryableChangeStreamTvfTest, CreateChangeStreamTvfPgOk) {
   GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto queryable_tvf,
                        QueryableChangeStreamTvf::Create(
                            schema_change_stream->tvf_name(), analyzer_options_,
-                           catalog_.get(), &type_factory_, true));
+                           catalog_.get(), &type_factory_, true, false));
   EXPECT_EQ(queryable_tvf->Name(), "read_json_change_stream_test_table");
   EXPECT_EQ(queryable_tvf->result_schema().num_columns(), 1);
   EXPECT_EQ(queryable_tvf->result_schema().column(0).type->DebugString(),
             "PG.JSONB");
+  EXPECT_EQ(queryable_tvf->GetSignature(0)->arguments().size(), 5);
+}
+
+TEST_F(PgQueryableChangeStreamTvfTest,
+       CreateMutableKeyRangeChangeStreamTvfPgOk) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const auto schema,
+                       CreateMutableKeyRangeChangeStreamSchema());
+  const auto* schema_change_stream =
+      schema->FindChangeStream("change_stream_test_table");
+  ASSERT_NE(schema_change_stream, nullptr);
+  FunctionCatalog fn_catalog(
+      &type_factory_, kCloudSpannerEmulatorFunctionCatalogName, schema.get());
+  Catalog catalog(schema.get(), &fn_catalog, &type_factory_, analyzer_options_);
+
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto queryable_tvf,
+                       QueryableChangeStreamTvf::Create(
+                           schema_change_stream->tvf_name(), analyzer_options_,
+                           &catalog, &type_factory_, true, true));
+  EXPECT_EQ(queryable_tvf->Name(), "read_proto_bytes_change_stream_test_table");
+  EXPECT_EQ(queryable_tvf->result_schema().num_columns(), 1);
+  EXPECT_EQ(queryable_tvf->result_schema().column(0).type->DebugString(),
+            "BYTES");
   EXPECT_EQ(queryable_tvf->GetSignature(0)->arguments().size(), 5);
 }
 

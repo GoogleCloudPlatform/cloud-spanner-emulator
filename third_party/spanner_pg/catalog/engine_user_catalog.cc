@@ -83,6 +83,14 @@ absl::Status EngineUserCatalog::FindTable(
   return engine_provided_catalog_->FindTable(adjusted_path, table, options);
 }
 
+absl::Status EngineUserCatalog::FindSequence(
+    const absl::Span<const std::string>& path,
+    const googlesql::Sequence** sequence, const FindOptions& options) {
+  GOOGLESQL_ASSIGN_OR_RETURN(const auto& adjusted_path, AdjustPath(path));
+  return engine_provided_catalog_->FindSequence(adjusted_path, sequence,
+                                                options);
+}
+
 absl::Status EngineUserCatalog::FindFunction(
     const absl::Span<const std::string>& path,
     const googlesql::Function** function, const FindOptions& options) {

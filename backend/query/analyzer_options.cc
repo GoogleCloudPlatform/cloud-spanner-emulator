@@ -104,6 +104,7 @@ googlesql::LanguageOptions MakeGoogleSqlLanguageOptions() {
       googlesql::FEATURE_SQL_GRAPH_DYNAMIC_LABEL_EXTENSION_IN_DDL,
       googlesql::FEATURE_SQL_GRAPH_DYNAMIC_ELEMENT_TYPE,
       googlesql::FEATURE_SQL_GRAPH_RETURN_EXTENSIONS,
+      googlesql::FEATURE_SQL_GRAPH_CALL,
       googlesql::FEATURE_UUID_TYPE,
       googlesql::FEATURE_FOR_UPDATE,
       googlesql::FEATURE_INLINE_LAMBDA_ARGUMENT,
@@ -120,6 +121,7 @@ googlesql::LanguageOptions MakeGoogleSqlLanguageOptions() {
       googlesql::RESOLVED_UPDATE_STMT,
       googlesql::RESOLVED_DELETE_STMT,
       googlesql::RESOLVED_CALL_STMT,
+      googlesql::RESOLVED_EXPORT_DATA_STMT,
   });
 
   return options;

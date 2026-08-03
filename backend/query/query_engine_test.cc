@@ -473,6 +473,8 @@ class QueryEngineTest
           test::CreateSchemaWithMultiTables(&type_factory_, POSTGRESQL);
       change_stream_schema_ = test::CreateSchemaWithOneTableAndOneChangeStream(
           &type_factory_, POSTGRESQL);
+      remote_udf_schema_ =
+          test::CreateSchemaWithOneRemoteUdf(&type_factory_, POSTGRESQL);
       GOOGLESQL_ASSERT_OK_AND_ASSIGN(gpk_schema_, test::CreateGpkSchemaWithOneTable(
                                             &type_factory_, POSTGRESQL));
       GOOGLESQL_ASSERT_OK_AND_ASSIGN(sequence_schema_, test::CreateSchemaWithOneSequence(
@@ -2437,10 +2439,6 @@ TEST_P(QueryEngineTest, TestMlQuery) {
   }
 }
 TEST_P(QueryEngineTest, TestAiIf) {
-  if (GetParam() == POSTGRESQL) {
-    GTEST_SKIP();
-  }
-
   Query query{R"sql(SELECT AI.IF('Is this a test?') AS result)sql"};
   GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       QueryResult result,
@@ -2451,9 +2449,6 @@ TEST_P(QueryEngineTest, TestAiIf) {
 }
 
 TEST_P(QueryEngineTest, TestAiScore) {
-  if (GetParam() == POSTGRESQL) {
-    GTEST_SKIP();
-  }
   Query query{R"sql(SELECT AI.SCORE('Is this a test?') AS result)sql"};
   GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       QueryResult result,
@@ -2464,10 +2459,6 @@ TEST_P(QueryEngineTest, TestAiScore) {
 }
 
 TEST_P(QueryEngineTest, TestAiClassify) {
-  if (GetParam() == POSTGRESQL) {
-    GTEST_SKIP();
-  }
-
   std::string query;
   if (GetParam() == POSTGRESQL) {
     query =
@@ -2485,10 +2476,6 @@ TEST_P(QueryEngineTest, TestAiClassify) {
 }
 
 TEST_P(QueryEngineTest, TestAiClassify_WithStructs) {
-  if (GetParam() == POSTGRESQL) {
-    GTEST_SKIP();
-  }
-
   if (GetParam() == POSTGRESQL) {
     Query query{R"sql(
       SELECT AI.CLASSIFY(
@@ -2595,11 +2582,6 @@ TEST_P(QueryEngineTest, TestMlQuery_Http) {
 }
 
 TEST_P(QueryEngineTest, TestRemoteUDF) {
-  // TODO: Enable tests once DDL parsing is implemented.
-  if (GetParam() == POSTGRESQL) {
-    return;
-  }
-
   Query query{R"sql(SELECT my_remote_udf(1) AS result)sql"};
   GOOGLESQL_ASSERT_OK_AND_ASSIGN(QueryResult result,
                        query_engine().ExecuteSql(
@@ -2609,11 +2591,6 @@ TEST_P(QueryEngineTest, TestRemoteUDF) {
 }
 
 TEST_P(QueryEngineTest, TestRemoteUDF_Http) {
-  // TODO: Enable tests once DDL parsing is implemented.
-  if (GetParam() == POSTGRESQL) {
-    return;
-  }
-
   absl::StatusOr<googlesql::JSONValue> last_request_body;
 
   {
@@ -2642,11 +2619,7 @@ TEST_P(QueryEngineTest, TestRemoteUDF_Http) {
             Query{R"sql(SELECT my_remote_udf(1) AS result)sql"},
             QueryContext{remote_udf_schema(), reader()}));
     ASSERT_NE(result.rows, nullptr);
-    if (GetParam() == POSTGRESQL) {
-      EXPECT_EQ(ToString(result), R"(result(BIGINT) : 1,)");
-    } else {
-      EXPECT_EQ(ToString(result), R"(result(INT64) : 1,)");
-    }
+    EXPECT_EQ(ToString(result), R"(result(INT64) : 1,)");
   }
 
   GOOGLESQL_ASSERT_OK_AND_ASSIGN(googlesql::JSONValue expected_request_body,
@@ -6830,6 +6803,207 @@ TEST_P(TimestampKeyTest, OnConflictReturningCommitTimestampValueIsNotAllowed) {
               "value for INSERT or UPDATE of an appropriately typed column. It "
               "cannot be used in SELECT, or as the input to any other scalar "
               "expression.")));
+}
+
+TEST_P(QueryEngineTest, TestMockGraphAlgoPageRank) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
+  Query query{R"sql(EXPORT DATA OPTIONS (
+  uri = "gs://my-bucket-name/my-output.csv",
+  format = "csv"
+) AS
+GRAPH test_graph
+CALL PageRank() YIELD node, score
+RETURN node, score)sql"};
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(query, QueryContext{property_graph_schema(),
+                                                    property_graph_reader()}));
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(ElementsAre()));
+}
+
+TEST_P(QueryEngineTest, TestMockGraphAlgoWeaklyConnectedComponents) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
+  Query query{R"sql(EXPORT DATA OPTIONS (
+  uri = "gs://my-bucket-name/my-output.csv",
+  format = "csv"
+) AS
+GRAPH test_graph
+CALL WeaklyConnectedComponents() YIELD node, component
+RETURN node, component)sql"};
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(query, QueryContext{property_graph_schema(),
+                                                    property_graph_reader()}));
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(ElementsAre()));
+}
+
+TEST_P(QueryEngineTest, TestMockGraphAlgoShortestPath) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+
+  Query query{R"sql(EXPORT DATA OPTIONS (
+  format = "CLOUD_SPANNER",
+  table = "Account",
+  write_mode = "update_ignore_all"
+) AS
+GRAPH test_graph
+CALL ShortestPath() YIELD source_node, target_node, distance
+RETURN source_node, target_node, distance)sql"};
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(query, QueryContext{property_graph_schema(),
+                                                    property_graph_reader()}));
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(ElementsAre()));
+}
+
+TEST_P(QueryEngineTest, TestMockGraphAlgoBetweennessCentrality) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  Query query{
+      R"sql(EXPORT DATA OPTIONS (format = "csv", uri = "gs://foo") AS GRAPH test_graph CALL BetweennessCentrality() YIELD node, score RETURN node, score)sql"};
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(query, QueryContext{property_graph_schema(),
+                                                    property_graph_reader()}));
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(ElementsAre()));
+}
+
+TEST_P(QueryEngineTest, TestMockGraphAlgoClosenessCentrality) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  Query query{
+      R"sql(EXPORT DATA OPTIONS (format = "csv", uri = "gs://foo") AS GRAPH test_graph CALL ClosenessCentrality() YIELD node, score RETURN node, score)sql"};
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(query, QueryContext{property_graph_schema(),
+                                                    property_graph_reader()}));
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(ElementsAre()));
+}
+
+TEST_P(QueryEngineTest, TestMockGraphAlgoModularityClustering) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  Query query{
+      R"sql(EXPORT DATA OPTIONS (format = "csv", uri = "gs://foo") AS GRAPH test_graph CALL ModularityClustering() YIELD node, cluster RETURN node, cluster)sql"};
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(query, QueryContext{property_graph_schema(),
+                                                    property_graph_reader()}));
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(ElementsAre()));
+}
+
+TEST_P(QueryEngineTest, TestMockGraphAlgoCorrelationClustering) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  Query query{
+      R"sql(EXPORT DATA OPTIONS (format = "csv", uri = "gs://foo") AS GRAPH test_graph CALL CorrelationClustering() YIELD node, cluster RETURN node, cluster)sql"};
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(query, QueryContext{property_graph_schema(),
+                                                    property_graph_reader()}));
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(ElementsAre()));
+}
+
+TEST_P(QueryEngineTest, TestMockGraphAlgoLabelPropagation) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  Query query{
+      R"sql(EXPORT DATA OPTIONS (format = "csv", uri = "gs://foo") AS GRAPH test_graph CALL LabelPropagation() YIELD node, cluster RETURN node, cluster)sql"};
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(query, QueryContext{property_graph_schema(),
+                                                    property_graph_reader()}));
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(ElementsAre()));
+}
+
+TEST_P(QueryEngineTest, TestMockGraphAlgoCliqueFinding) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  Query query{
+      R"sql(EXPORT DATA OPTIONS (format = "csv", uri = "gs://foo") AS GRAPH test_graph CALL CliqueFinding() YIELD node, clique RETURN node, clique)sql"};
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(query, QueryContext{property_graph_schema(),
+                                                    property_graph_reader()}));
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(ElementsAre()));
+}
+
+TEST_P(QueryEngineTest, TestMockGraphAlgoJaccardSimilarity) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  Query query{
+      R"sql(EXPORT DATA OPTIONS (format = "csv", uri = "gs://foo") AS GRAPH test_graph CALL JaccardSimilarity() YIELD source_node, target_node, similarity RETURN source_node, target_node, similarity)sql"};
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(query, QueryContext{property_graph_schema(),
+                                                    property_graph_reader()}));
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(ElementsAre()));
+}
+
+TEST_P(QueryEngineTest, TestMockGraphAlgoCosineSimilarity) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  Query query{
+      R"sql(EXPORT DATA OPTIONS (format = "csv", uri = "gs://foo") AS GRAPH test_graph CALL CosineSimilarity() YIELD source_node, target_node, similarity RETURN source_node, target_node, similarity)sql"};
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(query, QueryContext{property_graph_schema(),
+                                                    property_graph_reader()}));
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(ElementsAre()));
+}
+
+TEST_P(QueryEngineTest, TestMockGraphAlgoCommonNeighborsSimilarity) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  Query query{
+      R"sql(EXPORT DATA OPTIONS (format = "csv", uri = "gs://foo") AS GRAPH test_graph CALL CommonNeighborsSimilarity() YIELD source_node, target_node, similarity RETURN source_node, target_node, similarity)sql"};
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(query, QueryContext{property_graph_schema(),
+                                                    property_graph_reader()}));
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(ElementsAre()));
+}
+
+TEST_P(QueryEngineTest, TestMockGraphAlgoTotalNeighborsSimilarity) {
+  if (GetParam() == POSTGRESQL) {
+    GTEST_SKIP();
+  }
+  Query query{
+      R"sql(EXPORT DATA OPTIONS (format = "csv", uri = "gs://foo") AS GRAPH test_graph CALL TotalNeighborsSimilarity() YIELD source_node, target_node, similarity RETURN source_node, target_node, similarity)sql"};
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(query, QueryContext{property_graph_schema(),
+                                                    property_graph_reader()}));
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(ElementsAre()));
 }
 
 }  // namespace

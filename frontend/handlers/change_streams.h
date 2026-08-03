@@ -77,6 +77,12 @@ class ChangeStreamsHandler {
 
   backend::Query ConstructPartitionTablePartitionQuery() const;
 
+  // Constructs a query on the partition table to retrieve the partition record
+  // (start_time, partition_token, parents) for the current partition. Used in
+  // mutable key range mode at query start to emit move-in partition event
+  // records if the query start time is at or before the partition start time.
+  backend::Query ConstructQueryStartPartitionTablePartitionQuery() const;
+
   backend::Query ConstructDataTablePartitionQuery(absl::Time start,
                                                   absl::Time end) const;
 

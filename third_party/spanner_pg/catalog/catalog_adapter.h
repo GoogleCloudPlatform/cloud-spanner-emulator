@@ -77,6 +77,9 @@ class CatalogAdapter {
   // Retrieves table name from a given oid. Returns error if the oid is not
   // already tracked by the adapter.
   absl::StatusOr<TableName> GetTableNameFromOid(Oid oid) const;
+  // Retrieves namespace name from a given oid. Looks in the bootstrap catalog
+  // and in the adapter for user defined namespaces.
+  absl::StatusOr<std::string> GetNamespaceNameFromOid(Oid oid) const;
 
   // Gets the oid of a given table. `table_name` should be canonicalized by
   // caller before calling this method (later lookup is case-sensitive).
@@ -173,10 +176,6 @@ class CatalogAdapter {
       EngineSystemCatalog* engine_system_catalog,
       const googlesql::AnalyzerOptions& analyzer_options,
       absl::flat_hash_map<int, int> token_locations);
-
-  // Looks up namespace name from Oid. Helper used when producing a TableName
-  // object to return.
-  absl::StatusOr<std::string> GetNamespaceNameFromOid(Oid oid) const;
 
   // Generates a new oid.
   absl::StatusOr<Oid> GenerateOid();

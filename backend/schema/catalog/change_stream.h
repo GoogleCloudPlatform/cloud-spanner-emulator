@@ -47,6 +47,10 @@ inline constexpr absl::string_view kChangeStreamValueCaptureTypeNewValues =
     "NEW_VALUES";
 inline constexpr absl::string_view
     kChangeStreamValueCaptureTypeNewRowOldValues = "NEW_ROW_AND_OLD_VALUES";
+inline constexpr absl::string_view kChangeStreamPartitionModeImmutableKeyRange =
+    "IMMUTABLE_KEY_RANGE";
+inline constexpr absl::string_view kChangeStreamPartitionModeMutableKeyRange =
+    "MUTABLE_KEY_RANGE";
 
 class Table;
 class Column;
@@ -102,11 +106,13 @@ class ChangeStream : public SchemaNode {
     return allow_txn_exclusion_;
   }
 
+  std::optional<std::string> partition_mode() const { return partition_mode_; }
+
   bool HasExplicitValidOptions() const {
     return value_capture_type().has_value() || retention_period().has_value() ||
            exclude_insert().has_value() || exclude_update().has_value() ||
            exclude_delete().has_value() || exclude_ttl_deletes().has_value() ||
-           allow_txn_exclusion().has_value();
+           allow_txn_exclusion().has_value() || partition_mode().has_value();
   }
 
   const ::google::protobuf::RepeatedPtrField<ddl::SetOption> options() const {
@@ -176,6 +182,8 @@ class ChangeStream : public SchemaNode {
   std::optional<std::string> retention_period_;
 
   std::optional<std::string> value_capture_type_;
+
+  std::optional<std::string> partition_mode_ = std::nullopt;
 
   bool track_all_ = false;
 

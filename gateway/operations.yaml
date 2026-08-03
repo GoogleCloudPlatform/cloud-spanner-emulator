@@ -30,15 +30,19 @@ http:
     get: '/v1/{name=projects/*/instances/*/databases/*/operations/*}'
     additional_bindings:
     - get: '/v1/{name=projects/*/instances/*/operations/*}'
+    - get: '/v1/{name=projects/*/instances/*/instancePartitions/*/operations/*}'
   - selector: google.longrunning.Operations.ListOperations
     get: '/v1/{name=projects/*/instances/*/databases/*/operations}'
     additional_bindings:
     - get: '/v1/{name=projects/*/instances/*/operations}'
+    - get: '/v1/{name=projects/*/instances/*/instancePartitions/*/operations}'
   - selector: google.longrunning.Operations.CancelOperation
     post: '/v1/{name=projects/*/instances/*/databases/*/operations/*}:cancel'
     additional_bindings:
     - post: '/v1/{name=projects/*/instances/*/operations/*}:cancel'
+    - post: '/v1/{name=projects/*/instances/*/instancePartitions/*/operations/*}:cancel'
   - selector: google.longrunning.Operations.DeleteOperation
     delete: '/v1/{name=projects/*/instances/*/databases/*/operations/*}'
     additional_bindings:
     - delete: '/v1/{name=projects/*/instances/*/operations/*}'
+    - delete: '/v1/{name=projects/*/instances/*/instancePartitions/*/operations/*}'

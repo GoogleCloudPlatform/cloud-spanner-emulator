@@ -258,10 +258,10 @@ TEST_P(ViewsTest, ViewDependsOnView) {
               testing::StrEq("SELECT V1.k1 AS k2 FROM V1"));
 }
 
-TEST_P(ViewsTest, ViewRequiresInvokerSecurity) {
+TEST_P(ViewsTest, ViewMissingSqlSecurity) {
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
   EXPECT_THAT(CreateSchema({"CREATE VIEW V AS SELECT 1"}),
-              StatusIs(error::ViewRequiresInvokerSecurity("V")));
+              StatusIs(error::ViewMissingSqlSecurity("V")));
 }
 
 TEST_P(ViewsTest, MissingDependency) {

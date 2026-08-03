@@ -724,6 +724,15 @@ fmgr_spanner_internal_validator(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_VOID();
 }
+
+/*
+ * No-op language validator for Spanner remote functions
+ */
+Datum
+fmgr_remote_validator(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_VOID();
+}
 // SPANGRES END
 
 /*
@@ -1171,7 +1180,7 @@ match_prosrc_to_literal(const char *prosrc, const char *literal,
 			if (cursorpos > 0)
 				newcp++;
 		}
-		chlen = pg_mblen(prosrc);
+		chlen = pg_mblen_cstr(prosrc);
 		if (strncmp(prosrc, literal, chlen) != 0)
 			goto fail;
 		prosrc += chlen;

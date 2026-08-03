@@ -21,17 +21,18 @@
 #include <utility>
 #include <vector>
 
+#include "google/spanner/v1/change_stream.pb.h"
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/analyzer_options.h"
 #include "googlesql/public/function_signature.h"
 #include "googlesql/public/types/array_type.h"
-#include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/substitute.h"
-#include "backend/schema/catalog/change_stream.h"
 #include "common/constants.h"
 #include "googlesql/base/status_macros.h"
 #include "third_party/spanner_pg/catalog/spangres_type.h"
+#include "third_party/spanner_pg/catalog/type.h"
+#include "google/protobuf/descriptor.h"
 
 namespace google {
 namespace spanner {
@@ -42,18 +43,28 @@ QueryableChangeStreamTvf::Create(const std::string& tvf_name,
                                  const googlesql::AnalyzerOptions options,
                                  googlesql::Catalog* catalog,
                                  googlesql::TypeFactory* type_factory,
-                                 bool is_pg) {
+                                 bool is_pg, bool is_mutable_key_range) {
   std::vector<googlesql::FunctionArgumentType> args;
   std::vector<googlesql::TVFSchemaColumn> output_columns;
   std::vector<std::pair<std::string, const googlesql::Type*>> columns;
   const googlesql::Type* output_type = nullptr;
   if (is_pg) {
-    output_type =
-        postgres_translator::spangres::types::PgJsonbMapping()->mapped_type();
+    if (is_mutable_key_range) {
+      output_type = postgres_translator::types::PgByteaMapping()->mapped_type();
+    } else {
+      output_type =
+          postgres_translator::spangres::types::PgJsonbMapping()->mapped_type();
+    }
   } else {
-    GOOGLESQL_RETURN_IF_ERROR(googlesql::AnalyzeType(
-        absl::Substitute(kChangeStreamTvfOutputFormat, "JSON"), options,
-        catalog, type_factory, &output_type));
+    if (is_mutable_key_range) {
+      const google::protobuf::Descriptor* descriptor =
+          google::spanner::v1::ChangeStreamRecord::descriptor();
+      GOOGLESQL_RETURN_IF_ERROR(type_factory->MakeProtoType(descriptor, &output_type));
+    } else {
+      GOOGLESQL_RETURN_IF_ERROR(googlesql::AnalyzeType(
+          absl::Substitute(kChangeStreamTvfOutputFormat, "JSON"), options,
+          catalog, type_factory, &output_type));
+    }
   }
   const googlesql::ArrayType* read_options_array;
   GOOGLESQL_RETURN_IF_ERROR(type_factory->MakeArrayType(type_factory->get_string(),

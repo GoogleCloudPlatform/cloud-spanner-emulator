@@ -527,8 +527,8 @@ TEST_F(EngineSystemCatalogTest, AnyArgTypeMatch) {
                        TestSystemCatalog::GetTestCatalog());
   GOOGLESQL_ASSERT_OK(catalog->AddTestType(types::PgBoolMapping()));
 
-  // The GoogleSQL $equals function accepts two ARG_TYPE_ANY_1 input parameters
-  // of the same type.
+  // The GoogleSQL $equals function accepts two ARG_KIND_EXPR_ANY_1 input
+  // parameters of the same type.
   PostgresFunctionArguments function_arguments{
       "booleq",
       "$equal",

@@ -562,7 +562,7 @@ void CloudValueToJSONValue(const googlesql::Value value, JSONValueRef& ref) {
       break;
     }
     case googlesql::TYPE_TIMESTAMP: {
-      ref.SetString(absl::FormatTime("%Y-%m-%d%ET%H:%M:%SZ", value.ToTime(),
+      ref.SetString(absl::FormatTime("%Y-%m-%d%ET%H:%M:%E*SZ", value.ToTime(),
                                      absl::UTCTimeZone()));
       break;
     }
@@ -652,7 +652,7 @@ absl::StatusOr<WriteOp> ConvertDataChangeRecordToWriteOp(
   GOOGLESQL_ASSIGN_OR_RETURN(Key change_stream_data_table_key,
                    ComputeChangeStreamDataTableKey(
                        record.partition_token, record.commit_timestamp,
-                       record.server_transaction_id, record.record_sequence,
+                       record.record_sequence, record.server_transaction_id,
                        change_stream->change_stream_data_table()->Name()));
   std::vector<googlesql::Value> values;
   values.push_back(record.partition_token);

@@ -23,7 +23,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "googlesql/base/testing/status_matchers.h"
-#include "googlesql/base/no_destructor.h"
+#include "absl/base/no_destructor.h"
 
 namespace google::spanner::emulator::backend {
 
@@ -38,7 +38,7 @@ TEST(AddTablesFromMetadata, EmptyMetadata) {
             0);
 }
 
-static const googlesql_base::NoDestructor<std::vector<ColumnsMetaEntry>> kMetadata({
+static const absl::NoDestructor<std::vector<ColumnsMetaEntry>> kMetadata({
     {"SCHEMATA", "CATALOG_NAME", "NO", "STRING(MAX)"},
     {"SCHEMATA", "SCHEMA_NAME", "NO", "STRING(MAX)"},
     {"SCHEMATA", "EFFECTIVE_TIMESTAMP", "YES", "INT64"},
@@ -50,7 +50,7 @@ static const googlesql_base::NoDestructor<std::vector<ColumnsMetaEntry>> kMetada
     {"TABLES", "TABLE_NAME", "NO", "STRING(MAX)"},
 });
 
-static const googlesql_base::NoDestructor<
+static const absl::NoDestructor<
     absl::flat_hash_map<std::string, const googlesql::Type*>>
     kTypeMap{{
         {"BOOL", googlesql::types::BoolType()},
@@ -58,7 +58,7 @@ static const googlesql_base::NoDestructor<
         {"STRING(MAX)", googlesql::types::StringType()},
     }};
 
-static const googlesql_base::NoDestructor<absl::flat_hash_set<std::string>>
+static const absl::NoDestructor<absl::flat_hash_set<std::string>>
     kSupportedTables{{
         "SCHEMATA",
         "SPANNER_STATISTICS",

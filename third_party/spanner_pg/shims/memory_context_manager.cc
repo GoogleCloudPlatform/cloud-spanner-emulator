@@ -161,13 +161,13 @@ ActiveMemoryContext::ActiveMemoryContext(ActiveMemoryContext&& other) noexcept {
   absl::MutexLock my_lock(mu_);
   absl::MutexLock other_lock(other.mu_);
   active_memory_context_ = other.active_memory_context_;
-  other.active_memory_context_ = absl::nullopt;
+  other.active_memory_context_ = std::nullopt;
 }
 
 absl::optional<MemoryContext*> ActiveMemoryContext::Release() {
   absl::MutexLock lock(mu_);
   absl::optional<MemoryContext*> ctx(active_memory_context_);
-  active_memory_context_ = absl::nullopt;
+  active_memory_context_ = std::nullopt;
   return ctx;
 }
 
@@ -196,7 +196,7 @@ absl::Status ActiveMemoryContext::ClearLocked() {
     return absl::OkStatus();
   }
 
-  active_memory_context_ = absl::nullopt;
+  active_memory_context_ = std::nullopt;
   return MemoryContextManager::Clear();
 }
 

@@ -456,6 +456,7 @@ bool		check_for_data_types_usage(ClusterInfo *cluster,
 bool		check_for_data_type_usage(ClusterInfo *cluster,
 									  const char *type_name,
 									  const char *output_path);
+bool		protocol_negotiation_supported(const ClusterInfo *cluster);
 void		old_9_3_check_for_line_data_type_usage(ClusterInfo *cluster);
 void		old_9_6_check_for_unknown_data_type_usage(ClusterInfo *cluster);
 void		old_9_6_invalidate_hash_indexes(ClusterInfo *cluster,

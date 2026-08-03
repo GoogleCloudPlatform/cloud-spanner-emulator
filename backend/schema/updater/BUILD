@@ -222,7 +222,9 @@ cc_test(
         "--spangres_use_emulator_jsonb_type=true",
         "--spangres_use_emulator_numeric_type=true",
         "--spangres_use_emulator_oid_type=true",
+        "--spangres_enable_remote_udf=true",
     ],
+    shard_count = 30,
     deps = [
         "//backend/schema/updater/schema_updater_tests",
         "//backend/schema/updater/schema_updater_tests:proto_bundle_tests",

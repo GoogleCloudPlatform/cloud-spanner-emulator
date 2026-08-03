@@ -13242,6 +13242,8 @@ generate_function_name(Oid funcid, int nargs, List *argnames, Oid *argtypes,
 	 * specified argtypes and VARIADIC flag.  But if we already decided to
 	 * force qualification, then we can skip the lookup and pretend we didn't
 	 * find it.
+	 * Spangres will also schema-qualify if the function is in a namespace other
+	 * than pg_catalog.
 	 */
 	if (!force_qualify)
 		p_result = func_get_detail(list_make1(makeString(proname)),
@@ -13259,11 +13261,14 @@ generate_function_name(Oid funcid, int nargs, List *argnames, Oid *argtypes,
 	if ((p_result == FUNCDETAIL_NORMAL ||
 		 p_result == FUNCDETAIL_AGGREGATE ||
 		 p_result == FUNCDETAIL_WINDOWFUNC) &&
-		p_funcid == funcid)
+		p_funcid == funcid &&
+		procform->pronamespace == PG_CATALOG_NAMESPACE) {
 		nspname = NULL;
-	else
+	}
+	else {
 		// SPANGRES BEGIN
-		nspname = GetNamespaceNameByOidFromBootstrapCatalog(procform->pronamespace);
+		nspname = GetNamespaceNameByOid(procform->pronamespace);
+	}
 		// SPANGRES END
 
 	result = quote_qualified_identifier(nspname, proname);

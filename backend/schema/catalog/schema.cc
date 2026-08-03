@@ -258,7 +258,7 @@ void Schema::DumpIndex(const Index* index,
   ABSL_CHECK_NE(index, nullptr);  // Crash OK
   create_index.set_index_name(index->Name());
   create_index.set_index_base_name(index->indexed_table()->Name());
-  create_index.set_unique(index->is_unique() && !index->is_search_index());
+  create_index.set_unique(index->is_unique());
   if (index->parent() != nullptr) {
     create_index.set_interleave_in_table(index->parent()->Name());
   }
@@ -450,6 +450,11 @@ void DumpChangeStream(const ChangeStream* change_stream,
     ddl::SetOption* set_option = create_change_stream.add_set_options();
     set_option->set_option_name(ddl::kChangeStreamAllowTxnExclusionOptionName);
     set_option->set_bool_value(*change_stream->allow_txn_exclusion());
+  }
+  if (change_stream->partition_mode().has_value()) {
+    ddl::SetOption* set_option = create_change_stream.add_set_options();
+    set_option->set_option_name(ddl::kChangeStreamPartitionModeOptionName);
+    set_option->set_string_value(*change_stream->partition_mode());
   }
 }
 

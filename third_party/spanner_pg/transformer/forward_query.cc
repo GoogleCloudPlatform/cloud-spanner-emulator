@@ -3646,6 +3646,7 @@ ForwardTransformer::BuildGsqlResolvedStatement(const Query& query) {
         // TODO: expose when queue is implemented.
         case T_AlterLocalityGroupStmt:
         case T_AlterColumnLocalityGroupStmt:
+        case T_ReindexStmt:
           return absl::UnimplementedError(
               "DDL statements cannot be issued as SELECT/DML statements");
         default:

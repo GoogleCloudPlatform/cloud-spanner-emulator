@@ -28,7 +28,7 @@
 #include "googlesql/public/types/type.h"
 #include "googlesql/public/types/type_factory.h"
 #include "googlesql/public/value.h"
-#include "googlesql/base/no_destructor.h"
+#include "absl/base/no_destructor.h"
 #include "absl/flags/flag.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
@@ -280,7 +280,7 @@ absl::Status ModelEvaluator::PgPredict(
 }
 
 std::unique_ptr<QueryableModel> ModelEvaluator::GetDefaultLlmModel() {
-  static const googlesql_base::NoDestructor<std::unique_ptr<backend::Model>>
+  static const absl::NoDestructor<std::unique_ptr<backend::Model>>
       kDefaultLlmModel(absl::WrapUnique(new backend::Model(
           "default_llm_model",
           /*is_remote=*/true,

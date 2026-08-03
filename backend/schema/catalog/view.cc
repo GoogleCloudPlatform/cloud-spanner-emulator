@@ -64,6 +64,17 @@ absl::Status View::DeepClone(SchemaGraphEditor* editor,
   return absl::OkStatus();
 }
 
+std::string SqlSecurityToString(View::SqlSecurity security) {
+  switch (security) {
+    case View::SqlSecurity::INVOKER:
+      return "INVOKER";
+    case View::SqlSecurity::DEFINER:
+      return "DEFINER";
+    case View::SqlSecurity::UNSPECIFIED:
+      return "UNSPECIFIED";
+  }
+}
+
 }  // namespace backend
 }  // namespace emulator
 }  // namespace spanner

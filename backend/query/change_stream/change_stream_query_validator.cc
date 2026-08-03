@@ -92,6 +92,22 @@ absl::Status ChangeStreamQueryValidator::ValidateTimeStamps(
         absl::FormatTime(min_time), absl::FormatTime(max_time),
         absl::FormatTime(start_time));
   }
+
+  if (change_stream->partition_mode() ==
+      kChangeStreamPartitionModeMutableKeyRange) {
+    if (end_time_value.is_null()) {
+      return error::InvalidChangeStreamTvfArgumentNullEndTimestamp();
+    }
+    absl::Time end_time = end_time_value.ToTime();
+    absl::Time max_end_time =
+        start_time + absl::Minutes(limits::kChangeStreamsMaxEndTimestampDelay);
+    if (end_time > max_end_time) {
+      return error::InvalidChangeStreamTvfArgumentEndTimestampTooFarInFuture(
+          absl::FormatTime(start_time), absl::FormatTime(max_end_time),
+          absl::FormatTime(end_time));
+    }
+  }
+
   if (!end_time_value.is_null()) {
     absl::Time end_time = end_time_value.ToTime();
     if (start_time > end_time) {
@@ -130,7 +146,8 @@ absl::Status ChangeStreamQueryValidator::ValidateTvfScanAndExtractMetadata(
   GOOGLESQL_RETURN_IF_ERROR(ValidateHeartbeatMilliseconds(arguments[3]));
   GOOGLESQL_RETURN_IF_ERROR(ValidateReadOptions(arguments[4]));
 
-  change_stream_metadata_ = ChangeStreamMetadata{tvf_name_, arguments, is_pg_};
+  change_stream_metadata_ =
+      ChangeStreamMetadata{tvf_name_, arguments, is_pg_, schema_};
   return absl::OkStatus();
 }
 
@@ -189,8 +206,18 @@ absl::StatusOr<bool> ChangeStreamQueryValidator::IsChangeStreamQuery(
   if (node->node_kind() == googlesql::RESOLVED_TVFSCAN) {
     absl::string_view tvf_name =
         node->GetAs<googlesql::ResolvedTVFScan>()->tvf()->Name();
-    if (absl::ConsumePrefix(&tvf_name, is_pg_ ? kChangeStreamTvfJsonPrefix
-                                              : kChangeStreamTvfStructPrefix) &&
+    bool has_valid_prefix = false;
+    if (is_pg_) {
+      if (absl::ConsumePrefix(&tvf_name, kChangeStreamTvfJsonPrefix) ||
+          absl::ConsumePrefix(&tvf_name, kChangeStreamTvfProtoBytesPrefix)) {
+        has_valid_prefix = true;
+      }
+    } else {
+      if (absl::ConsumePrefix(&tvf_name, kChangeStreamTvfStructPrefix)) {
+        has_valid_prefix = true;
+      }
+    }
+    if (has_valid_prefix &&
         schema_->FindChangeStream(std::string(tvf_name)) != nullptr) {
       change_stream_name_ = std::string(tvf_name);
       tvf_name_ = node->GetAs<googlesql::ResolvedTVFScan>()->tvf()->Name();

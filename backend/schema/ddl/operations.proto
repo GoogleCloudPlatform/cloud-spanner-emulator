@@ -372,14 +372,14 @@ message CreateFunction {
   optional Function.SqlSecurity sql_security = 5;
   repeated Function.Parameter param = 6;
   optional string return_typename = 7;
+  repeated SqlOption options = 8;
   optional string sql_body = 9;
   optional SQLExpressionOrigin sql_body_origin = 12;
   optional string original_definition = 16;
   optional Function.Language language = 10;
   optional Function.Determinism determinism = 11;
   optional bool is_remote = 13;
-  repeated SetOption options = 14 [deprecated = true];
-  repeated SqlOption sql_options = 15;
+  repeated SqlOption sql_options = 15 [deprecated = true];
 }
 
 message DropFunction {

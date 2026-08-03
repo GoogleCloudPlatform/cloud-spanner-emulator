@@ -622,6 +622,17 @@ absl::StatusOr<Type> CheckedPgTypeidType(Oid id) {
   return ErrorCheckedPgCall(typeidType, id);
 }
 
+absl::StatusOr<bool> CheckedPgSplitIdentifierString(char* rawstring,
+                                                    char separator,
+                                                    List** namelist) {
+  return ErrorCheckedPgCall(SplitIdentifierString, rawstring, separator,
+                            namelist);
+}
+
+absl::StatusOr<const char*> CheckedPgQuoteIdentifier(const char* ident) {
+  return ErrorCheckedPgCall(quote_identifier, ident);
+}
+
 // Simple test functions that generate a PostgreSQL error when called.
 // These test functions are defined here because the template definition needs
 // PostgreSQL headers, thus putting it in a header is unacceptable from a

@@ -21,11 +21,13 @@
 #include "google/spanner/admin/instance/v1/spanner_instance_admin.pb.h"
 #include "common/errors.h"
 #include "common/limits.h"
+#include "frontend/collections/instance_partition_manager.h"
 #include "frontend/collections/operation_manager.h"
 #include "frontend/common/labels.h"
 #include "frontend/common/uris.h"
 #include "frontend/converters/time.h"
 #include "frontend/entities/instance.h"
+#include "frontend/entities/instance_partition.h"
 #include "frontend/entities/operation.h"
 #include "frontend/server/handler.h"
 #include "googlesql/base/status_macros.h"
@@ -231,6 +233,16 @@ absl::Status DeleteInstance(RequestContext* ctx,
     }
     GOOGLESQL_RETURN_IF_ERROR(ctx->env()->database_manager()->DeleteDatabase(
         database->database_uri()));
+  }
+
+  // Clean up instance partitions associated with the instance.
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      std::vector<std::shared_ptr<InstancePartition>> partitions,
+      ctx->env()->instance_partition_manager()->ListInstancePartitions(
+          request->name()));
+  for (const auto& partition : partitions) {
+    ctx->env()->instance_partition_manager()->DeleteInstancePartition(
+        partition->partition_uri());
   }
 
   // Clean up the instance.
