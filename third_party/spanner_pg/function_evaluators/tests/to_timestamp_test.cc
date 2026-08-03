@@ -439,6 +439,10 @@ TEST_F(RegressionTest, ASANViolation) {
                HasSubstr("timestamp out of range")));
 
   EXPECT_THAT(
+      ToTimestamp("2147483647", "id"),
+      StatusIs(absl::StatusCode::kInvalidArgument));
+
+  EXPECT_THAT(
       ToTimestamp(
           "0000000400000000000,004-\031R400 "
           "0000000000000010000000000000000000000000000000000000 "

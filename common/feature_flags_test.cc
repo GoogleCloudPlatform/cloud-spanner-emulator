@@ -158,6 +158,21 @@ TEST(EmulatorFeatureFlags, HiddenColumnFlag) {
   EXPECT_TRUE(features.flags().enable_hidden_column);
 }
 
+TEST(EmulatorFeatureFlags, MutableKeyRangeChangeStreamFlag) {
+  const EmulatorFeatureFlags& features = EmulatorFeatureFlags::instance();
+
+  EXPECT_TRUE(features.flags().enable_mutable_key_range_change_stream);
+
+  {
+    EmulatorFeatureFlags::Flags flags;
+    flags.enable_mutable_key_range_change_stream = false;
+    test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+    EXPECT_FALSE(features.flags().enable_mutable_key_range_change_stream);
+  }
+
+  EXPECT_TRUE(features.flags().enable_mutable_key_range_change_stream);
+}
+
 }  // namespace
 }  // namespace emulator
 }  // namespace spanner

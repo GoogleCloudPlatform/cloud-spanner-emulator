@@ -37,7 +37,7 @@
 #include "googlesql/public/uuid_value.h"
 #include "googlesql/public/value.h"
 #include "absl/base/const_init.h"
-#include "googlesql/base/no_destructor.h"
+#include "absl/base/no_destructor.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/flags/flag.h"
 #include "absl/numeric/int128.h"
@@ -73,7 +73,7 @@ using TypeAnnotationCode = ::google::spanner::v1::TypeAnnotationCode;
 // httplib::Client is thread-safe, although requests will be serialized.
 // If this becomes a problem, create connection pool.
 absl::StatusOr<httplib::Client*> GetHttpClient(absl::string_view host_port) {
-  static googlesql_base::NoDestructor<
+  static absl::NoDestructor<
       absl::flat_hash_map<std::string, std::unique_ptr<httplib::Client>>>
       shared_clients;
 

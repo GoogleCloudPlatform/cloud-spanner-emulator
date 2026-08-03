@@ -54,6 +54,7 @@
 #include "backend/query/queryable_udf.h"
 #include "backend/query/queryable_view.h"
 #include "backend/query/spanner_sys_catalog.h"
+#include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/sequence.h"
 #include "common/errors.h"
@@ -356,7 +357,10 @@ Catalog::Catalog(
     tvfs_[change_stream->tvf_name()] =
         std::move(*QueryableChangeStreamTvf::Create(
             change_stream->tvf_name(), options, this, type_factory,
-            schema->dialect() == database_api::DatabaseDialect::POSTGRESQL));
+            /*is_pg=*/schema->dialect() ==
+                database_api::DatabaseDialect::POSTGRESQL,
+            /*is_mutable_key_range=*/change_stream->partition_mode() ==
+                kChangeStreamPartitionModeMutableKeyRange));
   }
 
   // Read types.

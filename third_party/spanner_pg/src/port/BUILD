@@ -44,7 +44,7 @@ package(
     ],
 )
 
-licenses(["restricted"])
+licenses(["notice"])
 
 filegroup(
     name = "_common_files",
@@ -76,6 +76,7 @@ filegroup(
         "strlcpy.c",
         "tar.c",
         "thread.c",
+        "timingsafe_bcmp.c",
     ] + select({
         "@platforms//cpu:aarch64": [
             "pg_crc32c_armv8.c",

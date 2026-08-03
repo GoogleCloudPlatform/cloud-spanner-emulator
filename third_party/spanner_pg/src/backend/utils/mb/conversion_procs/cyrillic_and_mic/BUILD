@@ -43,7 +43,7 @@ package(
     ],
 )
 
-licenses(["restricted"])
+licenses(["notice"])
 
 cc_binary(
     name = "cyrillic_and_mic.so",

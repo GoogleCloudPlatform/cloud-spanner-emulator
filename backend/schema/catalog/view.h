@@ -150,6 +150,8 @@ class View : public SchemaNode {
   std::optional<std::string> body_origin_;
 };
 
+std::string SqlSecurityToString(View::SqlSecurity security);
+
 }  // namespace backend
 }  // namespace emulator
 }  // namespace spanner

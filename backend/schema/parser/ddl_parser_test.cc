@@ -4542,6 +4542,20 @@ TEST(CreateChangeStream, CanParseCreateChangeStreamSetBooleanOptions) {
         })pb")));
 }
 
+TEST(CreateChangeStream, CanParseCreateChangeStreamSetPartitionModeOption) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(CREATE CHANGE STREAM ChangeStream FOR
+      ALL OPTIONS (partition_mode = 'MUTABLE_KEY_RANGE'))sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_change_stream {
+                  change_stream_name: "ChangeStream"
+                  for_clause { all: true }
+                  set_options {
+                    option_name: "partition_mode"
+                    string_value: "MUTABLE_KEY_RANGE"
+                  }
+                })pb")));
+}
+
 TEST(CreateChangeStream, ChangeStreamErrorEmptyOptions) {
   EXPECT_THAT(
       ParseDDLStatement(
@@ -7143,8 +7157,8 @@ TEST(UserDefinedFunction, CreateFunctionRemote) {
           return_typename: "INT64"
           language: REMOTE
           determinism: NOT_DETERMINISTIC_VOLATILE
-          options { option_name: "endpoint" string_value: "https://google.com" }
-          options { option_name: "max_batching_rows" int64_value: 456 }
+          options { name: "endpoint" sql_value: "\'https://google.com\'" }
+          options { name: "max_batching_rows" sql_value: "456" }
           sql_options { name: "endpoint" sql_value: "\'https://google.com\'" }
           sql_options { name: "max_batching_rows" sql_value: "456" }
         }
@@ -7165,8 +7179,8 @@ TEST(UserDefinedFunction, CreateFunctionRemote) {
           return_typename: "INT64"
           determinism: NOT_DETERMINISTIC_VOLATILE
           is_remote: true
-          options { option_name: "endpoint" string_value: "https://google.com" }
-          options { option_name: "max_batching_rows" int64_value: 456 }
+          options { name: "endpoint" sql_value: "\'https://google.com\'" }
+          options { name: "max_batching_rows" sql_value: "456" }
           sql_options { name: "endpoint" sql_value: "\'https://google.com\'" }
           sql_options { name: "max_batching_rows" sql_value: "456" }
         }
@@ -7188,10 +7202,52 @@ TEST(UserDefinedFunction, CreateFunctionRemote) {
           determinism: NOT_DETERMINISTIC_VOLATILE
           is_remote: true
           language: REMOTE
-          options { option_name: "endpoint" string_value: "https://google.com" }
-          options { option_name: "max_batching_rows" int64_value: 456 }
+          options { name: "endpoint" sql_value: "\'https://google.com\'" }
+          options { name: "max_batching_rows" sql_value: "456" }
           sql_options { name: "endpoint" sql_value: "\'https://google.com\'" }
           sql_options { name: "max_batching_rows" sql_value: "456" }
+        }
+      )pb"));
+
+  // All option types.
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(statement, ParseDDLStatement(R"sql(
+      CREATE FUNCTION rudf_identity_func(x INT64) RETURNS INT64
+      NOT DETERMINISTIC LANGUAGE REMOTE
+      OPTIONS (
+        null_option = NULL, true_option = TRUE, false_option = FALSE,
+        integer_option = 456, string_option = 'https://google.com',
+        string_list_option = ['a', 'b', 'c'])
+      )sql"));
+  EXPECT_THAT(
+      statement, test::EqualsProto(R"pb(
+        create_function {
+          function_name: "rudf_identity_func"
+          function_kind: FUNCTION
+          param { name: "x" param_typename: "INT64" }
+          return_typename: "INT64"
+          language: REMOTE
+          determinism: NOT_DETERMINISTIC_VOLATILE
+          options { name: "null_option" sql_value: "NULL" }
+          options { name: "true_option" sql_value: "TRUE" }
+          options { name: "false_option" sql_value: "FALSE" }
+          options { name: "integer_option" sql_value: "456" }
+          options { name: "string_option" sql_value: "\'https://google.com\'" }
+          options {
+            name: "string_list_option"
+            sql_value: "[\'a\', \'b\', \'c\']"
+          }
+          sql_options { name: "null_option" sql_value: "NULL" }
+          sql_options { name: "true_option" sql_value: "TRUE" }
+          sql_options { name: "false_option" sql_value: "FALSE" }
+          sql_options { name: "integer_option" sql_value: "456" }
+          sql_options {
+            name: "string_option"
+            sql_value: "\'https://google.com\'"
+          }
+          sql_options {
+            name: "string_list_option"
+            sql_value: "[\'a\', \'b\', \'c\']"
+          }
         }
       )pb"));
 
@@ -7763,7 +7819,7 @@ TEST(UserDefinedFunction, CreateFunctionInvalidSyntax) {
       ParseDDLStatement(
           "CREATE FUNCTION foo () RETURNS INT64 SQL SECURITY FOOBAR AS (NULL)"),
       StatusIs(StatusCode::kInvalidArgument,
-               HasSubstr("Expecting 'INVOKER' but found 'FOOBAR'")));
+               HasSubstr("Encountered 'FOOBAR' while parsing: sql_security")));
 
   EXPECT_THAT(
       ParseDDLStatement("CREATE FUNCTION udf_1()) RETURNS INT64 SQL SECURITY "
@@ -8402,6 +8458,35 @@ TEST(ColumnarPolicy, HandlesOption) {
   )sql"),
               StatusIs(StatusCode::kInvalidArgument,
                        HasSubstr("columnar_policy is unknown")));
+}
+
+TEST(FulltextDictionaryTable, HandlesOption) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    CREATE TABLE Dictionary (
+      Key STRING(MAX) NOT NULL,
+      Value ARRAY<STRING(MAX)> NOT NULL,
+    ) PRIMARY KEY(Key), OPTIONS (
+      fulltext_dictionary_table = true
+    )
+  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    create_table {
+                      table_name: "Dictionary"
+                      column { column_name: "Key" type: STRING not_null: true }
+                      column {
+                        column_name: "Value"
+                        type: ARRAY
+                        array_subtype { type: STRING }
+                        not_null: true
+                      }
+                      primary_key { key_name: "Key" }
+                      set_options {
+                        option_name: "fulltext_dictionary_table"
+                        bool_value: true
+                      }
+                    }
+                  )pb")));
 }
 }  // namespace
 

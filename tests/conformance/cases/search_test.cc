@@ -181,6 +181,39 @@ TEST_P(SearchTest, SearchFunctionSupportOptionalArguments) {
   GOOGLESQL_EXPECT_OK(Query(GetSqlQueryString(query3)));
 }
 
+// This only checks that the argument is accepted.
+// TODO: Add support for logic.
+TEST_P(SearchTest, SearchFunctionSupportDictionaryArgument) {
+  if (dialect_ == database_api::DatabaseDialect::POSTGRESQL) {
+    GTEST_SKIP() << "Skip PG for now.";
+  }
+
+  std::string query_search = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SEARCH(summary_tokens, "top", dictionary=>"dict_table")
+            AND userid = 1
+          ORDER BY albumid ASC)sql";
+  GOOGLESQL_EXPECT_OK(Query(GetSqlQueryString(query_search)));
+
+  std::string query_score = R"sql(
+          SELECT albumid
+          FROM albums@{force_index=albumindex}
+          WHERE SCORE(summary_tokens, "top", dictionary=>"dict_table") >= 0
+            AND userid = 1
+            AND SEARCH(summary_tokens, "top", dictionary=>"dict_table")
+          ORDER BY albumid ASC)sql";
+  GOOGLESQL_EXPECT_OK(Query(GetSqlQueryString(query_score)));
+
+  std::string query_snippet = R"sql(
+          SELECT albumid, SNIPPET(summary, "top", dictionary=>"dict_table")
+          FROM albums@{force_index=albumindex}
+          WHERE userid = 1
+            AND SEARCH(summary_tokens, "top", dictionary=>"dict_table")
+          ORDER BY albumid ASC)sql";
+  GOOGLESQL_EXPECT_OK(Query(GetSqlQueryString(query_snippet)));
+}
+
 TEST_P(SearchTest, SearchFunctionWrongArguments) {
   std::string query = R"sql(
           SELECT albumid

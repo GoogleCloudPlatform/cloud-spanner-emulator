@@ -179,7 +179,7 @@ Oid GetCollationOidByNameFromBootstrapCatalog(const char* name) {
   abort();
 }
 
-char* GetNamespaceNameByOidFromBootstrapCatalog(Oid namespace_oid) {
+char* GetNamespaceNameByOid(Oid namespace_oid) {
   abort();
 }
 

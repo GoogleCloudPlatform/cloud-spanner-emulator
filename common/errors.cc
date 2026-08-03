@@ -32,6 +32,7 @@
 #include "absl/time/time.h"
 #include "backend/common/ids.h"
 #include "common/constants.h"
+#include "common/feature_flags.h"
 #include "common/limits.h"
 
 namespace google {
@@ -126,6 +127,76 @@ absl::Status InvalidCreateInstanceRequestUnitsMultiple() {
   return absl::Status(
       absl::StatusCode::kInvalidArgument,
       "Invalid CreateInstance request. Processing units should be "
+      "multiple of 100 for values below 1000 and multiples of "
+      "1000 for values above 1000.");
+}
+
+// Instance partition errors.
+absl::Status InvalidInstancePartitionURI(absl::string_view uri) {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      absl::StrCat("Invalid instance partition uri: ", uri));
+}
+
+absl::Status InstancePartitionNotFound(absl::string_view uri) {
+  absl::Status error(absl::StatusCode::kNotFound,
+                     absl::StrCat("Instance partition not found: ", uri));
+
+  google::rpc::ResourceInfo info;
+  info.set_resource_type(kInstancePartitionResourceType);
+  std::string resource_name(uri);
+  info.set_resource_name(resource_name);
+  info.set_description("Instance partition does not exist.");
+  absl::Cord serialized(info.SerializeAsString());
+  error.SetPayload(kResourceInfoType, serialized);
+  return error;
+}
+
+absl::Status InstancePartitionAlreadyExists(absl::string_view uri) {
+  return absl::Status(absl::StatusCode::kAlreadyExists,
+                      absl::StrCat("Instance partition already exists: ", uri));
+}
+
+absl::Status InstancePartitionNameMismatch(absl::string_view uri) {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      absl::StrCat("Mismatching instance partition: ", uri));
+}
+
+absl::Status InstancePartitionUpdatesNotSupported() {
+  return absl::Status(
+      absl::StatusCode::kUnimplemented,
+      "Cloud Spanner Emulator does not support updating instance partitions.");
+}
+
+absl::Status InvalidInstancePartitionName(absl::string_view partition_id) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::StrCat("Instance partition ID must start with a lowercase letter, "
+                   "be 2-64 characters long, contain only lowercase "
+                   "letters, numbers, or hyphens, and not end with a "
+                   "hyphen. Got: ",
+                   partition_id));
+}
+
+absl::Status InstancePartitionReferencedByDatabase(
+    absl::string_view partition_uri) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::StrCat("Cannot delete instance partition ", partition_uri,
+                   " because there are databases referring to it. Please "
+                   "alter/drop placements to not use this instance partition "
+                   "in this database before deleting the instance partition."));
+}
+
+absl::Status InvalidCreateInstancePartitionRequestUnitsNotBoth() {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      "Invalid CreateInstancePartition request. Only one of "
+                      "nodes or processing units should be specified.");
+}
+
+absl::Status InvalidCreateInstancePartitionRequestUnitsMultiple() {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      "Invalid CreateInstancePartition request. Processing units should be "
       "multiple of 100 for values below 1000 and multiples of "
       "1000 for values above 1000.");
 }
@@ -1247,11 +1318,44 @@ PropertyGraphDynamicLabelElementTablesUsedWithSchemaDefinedLabelsElementTables(
 }
 
 absl::Status UnsupportedChangeStreamOption(absl::string_view option_name) {
+  if (EmulatorFeatureFlags::instance()
+          .flags()
+          .enable_mutable_key_range_change_stream) {
+    return absl::Status(
+        absl::StatusCode::kFailedPrecondition,
+        absl::Substitute("Invalid Change Stream Option: $0. "
+                         "Supported options are retention_period, "
+                         "value_capture_type, and partition_mode.",
+                         option_name));
+  }
   return absl::Status(absl::StatusCode::kFailedPrecondition,
-                      absl::Substitute("Invalid Change Stream Option: $0."
+                      absl::Substitute("Invalid Change Stream Option: $0. "
                                        "Supported options are retention_period "
                                        "and value_capture_type.",
                                        option_name));
+}
+
+absl::Status InvalidChangeStreamPartitionMode(
+    absl::string_view partition_mode) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Invalid partition_mode: $0. Change Streams only "
+                       "support partition modes in IMMUTABLE_KEY_RANGE and "
+                       "MUTABLE_KEY_RANGE.",
+                       partition_mode));
+}
+
+absl::Status AlterChangeStreamPartitionModeNotAllowed(
+    absl::string_view change_stream_name, absl::string_view partition_mode) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "Cannot alter partition_mode to a different value. A Change Stream "
+          "of IMMUTABLE_KEY_RANGE (by default or created with "
+          "partition_mode='IMMUTABLE_KEY_RANGE') cannot be altered with "
+          "partition_mode='MUTABLE_KEY_RANGE' or vice versa. "
+          "Change Stream $0 was created with partition_mode $1.",
+          change_stream_name, partition_mode));
 }
 
 absl::Status InvalidChangeStreamRetentionPeriodOptionValue() {
@@ -1322,6 +1426,11 @@ absl::Status InvalidChangeStreamTvfArgumentNullStartTimestamp() {
                       "start_timestamp must not be null.");
 }
 
+absl::Status InvalidChangeStreamTvfArgumentNullEndTimestamp() {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      "end_timestamp must not be null.");
+}
+
 absl::Status InvalidChangeStreamTvfArgumentStartTimestampTooFarInFuture(
     absl::string_view min_read_ts_string, absl::string_view max_read_ts_string,
     absl::string_view start_ts_string) {
@@ -1333,6 +1442,19 @@ absl::Status InvalidChangeStreamTvfArgumentStartTimestampTooFarInFuture(
           "current maximum start timestamp: "
           "$1. Received start_timestamp: $2.",
           min_read_ts_string, max_read_ts_string, start_ts_string));
+}
+
+absl::Status InvalidChangeStreamTvfArgumentEndTimestampTooFarInFuture(
+    absl::string_view min_read_ts_string, absl::string_view max_read_ts_string,
+    absl::string_view end_ts_string) {
+  return absl::Status(
+      absl::StatusCode::kOutOfRange,
+      absl::Substitute(
+          "Specified end_timestamp is too far in the future. Please specify an "
+          "end_timestamp within the earliest start timestamp: "
+          "$0, and the current maximum end timestamp: $1. Received "
+          "end_timestamp: $2.",
+          min_read_ts_string, max_read_ts_string, end_ts_string));
 }
 
 absl::Status InvalidChangeStreamTvfArgumentStartTimestampTooOld(
@@ -4103,7 +4225,7 @@ absl::Status TooManyViewsPerDatabase(absl::string_view function_name,
                                        function_name, limit));
 }
 
-absl::Status ViewRequiresInvokerSecurity(absl::string_view view_name) {
+absl::Status ViewMissingSqlSecurity(absl::string_view view_name) {
   return absl::Status(
       absl::StatusCode::kInvalidArgument,
       absl::Substitute("View `$0` is missing the SQL SECURITY clause.",

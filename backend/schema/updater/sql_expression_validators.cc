@@ -434,9 +434,11 @@ absl::Status AnalyzeViewDefinition(
     absl::string_view view_name, absl::string_view view_definition,
     const Schema* schema, googlesql::TypeFactory* type_factory,
     std::vector<View::Column>* output_columns,
-    absl::flat_hash_set<const SchemaNode*>* dependencies) {
-  auto body = absl::Substitute("CREATE VIEW `$0` SQL SECURITY INVOKER AS $1",
-                               view_name, view_definition);
+    absl::flat_hash_set<const SchemaNode*>* dependencies,
+    View::SqlSecurity security_type) {
+  std::string body =
+      absl::Substitute("CREATE VIEW `$0` SQL SECURITY $1 AS $2", view_name,
+                       SqlSecurityToString(security_type), view_definition);
 
   // Analyze the view definition.
   auto analyzer_options = MakeGoogleSqlAnalyzerOptionsForViewsAndFunctions(
@@ -526,7 +528,7 @@ absl::Status AnalyzeUdfDefinition(
   for (const SchemaNode* sequence : validator.dependent_sequences()) {
     dependencies->insert(sequence);
   }
-  *function_signature = absl::make_unique<googlesql::FunctionSignature>(
+  *function_signature = std::make_unique<googlesql::FunctionSignature>(
       create_function_stmt->signature());
 
   // Capture the options from SQL expressions.

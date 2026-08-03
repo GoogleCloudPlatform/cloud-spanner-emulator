@@ -53,11 +53,13 @@
 #include "backend/schema/builders/change_stream_builder.h"
 #include "backend/schema/builders/column_builder.h"
 #include "backend/schema/builders/named_schema_builder.h"
+#include "backend/schema/builders/sequence_builder.h"
 #include "backend/schema/builders/table_builder.h"
 #include "backend/schema/builders/udf_builder.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/named_schema.h"
 #include "backend/schema/catalog/schema.h"
+#include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/catalog/udf.h"
 #include "backend/schema/graph/schema_graph.h"
@@ -75,6 +77,7 @@ using google::spanner::emulator::backend::KeyColumn;
 using google::spanner::emulator::backend::NamedSchema;
 using google::spanner::emulator::backend::OwningSchema;
 using google::spanner::emulator::backend::SchemaGraph;
+using google::spanner::emulator::backend::Sequence;
 using google::spanner::emulator::backend::Table;
 using google::spanner::emulator::backend::Udf;
 
@@ -110,6 +113,17 @@ ChangeStream::Builder change_stream_builder(const std::string& name) {
   ChangeStream::Builder c;
   c.set_name(name).set_id(name).set_tvf_postgresql_oid(kNextPostgresOid++);
   return c;
+}
+
+Sequence::Builder sequence_builder(const std::string& name) {
+  Sequence::Builder s;
+  s.set_name(name)
+      .set_id(name)
+      .set_postgresql_oid(kNextPostgresOid++)
+      .set_sequence_kind(Sequence::SequenceKind::BIT_REVERSED_POSITIVE)
+      .set_start_with_counter(1);
+  ;
+  return s;
 }
 
 NamedSchema::Builder named_schema_builder(const std::string& name) {
@@ -551,6 +565,30 @@ void create_change_stream(googlesql::TypeFactory& type_factory,
   graph->Add(std::move(change_stream));
 }
 
+void create_sequences(SchemaGraph* graph) {
+  // R"(
+  //     CREATE SEQUENCE myseq BIT_REVERSED_POSITIVE;
+  //   )",
+  {
+    Sequence::Builder sb = sequence_builder("myseq");
+    std::unique_ptr<const Sequence> sequence = sb.build();
+    graph->Add(std::move(sequence));
+  }
+  // R"(
+  //     CREATE SCHEMA Seq_Schema;
+  //     CREATE SEQUENCE Seq_Schema.Seq BIT_REVERSED_POSITIVE;
+  //   )",
+  {
+    std::unique_ptr<const NamedSchema> seq_schema =
+        named_schema_builder("Seq_Schema").build();
+    graph->Add(std::move(seq_schema));
+
+    Sequence::Builder sb = sequence_builder("Seq_Schema.Seq");
+    std::unique_ptr<const Sequence> sequence = sb.build();
+    graph->Add(std::move(sequence));
+  }
+}
+
 void create_udf(googlesql::TypeFactory& type_factory, SchemaGraph* graph) {
   // R"(
   //     CREATE FUNCTION foo_udf() RETURNS INT64 AS (1);
@@ -570,11 +608,11 @@ void create_udf(googlesql::TypeFactory& type_factory, SchemaGraph* graph) {
     graph->Add(std::move(function));
   }
   // R"(
-  //     CREATE FUNCTION udf_schema.bar_udf() RETURNS INT64 AS (2);
+  //     CREATE FUNCTION "Udf_Schema"."Bar_Udf"() RETURNS INT64 AS (2);
   //   )",
   {
     std::unique_ptr<const NamedSchema> udf_schema =
-        named_schema_builder("udf_schema").build();
+        named_schema_builder("Udf_Schema").build();
     graph->Add(std::move(udf_schema));
 
     auto function_signature = std::make_unique<googlesql::FunctionSignature>(
@@ -583,7 +621,7 @@ void create_udf(googlesql::TypeFactory& type_factory, SchemaGraph* graph) {
         /*context_id=*/-1);
     Udf::Builder builder;
     std::unique_ptr<const Udf> function =
-        builder.set_name("udf_schema.bar_udf")
+        builder.set_name("Udf_Schema.Bar_Udf")
             .set_postgresql_oid(kNextPostgresOid++)
             .set_signature(std::move(function_signature))
             .set_body_origin("2")
@@ -778,6 +816,9 @@ std::unique_ptr<const OwningSchema> CreateSchema(
   create_udf(type_factory, graph.get());
 
   create_ann_vector_base_table(type_factory, graph.get());
+
+  // Simple Sequences
+  create_sequences(graph.get());
 
   return std::make_unique<const OwningSchema>(
       std::move(graph),

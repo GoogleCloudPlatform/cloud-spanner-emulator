@@ -8268,6 +8268,84 @@ functions {
 functions {
   mapped_name_path {
     name_path: "pg"
+    name_path: "jsonb_extract_path"
+  }
+  postgresql_name_paths {
+    name_path: "pg"
+    name_path: "jsonb_extract_path"
+  }
+  signatures {
+    return_type {
+      oid: 3802
+      name: "jsonb"
+    }
+    arguments {
+      type {
+        oid: 3802
+        name: "jsonb"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1009
+        name: "_text"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    oid: 3217
+    postgresql_name_paths {
+      name_path: "pg"
+      name_path: "jsonb_extract_path"
+    }
+    deprecated: false
+  }
+  mode: SCALAR
+}
+functions {
+  mapped_name_path {
+    name_path: "pg"
+    name_path: "jsonb_extract_path_text"
+  }
+  postgresql_name_paths {
+    name_path: "pg"
+    name_path: "jsonb_extract_path_text"
+  }
+  signatures {
+    return_type {
+      oid: 25
+      name: "text"
+    }
+    arguments {
+      type {
+        oid: 3802
+        name: "jsonb"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    arguments {
+      type {
+        oid: 1009
+        name: "_text"
+      }
+      cardinality: REQUIRED
+      named_argument_kind: POSITIONAL_ONLY
+    }
+    oid: 3940
+    postgresql_name_paths {
+      name_path: "pg"
+      name_path: "jsonb_extract_path_text"
+    }
+    deprecated: false
+  }
+  mode: SCALAR
+}
+functions {
+  mapped_name_path {
+    name_path: "pg"
     name_path: "jsonb_insert"
   }
   postgresql_name_paths {

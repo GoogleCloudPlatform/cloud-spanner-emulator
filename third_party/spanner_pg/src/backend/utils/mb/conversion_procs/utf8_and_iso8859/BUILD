@@ -43,7 +43,7 @@ package(
     ],
 )
 
-licenses(["restricted"])
+licenses(["notice"])
 
 cc_binary(
     name = "utf8_and_iso8859.so",

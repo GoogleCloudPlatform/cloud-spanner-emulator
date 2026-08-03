@@ -86,6 +86,10 @@ class EngineUserCatalog : public googlesql::EnumerableCatalog {
                          const googlesql::Table** table,
                          const FindOptions& options = FindOptions()) override;
 
+  absl::Status FindSequence(const absl::Span<const std::string>& path,
+                            const googlesql::Sequence** sequence,
+                            const FindOptions& options) override;
+
   // FindFunction uses the engine-specific IsUserDefinedFunction to filter out
   // non-UDFs from the result to prevent duplicates with the SystemCatalog.
   absl::Status FindFunction(

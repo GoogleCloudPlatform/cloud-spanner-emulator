@@ -33,7 +33,7 @@
 // start-postgres-header-region.inc.
 //
 // Pop all the macros from the stack so future google3-includes can use their
-// original defitions.
+// original definitions.
 #undef Assert
 #pragma pop_macro("Assert")
 #undef LOG
@@ -46,10 +46,16 @@
 #pragma pop_macro("ERROR")
 #undef FATAL
 #pragma pop_macro("FATAL")
+#undef NOTICE
+#pragma pop_macro("NOTICE")
 #undef PANIC
 #pragma pop_macro("PANIC")
 #undef INVALID
 #pragma pop_macro("INVALID")
+#undef EPOCH
+#pragma pop_macro("EPOCH")
+#undef ZULU
+#pragma pop_macro("ZULU")
 #undef NOW
 #pragma pop_macro("NOW")
 #undef Abs
@@ -111,6 +117,7 @@
 // undef all conflicting symbols so future google3-headers use/define/declare
 // the real symbols.
 #undef File
+#undef GROUPING
 
 #ifdef __cplusplus
 }  // extern "C"

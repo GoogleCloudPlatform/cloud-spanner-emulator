@@ -72,6 +72,10 @@ constexpr int64_t kChangeStreamsMaxHeartbeatMilliseconds = 300000;
 // the future
 constexpr int kChangeStreamsMaxStartTimestampDelay = 10;
 
+// Maximum duration in minutes supported for change stream query to read into
+// the future for mutable key range change streams.
+constexpr int kChangeStreamsMaxEndTimestampDelay = 30;
+
 // Maximum number of change streams per column.
 constexpr int kMaxChangeStreamsTrackingATableOrColumn = 3;
 

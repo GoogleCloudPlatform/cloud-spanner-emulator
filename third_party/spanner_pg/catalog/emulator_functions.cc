@@ -279,7 +279,7 @@ absl::StatusOr<googlesql::Value> EvalArrayUpper(
 // spangres supports.
 std::unique_ptr<googlesql::Function> ArrayUpperFunction(
     absl::string_view catalog_name, absl::string_view function_name) {
-  const auto gsql_anyarray = googlesql::ARG_ARRAY_TYPE_ANY_1;
+  const auto gsql_anyarray = googlesql::ARG_KIND_EXPR_ARRAY_ANY_1;
 
   googlesql::FunctionOptions function_options;
   function_options.set_supports_safe_error_mode(false);
@@ -1275,13 +1275,13 @@ std::unique_ptr<googlesql::Function> ArrayOverlapFunction(
                   END
                 )sql";
   FunctionArgumentType array_to_search_arg(
-      googlesql::ARG_ARRAY_TYPE_ANY_1,
+      googlesql::ARG_KIND_EXPR_ARRAY_ANY_1,
       FunctionArgumentTypeOptions()
           .set_array_element_must_support_equality()
           .set_argument_name("array_to_search", googlesql::kPositionalOnly));
 
   FunctionArgumentType search_values_arg(
-      googlesql::ARG_ARRAY_TYPE_ANY_1,
+      googlesql::ARG_KIND_EXPR_ARRAY_ANY_1,
       FunctionArgumentTypeOptions().set_argument_name(
           "search_values", googlesql::kPositionalOnly));
 
@@ -1314,13 +1314,13 @@ std::unique_ptr<googlesql::Function> ArrayContainsOrContainedFunction(
                 )sql";
 
   FunctionArgumentType array_to_search(
-      googlesql::ARG_ARRAY_TYPE_ANY_1,
+      googlesql::ARG_KIND_EXPR_ARRAY_ANY_1,
       FunctionArgumentTypeOptions()
           .set_array_element_must_support_equality()
           .set_argument_name("array_to_search", googlesql::kPositionalOnly));
 
   FunctionArgumentType search_values(
-      googlesql::ARG_ARRAY_TYPE_ANY_1,
+      googlesql::ARG_KIND_EXPR_ARRAY_ANY_1,
       FunctionArgumentTypeOptions()
           .set_array_element_must_support_equality()
           .set_argument_name("search_values", googlesql::kPositionalOnly));
@@ -1363,13 +1363,13 @@ std::unique_ptr<googlesql::Function> ArrayAllFunction(
       )sql";
 
   FunctionArgumentType array_to_search(
-      googlesql::ARG_ARRAY_TYPE_ANY_1,
+      googlesql::ARG_KIND_EXPR_ARRAY_ANY_1,
       FunctionArgumentTypeOptions()
           .set_array_element_must_support_equality()
           .set_argument_name("array_to_search", googlesql::kPositionalOnly));
 
   FunctionArgumentType search_value(
-      googlesql::ARG_TYPE_ANY_1,
+      googlesql::ARG_KIND_EXPR_ANY_1,
       FunctionArgumentTypeOptions().set_argument_name(
           "search_value", googlesql::kPositionalOnly));
 
@@ -1412,7 +1412,7 @@ std::unique_ptr<googlesql::Function> ArraySliceFunction(
         END
       )sql";
   FunctionArgumentType array_to_slice_arg(
-      googlesql::ARG_ARRAY_TYPE_ANY_1,
+      googlesql::ARG_KIND_EXPR_ARRAY_ANY_1,
       FunctionArgumentTypeOptions()
           .set_array_element_must_support_equality()
           .set_argument_name("array_to_slice", googlesql::kPositionalOnly));
@@ -1426,7 +1426,7 @@ std::unique_ptr<googlesql::Function> ArraySliceFunction(
                       "end_offset", googlesql::kPositionalOnly));
 
   FunctionSignature signature{
-      googlesql::ARG_ARRAY_TYPE_ANY_1,
+      googlesql::ARG_KIND_EXPR_ARRAY_ANY_1,
       {array_to_slice_arg, start_offset_arg, end_offset_arg},
       /*context_id=*/-1,
       FunctionSignatureOptions().set_rewrite_options(
@@ -2294,7 +2294,7 @@ std::unique_ptr<googlesql::Function> JsonbBuildArrayFunction(
                                        /*context_ptr=*/nullptr),
           googlesql::FunctionSignature(
               gsql_pg_jsonb,
-              {{googlesql::ARG_TYPE_ARBITRARY,
+              {{googlesql::ARG_KIND_EXPR_ARBITRARY,
                 googlesql::FunctionArgumentTypeOptions().set_cardinality(
                     googlesql::FunctionArgumentType::REPEATED)}},
               /*context_ptr=*/nullptr)},
@@ -2350,7 +2350,7 @@ std::unique_ptr<googlesql::Function> JsonbBuildObjectFunction(
               {{gsql_string,
                 googlesql::FunctionArgumentTypeOptions().set_cardinality(
                     googlesql::FunctionArgumentType::REPEATED)},
-               {googlesql::ARG_TYPE_ARBITRARY,
+               {googlesql::ARG_KIND_EXPR_ARBITRARY,
                 googlesql::FunctionArgumentTypeOptions().set_cardinality(
                     googlesql::FunctionArgumentType::REPEATED)}},
               /*context_ptr=*/nullptr)},

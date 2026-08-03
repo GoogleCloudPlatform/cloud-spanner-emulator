@@ -25,9 +25,11 @@
 
 #include "google/protobuf/struct.pb.h"
 #include "google/spanner/admin/database/v1/common.pb.h"
+#include "google/spanner/v1/change_stream.pb.h"
 #include "google/spanner/v1/spanner.pb.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/escaping.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
 #include "absl/time/time.h"
@@ -38,6 +40,7 @@
 #include "googlesql/base/status_macros.h"
 #include "grpcpp/client_context.h"
 #include "google/protobuf/json/json.h"
+
 namespace google {
 namespace spanner {
 namespace emulator {
@@ -227,6 +230,53 @@ absl::Status GetChangeStreamRecordsFromJsonHelper(
   return absl::OkStatus();
 }
 
+absl::Status GetChangeStreamRecordsFromProtoHelper(
+    const google::spanner::v1::ResultSet& result_set,
+    ChangeStreamRecords* change_stream_records) {
+  for (const auto& row : result_set.rows()) {
+    if (row.values_size() != 1) {
+      return absl::InternalError(
+          "Expected 1 column for mutable key range change stream output");
+    }
+    const std::string& base64_proto = row.values(0).string_value();
+    std::string serialized_proto;
+    if (!absl::Base64Unescape(base64_proto, &serialized_proto)) {
+      return absl::InternalError(
+          "Failed to base64 decode change stream record");
+    }
+    google::spanner::v1::ChangeStreamRecord record_proto;
+    if (!record_proto.ParseFromString(serialized_proto)) {
+      return absl::InternalError("Failed to parse ChangeStreamRecord proto");
+    }
+
+    switch (record_proto.record_case()) {
+      case google::spanner::v1::ChangeStreamRecord::kDataChangeRecord:
+        change_stream_records->mutable_key_range_data_change_records.push_back(
+            record_proto.data_change_record());
+        break;
+      case google::spanner::v1::ChangeStreamRecord::kHeartbeatRecord:
+        change_stream_records->mutable_key_range_heartbeat_records.push_back(
+            record_proto.heartbeat_record());
+        break;
+      case google::spanner::v1::ChangeStreamRecord::kPartitionStartRecord:
+        change_stream_records->partition_start_records.push_back(
+            record_proto.partition_start_record());
+        break;
+      case google::spanner::v1::ChangeStreamRecord::kPartitionEventRecord:
+        change_stream_records->partition_event_records.push_back(
+            record_proto.partition_event_record());
+        break;
+      case google::spanner::v1::ChangeStreamRecord::kPartitionEndRecord:
+        change_stream_records->partition_end_records.push_back(
+            record_proto.partition_end_record());
+        break;
+      case google::spanner::v1::ChangeStreamRecord::RECORD_NOT_SET:
+        return absl::InternalError("ChangeStreamRecord has no record type set");
+    }
+  }
+  return absl::OkStatus();
+}
+
 }  // namespace
 
 absl::StatusOr<ChangeStreamRecords> GetChangeStreamRecordsFromResultSet(
@@ -235,16 +285,44 @@ absl::StatusOr<ChangeStreamRecords> GetChangeStreamRecordsFromResultSet(
   if (result_set.rows().empty()) {
     return change_stream_records;
   }
-  const auto& row_value = result_set.rows(0).values(0);
-  if (row_value.has_list_value()) {
-    GOOGLESQL_RET_CHECK(GetChangeStreamRecordsFromArrayHelper(result_set,
-                                                    &change_stream_records)
-                  .ok());
+  if (result_set.metadata().row_type().fields_size() > 0 &&
+      (result_set.metadata().row_type().fields(0).type().code() ==
+           google::spanner::v1::TypeCode::PROTO ||
+       result_set.metadata().row_type().fields(0).type().code() ==
+           google::spanner::v1::TypeCode::BYTES)) {
+    GOOGLESQL_RETURN_IF_ERROR(GetChangeStreamRecordsFromProtoHelper(
+        result_set, &change_stream_records));
   } else {
-    GOOGLESQL_RET_CHECK(
-        GetChangeStreamRecordsFromJsonHelper(result_set, &change_stream_records)
-            .ok());
+    const auto& row_value = result_set.rows(0).values(0);
+    if (row_value.has_list_value()) {
+      GOOGLESQL_RET_CHECK(GetChangeStreamRecordsFromArrayHelper(result_set,
+                                                      &change_stream_records)
+                    .ok());
+    } else {
+      GOOGLESQL_RET_CHECK(GetChangeStreamRecordsFromJsonHelper(result_set,
+                                                     &change_stream_records)
+                    .ok());
+    }
   }
+
+  // Check that immutable key range and mutable key range change stream records
+  // are distinct.
+  bool has_immutable_key_range_records =
+      !change_stream_records.data_change_records.empty() ||
+      !change_stream_records.heartbeat_records.empty() ||
+      !change_stream_records.child_partition_records.empty();
+  bool has_mutable_key_range_records =
+      !change_stream_records.mutable_key_range_data_change_records.empty() ||
+      !change_stream_records.mutable_key_range_heartbeat_records.empty() ||
+      !change_stream_records.partition_start_records.empty() ||
+      !change_stream_records.partition_event_records.empty() ||
+      !change_stream_records.partition_end_records.empty();
+  if (has_immutable_key_range_records && has_mutable_key_range_records) {
+    return absl::InternalError(
+        "Found both immutable key range and mutable key range change stream "
+        "records in the same result set.");
+  }
+
   return change_stream_records;
 }
 

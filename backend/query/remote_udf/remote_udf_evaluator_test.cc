@@ -35,7 +35,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "googlesql/base/testing/status_matchers.h"
-#include "googlesql/base/no_destructor.h"
+#include "absl/base/no_destructor.h"
 #include "absl/flags/flag.h"
 #include "absl/log/check.h"
 #include "absl/status/status.h"
@@ -221,23 +221,23 @@ class RemoteUdfProtocolTest
   googlesql::Value value_from_fingerprint_;
 };
 
-googlesql_base::NoDestructor<googlesql::TypeFactory> factory;
+absl::NoDestructor<googlesql::TypeFactory> factory;
 
-googlesql_base::NoDestructor<const googlesql::EnumType*> enum_type{[]() {
+absl::NoDestructor<const googlesql::EnumType*> enum_type{[]() {
   const ::googlesql::EnumType* enum_type = nullptr;
   ABSL_CHECK_OK(factory->MakeEnumType(
       ::emulator::tests::common::TestEnum_descriptor(), &enum_type));
   return enum_type;
 }()};
 
-googlesql_base::NoDestructor<const googlesql::ProtoType*> proto_type{[]() {
+absl::NoDestructor<const googlesql::ProtoType*> proto_type{[]() {
   const ::googlesql::ProtoType* proto_type = nullptr;
   ABSL_CHECK_OK(factory->MakeProtoType(
       ::emulator::tests::common::Simple::descriptor(), &proto_type));
   return proto_type;
 }()};
 
-googlesql_base::NoDestructor<const googlesql::Type*> map_type{[]() {
+absl::NoDestructor<const googlesql::Type*> map_type{[]() {
   googlesql::LanguageOptions language_options;
   language_options.SetEnabledLanguageFeatures({googlesql::FEATURE_MAP_TYPE});
   auto map_type = factory->MakeMapType(factory->get_int64(),
@@ -246,7 +246,7 @@ googlesql_base::NoDestructor<const googlesql::Type*> map_type{[]() {
   return map_type.value();
 }()};
 
-googlesql_base::NoDestructor<const googlesql::StructType*> struct_type{[]() {
+absl::NoDestructor<const googlesql::StructType*> struct_type{[]() {
   const googlesql::StructType* struct_type;
   ABSL_CHECK_OK(factory->MakeStructType(
       {{"a", factory->get_int64()}, {"b", factory->get_int64()}},

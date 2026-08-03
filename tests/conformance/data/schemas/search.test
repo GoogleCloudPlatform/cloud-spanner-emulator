@@ -80,6 +80,12 @@ CREATE TABLE Test (
   ) HIDDEN
 ) PRIMARY KEY (Id);
 CREATE SEARCH INDEX SearchTokenIndex ON Test(Search_Tokens);
+CREATE TABLE dict_table (
+  Key STRING(MAX) NOT NULL,
+  Value ARRAY<STRING(MAX)> NOT NULL,
+) PRIMARY KEY(Key), OPTIONS (
+  fulltext_dictionary_table = true
+);
 ===
 @Dialect=POSTGRESQL
 CREATE TABLE albums (

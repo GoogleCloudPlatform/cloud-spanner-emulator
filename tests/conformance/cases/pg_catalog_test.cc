@@ -22,7 +22,7 @@
 #include "gtest/gtest.h"
 #include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
-#include "googlesql/base/no_destructor.h"
+#include "absl/base/no_destructor.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -42,7 +42,7 @@ namespace {
 
 using ::google::cloud::spanner::PgOid;
 
-static const googlesql_base::NoDestructor<absl::flat_hash_set<std::string>>
+static const absl::NoDestructor<absl::flat_hash_set<std::string>>
     kSupportedButEmptyTables{{
         "pg_available_extension_versions",
         "pg_available_extensions",

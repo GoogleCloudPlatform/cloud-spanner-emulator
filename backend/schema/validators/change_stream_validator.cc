@@ -81,6 +81,16 @@ absl::Status ChangeStreamValidator::ValidateUpdate(
     GOOGLESQL_RET_CHECK(!change_stream->postgresql_oid().has_value());
     GOOGLESQL_RET_CHECK(!old_change_stream->postgresql_oid().has_value());
   }
+
+  std::string old_partition_mode = old_change_stream->partition_mode().value_or(
+      std::string(kChangeStreamPartitionModeImmutableKeyRange));
+  std::string new_partition_mode = change_stream->partition_mode().value_or(
+      std::string(kChangeStreamPartitionModeImmutableKeyRange));
+  if (old_partition_mode != new_partition_mode) {
+    return error::AlterChangeStreamPartitionModeNotAllowed(
+        change_stream->Name(), old_partition_mode);
+  }
+
   return absl::OkStatus();
 }
 

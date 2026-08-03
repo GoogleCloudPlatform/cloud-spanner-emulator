@@ -105,7 +105,7 @@ Transaction::Transaction(
 {}
 
 void Transaction::Close() {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   closed_ = true;
   if (type_ == kReadWrite || type_ == kPartitionedDml) {
     read_write()->Rollback().IgnoreError();
@@ -127,7 +127,7 @@ absl::StatusOr<spanner_api::Transaction> Transaction::ToProto() {
 }
 
 bool Transaction::IsClosed() const {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   return closed_;
 }
 
@@ -155,7 +155,7 @@ bool Transaction::IsInvalid() const {
 }
 
 bool Transaction::IsAborted() const {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   return type_ == kReadWrite && status_.code() == absl::StatusCode::kAborted;
 }
 
@@ -394,7 +394,7 @@ Transaction::DMLErrorHandlingMode Transaction::DMLErrorType() const {
 
 absl::Status Transaction::GuardedCall(OpType op,
                                       const std::function<absl::Status()>& fn) {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
 
   // Cannot reuse a transaction that previously encountered an error.
   // Replay the last error status for the given transaction. Status will not be

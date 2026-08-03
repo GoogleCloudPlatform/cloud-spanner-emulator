@@ -94,7 +94,7 @@ absl::Status ValidateSingleUseTransactionOptions(
 
 absl::Status Session::ToProto(spanner_api::Session* session,
                               bool include_labels) {
-  absl::ReaderMutexLock lock(&mu_);
+  absl::ReaderMutexLock lock(mu_);
   session->set_name(session_uri_);
   if (include_labels) {
     session->mutable_labels()->insert(labels_.begin(), labels_.end());
@@ -131,7 +131,7 @@ absl::StatusOr<std::shared_ptr<Transaction>> Session::CreateMultiUseTransaction(
     const TransactionActivation& activation) {
   GOOGLESQL_RETURN_IF_ERROR(ValidateMultiUseTransactionOptions(options));
 
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   // Move-convert unique pointer returned by CreateTransaction to shared pointer
   // since session will also hold a reference to multi-use transaction object
   // for future uses.
@@ -180,7 +180,7 @@ Session::CreateSingleUseTransaction(
     const spanner_api::TransactionOptions& options) {
   GOOGLESQL_RETURN_IF_ERROR(ValidateSingleUseTransactionOptions(options));
 
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   return CreateTransaction(options, Transaction::Usage::kSingleUse,
                            MakeRetryState(options, /*is_single_use_txn=*/true));
 }
@@ -244,7 +244,7 @@ absl::StatusOr<std::unique_ptr<Transaction>> Session::CreateReadWrite(
 absl::StatusOr<std::shared_ptr<Transaction>> Session::FindAndUseTransaction(
     const std::string& bytes) {
   const backend::TransactionID& id = TransactionIDFromProto(bytes);
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   if (multiplexed_) {
     return mux_txn_manager_->GetCurrentTransactionOnMultiplexedSession(
         database_->database_uri(), id);

@@ -45,6 +45,15 @@ absl::Status ParseInstanceUri(absl::string_view resource_uri,
 // Validates an instance name.
 absl::Status ValidateInstanceId(absl::string_view instance_id);
 
+// Parses an instance partition URI into its components.
+absl::Status ParseInstancePartitionUri(
+    absl::string_view resource_uri, absl::string_view* project_id,
+    absl::string_view* instance_id, absl::string_view* instance_partition_id);
+
+// Validates an instance partition name.
+absl::Status ValidateInstancePartitionId(
+    absl::string_view instance_partition_id);
+
 // Parses a database URI into its components.
 absl::Status ParseDatabaseUri(absl::string_view resource_uri,
                               absl::string_view* project_id,
@@ -63,7 +72,7 @@ absl::Status ParseSessionUri(absl::string_view resource_uri,
 
 // Parses an operation URI into its components.
 absl::Status ParseOperationUri(absl::string_view operation_uri,
-                               std::shared_ptr<std::string> resource_uri,
+                               std::string* resource_uri,
                                absl::string_view* operation_id);
 
 // Constructs a project URI from its components.
@@ -76,6 +85,10 @@ std::string MakeInstanceConfigUri(absl::string_view project_id,
 // Constructs an instance URI from its components.
 std::string MakeInstanceUri(absl::string_view project_id,
                             absl::string_view instance_id);
+
+// Constructs an instance partition URI from its components.
+std::string MakeInstancePartitionUri(absl::string_view instance_uri,
+                                     absl::string_view instance_partition_id);
 
 // Constructs a database URI from its components.
 std::string MakeDatabaseUri(absl::string_view instance_uri,

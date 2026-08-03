@@ -53,6 +53,18 @@ absl::Status InvalidInstanceName(absl::string_view instance_id);
 absl::Status InvalidCreateInstanceRequestUnitsNotBoth();
 absl::Status InvalidCreateInstanceRequestUnitsMultiple();
 
+// Instance partition errors.
+absl::Status InvalidInstancePartitionURI(absl::string_view uri);
+absl::Status InstancePartitionNotFound(absl::string_view uri);
+absl::Status InstancePartitionAlreadyExists(absl::string_view uri);
+absl::Status InstancePartitionNameMismatch(absl::string_view uri);
+absl::Status InstancePartitionUpdatesNotSupported();
+absl::Status InvalidInstancePartitionName(absl::string_view partition_id);
+absl::Status InstancePartitionReferencedByDatabase(
+    absl::string_view partition_uri);
+absl::Status InvalidCreateInstancePartitionRequestUnitsNotBoth();
+absl::Status InvalidCreateInstancePartitionRequestUnitsMultiple();
+
 // Database errors.
 absl::Status InvalidDatabaseURI(absl::string_view uri);
 absl::Status DatabaseNotFound(absl::string_view uri);
@@ -251,6 +263,9 @@ absl::Status TooManyChangeStreamsTrackingSameObject(
     absl::string_view change_stream_name, int64_t limit,
     absl::string_view object_name_string);
 absl::Status UnsupportedChangeStreamOption(absl::string_view option_name);
+absl::Status InvalidChangeStreamPartitionMode(absl::string_view partition_mode);
+absl::Status AlterChangeStreamPartitionModeNotAllowed(
+    absl::string_view change_stream_name, absl::string_view partition_mode);
 absl::Status InvalidChangeStreamRetentionPeriodOptionValue();
 absl::Status InvalidTimeDurationFormat(absl::string_view time_duration);
 absl::Status InvalidTypeForVectorLength(absl::string_view column_name);
@@ -266,9 +281,13 @@ absl::Status UnsetTrackedObject(absl::string_view change_stream_name,
                                 absl::string_view table_name);
 // change stream tvf query related errors
 absl::Status InvalidChangeStreamTvfArgumentNullStartTimestamp();
+absl::Status InvalidChangeStreamTvfArgumentNullEndTimestamp();
 absl::Status InvalidChangeStreamTvfArgumentStartTimestampTooFarInFuture(
     absl::string_view min_read_ts_string, absl::string_view max_read_ts_string,
     absl::string_view start_ts_string);
+absl::Status InvalidChangeStreamTvfArgumentEndTimestampTooFarInFuture(
+    absl::string_view min_read_ts_string, absl::string_view max_read_ts_string,
+    absl::string_view end_ts_string);
 absl::Status InvalidChangeStreamTvfArgumentStartTimestampTooOld(
     absl::string_view min_read_ts_string, absl::string_view start_ts_string);
 absl::Status
@@ -981,7 +1000,7 @@ absl::Status ViewBodyAnalysisError(absl::string_view view_name,
                                    absl::string_view error);
 
 absl::Status ViewNotFound(absl::string_view view_name);
-absl::Status ViewRequiresInvokerSecurity(absl::string_view view_name);
+absl::Status ViewMissingSqlSecurity(absl::string_view view_name);
 absl::Status ViewReplaceError(absl::string_view view_name,
                               absl::string_view error);
 absl::Status ViewReplaceRecursive(absl::string_view view_name);

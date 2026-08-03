@@ -320,7 +320,7 @@ TEST_F(TestSpangresFunctionMapper, MapsFunctionWithMultipleSignatures) {
                /*context_ptr=*/nullptr)),
            PostgresFunctionSignatureArguments(googlesql::FunctionSignature(
                gsql_bool,
-               {{googlesql::SignatureArgumentKind::ARG_TYPE_ARBITRARY,
+               {{googlesql::SignatureArgumentKind::ARG_KIND_EXPR_ARBITRARY,
                  googlesql::FunctionEnums::REPEATED}},
                /*context_id=*/0,
                googlesql::FunctionSignatureOptions().set_is_deprecated(true))),

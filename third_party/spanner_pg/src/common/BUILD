@@ -44,7 +44,7 @@ package(
     ],
 )
 
-licenses(["restricted"])
+licenses(["notice"])
 
 filegroup(
     name = "_common",

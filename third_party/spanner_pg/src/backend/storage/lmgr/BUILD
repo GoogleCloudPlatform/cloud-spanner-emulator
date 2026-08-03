@@ -46,7 +46,7 @@ package(
     ],
 )
 
-licenses(["restricted"])
+licenses(["notice"])
 
 genrule(
     name = "generate_lwlocknames",

@@ -137,6 +137,10 @@ void GetColumnTypesC(Oid relid, List** coltypes, List** coltypmods,
 // column or table don't exist.
 int GetColumnAttrNumber(Oid relid, const char* column_name);
 
+// Look up a namespace by oid in the thread-local catalog adapter and bootstrap
+// catalog.
+char* GetNamespaceNameByOid(Oid namespace_oid);
+
 // Wrapper functions for Bootstrap Catalog to be called directly from PostgreSQL
 // source or catalog shim C functions. If BootstrapCatalog returns an error,
 // these return nullptr, which is equivalent to a HeapTuple lookup failure.
@@ -150,7 +154,6 @@ const FormData_pg_language* GetLanguageByNameFromBootstrapCatalog(
     const char* name);
 Oid GetNamespaceByNameFromBootstrapCatalog(const char* name);
 Oid GetCollationOidByNameFromBootstrapCatalog(const char* name);
-char* GetNamespaceNameByOidFromBootstrapCatalog(Oid namespace_oid);
 
 // These functions get a list of results matching a name by returning a pointer
 // to <result>* and a length to avoid copying the Span data into a new temporary

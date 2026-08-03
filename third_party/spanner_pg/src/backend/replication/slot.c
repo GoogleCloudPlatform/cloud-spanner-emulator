@@ -858,8 +858,11 @@ ReplicationSlotPersist(void)
 /*
  * Compute the oldest xmin across all slots and store it in the ProcArray.
  *
- * If already_locked is true, ProcArrayLock has already been acquired
- * exclusively.
+ * If already_locked is true, both the ReplicationSlotControlLock and the
+ * ProcArrayLock have already been acquired exclusively. It is crucial that the
+ * caller first acquires the ReplicationSlotControlLock, followed by the
+ * ProcArrayLock, to prevent any undetectable deadlocks since this function
+ * acquires them in that order.
  */
 void
 ReplicationSlotsComputeRequiredXmin(bool already_locked)
@@ -869,8 +872,33 @@ ReplicationSlotsComputeRequiredXmin(bool already_locked)
 	TransactionId agg_catalog_xmin = InvalidTransactionId;
 
 	Assert(ReplicationSlotCtl != NULL);
+	Assert(!already_locked ||
+		   (LWLockHeldByMeInMode(ReplicationSlotControlLock, LW_EXCLUSIVE) &&
+			LWLockHeldByMeInMode(ProcArrayLock, LW_EXCLUSIVE)));
 
-	LWLockAcquire(ReplicationSlotControlLock, LW_SHARED);
+	/*
+	 * Hold the ReplicationSlotControlLock until after updating the slot xmin
+	 * values, so no backend updates the initial xmin for newly created slot
+	 * concurrently. A shared lock is used here to minimize lock contention,
+	 * especially when many slots exist and advancements occur frequently.
+	 * This is safe since an exclusive lock is taken during initial slot xmin
+	 * update in slot creation.
+	 *
+	 * One might think that we can hold the ProcArrayLock exclusively and
+	 * update the slot xmin values, but it could increase lock contention on
+	 * the ProcArrayLock, which is not great since this function can be called
+	 * at non-negligible frequency.
+	 *
+	 * Concurrent invocation of this function may cause the computed slot xmin
+	 * to regress. However, this is harmless because tuples prior to the most
+	 * recent xmin are no longer useful once advancement occurs (see
+	 * LogicalConfirmReceivedLocation where the slot's xmin value is flushed
+	 * before updating the effective_xmin). Thus, such regression merely
+	 * prevents VACUUM from prematurely removing tuples without causing the
+	 * early deletion of required data.
+	 */
+	if (!already_locked)
+		LWLockAcquire(ReplicationSlotControlLock, LW_SHARED);
 
 	for (i = 0; i < max_replication_slots; i++)
 	{
@@ -905,9 +933,10 @@ ReplicationSlotsComputeRequiredXmin(bool already_locked)
 			agg_catalog_xmin = effective_catalog_xmin;
 	}
 
-	LWLockRelease(ReplicationSlotControlLock);
-
 	ProcArraySetReplicationSlotXmin(agg_xmin, agg_catalog_xmin, already_locked);
+
+	if (!already_locked)
+		LWLockRelease(ReplicationSlotControlLock);
 }
 
 /*
@@ -1203,62 +1232,65 @@ void
 ReplicationSlotReserveWal(void)
 {
 	ReplicationSlot *slot = MyReplicationSlot;
+	XLogSegNo	segno;
+	XLogRecPtr	restart_lsn;
 
 	Assert(slot != NULL);
 	Assert(slot->data.restart_lsn == InvalidXLogRecPtr);
 
 	/*
-	 * The replication slot mechanism is used to prevent removal of required
-	 * WAL. As there is no interlock between this routine and checkpoints, WAL
-	 * segments could concurrently be removed when a now stale return value of
-	 * ReplicationSlotsComputeRequiredLSN() is used. In the unlikely case that
-	 * this happens we'll just retry.
+	 * The replication slot mechanism is used to prevent the removal of
+	 * required WAL.
+	 *
+	 * Acquire an exclusive lock to prevent the checkpoint process from
+	 * concurrently computing the minimum slot LSN (see the call to
+	 * XLogGetReplicationSlotMinimumLSN in CreateCheckPoint). This ensures
+	 * that the WAL reserved for replication cannot be removed during a
+	 * checkpoint.
+	 *
+	 * The mechanism is reliable because if WAL reservation occurs first, the
+	 * checkpoint must wait for the restart_lsn update before determining the
+	 * minimum non-removable LSN. On the other hand, if the checkpoint happens
+	 * first, subsequent WAL reservations will select positions at or beyond
+	 * the redo pointer of that checkpoint.
 	 */
-	while (true)
-	{
-		XLogSegNo	segno;
-		XLogRecPtr	restart_lsn;
+	LWLockAcquire(ReplicationSlotAllocationLock, LW_EXCLUSIVE);
 
-		/*
-		 * For logical slots log a standby snapshot and start logical decoding
-		 * at exactly that position. That allows the slot to start up more
-		 * quickly. But on a standby we cannot do WAL writes, so just use the
-		 * replay pointer; effectively, an attempt to create a logical slot on
-		 * standby will cause it to wait for an xl_running_xact record to be
-		 * logged independently on the primary, so that a snapshot can be
-		 * built using the record.
-		 *
-		 * None of this is needed (or indeed helpful) for physical slots as
-		 * they'll start replay at the last logged checkpoint anyway. Instead
-		 * return the location of the last redo LSN. While that slightly
-		 * increases the chance that we have to retry, it's where a base
-		 * backup has to start replay at.
-		 */
-		if (SlotIsPhysical(slot))
-			restart_lsn = GetRedoRecPtr();
-		else if (RecoveryInProgress())
-			restart_lsn = GetXLogReplayRecPtr(NULL);
-		else
-			restart_lsn = GetXLogInsertRecPtr();
+	/*
+	 * For logical slots log a standby snapshot and start logical decoding at
+	 * exactly that position. That allows the slot to start up more quickly.
+	 * But on a standby we cannot do WAL writes, so just use the replay
+	 * pointer; effectively, an attempt to create a logical slot on standby
+	 * will cause it to wait for an xl_running_xact record to be logged
+	 * independently on the primary, so that a snapshot can be built using the
+	 * record.
+	 *
+	 * None of this is needed (or indeed helpful) for physical slots as
+	 * they'll start replay at the last logged checkpoint anyway. Instead,
+	 * return the location of the last redo LSN, where a base backup has to
+	 * start replay at.
+	 */
+	if (SlotIsPhysical(slot))
+		restart_lsn = GetRedoRecPtr();
+	else if (RecoveryInProgress())
+		restart_lsn = GetXLogReplayRecPtr(NULL);
+	else
+		restart_lsn = GetXLogInsertRecPtr();
 
-		SpinLockAcquire(&slot->mutex);
-		slot->data.restart_lsn = restart_lsn;
-		SpinLockRelease(&slot->mutex);
+	SpinLockAcquire(&slot->mutex);
+	slot->data.restart_lsn = restart_lsn;
+	SpinLockRelease(&slot->mutex);
 
-		/* prevent WAL removal as fast as possible */
-		ReplicationSlotsComputeRequiredLSN();
+	/* prevent WAL removal as fast as possible */
+	ReplicationSlotsComputeRequiredLSN();
 
-		/*
-		 * If all required WAL is still there, great, otherwise retry. The
-		 * slot should prevent further removal of WAL, unless there's a
-		 * concurrent ReplicationSlotsComputeRequiredLSN() after we've written
-		 * the new restart_lsn above, so normally we should never need to loop
-		 * more than twice.
-		 */
-		XLByteToSeg(slot->data.restart_lsn, segno, wal_segment_size);
-		if (XLogGetLastRemovedSegno() < segno)
-			break;
-	}
+	/* Checkpoint shouldn't remove the required WAL. */
+	XLByteToSeg(slot->data.restart_lsn, segno, wal_segment_size);
+	if (XLogGetLastRemovedSegno() >= segno)
+		elog(ERROR, "WAL required by replication slot %s has been removed concurrently",
+			 NameStr(slot->data.name));
+
+	LWLockRelease(ReplicationSlotAllocationLock);
 
 	if (!RecoveryInProgress() && SlotIsLogical(slot))
 	{

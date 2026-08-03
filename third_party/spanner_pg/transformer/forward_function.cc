@@ -73,6 +73,7 @@ namespace postgres_translator {
 
 using ::postgres_translator::internal::PostgresCastNodeTemplate;
 using ::postgres_translator::internal::PostgresCastToExpr;
+using ::postgres_translator::internal::PostgresConstCastNodeTemplate;
 using ::postgres_translator::internal::PostgresConstCastToExpr;
 
 namespace {

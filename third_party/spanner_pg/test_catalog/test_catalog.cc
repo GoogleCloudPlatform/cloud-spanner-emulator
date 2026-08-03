@@ -119,9 +119,8 @@ EngineSystemCatalog* GetSpangresTestSystemCatalog(
   // Initialize the EngineSystemCatalog singleton as needed, but throw away
   // the result since it's ok if it was already initialized.
   std::unique_ptr<EngineBuiltinFunctionCatalog> builtin_function_catalog;
-    builtin_function_catalog = absl::make_unique<
-        EmulatorBuiltinFunctionCatalog>(
-        absl::make_unique<google::spanner::emulator::backend::FunctionCatalog>(
+    builtin_function_catalog = std::make_unique<EmulatorBuiltinFunctionCatalog>(
+        std::make_unique<google::spanner::emulator::backend::FunctionCatalog>(
             GetTypeFactory(), /* catalog_name =*/"spanner"));
   absl::StatusOr<bool> initialized_catalog_or =
       SpangresSystemCatalog::TryInitializeEngineSystemCatalog(

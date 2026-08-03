@@ -34,7 +34,10 @@
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
 package(
-    default_visibility = ["//:__subpackages__"],
+    default_visibility = [
+        "//:__subpackages__",
+        "//spanner/tests/spangres:__subpackages__",
+    ],
 )
 
 licenses(["notice"])

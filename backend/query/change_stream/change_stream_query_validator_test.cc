@@ -41,11 +41,13 @@
 #include "backend/query/analyzer_options.h"
 #include "backend/query/catalog.h"
 #include "backend/query/function_catalog.h"
+#include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/schema.h"
 #include "common/constants.h"
 #include "common/errors.h"
 #include "common/limits.h"
 #include "tests/common/schema_constructor.h"
+#include "tests/common/scoped_feature_flags_setter.h"
 
 namespace google {
 namespace spanner {
@@ -222,6 +224,8 @@ TEST_F(ChangeStreamQueryValidatorTest,
             "_change_stream_partition_change_stream_test_table");
   EXPECT_EQ(validator.change_stream_metadata().data_table,
             "_change_stream_data_change_stream_test_table");
+  EXPECT_EQ(validator.change_stream_metadata().partition_mode,
+            kChangeStreamPartitionModeImmutableKeyRange);
   ASSERT_FALSE(validator.change_stream_metadata().is_pg);
   ASSERT_TRUE(validator.change_stream_metadata().is_change_stream_query);
 }
@@ -410,6 +414,128 @@ TEST_F(ChangeStreamQueryValidatorTest, ValidateScalarArgumentNonValid) {
   EXPECT_EQ(stmt->resolved_statement()->Accept(&validator),
             error::InvalidChangeStreamTvfArgumentWithArgIndex(
                 "READ_change_stream_test_table", 2));
+}
+
+class ChangeStreamMutableKeyRangeQueryValidatorTest : public testing::Test {
+ public:
+  friend class Catalog;
+  ChangeStreamMutableKeyRangeQueryValidatorTest()
+      : flag_setter_({.enable_mutable_key_range_change_stream = true}),
+        analyzer_options_(MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone)),
+        schema_(test::CreateSchemaWithOneTableAndOneChangeStream(
+            &type_factory_, database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
+            /*is_mutable_key_range=*/true)),
+        fn_catalog_(&type_factory_,
+                    /*catalog_name=*/kCloudSpannerEmulatorFunctionCatalogName,
+                    /*latest_schema=*/schema_.get()),
+        catalog_(std::make_unique<Catalog>(
+            schema_.get(), &fn_catalog_, &type_factory_, analyzer_options_)) {}
+
+ protected:
+  std::unique_ptr<const googlesql::AnalyzerOutput> AnalyzeQuery(
+      const std::string& sql) {
+    std::unique_ptr<const googlesql::AnalyzerOutput> output;
+    GOOGLESQL_EXPECT_OK(googlesql::AnalyzeStatement(
+        sql, analyzer_options_, catalog_.get(), &type_factory_, &output));
+    return output;
+  }
+
+  test::ScopedEmulatorFeatureFlagsSetter flag_setter_;
+  googlesql::TypeFactory type_factory_;
+  const googlesql::AnalyzerOptions analyzer_options_;
+  std::unique_ptr<const Schema> schema_;
+  const FunctionCatalog fn_catalog_;
+  std::unique_ptr<Catalog> catalog_;
+  absl::flat_hash_map<std::string, googlesql::Value> params_;
+};
+
+TEST_F(ChangeStreamMutableKeyRangeQueryValidatorTest,
+       ValidateMetadataCreatedForValidChangeStreamQuery) {
+  absl::Time start_time = absl::Now();
+  absl::Time end_time = start_time + absl::Minutes(1);
+  auto stmt =
+      AnalyzeQuery(absl::Substitute("SELECT * FROM "
+                                    "READ_change_stream_test_table ('$0', "
+                                    "'$1', 'test_token', 1000 )",
+                                    start_time, end_time));
+  ChangeStreamQueryValidator validator{schema_.get(), absl::Now(),
+                                       std::move(params_)};
+  ASSERT_THAT(validator.IsChangeStreamQuery(stmt->resolved_statement()),
+              IsOkAndHolds(true));
+  GOOGLESQL_ASSERT_OK(stmt->resolved_statement()->Accept(&validator));
+  EXPECT_EQ(validator.change_stream_metadata().change_stream_name,
+            "change_stream_test_table");
+  EXPECT_EQ(validator.change_stream_metadata().heartbeat_milliseconds, 1000);
+  EXPECT_EQ(validator.change_stream_metadata().partition_token.value(),
+            "test_token");
+  EXPECT_EQ(validator.change_stream_metadata().end_timestamp.value(), end_time);
+  EXPECT_EQ(validator.change_stream_metadata().start_timestamp, start_time);
+  EXPECT_EQ(validator.change_stream_metadata().tvf_name,
+            "READ_change_stream_test_table");
+  EXPECT_EQ(validator.change_stream_metadata().partition_table,
+            "_change_stream_partition_change_stream_test_table");
+  EXPECT_EQ(validator.change_stream_metadata().data_table,
+            "_change_stream_data_change_stream_test_table");
+  EXPECT_EQ(validator.change_stream_metadata().partition_mode,
+            kChangeStreamPartitionModeMutableKeyRange);
+  ASSERT_FALSE(validator.change_stream_metadata().is_pg);
+  ASSERT_TRUE(validator.change_stream_metadata().is_change_stream_query);
+}
+
+TEST_F(ChangeStreamMutableKeyRangeQueryValidatorTest,
+       ValidateInvalidChangeStreamTvfName) {
+  absl::Time start_time = absl::Now();
+  absl::Time end_time = start_time + absl::Minutes(1);
+  std::unique_ptr<const googlesql::AnalyzerOutput> output;
+  EXPECT_FALSE(googlesql::AnalyzeStatement(
+                   absl::Substitute("SELECT * FROM "
+                                    "READ_non_existent_stream ('$0', "
+                                    "'$1', 'test_token', 1000 )",
+                                    start_time, end_time),
+                   analyzer_options_, catalog_.get(), &type_factory_, &output)
+                   .ok());
+}
+
+TEST_F(ChangeStreamMutableKeyRangeQueryValidatorTest,
+       ValidateEmptyEndTimestampNonValid) {
+  auto stmt =
+      AnalyzeQuery(absl::Substitute("SELECT * FROM "
+                                    "READ_change_stream_test_table ('$0', "
+                                    "NULL, 'test_token', 1000 )",
+                                    absl::Now()));
+  ChangeStreamQueryValidator validator{
+      schema_.get(),
+      absl::Now(),
+      params_,
+  };
+  ASSERT_THAT(validator.IsChangeStreamQuery(stmt->resolved_statement()),
+              IsOkAndHolds(true));
+  EXPECT_EQ(stmt->resolved_statement()->Accept(&validator),
+            error::InvalidChangeStreamTvfArgumentNullEndTimestamp());
+}
+
+TEST_F(ChangeStreamMutableKeyRangeQueryValidatorTest,
+       ValidateEndTimestampTooFarInFutureNonValid) {
+  absl::Time query_start_time = absl::Now();
+  absl::Time start_time = query_start_time;
+  absl::Time end_time = query_start_time + absl::Minutes(31);
+  auto stmt =
+      AnalyzeQuery(absl::Substitute("SELECT * FROM "
+                                    "READ_change_stream_test_table ('$0', "
+                                    "'$1', 'test_token', 1000 )",
+                                    start_time, end_time));
+  ChangeStreamQueryValidator validator{
+      schema_.get(),
+      query_start_time,
+      params_,
+  };
+  ASSERT_THAT(validator.IsChangeStreamQuery(stmt->resolved_statement()),
+              IsOkAndHolds(true));
+  EXPECT_THAT(
+      stmt->resolved_statement()->Accept(&validator),
+      StatusIs(absl::StatusCode::kOutOfRange,
+               testing::HasSubstr(
+                   "Specified end_timestamp is too far in the future.")));
 }
 
 class ChangeStreamQueryValidatorIllegalTVFTest

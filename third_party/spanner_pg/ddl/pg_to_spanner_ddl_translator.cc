@@ -389,6 +389,9 @@ class PostgreSQLToSpannerDDLTranslatorImpl
   absl::Status TranslateAlterIndex(const AlterTableStmt& alter_index_statement,
                                    const TranslationOptions& options,
                                    google::spanner::emulator::backend::ddl::AlterIndex& out) const;
+  absl::Status TranslateReindex(const ReindexStmt& reindex_statement,
+                                const TranslationOptions& options,
+                                google::spanner::emulator::backend::ddl::AlterVectorIndex& out) const;
   absl::Status TranslateCreateSchema(const CreateSchemaStmt& create_statement,
                                      google::spanner::emulator::backend::ddl::CreateSchema& out) const;
   absl::Status TranslateVacuum(const VacuumStmt& vacuum_statement,
@@ -2149,8 +2152,25 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateTable(
   }
 
   if (out.primary_key_size() == 0) {
+    if (!options.enable_tables_without_primary_keys) {
       return UnsupportedTranslationError(absl::StrCat(
           "Primary key must be defined for table \"", table_name, "\"."));
+    }
+    // If no primary key is specified, we generate a primary key column with
+    // the HIDDEN option.
+    google::spanner::emulator::backend::ddl::ColumnDefinition* column = out.add_column();
+    std::string generated_pk_name = "rowid";
+    column->set_column_name(generated_pk_name);
+    column->set_type(google::spanner::emulator::backend::ddl::ColumnDefinition::INT64);
+    column->set_not_null(true);
+    column->set_hidden(true);
+    column->mutable_identity_column()->set_type(
+        google::spanner::emulator::backend::ddl::ColumnDefinition::IdentityColumnDefinition::
+            BIT_REVERSED_POSITIVE);
+    google::spanner::emulator::backend::ddl::KeyPartClause* primary_key_part = out.add_primary_key();
+    primary_key_part->set_key_name(generated_pk_name);
+    // This is the default ordering for PG.
+    primary_key_part->set_order(google::spanner::emulator::backend::ddl::KeyPartClause::ASC_NULLS_LAST);
   }
 
   return absl::OkStatus();
@@ -3179,11 +3199,10 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateFunction(
           "AS clause is supported only for REMOTE functions.");
     }
 
-    GOOGLESQL_RETURN_IF_ERROR(ParseAsDefinitionForRemoteUdf(
-        *as_definition,
-        // TODO: Rename to options.
-        out.mutable_sql_options()
-        ));
+    GOOGLESQL_RETURN_IF_ERROR(
+        ParseAsDefinitionForRemoteUdf(*as_definition, out.mutable_options()));
+
+    out.set_original_definition(*as_definition);
   }
 
   absl::string_view routine_body_string =
@@ -4137,7 +4156,6 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::Visitor::Visit(
 
       break;
     }
-
     case T_AlterTableStmt: {
       GOOGLESQL_ASSIGN_OR_RETURN(
           const AlterTableStmt* statement,

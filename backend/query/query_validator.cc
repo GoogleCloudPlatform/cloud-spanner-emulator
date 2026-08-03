@@ -141,6 +141,13 @@ constexpr absl::string_view kScanMethodBatch = "batch";
 constexpr absl::string_view kScanMethodRow = "row";
 constexpr absl::string_view kHintPDMLMaxParallelism = "pdml_max_parallelism";
 
+// Export Data statement hints
+constexpr absl::string_view kHintExportDataFormat = "format";
+constexpr absl::string_view kHintExportDataUri = "uri";
+constexpr absl::string_view kHintExportDataTable = "table";
+constexpr absl::string_view kHintExportDataWriteMode = "write_mode";
+constexpr absl::string_view kHintExportDataSpannerOptions = "spanner_options";
+
 absl::Status CollectHintsForNode(
     const googlesql::ResolvedOption* hint,
     absl::flat_hash_map<absl::string_view, googlesql::Value>* node_hint_map) {
@@ -321,7 +328,10 @@ absl::Status QueryValidator::CheckSpannerHintName(
         kHintJoinBatch, kHintJoinForceOrder, kHashJoinExecution}},
       {googlesql::RESOLVED_SET_OPERATION_SCAN,
        {kHintJoinMethod, kHintJoinForceOrder}},
-      {googlesql::RESOLVED_FUNCTION_CALL, {kHintDisableInline}}};
+      {googlesql::RESOLVED_FUNCTION_CALL, {kHintDisableInline}},
+      {googlesql::RESOLVED_EXPORT_DATA_STMT,
+       {kHintExportDataFormat, kHintExportDataUri, kHintExportDataTable,
+        kHintExportDataWriteMode, kHintExportDataSpannerOptions}}};
 
   const auto& iter = supported_hints->find(node_kind);
   if (iter == supported_hints->end() || !iter->second.contains(name)) {
@@ -381,6 +391,11 @@ absl::Status QueryValidator::CheckHintValue(
           {kRequireEnhanceQuery, googlesql::types::BoolType()},
           {kEnhanceQueryTimeoutMs, googlesql::types::Int64Type()},
           {kScanMethod, googlesql::types::StringType()},
+          {kHintExportDataFormat, googlesql::types::StringType()},
+          {kHintExportDataUri, googlesql::types::StringType()},
+          {kHintExportDataTable, googlesql::types::StringType()},
+          {kHintExportDataWriteMode, googlesql::types::StringType()},
+          {kHintExportDataSpannerOptions, googlesql::types::StringType()},
           {kHintPDMLMaxParallelism, googlesql::types::Int64Type()},
       }};
 

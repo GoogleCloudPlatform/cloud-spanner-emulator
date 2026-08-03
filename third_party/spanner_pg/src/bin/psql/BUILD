@@ -45,7 +45,7 @@ package(
     ],
 )
 
-licenses(["restricted"])
+licenses(["notice"])
 
 cc_binary(
     name = "psql",

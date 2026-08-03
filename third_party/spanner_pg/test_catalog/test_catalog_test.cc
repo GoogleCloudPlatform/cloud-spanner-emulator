@@ -166,6 +166,21 @@ TEST(TestCatalogTest, Arrays) {
   EXPECT_NE(udf, nullptr);
 }
 
+// Test that the catalog has sequences as we expect.
+     TEST(TestCatalogTest, Sequences) {
+  googlesql::EnumerableCatalog* test_catalog =
+      GetSpangresTestSpannerUserCatalog();
+  ASSERT_NE(test_catalog, nullptr);
+
+  const googlesql::Sequence* seq;
+  GOOGLESQL_EXPECT_OK(test_catalog->FindSequence({"myseq"}, &seq, /*options=*/{}));
+  EXPECT_NE(seq, nullptr);
+
+  GOOGLESQL_EXPECT_OK(
+      test_catalog->FindSequence({"Seq_Schema", "Seq"}, &seq, /*options=*/{}));
+  EXPECT_NE(seq, nullptr);
+}
+
 // Lookup a table that doesn't exist, ensuring we get null and don't crash.
 TEST(TestCatalogTest, FailedLookup) {
   googlesql::EnumerableCatalog* test_catalog =

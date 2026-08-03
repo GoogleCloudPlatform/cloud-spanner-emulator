@@ -82,6 +82,7 @@ cc_library(
     ],
     deps = [
         ":constants",
+        ":feature_flags",
         ":limits",
         "//backend/common:ids",
         "@com_google_absl//absl/status",

@@ -58,10 +58,11 @@ namespace {
 absl::Status CheckTypeAndKindMapping(
     uint32_t oid, const googlesql::Type* type,
     const googlesql::SignatureArgumentKind kind) {
-  if (kind == googlesql::SignatureArgumentKind::ARG_TYPE_FIXED) {
-    GOOGLESQL_RET_CHECK(type != nullptr) << "Type with OID " << oid
-                               << " not found in the catalog (ARG_TYPE_FIXED "
-                                  "and googlesql::Type* mapping is NULL)";
+  if (kind == googlesql::SignatureArgumentKind::ARG_KIND_EXPR_FIXED) {
+    GOOGLESQL_RET_CHECK(type != nullptr)
+        << "Type with OID " << oid
+        << " not found in the catalog (ARG_KIND_EXPR_FIXED "
+           "and googlesql::Type* mapping is NULL)";
   }
   return absl::OkStatus();
 }
@@ -75,13 +76,13 @@ std::string_view PostgresNamespaceFrom(std::string_view nspace) {
 googlesql::SignatureArgumentKind SignatureArgumentKindFrom(uint32_t oid) {
   switch (oid) {
     case ANYOID:
-      return googlesql::SignatureArgumentKind::ARG_TYPE_ARBITRARY;
+      return googlesql::SignatureArgumentKind::ARG_KIND_EXPR_ARBITRARY;
     case ANYARRAYOID:
-      return googlesql::SignatureArgumentKind::ARG_ARRAY_TYPE_ANY_1;
+      return googlesql::SignatureArgumentKind::ARG_KIND_EXPR_ARRAY_ANY_1;
     case ANYELEMENTOID:
-      return googlesql::SignatureArgumentKind::ARG_TYPE_ANY_1;
+      return googlesql::SignatureArgumentKind::ARG_KIND_EXPR_ANY_1;
     default:
-      return googlesql::SignatureArgumentKind::ARG_TYPE_FIXED;
+      return googlesql::SignatureArgumentKind::ARG_KIND_EXPR_FIXED;
   }
 }
 

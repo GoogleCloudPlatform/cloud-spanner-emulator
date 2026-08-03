@@ -31,26 +31,26 @@ Operation::Operation(const std::string& operation_uri)
     : operation_uri_(operation_uri) {}
 
 void Operation::SetMetadata(const google::protobuf::Message& metadata) {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   metadata_.reset(metadata.New());
   metadata_->CopyFrom(metadata);
 }
 
 void Operation::SetError(const absl::Status& status) {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   status_ = status;
   response_.reset();
 }
 
 void Operation::SetResponse(const google::protobuf::Message& response) {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   response_.reset(response.New());
   response_->CopyFrom(response);
   status_ = absl::OkStatus();
 }
 
 void Operation::ToProto(google::longrunning::Operation* operation_pb) {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
 
   operation_pb->set_name(operation_uri_);
   operation_pb->set_done(!status_.ok() || response_ != nullptr);

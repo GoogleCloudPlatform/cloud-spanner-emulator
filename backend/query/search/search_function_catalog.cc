@@ -472,7 +472,8 @@ std::unique_ptr<googlesql::Function> SearchFunction(
   //                   string query,
   //                   bool enhance_query = false,
   //                   string language_tag = NULL,
-  //                   string dialect = NULL)
+  //                   string dialect = NULL,
+  //                   string dictionary = NULL)
   return std::make_unique<googlesql::Function>(
       kSearchFunctionName, catalog_name, googlesql::Function::SCALAR,
       std::vector<googlesql::FunctionSignature>{
@@ -483,7 +484,8 @@ std::unique_ptr<googlesql::Function> SearchFunction(
                {string_type, GetRequiredArgumentTypeOptions("query")},
                {bool_type, GetNamedOptionalArgTypeOptions("enhance_query")},
                {string_type, GetNamedOptionalArgTypeOptions("language_tag")},
-               {string_type, GetNamedOptionalArgTypeOptions("dialect")}},
+               {string_type, GetNamedOptionalArgTypeOptions("dialect")},
+               {string_type, GetNamedOptionalArgTypeOptions("dictionary")}},
               nullptr},
       },
       function_options);
@@ -550,7 +552,8 @@ std::unique_ptr<googlesql::Function> ScoreFunction(
   //                  bool enhance_query = false,
   //                  string language_tag = NULL,
   //                  string dialect = NULL,
-  //                  json options = NULL)
+  //                  json options = NULL,
+  //                  string dictionary = NULL)
   return std::make_unique<googlesql::Function>(
       kScoreFunctionName, catalog_name, googlesql::Function::SCALAR,
       std::vector<googlesql::FunctionSignature>{
@@ -564,6 +567,7 @@ std::unique_ptr<googlesql::Function> ScoreFunction(
                   {string_type, GetNamedOptionalArgTypeOptions("language_tag")},
                   {string_type, GetNamedOptionalArgTypeOptions("dialect")},
                   {json_type, GetNamedOptionalArgTypeOptions("options", false)},
+                  {string_type, GetNamedOptionalArgTypeOptions("dictionary")},
               },
               nullptr},
           googlesql::FunctionSignature{
@@ -576,6 +580,7 @@ std::unique_ptr<googlesql::Function> ScoreFunction(
                   {string_type, GetNamedOptionalArgTypeOptions("language_tag")},
                   {string_type, GetNamedOptionalArgTypeOptions("dialect")},
                   {json_type, GetNamedOptionalArgTypeOptions("options", false)},
+                  {string_type, GetNamedOptionalArgTypeOptions("dictionary")},
               },
               nullptr},
       },
@@ -629,7 +634,8 @@ std::unique_ptr<googlesql::Function> SnippetFunction(
   //                    string language_tag = NULL,
   //                    int64_t max_snippet_width = 160,
   //                    int64_t max_snippets = 3,
-  //                    string content_type = "text/html")
+  //                    string content_type = "text/html",
+  //                    string dictionary = NULL)
 
   if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
     function_options.set_evaluator(googlesql::FunctionEvaluator(EvalSnippetPG));
@@ -645,7 +651,8 @@ std::unique_ptr<googlesql::Function> SnippetFunction(
               GetNamedOptionalArgTypeOptions("max_snippet_width", false)},
              {int64_type,
               GetNamedOptionalArgTypeOptions("max_snippets", false)},
-             {string_type, GetNamedOptionalArgTypeOptions("content_type")}},
+             {string_type, GetNamedOptionalArgTypeOptions("content_type")},
+             {string_type, GetNamedOptionalArgTypeOptions("dictionary")}},
             nullptr}},
         function_options);
   }
@@ -662,7 +669,8 @@ std::unique_ptr<googlesql::Function> SnippetFunction(
            {int64_type,
             GetNamedOptionalArgTypeOptions("max_snippet_width", false)},
            {int64_type, GetNamedOptionalArgTypeOptions("max_snippets", false)},
-           {string_type, GetNamedOptionalArgTypeOptions("content_type")}},
+           {string_type, GetNamedOptionalArgTypeOptions("content_type")},
+           {string_type, GetNamedOptionalArgTypeOptions("dictionary")}},
           nullptr}},
       function_options);
 }

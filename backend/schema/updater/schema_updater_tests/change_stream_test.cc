@@ -30,6 +30,7 @@
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/updater/schema_updater_tests/base.h"
 #include "common/errors.h"
+#include "common/feature_flags.h"
 
 namespace google {
 namespace spanner {
@@ -836,6 +837,65 @@ TEST_P(SchemaUpdaterTest, SetOptions_AllowTxnExclusion) {
   EXPECT_EQ(new_schema->FindChangeStream("C2")->allow_txn_exclusion(), false);
 }
 
+TEST_P(SchemaUpdaterTest, SetOptions_PartitionMode) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_mutable_key_range_change_stream = true;
+  ScopedEmulatorFeatureFlagsSetter setter(flags);
+
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema(
+                                        {
+                                            R"(
+      CREATE TABLE T (
+        k1 INT64,
+        c1 STRING(100),
+      ) PRIMARY KEY (k1)
+    )",
+                                            R"(
+      CREATE CHANGE STREAM C1 FOR ALL OPTIONS (
+        partition_mode = 'MUTABLE_KEY_RANGE'
+      ))",
+                                            R"(
+      CREATE CHANGE STREAM C2 FOR ALL OPTIONS (
+        partition_mode = 'IMMUTABLE_KEY_RANGE'
+      ))"},
+                                        "", GetParam(), true));
+  EXPECT_EQ(schema->FindChangeStream("C1")->partition_mode(),
+            kChangeStreamPartitionModeMutableKeyRange);
+  EXPECT_EQ(schema->FindChangeStream("C2")->partition_mode(),
+            kChangeStreamPartitionModeImmutableKeyRange);
+
+  if (GetParam() == database_api::DatabaseDialect::POSTGRESQL) {
+    EXPECT_EQ(schema->FindChangeStream("C1")->tvf_name(),
+              "read_proto_bytes_C1");
+    EXPECT_EQ(schema->FindChangeStream("C2")->tvf_name(), "read_json_C2");
+  } else {
+    EXPECT_EQ(schema->FindChangeStream("C1")->tvf_name(), "READ_C1");
+    EXPECT_EQ(schema->FindChangeStream("C2")->tvf_name(), "READ_C2");
+  }
+
+  // Dump change stream statement to cover DumpChangeStream in schema.cc
+  ddl::DDLStatementList ddl_statements = schema->Dump();
+  EXPECT_GT(ddl_statements.statement_size(), 0);
+
+  // Invalid partition_mode value
+  EXPECT_THAT(
+      UpdateSchema(schema.get(), {R"(CREATE CHANGE STREAM C_invalid OPTIONS
+            ( partition_mode = 'INVALID_MODE' ))"}),
+      StatusIs(error::InvalidChangeStreamPartitionMode("INVALID_MODE")));
+}
+
+TEST_P(SchemaUpdaterTest, SetOptions_PartitionModeOptionsDisabled) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_mutable_key_range_change_stream = false;
+  ScopedEmulatorFeatureFlagsSetter setter(flags);
+
+  EXPECT_THAT(CreateSchema({R"(
+        CREATE CHANGE STREAM C FOR ALL OPTIONS (
+          partition_mode = 'MUTABLE_KEY_RANGE'
+        ))"}),
+              StatusIs(error::UnsupportedChangeStreamOption("partition_mode")));
+}
+
 TEST_P(SchemaUpdaterTest, DropChangeStream) {
   GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
               CREATE TABLE test_table (
@@ -1072,6 +1132,78 @@ TEST_P(SchemaUpdaterTest, AlterChangeStreamSetForClauseAddsAllTrackedTables) {
   EXPECT_TRUE(tracked_tables.contains("a"));
   EXPECT_TRUE(tracked_tables.contains("b"));
   EXPECT_EQ(tracked_tables.size(), 2);
+}
+
+TEST_P(SchemaUpdaterTest, AlterChangeStream_PartitionModeBlocked) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_mutable_key_range_change_stream = true;
+  ScopedEmulatorFeatureFlagsSetter setter(flags);
+
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+      CREATE TABLE T (
+        k1 INT64,
+        c1 STRING(100),
+      ) PRIMARY KEY (k1)
+    )",
+                                                  R"(
+      CREATE CHANGE STREAM C1 FOR ALL OPTIONS (
+        partition_mode = 'MUTABLE_KEY_RANGE'
+      ))",
+                                                  R"(
+      CREATE CHANGE STREAM C2 FOR ALL
+    )"}));
+
+  // Altering C1 (MUTABLE) to IMMUTABLE should fail
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"(ALTER CHANGE STREAM C1 SET OPTIONS
+            (partition_mode = 'IMMUTABLE_KEY_RANGE'))"}),
+              StatusIs(error::AlterChangeStreamPartitionModeNotAllowed(
+                  "C1", "MUTABLE_KEY_RANGE")));
+
+  // Altering C2 (default IMMUTABLE) to MUTABLE should fail
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"(ALTER CHANGE STREAM C2 SET OPTIONS
+            (partition_mode = 'MUTABLE_KEY_RANGE'))"}),
+              StatusIs(error::AlterChangeStreamPartitionModeNotAllowed(
+                  "C2", "IMMUTABLE_KEY_RANGE")));
+
+  // Altering C1 to MUTABLE (same value) should succeed
+  GOOGLESQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(ALTER CHANGE STREAM C1 SET OPTIONS
+        (partition_mode = 'MUTABLE_KEY_RANGE'))"}));
+
+  // Altering C2 to IMMUTABLE (same value) should succeed
+  GOOGLESQL_EXPECT_OK(UpdateSchema(schema.get(), {R"(ALTER CHANGE STREAM C2 SET OPTIONS
+        (partition_mode = 'IMMUTABLE_KEY_RANGE'))"}));
+}
+
+TEST(ChangeStreamErrorsTest, UnsupportedChangeStreamOptionCoverage) {
+  // Test with flag = true
+  {
+    EmulatorFeatureFlags::Flags flags;
+    flags.enable_mutable_key_range_change_stream = true;
+    ScopedEmulatorFeatureFlagsSetter setter(flags);
+
+    absl::Status status = error::UnsupportedChangeStreamOption("my_option");
+    absl::Status expected =
+        absl::Status(absl::StatusCode::kFailedPrecondition,
+                     "Invalid Change Stream Option: my_option. "
+                     "Supported options are retention_period, "
+                     "value_capture_type, and partition_mode.");
+    EXPECT_EQ(status, expected);
+  }
+
+  // Test with flag = false
+  {
+    EmulatorFeatureFlags::Flags flags;
+    flags.enable_mutable_key_range_change_stream = false;
+    ScopedEmulatorFeatureFlagsSetter setter(flags);
+
+    absl::Status status = error::UnsupportedChangeStreamOption("my_option");
+    absl::Status expected =
+        absl::Status(absl::StatusCode::kFailedPrecondition,
+                     "Invalid Change Stream Option: my_option. "
+                     "Supported options are retention_period "
+                     "and value_capture_type.");
+    EXPECT_EQ(status, expected);
+  }
 }
 
 }  // namespace

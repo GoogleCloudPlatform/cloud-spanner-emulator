@@ -116,10 +116,6 @@ TEST_P(SchemaUpdaterTest, CreateUDF_Basic) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateRemoteUDF_Basic) {
-  if (GetParam() == POSTGRESQL) {
-    GTEST_SKIP();
-  }
-
   std::string ddl;
   if (GetParam() == POSTGRESQL) {
     ddl =
@@ -157,10 +153,6 @@ TEST_P(SchemaUpdaterTest, CreateRemoteUDF_Basic) {
 }
 
 TEST_P(SchemaUpdaterTest, CreateRemoteUDF_Error) {
-  if (GetParam() == POSTGRESQL) {
-    GTEST_SKIP();
-  }
-
   // No endpoint set.
   EXPECT_THAT(
       CreateSchema(
@@ -241,46 +233,80 @@ TEST_P(SchemaUpdaterTest, CreateRemoteUDF_Error) {
   }
 
   // Language SQL set.
-  EXPECT_THAT(
-      CreateSchema(
-          {GetParam() == POSTGRESQL
-               ? R"sql(CREATE FUNCTION udf_1(x BIGINT) RETURNS BIGINT LANGUAGE SQL AS $${"endpoint": "https://www.google.com"}$$)sql"
-               : R"sql(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 LANGUAGE SQL OPTIONS (endpoint = 'https://www.google.com'))sql"},
-          /*proto_descriptor_bytes=*/"",
-          /*dialect=*/GetParam(),
-          /*use_gsql_to_pg_translation=*/false),
-      ::googlesql_base::testing::StatusIs(
-          absl::StatusCode::kInvalidArgument,
-          HasSubstr("To write SQL functions, omit the LANGUAGE clause and "
-                    "write the function body using 'AS (expression)'")));
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_THAT(
+        CreateSchema(
+            {R"sql(CREATE FUNCTION udf_1(x BIGINT) RETURNS BIGINT LANGUAGE SQL AS $${"endpoint": "https://www.google.com"}$$)sql"},
+            /*proto_descriptor_bytes=*/"",
+            /*dialect=*/GetParam(),
+            /*use_gsql_to_pg_translation=*/false),
+        ::googlesql_base::testing::StatusIs(
+            absl::StatusCode::kFailedPrecondition,
+            HasSubstr("AS clause is supported only for REMOTE functions.")));
+  } else {
+    EXPECT_THAT(
+        CreateSchema(
+            {R"sql(CREATE FUNCTION udf_1(x INT64) RETURNS INT64 LANGUAGE SQL OPTIONS (endpoint = 'https://www.google.com'))sql"},
+            /*proto_descriptor_bytes=*/"",
+            /*dialect=*/GetParam(),
+            /*use_gsql_to_pg_translation=*/false),
+        ::googlesql_base::testing::StatusIs(
+            absl::StatusCode::kInvalidArgument,
+            HasSubstr("To write SQL functions, omit the LANGUAGE clause and "
+                      "write the function body using 'AS (expression)'")));
+  }
 
   // Unsupported argument type.
-  EXPECT_THAT(
-      CreateSchema(
-          {GetParam() == POSTGRESQL
-               ? R"sql(CREATE FUNCTION udf_1(x ARRAY<TOKENLIST>) RETURNS BIGINT VOLATILE LANGUAGE REMOTE AS $${"endpoint": "https://www.google.com"}$$)sql"
-               : R"sql(CREATE FUNCTION udf_1(x ARRAY<TOKENLIST>) RETURNS INT64 NOT DETERMINISTIC LANGUAGE REMOTE OPTIONS (endpoint = 'https://www.google.com'))sql"},
-          /*proto_descriptor_bytes=*/"",
-          /*dialect=*/GetParam(),
-          /*use_gsql_to_pg_translation=*/false),
-      ::googlesql_base::testing::StatusIs(
-          absl::StatusCode::kInvalidArgument,
-          HasSubstr(
-              "Encountered 'TOKENLIST' while parsing: function_data_type")));
+
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_THAT(
+        CreateSchema(
+            {R"sql(CREATE FUNCTION udf_1(x TOKENLIST[]) RETURNS BIGINT VOLATILE LANGUAGE REMOTE AS $${"endpoint": "https://www.google.com"}$$)sql"},
+            /*proto_descriptor_bytes=*/"",
+            /*dialect=*/GetParam(),
+            /*use_gsql_to_pg_translation=*/false),
+        ::googlesql_base::testing::StatusIs(
+            absl::StatusCode::kUnimplemented,
+            HasSubstr("Remote UDF udf_1 has unsupported type TOKENLIST")
+            ));
+  } else {
+    EXPECT_THAT(
+        CreateSchema(
+            {R"sql(CREATE FUNCTION udf_1(x ARRAY<TOKENLIST>) RETURNS INT64 NOT DETERMINISTIC LANGUAGE REMOTE OPTIONS (endpoint = 'https://www.google.com'))sql"},
+            /*proto_descriptor_bytes=*/"",
+            /*dialect=*/GetParam(),
+            /*use_gsql_to_pg_translation=*/false),
+        ::googlesql_base::testing::StatusIs(
+            absl::StatusCode::kInvalidArgument,
+            HasSubstr(
+                "Encountered 'TOKENLIST' while parsing: function_data_type")));
+  }
 
   // Unsupported return type.
-  EXPECT_THAT(
-      CreateSchema(
-          {GetParam() == POSTGRESQL
-               ? R"sql(CREATE FUNCTION udf_1(x BIGINT) RETURNS ARRAY<TOKENLIST> VOLATILE LANGUAGE REMOTE AS $${"endpoint": "https://www.google.com"}$$)sql"
-               : R"sql(CREATE FUNCTION udf_1(x INT64) RETURNS ARRAY<TOKENLIST> NOT DETERMINISTIC LANGUAGE REMOTE OPTIONS (endpoint = 'https://www.google.com'))sql"},
-          /*proto_descriptor_bytes=*/"",
-          /*dialect=*/GetParam(),
-          /*use_gsql_to_pg_translation=*/false),
-      ::googlesql_base::testing::StatusIs(
-          absl::StatusCode::kInvalidArgument,
-          HasSubstr(
-              "Encountered 'TOKENLIST' while parsing: function_data_type")));
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_THAT(
+        CreateSchema(
+            {R"sql(CREATE FUNCTION udf_1(x BIGINT) RETURNS TOKENLIST[] VOLATILE
+                      LANGUAGE REMOTE AS $${"endpoint": "https://www.google.com"}$$)sql"},
+            /*proto_descriptor_bytes=*/"",
+            /*dialect=*/GetParam(),
+            /*use_gsql_to_pg_translation=*/false),
+        ::googlesql_base::testing::StatusIs(
+            absl::StatusCode::kUnimplemented,
+            HasSubstr("Remote UDF udf_1 has unsupported type TOKENLIST")
+            ));
+  } else {
+    EXPECT_THAT(
+        CreateSchema(
+            {R"sql(CREATE FUNCTION udf_1(x INT64) RETURNS ARRAY<TOKENLIST> NOT DETERMINISTIC LANGUAGE REMOTE OPTIONS (endpoint = 'https://www.google.com'))sql"},
+            /*proto_descriptor_bytes=*/"",
+            /*dialect=*/GetParam(),
+            /*use_gsql_to_pg_translation=*/false),
+        ::googlesql_base::testing::StatusIs(
+            absl::StatusCode::kInvalidArgument,
+            HasSubstr(
+                "Encountered 'TOKENLIST' while parsing: function_data_type")));
+  }
 
   // Duplicate struct field names. Not possible with PG composite types.
   if (GetParam() != POSTGRESQL) {

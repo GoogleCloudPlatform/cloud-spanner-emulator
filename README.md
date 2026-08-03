@@ -143,6 +143,8 @@ Notable supported features:
 
 - [GQL support](https://docs.cloud.google.com/spanner/docs/reference/standard-sql/graph-intro)
 
+- [Graph Algorithms](https://cloud.google.com/spanner/docs/graph/graph-algorithms-overview) (Graph Algorithms are supported in the emulator for parsing and query validation, but they will always return an empty result set)
+
 - DML sequence numbers
 
 - Non-SQL read and write methods

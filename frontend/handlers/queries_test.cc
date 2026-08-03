@@ -15,6 +15,7 @@
 //
 
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "google/spanner/admin/database/v1/spanner_database_admin.pb.h"
@@ -31,8 +32,10 @@
 #include "absl/strings/string_view.h"
 #include "backend/datamodel/types.h"
 #include "common/errors.h"
+#include "frontend/converters/partition.h"
 #include "frontend/converters/types.h"
 #include "frontend/converters/values.h"
+#include "frontend/proto/partition_token.pb.h"
 #include "tests/common/proto_matchers.h"
 #include "tests/common/test_env.h"
 #include "googlesql/base/status_macros.h"
@@ -51,6 +54,7 @@ namespace operations_api = ::google::longrunning;
 
 using testing::ElementsAre;
 using test::EqualsProto;
+using testing::HasSubstr;
 using test::proto::Partially;
 using googlesql_base::testing::StatusIs;
 

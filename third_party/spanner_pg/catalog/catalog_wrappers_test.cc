@@ -1144,11 +1144,11 @@ TEST_F(CatalogWrappersTest, LooksUpUdfProcBySchemaAndFuncNames) {
   }
   // Valid user namespace
   {
-    const std::string kSchemaName = "udf_schema";
+    const std::string kSchemaName = "Udf_Schema";
     const Oid namespace_id =
         GetOrGenerateOidFromNamespaceNameC(kSchemaName.c_str());
 
-    const std::string kUdfName = "bar_udf";
+    const std::string kUdfName = "Bar_Udf";
     const FormData_pg_proc** proc_list;
     size_t proc_count;
     GetProcsBySchemaAndFuncNames(kSchemaName.c_str(), kUdfName.c_str(),
@@ -1156,9 +1156,8 @@ TEST_F(CatalogWrappersTest, LooksUpUdfProcBySchemaAndFuncNames) {
 
     EXPECT_EQ(proc_count, 1);
     if (proc_count > 0) {
-      const std::string kUdfFullName = "udf_schema.bar_udf";
       const FormData_pg_proc* proc = proc_list[0];
-      EXPECT_STREQ(NameStr(proc->proname), kUdfFullName.c_str());
+      EXPECT_STREQ(NameStr(proc->proname), kUdfName.c_str());
       EXPECT_NE(proc->oid, InvalidOid);
       EXPECT_EQ(proc->pronamespace, namespace_id);
     }

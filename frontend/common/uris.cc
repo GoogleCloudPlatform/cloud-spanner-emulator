@@ -58,6 +58,12 @@ bool ConsumeInstance(absl::string_view* resource_uri,
   return ConsumeResource("instances/", resource_uri, instance_id);
 }
 
+bool ConsumeInstancePartition(absl::string_view* resource_uri,
+                              absl::string_view* instance_partition_id) {
+  return ConsumeResource("instancePartitions/", resource_uri,
+                         instance_partition_id);
+}
+
 bool ConsumeDatabase(absl::string_view* resource_uri,
                      absl::string_view* database_id) {
   return ConsumeResource("databases/", resource_uri, database_id);
@@ -117,6 +123,32 @@ absl::Status ValidateInstanceId(absl::string_view instance_id) {
   return absl::OkStatus();
 }
 
+absl::Status ParseInstancePartitionUri(
+    absl::string_view resource_uri, absl::string_view* project_id,
+    absl::string_view* instance_id, absl::string_view* instance_partition_id) {
+  if (!ConsumeProject(&resource_uri, project_id)) {
+    return error::InvalidProjectURI(resource_uri);
+  }
+  if (!ConsumeInstance(&resource_uri, instance_id)) {
+    return error::InvalidInstanceURI(resource_uri);
+  }
+  if (!ConsumeInstancePartition(&resource_uri, instance_partition_id)) {
+    return error::InvalidInstancePartitionURI(resource_uri);
+  }
+  return absl::OkStatus();
+}
+
+absl::Status ValidateInstancePartitionId(
+    absl::string_view instance_partition_id) {
+  static LazyRE2 matcher{"[a-z][-a-z0-9]*[a-z0-9]"};
+  if (instance_partition_id.size() < limits::kMinInstanceNameLength ||
+      instance_partition_id.size() > limits::kMaxInstanceNameLength ||
+      !RE2::FullMatch(instance_partition_id, *matcher)) {
+    return error::InvalidInstancePartitionName(instance_partition_id);
+  }
+  return absl::OkStatus();
+}
+
 absl::Status ParseDatabaseUri(absl::string_view resource_uri,
                               absl::string_view* project_id,
                               absl::string_view* instance_id,
@@ -164,24 +196,33 @@ absl::Status ParseSessionUri(absl::string_view resource_uri,
 }
 
 absl::Status ParseOperationUri(absl::string_view operation_uri,
-                               std::shared_ptr<std::string> resource_uri,
+                               std::string* resource_uri,
                                absl::string_view* operation_id) {
-  absl::string_view project_id, instance_id, database_id;
+  absl::string_view project_id, instance_id, database_id, instance_partition_id;
   if (!ConsumeProject(&operation_uri, &project_id)) {
     return error::InvalidProjectURI(operation_uri);
   }
   if (!ConsumeInstance(&operation_uri, &instance_id)) {
     return error::InvalidInstanceURI(operation_uri);
   }
-  // Operations may be performed on an instance, or a database. Call
-  // ConsumeDatabase to remove "databases/<database_id>" if exists. Proceed
+  // Operations may be performed on an instance, an instance partition, or a
+  // database. Call ConsumeDatabase or ConsumeInstancePartition to remove
+  // "databases/<database_id>" or "instancePartitions/<id>" if exists. Proceed
   // regardless of the returned value.
   if (ConsumeDatabase(&operation_uri, &database_id)) {
-    resource_uri = std::make_shared<std::string>(
-        MakeDatabaseUri(MakeInstanceUri(project_id, instance_id), database_id));
+    if (resource_uri != nullptr) {
+      *resource_uri = MakeDatabaseUri(MakeInstanceUri(project_id, instance_id),
+                                      database_id);
+    }
+  } else if (ConsumeInstancePartition(&operation_uri, &instance_partition_id)) {
+    if (resource_uri != nullptr) {
+      *resource_uri = MakeInstancePartitionUri(
+          MakeInstanceUri(project_id, instance_id), instance_partition_id);
+    }
   } else {
-    resource_uri =
-        std::make_shared<std::string>(MakeInstanceUri(project_id, instance_id));
+    if (resource_uri != nullptr) {
+      *resource_uri = MakeInstanceUri(project_id, instance_id);
+    }
   }
 
   if (!ConsumeOperation(&operation_uri, operation_id)) {
@@ -203,6 +244,12 @@ std::string MakeInstanceConfigUri(absl::string_view project_id,
 std::string MakeInstanceUri(absl::string_view project_id,
                             absl::string_view instance_id) {
   return absl::StrCat("projects/", project_id, "/instances/", instance_id);
+}
+
+std::string MakeInstancePartitionUri(absl::string_view instance_uri,
+                                     absl::string_view instance_partition_id) {
+  return absl::StrCat(instance_uri, "/instancePartitions/",
+                      instance_partition_id);
 }
 
 std::string MakeDatabaseUri(absl::string_view instance_uri,

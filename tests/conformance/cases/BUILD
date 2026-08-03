@@ -33,6 +33,7 @@ cc_library(
         "case_sensitivity.cc",
         "change_streams_exclusion.cc",
         "change_streams_exclusion_txn.cc",
+        "change_streams_mutable_key_range.cc",
         "change_streams_read_write.cc",
         "check_constraint_read_write.cc",
         "column_constraints.cc",
@@ -118,6 +119,7 @@ cc_library(
         "@com_github_googleapis_google_cloud_cpp//:common",
         "@com_github_googleapis_google_cloud_cpp//:spanner",
         "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/base:no_destructor",
         "@com_google_absl//absl/container:btree",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",  # buildcleaner: keep
@@ -132,7 +134,6 @@ cc_library(
         "@com_google_googleapis//google/spanner/admin/database/v1:database_cc_proto",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_proto",
-        "@com_google_googlesql//googlesql/base:no_destructor",
         "@com_google_googlesql//googlesql/base:ret_check",
         "@com_google_googlesql//googlesql/base:status",
         "@com_google_googletest//:gtest",

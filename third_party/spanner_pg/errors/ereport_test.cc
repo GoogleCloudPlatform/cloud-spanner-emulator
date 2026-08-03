@@ -89,7 +89,7 @@ TEST(PostgresEreportException, EmptyEreport) {
     EXPECT_EQ(exc.error_data().elevel, 0);
     EXPECT_EQ(exc.error_data().message, nullptr);
     EXPECT_EQ(exc.error_data().sqlerrcode, 0);
-    EXPECT_EQ(exc.error_status(), absl::nullopt);
+    EXPECT_EQ(exc.error_status(), std::nullopt);
   }
 
   EXPECT_TRUE(caught_exception);
@@ -149,7 +149,7 @@ TEST(PostgresEreportException, EmptyThrow) {
     // Message should be copied so pointers aren't the same
     EXPECT_NE(exc.error_data().message, error_message.data());
     EXPECT_EQ(exc.error_data().sqlerrcode, 21);
-    EXPECT_EQ(exc.error_status(), absl::nullopt);
+    EXPECT_EQ(exc.error_status(), std::nullopt);
   }
 
   EXPECT_TRUE(caught_exception);

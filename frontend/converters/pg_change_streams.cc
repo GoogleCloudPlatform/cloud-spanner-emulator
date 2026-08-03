@@ -29,6 +29,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
+#include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "backend/access/read.h"
 #include "common/limits.h"
@@ -190,7 +191,7 @@ JSON CreateDataChangeRecord(backend::RowCursor* cursor) {
 }
 absl::Status PopulateMetadata(
     std::vector<spanner_api::PartialResultSet>* responses,
-    const std::string& tvf_name) {
+    absl::string_view tvf_name) {
   auto* result_metadata_pb = responses->at(0).mutable_metadata();
   auto* field_pb = result_metadata_pb->mutable_row_type()->add_fields();
   field_pb->set_name(tvf_name);
@@ -211,7 +212,7 @@ void PopulateFakeResumeTokens(
 
 absl::StatusOr<std::vector<spanner_api::PartialResultSet>>
 ConvertHeartbeatTimestampToJson(absl::Time timestamp,
-                                const std::string& tvf_name,
+                                absl::string_view tvf_name,
                                 bool expect_metadata) {
   spanner_api::ResultSet result_pb;
   auto* row_pb = result_pb.add_rows();
@@ -236,7 +237,7 @@ ConvertHeartbeatTimestampToJson(absl::Time timestamp,
 absl::StatusOr<std::vector<spanner_api::PartialResultSet>>
 ConvertPartitionTableRowCursorToJson(
     backend::RowCursor* row_cursor,
-    std::optional<absl::Time> initial_start_time, const std::string& tvf_name,
+    std::optional<absl::Time> initial_start_time, absl::string_view tvf_name,
     bool expect_metadata) {
   spanner_api::ResultSet result_pb;
   int64_t record_sequence = 0;
@@ -266,7 +267,7 @@ ConvertPartitionTableRowCursorToJson(
 
 absl::StatusOr<std::vector<spanner_api::PartialResultSet>>
 ConvertDataTableRowCursorToJson(backend::RowCursor* row_cursor,
-                                const std::string& tvf_name,
+                                absl::string_view tvf_name,
                                 bool expect_metadata) {
   spanner_api::ResultSet result_pb;
   while (row_cursor->Next()) {
@@ -288,6 +289,81 @@ ConvertDataTableRowCursorToJson(backend::RowCursor* row_cursor,
     responses.at(0).clear_metadata();
   }
   PopulateFakeResumeTokens(&responses);
+  return responses;
+}
+
+absl::Status PatchMetadataToBytes(
+    std::vector<spanner_api::PartialResultSet>* responses,
+    absl::string_view tvf_name) {
+  auto* result_metadata_pb = responses->at(0).mutable_metadata();
+  result_metadata_pb->mutable_row_type()->clear_fields();
+  auto* field_pb = result_metadata_pb->mutable_row_type()->add_fields();
+  field_pb->set_name(tvf_name);
+  field_pb->mutable_type()->set_code(google::spanner::v1::TypeCode::BYTES);
+  return absl::OkStatus();
+}
+
+absl::StatusOr<std::vector<spanner_api::PartialResultSet>>
+ConvertPartitionTableRowCursorToBytes(
+    backend::RowCursor* row_cursor,
+    std::optional<absl::Time> initial_start_time,
+    absl::string_view partition_token, absl::string_view tvf_name,
+    bool expect_metadata) {
+  GOOGLESQL_ASSIGN_OR_RETURN(auto responses, ConvertPartitionTableRowCursorToProto(
+                                       row_cursor, initial_start_time,
+                                       partition_token, expect_metadata));
+  if (expect_metadata) {
+    GOOGLESQL_RETURN_IF_ERROR(PatchMetadataToBytes(&responses, tvf_name));
+  } else {
+    responses.at(0).clear_metadata();
+  }
+  return responses;
+}
+
+absl::StatusOr<std::vector<spanner_api::PartialResultSet>>
+ConvertQueryStartPartitionTableRowCursorToBytes(backend::RowCursor* row_cursor,
+                                                absl::Time query_start_time,
+                                                absl::string_view tvf_name,
+                                                bool expect_metadata) {
+  GOOGLESQL_ASSIGN_OR_RETURN(auto responses,
+                   ConvertQueryStartPartitionTableRowCursorToProto(
+                       row_cursor, query_start_time, expect_metadata));
+  if (responses.empty()) {
+    return responses;
+  }
+  if (expect_metadata) {
+    GOOGLESQL_RETURN_IF_ERROR(PatchMetadataToBytes(&responses, tvf_name));
+  } else {
+    responses.at(0).clear_metadata();
+  }
+  return responses;
+}
+
+absl::StatusOr<std::vector<spanner_api::PartialResultSet>>
+ConvertHeartbeatTimestampToBytes(absl::Time timestamp,
+                                 absl::string_view tvf_name,
+                                 bool expect_metadata) {
+  GOOGLESQL_ASSIGN_OR_RETURN(auto responses, ConvertHeartbeatTimestampToProto(
+                                       timestamp, expect_metadata));
+  if (expect_metadata) {
+    GOOGLESQL_RETURN_IF_ERROR(PatchMetadataToBytes(&responses, tvf_name));
+  } else {
+    responses.at(0).clear_metadata();
+  }
+  return responses;
+}
+
+absl::StatusOr<std::vector<spanner_api::PartialResultSet>>
+ConvertDataTableRowCursorToBytes(backend::RowCursor* row_cursor,
+                                 absl::string_view tvf_name,
+                                 bool expect_metadata) {
+  GOOGLESQL_ASSIGN_OR_RETURN(auto responses, ConvertDataTableRowCursorToProto(
+                                       row_cursor, expect_metadata));
+  if (expect_metadata) {
+    GOOGLESQL_RETURN_IF_ERROR(PatchMetadataToBytes(&responses, tvf_name));
+  } else {
+    responses.at(0).clear_metadata();
+  }
   return responses;
 }
 

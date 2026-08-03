@@ -405,7 +405,7 @@ class SchemaUpdaterImpl {
       const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& set_options);
   static std::string MakeChangeStreamTvfName(
       std::string change_stream_name,
-      const database_api::DatabaseDialect& dialect);
+      const database_api::DatabaseDialect& dialect, bool is_mutable_key_range);
 
   absl::StatusOr<const Table*> GetInterleaveConstraintTable(
       const std::string& interleave_in_table_name,
@@ -897,50 +897,51 @@ SchemaUpdaterImpl::ApplyDDLStatement(
       break;
     }
     case ddl::DDLStatement::kCreateFunction: {
+      ddl::CreateFunction* create_function =
+          ddl_statement->mutable_create_function();
+      // For PG SQL functions, translate the function body to GoogleSQL.
       if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
-        absl::StatusOr<ExpressionTranslateResult> result;
-        ddl::CreateFunction* create_function =
-            ddl_statement->mutable_create_function();
-        if (ddl_statement->create_function().function_kind() ==
-            ddl::Function::VIEW) {
-          GOOGLESQL_RET_CHECK(
-              create_function->has_sql_body_origin() &&
-              create_function->sql_body_origin().has_original_expression());
+        if (create_function->has_sql_body_origin() &&
+            create_function->sql_body_origin().has_original_expression()) {
+          absl::StatusOr<ExpressionTranslateResult> result;
+          if (create_function->function_kind() == ddl::Function::VIEW) {
+            result = TranslatePostgreSqlQueryInView(absl::StripAsciiWhitespace(
+                create_function->sql_body_origin().original_expression()));
+            if (!result.ok()) {
+              return error::ViewBodyAnalysisError(
+                  create_function->function_name(), result.status().message());
+            }
+          } else {
+            GOOGLESQL_RET_CHECK(
+                create_function->has_sql_body_origin() &&
+                create_function->sql_body_origin().has_original_expression());
 
-          result = TranslatePostgreSqlQueryInView(absl::StripAsciiWhitespace(
-              create_function->sql_body_origin().original_expression()));
-          if (!result.ok()) {
-            return error::ViewBodyAnalysisError(
-                create_function->function_name(), result.status().message());
+            absl::StatusOr<std::unique_ptr<SpangresSchemaPrinter>> printer =
+                postgres_translator::spangres::
+                    CreateSpangresDirectSchemaPrinter();
+            const ddl::DDLStatement& statement = *ddl_statement;
+            GOOGLESQL_ASSIGN_OR_RETURN(
+                std::vector<std::string> pg_printed,
+                (*printer)->PrintDDLStatementForEmulator(statement));
+            GOOGLESQL_RET_CHECK_EQ(pg_printed.size(), 1);
+
+            result = TranslatePostgreSqlQueryInUdf(
+                absl::StripAsciiWhitespace(pg_printed[0]));
+            if (!result.ok()) {
+              return error::FunctionBodyAnalysisError(
+                  create_function->function_name(), result.status().message());
+            }
           }
-        } else {
-          GOOGLESQL_RET_CHECK(
-              create_function->has_sql_body_origin() &&
-              create_function->sql_body_origin().has_original_expression());
-
-          absl::StatusOr<std::unique_ptr<SpangresSchemaPrinter>> printer =
-              postgres_translator::spangres::
-                  CreateSpangresDirectSchemaPrinter();
-          const ddl::DDLStatement& statement = *ddl_statement;
-          GOOGLESQL_ASSIGN_OR_RETURN(std::vector<std::string> pg_printed,
-                           (*printer)->PrintDDLStatementForEmulator(statement));
-          GOOGLESQL_RET_CHECK_EQ(pg_printed.size(), 1);
-
-          result = TranslatePostgreSqlQueryInUdf(
-              absl::StripAsciiWhitespace(pg_printed[0]));
-          if (!result.ok()) {
-            return error::FunctionBodyAnalysisError(
-                create_function->function_name(), result.status().message());
-          }
+          // Overwrite the original_expression to the deparsed (formalized) PG
+          // expression which can be different from the user-input PG
+          // expression.
+          create_function->mutable_sql_body_origin()->set_original_expression(
+              result->original_postgresql_expression);
+          create_function->set_sql_body(
+              result->translated_googlesql_expression);
         }
-        // Overwrite the original_expression to the deparsed (formalized) PG
-        // expression which can be different from the user-input PG
-        // expression.
-        create_function->mutable_sql_body_origin()->set_original_expression(
-            result->original_postgresql_expression);
-        create_function->set_sql_body(result->translated_googlesql_expression);
       }
-      GOOGLESQL_RETURN_IF_ERROR(CreateFunction(ddl_statement->create_function()));
+      GOOGLESQL_RETURN_IF_ERROR(CreateFunction(*create_function));
       break;
     }
     case ddl::DDLStatement::kCreateSequence: {
@@ -1296,6 +1297,11 @@ absl::Status SchemaUpdaterImpl::SetTableOptions(
       // TODO: Columnar Policy value should be exposed in table
       // options, once they are exposed.
       continue;
+    } else if (option.option_name() ==
+               ddl::kFulltextDictionaryTableOptionName) {
+      // TODO: Fulltext dictionary table option value should be
+      // exposed in table options, once they are exposed.
+      continue;
     } else {
       GOOGLESQL_RET_CHECK(false) << "Invalid table option: " << option.option_name();
     }
@@ -1415,6 +1421,10 @@ absl::Status SchemaUpdaterImpl::SetChangeStreamOptions(
                ddl::kChangeStreamValueCaptureTypeOptionName) {
       std::optional<std::string> value_capture_type = option.string_value();
       modifier->set_value_capture_type(value_capture_type);
+    } else if (option.option_name() ==
+               ddl::kChangeStreamPartitionModeOptionName) {
+      std::optional<std::string> partition_mode = option.string_value();
+      modifier->set_partition_mode(partition_mode);
     } else if (ddl::kChangeStreamBooleanOptions->contains(
                    option.option_name())) {
       modifier->set_boolean_option(option.option_name(), option.bool_value());
@@ -1484,6 +1494,23 @@ absl::Status SchemaUpdaterImpl::ValidateChangeStreamOptions(
         }
       }
     }
+    // Partition Mode Validation
+    if (option.option_name() == ddl::kChangeStreamPartitionModeOptionName) {
+      if (!EmulatorFeatureFlags::instance()
+               .flags()
+               .enable_mutable_key_range_change_stream) {
+        return error::UnsupportedChangeStreamOption(option.option_name());
+      }
+      if (option.has_string_value()) {
+        const std::string& partition_mode = option.string_value();
+        if (partition_mode == kChangeStreamPartitionModeImmutableKeyRange ||
+            partition_mode == kChangeStreamPartitionModeMutableKeyRange) {
+          continue;
+        } else {
+          return error::InvalidChangeStreamPartitionMode(partition_mode);
+        }
+      }
+    }
   }
   return absl::OkStatus();
 }
@@ -1538,8 +1565,11 @@ absl::Status SchemaUpdaterImpl::SetLocalityGroupOptions(
 // Construct the change stream tvf name for googlesql
 std::string SchemaUpdaterImpl::MakeChangeStreamTvfName(
     std::string change_stream_name,
-    const database_api::DatabaseDialect& dialect) {
+    const database_api::DatabaseDialect& dialect, bool is_mutable_key_range) {
   if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
+    if (is_mutable_key_range) {
+      return absl::StrCat(kChangeStreamTvfProtoBytesPrefix, change_stream_name);
+    }
     return absl::StrCat(kChangeStreamTvfJsonPrefix, change_stream_name);
   }
   return absl::StrCat(kChangeStreamTvfStructPrefix, change_stream_name);
@@ -3998,7 +4028,7 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateSearchIndex(
   bool is_null_filtered = ddl_index.null_filtered();
   return CreateIndexHelper(
       ddl_index.index_name(), ddl_index.index_base_name(),
-      /*is_unique=*/true, is_null_filtered, interleave_in_table, table_pk,
+      /*is_unique=*/false, is_null_filtered, interleave_in_table, table_pk,
       ddl_index.stored_column_definition(),
       /*is_search_index=*/true, false, &ddl_index.partition_by(),
       &ddl_index.order_by(), &ddl_index.null_filtered_column(),
@@ -4028,17 +4058,6 @@ absl::StatusOr<const ChangeStream*> SchemaUpdaterImpl::CreateChangeStream(
   }
   builder.set_name(ddl_change_stream.change_stream_name());
   const ChangeStream* change_stream = builder.get();
-  const std::string tvf_name =
-      MakeChangeStreamTvfName(ddl_change_stream.change_stream_name(), dialect);
-  builder.set_tvf_name(tvf_name);
-  std::optional<uint32_t> tvf_oid = pg_oid_assigner_->GetNextPostgresqlOid();
-  builder.set_tvf_postgresql_oid(tvf_oid);
-  if (tvf_oid.has_value()) {
-    GOOGLESQL_VLOG(2) << "Assigned oid " << tvf_oid.value() << " to TVF " << tvf_name
-            << " on change stream " << ddl_change_stream.change_stream_name();
-  }
-  // Validate the change stream tvf name in global_names_
-  GOOGLESQL_RETURN_IF_ERROR(global_names_.AddName("Change Stream", tvf_name));
   // Set up _ChangeStream_Partition_${ChangeStreamName}
   GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<const Table> change_stream_partition_table,
                    CreateChangeStreamPartitionTable(change_stream));
@@ -4085,6 +4104,21 @@ absl::StatusOr<const ChangeStream*> SchemaUpdaterImpl::CreateChangeStream(
     GOOGLESQL_RETURN_IF_ERROR(BuildChangeStreamTrackedObjects(
         ddl_change_stream.for_clause(), change_stream, &builder));
   }
+
+  const std::string tvf_name =
+      MakeChangeStreamTvfName(ddl_change_stream.change_stream_name(), dialect,
+                              change_stream->partition_mode() ==
+                                  kChangeStreamPartitionModeMutableKeyRange);
+  builder.set_tvf_name(tvf_name);
+  std::optional<uint32_t> tvf_oid = pg_oid_assigner_->GetNextPostgresqlOid();
+  builder.set_tvf_postgresql_oid(tvf_oid);
+  if (tvf_oid.has_value()) {
+    GOOGLESQL_VLOG(2) << "Assigned oid " << tvf_oid.value() << " to TVF " << tvf_name
+            << " on change stream " << ddl_change_stream.change_stream_name();
+  }
+  // Validate the change stream tvf name in global_names_
+  GOOGLESQL_RETURN_IF_ERROR(global_names_.AddName("Change Stream", tvf_name));
+
   // Set the creation time to now
   builder.set_creation_time(absl::Now());
 
@@ -4394,10 +4428,14 @@ absl::Status SchemaUpdaterImpl::AnalyzeFunctionDefinition(
   }
 
   std::string options = "";
-  if (!ddl_function.sql_options().empty()) {
+  const auto& create_function_options = !ddl_function.sql_options().empty()
+                                            ? ddl_function.sql_options()
+                                            : ddl_function.options();
+
+  if (!create_function_options.empty()) {
     absl::StrAppend(&options, " OPTIONS (");
     bool first = true;
-    for (const auto& option : ddl_function.sql_options()) {
+    for (const auto& option : create_function_options) {
       absl::StrAppend(&options, first ? "" : ", ", option.name(), " = ",
                       option.sql_value());
       first = false;
@@ -4436,9 +4474,22 @@ absl::Status SchemaUpdaterImpl::AnalyzeFunctionDefinition(
     const ddl::CreateFunction& ddl_function, bool replace,
     std::vector<View::Column>* output_columns,
     absl::flat_hash_set<const SchemaNode*>* dependencies) {
+  View::SqlSecurity security_type = View::SqlSecurity::UNSPECIFIED;
+  switch (ddl_function.sql_security()) {
+    case ddl::Function::UNSPECIFIED_SQL_SECURITY:
+      security_type = View::SqlSecurity::UNSPECIFIED;
+      break;
+    case ddl::Function::INVOKER:
+      security_type = View::SqlSecurity::INVOKER;
+      break;
+    case ddl::Function::DEFINER:
+      security_type = View::SqlSecurity::DEFINER;
+      break;
+  }
+
   auto status = AnalyzeViewDefinition(
       ddl_function.function_name(), ddl_function.sql_body(), latest_schema_,
-      type_factory_, output_columns, dependencies);
+      type_factory_, output_columns, dependencies, security_type);
   if (!status.ok()) {
     return replace ? error::ViewReplaceError(ddl_function.function_name(),
                                              status.message())
@@ -4557,10 +4608,10 @@ absl::Status SchemaUpdaterImpl::CreateFunction(
       ddl_function.sql_security() != ddl::Function::INVOKER) {
     return error::FunctionDefinerSecurityError(ddl_function.function_name());
   }
-  // TODO: update this to allow definer views.
   if (ddl_function.function_kind() == ddl::Function::VIEW &&
-      ddl_function.sql_security() != ddl::Function::INVOKER) {
-    return error::ViewRequiresInvokerSecurity(ddl_function.function_name());
+      ddl_function.sql_security() != ddl::Function::INVOKER &&
+      ddl_function.sql_security() != ddl::Function::DEFINER) {
+    return error::ViewMissingSqlSecurity(ddl_function.function_name());
   }
 
   bool replace = false;
@@ -6939,6 +6990,7 @@ absl::StatusOr<std::unique_ptr<ddl::DDLStatement>> ParseDDLByDialect(
         .enable_change_streams_ttl_deletes_filter_option = true,
         .enable_change_streams_allow_txn_exclusion_option = true,
         .enable_change_streams_if_not_exists = true,
+        .enable_change_streams_partition_mode_option = true,
         .enable_search_index =
             EmulatorFeatureFlags::instance().flags().enable_search_index,
         .enable_columnar_policy = true,

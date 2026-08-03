@@ -69,7 +69,8 @@ absl::Status AnalyzeViewDefinition(
     absl::string_view view_name, absl::string_view view_definition,
     const Schema* schema, googlesql::TypeFactory* type_factory,
     std::vector<View::Column>* output_columns,
-    absl::flat_hash_set<const SchemaNode*>* dependencies);
+    absl::flat_hash_set<const SchemaNode*>* dependencies,
+    View::SqlSecurity security_type);
 
 // Analyzes the UDF definition in `udf_definition`. Returns the
 // table, column and other view dependencies in `dependencies` and

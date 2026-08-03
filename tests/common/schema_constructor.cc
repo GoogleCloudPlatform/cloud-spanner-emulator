@@ -135,8 +135,8 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithTimestampDateTable(
 
 std::unique_ptr<const backend::Schema>
 CreateSchemaWithOneTableAndOneChangeStream(
-    googlesql::TypeFactory* type_factory,
-    database_api::DatabaseDialect dialect) {
+    googlesql::TypeFactory* type_factory, database_api::DatabaseDialect dialect,
+    bool is_mutable_key_range) {
   absl::StatusOr<std::unique_ptr<const backend::Schema>> maybe_schema;
 
   std::string test_table =
@@ -155,18 +155,25 @@ CreateSchemaWithOneTableAndOneChangeStream(
               )
             )";
   }
+  std::string change_stream_ddl =
+      R"(CREATE CHANGE STREAM change_stream_test_table FOR ALL)";
+  if (is_mutable_key_range) {
+    if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
+      change_stream_ddl =
+          R"(CREATE CHANGE STREAM change_stream_test_table FOR ALL WITH
+            (partition_mode = 'MUTABLE_KEY_RANGE'))";
+    } else {
+      change_stream_ddl =
+          R"(CREATE CHANGE STREAM change_stream_test_table FOR ALL OPTIONS
+            (partition_mode = 'MUTABLE_KEY_RANGE'))";
+    }
+  }
   maybe_schema = CreateSchemaFromDDL(
       {
           test_table,
-          R"(
-              CREATE CHANGE STREAM change_stream_test_table FOR ALL
-            )",
+          change_stream_ddl,
       },
-      type_factory
-      ,
-      "" /*proto_descriptor_bytes*/
-      ,
-      dialect);
+      type_factory, "" /*proto_descriptor_bytes*/, dialect);
 
   ABSL_CHECK_OK(maybe_schema.status());
   return std::move(maybe_schema.value());

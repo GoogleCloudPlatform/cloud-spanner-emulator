@@ -46,7 +46,7 @@ package(
     ],
 )
 
-licenses(["restricted"])
+licenses(["notice"])
 
 filegroup(
     name = "client_include_files",

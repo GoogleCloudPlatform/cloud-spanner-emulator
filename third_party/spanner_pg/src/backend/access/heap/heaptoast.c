@@ -769,10 +769,12 @@ heap_fetch_toast_slice(Relation toastrel, Oid valueid, int32 attrsize,
 		if (curchunk == endchunk)
 			chcpyend = (sliceoffset + slicelength - 1) % TOAST_MAX_CHUNK_SIZE;
 
+		// SPANGRES BEGIN
 		memcpy(VARDATA(result) +
 			   (curchunk * TOAST_MAX_CHUNK_SIZE - sliceoffset + chcpystrt),  /* SPECKLE_POSTGRES: ubsan pointer-overflow */
 			   chunkdata + chcpystrt,
 			   (chcpyend - chcpystrt) + 1);
+		// SPANGRES END
 
 		expectedchunk++;
 	}

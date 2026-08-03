@@ -359,7 +359,8 @@ absl::Status ReadWriteTransaction::GuardedCall(
           action_manager_->GetActionsForSchema(schema_);
       if (!maybe_action_registry.ok()) {
         Reset();
-        return maybe_action_registry.status();
+        ++retry_state_.abort_retry_count;
+        return error::AbortDueToConcurrentSchemaChange(id_);
       }
       action_registry_ = maybe_action_registry.value();
       state_ = State::kActive;

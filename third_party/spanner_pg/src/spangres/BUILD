@@ -37,7 +37,7 @@ package(
     default_visibility = ["//:__subpackages__"],
 )
 
-licenses(["restricted"])
+licenses(["notice"])
 
 # Memory intercepts Postgres malloc calls and makes a corresponding
 # reservation in Spanner before performing the allocation.

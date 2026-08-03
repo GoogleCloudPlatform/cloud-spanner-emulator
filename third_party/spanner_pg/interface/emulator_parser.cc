@@ -66,7 +66,7 @@ ParseAndAnalyzePostgreSQL(
   return SpangresTranslatorFactory::Create()->TranslateParsedQuery(
       TranslateParsedQueryParamsBuilder(
           std::move(parser_output), sql, catalog,
-          absl::make_unique<EmulatorBuiltinFunctionCatalog>(
+          std::make_unique<EmulatorBuiltinFunctionCatalog>(
               std::move(emulator_function_catalog)))
           .SetAnalyzerOptions(analyzer_options)
           .SetTypeFactory(type_factory)
@@ -92,7 +92,7 @@ TranslateTableLevelExpression(
       ->TranslateParsedTableLevelExpression(
           TranslateParsedQueryParamsBuilder(
               std::move(parser_output), {}, &catalog,
-              absl::make_unique<EmulatorBuiltinFunctionCatalog>(
+              std::make_unique<EmulatorBuiltinFunctionCatalog>(
                   std::move(emulator_function_catalog)))
               .SetAnalyzerOptions(analyzer_options)
               .SetTypeFactory(type_factory)
