@@ -213,7 +213,9 @@ absl::Status ValidateParseTreeNode(const ColumnDef& node,
 
   // `compression` defines the method to compress the given column. Not
   // supported.
-  GOOGLESQL_RET_CHECK_EQ(node.compression, nullptr);
+  if (node.compression != nullptr) {
+    return absl::InvalidArgumentError("Column compression is not supported.");
+  }
 
   // `inhcount` shows how many times the column is inherited. Not used during
   // parsing.

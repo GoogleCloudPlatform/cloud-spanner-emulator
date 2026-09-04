@@ -94,6 +94,7 @@ const char kDefaultSequenceKindOptionName[] = "default_sequence_kind";
 const char kDefaultTimeZoneOptionName[] = "default_time_zone";
 const char kColumnarPolicyOptionName[] = "columnar_policy";
 const char kFulltextDictionaryTableOptionName[] = "fulltext_dictionary_table";
+const char kScoreVersionOptionName[] = "score_version";
 const char kVectorIndexTreeDepth[] = "tree_depth";
 const char kVectorIndexNumberOfLeaves[] = "num_leaves";
 const char kVectorIndexNumberOfBranches[] = "num_branches";
@@ -370,8 +371,9 @@ void VisitStringOrNullOptionValNode(const SimpleNode* value_node,
   if (value_node->getId() != JJTSTR_VAL ||
       !ValidateStringLiteralImage(value_node->image(), /*force=*/true, nullptr)
            .ok()) {
+    std::string option_name = option->option_name();
     errors->push_back(
-        absl::StrCat("Unexpected value for option: ", option->option_name(),
+        absl::StrCat("Unexpected value for option: ", option_name,
                      ". Supported option values are strings and NULL."));
     return;
   }
@@ -397,6 +399,22 @@ void VisitBoolOrNullOptionValNode(const SimpleNode* value_node,
     errors->push_back(
         absl::StrCat("Unexpected value for option: ", option->option_name(),
                      ". Supported option values are booleans and NULL."));
+    return;
+  }
+}
+
+void VisitInt64OrNullOptionValNode(const SimpleNode* value_node,
+                                   SetOption* option,
+                                   std::vector<std::string>* errors) {
+  if (value_node->getId() == JJTINTEGER_VAL) {
+    const int64_t value = value_node->image_as_int64();
+    option->set_int64_value(value);
+  } else if (value_node->getId() == JJTNULLL) {
+    option->set_null_value(true);
+  } else {
+    errors->push_back(
+        absl::StrCat("Unexpected value for option: ", option->option_name(),
+                     ". Supported option values are integers and NULL."));
     return;
   }
 }
@@ -1490,8 +1508,27 @@ void VisitCreateTableNode(const SimpleNode* node, CreateTable* table,
   }
 
   if (table->primary_key().empty() && !has_primary_key) {
-    // Even for singleton tables, a table-level PRIMARY KEY() must be specified.
-    errors->push_back("Must specify either table or column PRIMARY KEY");
+    if (EmulatorFeatureFlags::instance()
+            .flags()
+            .enable_tables_without_primary_keys) {
+      ColumnDefinition* rowid_col = table->add_column();
+      rowid_col->set_column_name("rowid");
+      rowid_col->set_type(ColumnDefinition::INT64);
+      rowid_col->set_not_null(true);
+      rowid_col->set_hidden(true);
+
+      ColumnDefinition::IdentityColumnDefinition* identity =
+          rowid_col->mutable_identity_column();
+      identity->set_type(
+          ColumnDefinition::IdentityColumnDefinition::BIT_REVERSED_POSITIVE);
+
+      KeyPartClause* rowid_key = table->add_primary_key();
+      rowid_key->set_key_name("rowid");
+    } else {
+      // Even for singleton tables, a table-level PRIMARY KEY() must be
+      // specified.
+      errors->push_back("Must specify either table or column PRIMARY KEY");
+    }
   }
 }
 
@@ -2249,6 +2286,10 @@ void VisitDatabaseOptionKeyValNode(const SimpleNode* node, OptionList* options,
     SetOption* option = options->Add();
     option->set_option_name(kColumnarPolicyOptionName);
     VisitStringOrNullOptionValNode(value_node, option, errors);
+  } else if (option_name == kScoreVersionOptionName) {
+    SetOption* option = options->Add();
+    option->set_option_name(kScoreVersionOptionName);
+    VisitInt64OrNullOptionValNode(value_node, option, errors);
   } else {
     errors->push_back(absl::StrCat("Option: ", option_name, " is unknown."));
   }
@@ -2301,22 +2342,6 @@ void VisitStringArrayOrNullOptionValNode(const SimpleNode* value_node,
       errors->push_back(error);
       return;
     }
-  }
-}
-
-void VisitInt64OrNullOptionValNode(const SimpleNode* value_node,
-                                   SetOption* option,
-                                   std::vector<std::string>* errors) {
-  if (value_node->getId() == JJTINTEGER_VAL) {
-    const int64_t value = value_node->image_as_int64();
-    option->set_int64_value(value);
-  } else if (value_node->getId() == JJTNULLL) {
-    option->set_null_value(true);
-  } else {
-    errors->push_back(
-        absl::StrCat("Unexpected value for option: ", option->option_name(),
-                     ". Supported option values are integers and NULL."));
-    return;
   }
 }
 

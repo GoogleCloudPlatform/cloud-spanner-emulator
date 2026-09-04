@@ -918,24 +918,48 @@ transformRangeTableSample(ParseState *pstate, RangeTableSample *rts)
 	ListCell   *larg,
 			   *ltyp;
 
-  /*
-   * To validate the sample method name, look up the handler function, which
-   * has the same name, one dummy INTERNAL argument, and a result type of
-   * tsm_handler.  (Note: tablesample method names are not schema-qualified
-   * in the SQL standard; but since they are just functions to us, we allow
-   * schema qualification to resolve any potential ambiguity.)
-   */
-  funcargtypes[0] = INTERNALOID;
+	// SPANGRES BEGIN
+	/*
+	 * To validate the sample method name, look up the handler function, which
+	 * has the same name, one dummy INTERNAL argument, and a result type of
+	 * tsm_handler.
+	 */
+	/*
+	 * SPANGRES: Note that tablesample method names *are* schema-qualified in
+	 * Spangres to distinguish methods supported by native PostgreSQL from those
+	 * supported by Spanner.
+	 * Example:
+	 * 		SELECT * FROM T TABLESAMPLE BERNOULLI (50.5);
+	 * 		SELECT * FROM T TABLESAMPLE SPANNER.RESERVOIR (50);
+	 *    SELECT * FROM T TABLESAMPLE SYSTEM (50);  -- `system` is not supported.
+	*/
+	funcargtypes[0] = INTERNALOID;
 
-  handlerOid = LookupFuncName(rts->method, 1, funcargtypes, true);
+	handlerOid = LookupFuncName(rts->method, 1, funcargtypes, true);
 
-  /* we want error to complain about no-such-method, not no-such-function */
-  if (!OidIsValid(handlerOid))
-       ereport(ERROR,
-                       (errcode(ERRCODE_UNDEFINED_OBJECT),
-                        errmsg("tablesample method %s does not exist",
-                                       NameListToString(rts->method)),
-                        parser_errposition(pstate, rts->location)));
+	char *name_path = NameListToString(rts->method);
+	char *supported_sampling_methods;
+	GetSupportedSamplingMethodsAsString(&supported_sampling_methods);
+	/* we want error to complain about no-such-method, not no-such-function */
+	if (!OidIsValid(handlerOid))
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
+				 errmsg("tablesample method %s does not exist; use sampling methods "
+								"%s.", name_path, supported_sampling_methods),
+				 parser_errposition(pstate, rts->location)));
+
+	// Check if the sampling method is supported by the engine system catalog.
+	bool is_function_in_engine_system_catalog = false;
+	TableSampleFunctionSupportedInSpangres(name_path,
+																				 &is_function_in_engine_system_catalog);
+	if (!is_function_in_engine_system_catalog) {
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("tablesample method %s is not supported; use sampling methods "
+								"%s instead.", name_path, supported_sampling_methods),
+			 	parser_errposition(pstate, rts->location)));
+	}
+  // SPANGRES END
 
 	/* check that handler has correct return type */
 	if (get_func_rettype(handlerOid) != TSM_HANDLEROID)
@@ -974,29 +998,36 @@ transformRangeTableSample(ParseState *pstate, RangeTableSample *rts)
 		Node	   *arg = (Node *) lfirst(larg);
 		Oid			argtype = lfirst_oid(ltyp);
 
-		arg = transformExpr(pstate, arg, EXPR_KIND_FROM_FUNCTION);
-		arg = coerce_to_specific_type(pstate, arg, argtype, "TABLESAMPLE");
+		// SPANGRES BEGIN
+		Node *transformed_arg = transformExpr(pstate, arg, EXPR_KIND_FROM_FUNCTION);
+		arg = coerce_to_specific_type(pstate, transformed_arg, argtype,
+                                  "TABLESAMPLE");
 		assign_expr_collations(pstate, arg);
-		fargs = lappend(fargs, arg);
+		bool is_nested_cast_added = IsA(transformed_arg, FuncExpr) &&
+					IsA(arg, FuncExpr) &&
+					(Node *) linitial(((FuncExpr *)arg)->args) == transformed_arg;
+		bool is_param_cast_added = IsA(transformed_arg, Param) &&
+					IsA(arg, FuncExpr) &&
+					(Node *) linitial(((FuncExpr *)arg)->args) == transformed_arg;
+		if (is_nested_cast_added || is_param_cast_added) {
+			fargs = lappend(fargs, transformed_arg);
+		} else {
+			fargs = lappend(fargs, arg);
+		}
+		// SPANGRES END
 	}
 	tablesample->args = fargs;
 
+	// SPANGRES BEGIN
+	// Spanner does not support REPEATABLE.
 	/* Process REPEATABLE (seed) */
 	if (rts->repeatable != NULL) {
-		Node	   *arg;
-
-		// TODO: b/432126919 - Remove after TABLESAMPLE is ready to launch.
-		if (!tsm->repeatable_across_queries)
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("tablesample method %s does not support REPEATABLE",
-							NameListToString(rts->method)),
-					 parser_errposition(pstate, rts->location)));
-		arg = transformExpr(pstate, rts->repeatable, EXPR_KIND_FROM_FUNCTION);
-		// TODO: b/432126919 - Remove after TABLESAMPLE is ready to launch.
-		arg = coerce_to_specific_type(pstate, arg, FLOAT8OID, "REPEATABLE");
-		assign_expr_collations(pstate, arg);
-		tablesample->repeatable = (Expr *) arg;
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					errmsg("tablesample method %s does not support REPEATABLE",
+						NameListToString(rts->method)),
+					parser_errposition(pstate, rts->location)));
+		// SPANGRES END
 	}
 	else
 		tablesample->repeatable = NULL;

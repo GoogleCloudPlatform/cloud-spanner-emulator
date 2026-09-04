@@ -457,6 +457,11 @@ ForwardTransformer::BuildGsqlResolvedFunctionCall(
                              catalog_adapter_->GetEngineSystemCatalog()
                                  ->GetType(escape_const->consttype)
                                  ->MakeGsqlValue(escape_const));
+            if (escape_value.is_null()) {
+              return absl::InvalidArgumentError(
+                  absl::StrCat("Invalid escape character: NULL. Currently only "
+                               "backslash constant '\\' is supported."));
+            }
             if (escape_value.type_kind() == googlesql::TYPE_STRING) {
               if (escape_value.string_value() == "\\") {
                 // Replace the second argument of `textlike` (`like_escape`

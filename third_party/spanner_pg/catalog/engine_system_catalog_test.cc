@@ -131,6 +131,10 @@ class TestSystemCatalog : public EngineSystemCatalog {
     return absl::OkStatus();
   }
 
+  absl::Status AddTestSamplingMethod(const std::string& sampling_method_name) {
+    return AddSamplingMethod(sampling_method_name);
+  }
+
   // A function with signatures that aren't used by operators.
   absl::Status AddAbsFunction(
       absl::string_view postgres_namespace = "pg_catalog") {
@@ -1003,6 +1007,24 @@ TEST_F(EngineSystemCatalogTest, SqlRewriteFunctionWithNamedArgs) {
             "array_to_search");
   EXPECT_EQ(function_and_signature.signature().argument(1).argument_name(),
             "search_values");
+}
+
+TEST_F(EngineSystemCatalogTest, SamplingMethods) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<TestSystemCatalog> catalog,
+                       TestSystemCatalog::GetTestCatalog());
+
+  // Add sampling methods.
+  for (const auto& sampling_method : {"spanner.reservoir", "bernoulli"}) {
+    GOOGLESQL_ASSERT_OK(catalog->AddTestSamplingMethod(sampling_method));
+  }
+  EXPECT_TRUE(catalog->IsSamplingMethodSupported("spanner.reservoir"));
+  EXPECT_TRUE(catalog->IsSamplingMethodSupported("bernoulli"));
+  EXPECT_FALSE(catalog->IsSamplingMethodSupported("system"));
+  EXPECT_FALSE(catalog->IsSamplingMethodSupported("dummy"));
+
+  // Verify that the sampling methods are correctly registered and sorted.
+  EXPECT_THAT(catalog->GetSupportedSamplingMethods(),
+              testing::ElementsAre("bernoulli", "spanner.reservoir"));
 }
 
 }  // namespace

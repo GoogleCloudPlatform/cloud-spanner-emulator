@@ -12,6 +12,9 @@ CREATE TABLE tablewithnumerickey(
   key NUMERIC NOT NULL,
   val STRING(MAX)
 ) PRIMARY KEY (key DESC);
+CREATE TABLE tablewithoutpk(
+  col1 STRING(MAX)
+);
 ===
 @Dialect=POSTGRESQL
 CREATE TABLE tablewithnullablekey(
@@ -19,4 +22,7 @@ CREATE TABLE tablewithnullablekey(
   key2 varchar,
   col1 varchar,
   PRIMARY KEY (key1, key2)
+);
+CREATE TABLE tablewithoutpk(
+  col1 varchar
 );

@@ -252,6 +252,12 @@ absl::Status CommitTimestampTracker::CheckRead(
   return absl::OkStatus();
 }
 
+bool CommitTimestampTracker::HasPendingCommitTimestamp(
+    const Column* column) const {
+  absl::MutexLock lock(mu_);
+  return commit_ts_columns_.contains(column);
+}
+
 void CommitTimestampTracker::TrackColumns(
     absl::Span<const Column* const> columns, const ValueList& values) {
   ABSL_DCHECK_EQ(columns.size(), values.size());

@@ -950,6 +950,22 @@ TEST_F(CatalogTest, GetUuidType) {
   EXPECT_EQ(uuid_type, googlesql::types::UuidType());
 }
 
+TEST_F(CatalogTest, PgCatalogTables) {
+  MakeCatalog(
+      {
+          R"(
+        CREATE TABLE test_table (
+          k uuid PRIMARY KEY,
+          v varchar
+        ))",
+      },
+      database_api::DatabaseDialect::POSTGRESQL);
+  const googlesql::Table* table;
+  GOOGLESQL_EXPECT_OK(catalog().FindTable({"pg_catalog", "pg_tables"}, &table, {}));
+  EXPECT_EQ(table->Name(), "pg_tables");
+  EXPECT_EQ(table->FullName(), "pg_catalog.pg_tables");
+}
+
 }  // namespace
 }  // namespace backend
 }  // namespace emulator

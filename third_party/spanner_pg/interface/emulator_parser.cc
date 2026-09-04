@@ -79,11 +79,12 @@ TranslateTableLevelExpression(
     googlesql::EnumerableCatalog& catalog,
     const googlesql::AnalyzerOptions& analyzer_options,
     googlesql::TypeFactory* type_factory,
-    std::unique_ptr<FunctionCatalog> emulator_function_catalog) {
+    std::unique_ptr<FunctionCatalog> emulator_function_catalog,
+    bool table_in_named_catalog) {
   // Wrap the expression in SELECT <expression> FROM <table_name>.
-  GOOGLESQL_ASSIGN_OR_RETURN(
-      std::string wrapped_expression,
-      SpangresTranslator::WrapExpressionInSelect(expression, table_name));
+  GOOGLESQL_ASSIGN_OR_RETURN(std::string wrapped_expression,
+                   SpangresTranslator::WrapExpressionInSelect(
+                       expression, table_name, table_in_named_catalog));
 
   GOOGLESQL_ASSIGN_OR_RETURN(ParserOutput parser_output,
                    CheckedPgRawParserFullOutput(wrapped_expression.c_str()));
@@ -96,6 +97,7 @@ TranslateTableLevelExpression(
                   std::move(emulator_function_catalog)))
               .SetAnalyzerOptions(analyzer_options)
               .SetTypeFactory(type_factory)
+              .SetTableInNamedCatalog(table_in_named_catalog)
               .Build(),
           table_name);
 }

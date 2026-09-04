@@ -98,6 +98,11 @@ absl::StatusOr<std::unique_ptr<StorageIterator>> TransactionReadOnlyStore::Read(
   return itr;
 }
 
+bool TransactionReadOnlyStore::HasPendingCommitTimestamp(
+    const Column* column) const {
+  return read_only_store_->HasPendingCommitTimestamp(column);
+}
+
 void TransactionEffectsBuffer::Insert(
     const Table* table, const Key& key, absl::Span<const Column* const> columns,
     const std::vector<googlesql::Value>& values) {

@@ -110,6 +110,15 @@ const FormData_pg_operator* GetOperatorFromBootstrapCatalog(Oid operator_id) {
   abort();
 }
 
+void TableSampleFunctionSupportedInSpangres(const char* name_path,
+                                            bool* out_is_supported) {
+  abort();
+}
+
+void GetSupportedSamplingMethodsAsString(char** out_string) {
+  abort();
+}
+
 char* GetAttributeNameC(Oid relid, AttrNumber attnum, bool missing_ok) {
   abort();
 }

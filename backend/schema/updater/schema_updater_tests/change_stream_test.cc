@@ -1174,6 +1174,75 @@ TEST_P(SchemaUpdaterTest, AlterChangeStream_PartitionModeBlocked) {
         (partition_mode = 'IMMUTABLE_KEY_RANGE'))"}));
 }
 
+TEST_P(SchemaUpdaterTest, AlterChangeStreamAfterDroppingColumnOnTrackedTable) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+      CREATE TABLE Orders (
+        OrderId STRING(36) NOT NULL,
+        Status STRING(32),
+        Channel STRING(32)
+      ) PRIMARY KEY (OrderId)
+    )",
+                                                  R"(
+      CREATE CHANGE STREAM OrdersStream FOR Orders
+    )"}));
+
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema_after_drop, UpdateSchema(schema.get(), {R"(
+      ALTER TABLE Orders DROP COLUMN Channel
+    )"}));
+
+  EXPECT_THAT(UpdateSchema(schema_after_drop.get(), {R"(
+      ALTER CHANGE STREAM OrdersStream SET FOR Orders
+    )"}),
+              IsOk());
+
+  EXPECT_THAT(UpdateSchema(schema_after_drop.get(), {R"(
+      ALTER CHANGE STREAM OrdersStream SET FOR Orders(Status)
+    )"}),
+              IsOk());
+
+  EXPECT_THAT(UpdateSchema(schema_after_drop.get(), {R"(
+      ALTER CHANGE STREAM OrdersStream SET FOR ALL
+    )"}),
+              IsOk());
+
+  EXPECT_THAT(UpdateSchema(schema_after_drop.get(), {R"(
+      ALTER CHANGE STREAM OrdersStream DROP FOR ALL
+    )"}),
+              IsOk());
+
+  EXPECT_THAT(UpdateSchema(schema_after_drop.get(), {R"(
+      ALTER CHANGE STREAM OrdersStream SET FOR Orders(Channel)
+    )"}),
+              StatusIs(error::NonexistentTrackedColumnInChangeStream(
+                  "OrdersStream", "Channel", "Orders")));
+}
+
+TEST_P(SchemaUpdaterTest, AlterChangeStreamAfterDroppingTableOnTrackAll) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({R"(
+      CREATE TABLE Orders (
+        OrderId STRING(36) NOT NULL,
+        Status STRING(32)
+      ) PRIMARY KEY (OrderId)
+    )",
+                                                  R"(
+      CREATE CHANGE STREAM CS FOR ALL
+    )"}));
+
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema_after_drop, UpdateSchema(schema.get(), {R"(
+      DROP TABLE Orders
+    )"}));
+
+  EXPECT_THAT(UpdateSchema(schema_after_drop.get(), {R"(
+      ALTER CHANGE STREAM CS SET FOR ALL
+    )"}),
+              IsOk());
+
+  EXPECT_THAT(UpdateSchema(schema_after_drop.get(), {R"(
+      ALTER CHANGE STREAM CS DROP FOR ALL
+    )"}),
+              IsOk());
+}
+
 TEST(ChangeStreamErrorsTest, UnsupportedChangeStreamOptionCoverage) {
   // Test with flag = true
   {

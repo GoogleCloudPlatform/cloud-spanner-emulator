@@ -4899,6 +4899,119 @@ TEST_F(ChangeStreamTest,
                })pb"));
 }
 
+TEST_F(ChangeStreamTest, DataChangeRecordsBeforeAndAfterDropColumn) {
+  GOOGLESQL_ASSERT_OK(UpdateSchema({
+      R"(
+        CREATE TABLE TableWithColA (
+          UserId INT64 NOT NULL,
+          ColA STRING(MAX),
+          ColB INT64,
+        ) PRIMARY KEY (UserId)
+      )",
+      R"(
+        CREATE CHANGE STREAM StreamTableWithColA FOR TableWithColA OPTIONS (
+          value_capture_type = 'NEW_ROW'
+        )
+      )",
+  }));
+
+  // 1. Insert row with key 1 and ColA = "A" and ColB = 10
+  auto insert_row1 =
+      InsertMutationBuilder("TableWithColA", {"UserId", "ColA", "ColB"});
+  insert_row1.AddRow(ValueRow{1, "A", 10});
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto commit_result1, Commit({insert_row1.Build()}));
+  Timestamp commit_timestamp1 = commit_result1.commit_timestamp;
+  absl::Time start_time = commit_timestamp1.get<absl::Time>().value();
+
+  // 2. Drop ColA
+  GOOGLESQL_ASSERT_OK(UpdateSchema({
+      R"(
+        ALTER TABLE TableWithColA DROP COLUMN ColA
+      )",
+  }));
+
+  // 3. Insert row with key 2
+  auto insert_row2 = InsertMutationBuilder("TableWithColA", {"UserId", "ColB"});
+  insert_row2.AddRow(ValueRow{2, 20});
+  GOOGLESQL_EXPECT_OK(Commit({insert_row2.Build()}));
+
+  // Query all change stream data records from the beginning
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      auto data_change_records,
+      GetDataRecordsFromStartToNow(start_time, "StreamTableWithColA"));
+  ASSERT_EQ(data_change_records.size(), 2);
+
+  // First record (before dropping ColA): key=1, ColA="A", ColB=10
+  EXPECT_EQ(data_change_records[0].table_name.string_value(), "TableWithColA");
+  EXPECT_EQ(data_change_records[0].mod_type.string_value(), "INSERT");
+  EXPECT_THAT(data_change_records[0].column_types, test::EqualsProto(R"pb(
+                values {
+                  list_value {
+                    values { string_value: "UserId" }
+                    values { string_value: "{\"code\":\"INT64\"}" }
+                    values { bool_value: true }
+                    values { string_value: "1" }
+                  }
+                }
+                values {
+                  list_value {
+                    values { string_value: "ColA" }
+                    values { string_value: "{\"code\":\"STRING\"}" }
+                    values { bool_value: false }
+                    values { string_value: "2" }
+                  }
+                }
+                values {
+                  list_value {
+                    values { string_value: "ColB" }
+                    values { string_value: "{\"code\":\"INT64\"}" }
+                    values { bool_value: false }
+                    values { string_value: "3" }
+                  }
+                }
+              )pb"));
+  EXPECT_THAT(data_change_records[0].mods, test::EqualsProto(R"pb(
+                values {
+                  list_value {
+                    values { string_value: "{\"UserId\":\"1\"}" }
+                    values { string_value: "{\"ColA\":\"A\",\"ColB\":\"10\"}" }
+                    values { string_value: "{}" }
+                  }
+                }
+              )pb"));
+
+  // Second record (after dropping ColA): key=2, no ColA in column_types or mods
+  EXPECT_EQ(data_change_records[1].table_name.string_value(), "TableWithColA");
+  EXPECT_EQ(data_change_records[1].mod_type.string_value(), "INSERT");
+  EXPECT_THAT(data_change_records[1].column_types, test::EqualsProto(R"pb(
+                values {
+                  list_value {
+                    values { string_value: "UserId" }
+                    values { string_value: "{\"code\":\"INT64\"}" }
+                    values { bool_value: true }
+                    values { string_value: "1" }
+                  }
+                }
+                values {
+                  list_value {
+                    values { string_value: "ColB" }
+                    values { string_value: "{\"code\":\"INT64\"}" }
+                    values { bool_value: false }
+                    values { string_value: "2" }
+                  }
+                }
+              )pb"));
+  EXPECT_THAT(data_change_records[1].mods, test::EqualsProto(R"pb(
+                values {
+                  list_value {
+                    values { string_value: "{\"UserId\":\"2\"}" }
+                    values { string_value: "{\"ColB\":\"20\"}" }
+                    values { string_value: "{}" }
+                  }
+                }
+              )pb"));
+}
+
 }  // namespace
 
 }  // namespace test

@@ -31,6 +31,9 @@
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
+#include "nodes/nodes.h"
+#include "nodes/parsenodes.h"
+#include "nodes/pg_list.h"
 #include "nodes/queryjumble.h"
 #include "optimizer/optimizer.h"
 #include "parser/analyze.h"
@@ -263,9 +266,10 @@ transformTopLevelStmt(ParseState *pstate, RawStmt *parseTree)
 	/* SPANGRES: Transform statement hints */
 	ListCell* lc;
 	foreach(lc, parseTree->statementHints) {
-		result->statementHints =
-				lappend(result->statementHints,
-						transformSpangresHint(pstate, castNode(DefElem, lfirst(lc))));
+		Node* hint = transformSpangresHint(pstate, castNode(DefElem, lfirst(lc)));
+		if (hint != NULL) {
+			result->statementHints = lappend(result->statementHints, hint);
+		}
 	}
 
 	return result;

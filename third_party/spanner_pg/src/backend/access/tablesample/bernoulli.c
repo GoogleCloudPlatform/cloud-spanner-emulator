@@ -66,7 +66,9 @@ tsm_bernoulli_handler(PG_FUNCTION_ARGS)
 {
 	TsmRoutine *tsm = makeNode(TsmRoutine);
 
-	tsm->parameterTypes = list_make1_oid(FLOAT4OID);
+	// SPANGRES START
+	tsm->parameterTypes = list_make1_oid(FLOAT8OID);
+	// SPANGRES END
 	tsm->repeatable_across_queries = true;
 	tsm->repeatable_across_scans = true;
 	tsm->SampleScanGetSampleSize = bernoulli_samplescangetsamplesize;

@@ -220,7 +220,13 @@ TEST_P(SchemaChangeTest, FileBasedTests) {
     }
   }
 
-  auto normalize = [](std::string* text) {
+  auto normalize = [this](std::string* text) {
+    if (database() != nullptr) {
+      std::string db_id = database()->database_id();
+      *text =
+          absl::StrReplaceAll(*text, {{absl::StrCat("`", db_id, "`"), "db"},
+                                      {absl::StrCat("\"", db_id, "\""), "db"}});
+    }
     RE2::GlobalReplace(text, "\n", " ");
     RE2::GlobalReplace(text, R"(\\n)", " ");
     RE2::GlobalReplace(text, R"(\\')", "'");

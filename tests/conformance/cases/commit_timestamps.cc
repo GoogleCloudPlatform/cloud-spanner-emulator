@@ -599,6 +599,23 @@ TEST_F(CommitTimestamps, CannotUpdateMultipleRowsWithIndexedTimestampInDml) {
       StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
+TEST_F(CommitTimestamps, CannotDeleteRowWithIndexedTimestampInDml) {
+  GOOGLESQL_ASSERT_OK(Commit({
+      MakeInsert("CommitTimestampIndexTable", {"ID", "CommitTS", "Name"}, 0,
+                 kCommitTimestampSentinel, "A"),
+  }));
+
+  auto txn = Transaction(Transaction::ReadWriteOptions());
+  GOOGLESQL_ASSERT_OK(ExecuteDmlTransaction(
+      txn, SqlStatement("UPDATE CommitTimestampIndexTable SET CommitTS = "
+                        "PENDING_COMMIT_TIMESTAMP() WHERE ID = 0")));
+  EXPECT_THAT(
+      ExecuteDmlTransaction(
+          txn,
+          SqlStatement("DELETE FROM CommitTimestampIndexTable WHERE ID = 0")),
+      StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
 TEST_F(CommitTimestamps, InsertOnConflictDoNothingCommitTsPKColumn) {
   GOOGLESQL_ASSERT_OK(Commit({
       MakeInsert("CommitTimestampKeyTable", {"ID", "CommitTS"}, 1,

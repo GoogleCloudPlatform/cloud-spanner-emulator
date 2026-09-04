@@ -657,6 +657,43 @@ TEST_F(CatalogWrappersTest, BoolInProc) {
   EXPECT_THAT(oidlist, UnorderedElementsAre(F_BOOLIN));
 }
 
+TEST_F(CatalogWrappersTest, TableSampleFunctionSupportedInEngineSystemCatalog) {
+  googlesql::AnalyzerOptions analyzer_options =
+      GetSpangresTestAnalyzerOptions();
+  std::unique_ptr<CatalogAdapterHolder> holder =
+      GetSpangresTestCatalogAdapterHolder(analyzer_options);
+  const FormData_pg_proc** proc_list;
+  size_t proc_count;
+  bool is_supported;
+
+  // `system` is in the BootstrapCatalog, but not in the EngineSystemCatalog.
+  GetProcsBySchemaAndFuncNames("pg_catalog", "system", &proc_list, &proc_count);
+  ASSERT_EQ(proc_count, 1);
+  TableSampleFunctionSupportedInSpangres("system", &is_supported);
+  EXPECT_FALSE(is_supported);
+
+  // `bernoulli` is in the BootstrapCatalog and the EngineSystemCatalog.
+  GetProcsBySchemaAndFuncNames("pg_catalog", "bernoulli", &proc_list,
+                               &proc_count);
+  ASSERT_EQ(proc_count, 1);
+  TableSampleFunctionSupportedInSpangres("bernoulli", &is_supported);
+  EXPECT_TRUE(is_supported);
+
+  // `spanner.reservoir` is in the BootstrapCatalog and the EngineSystemCatalog.
+  GetProcsBySchemaAndFuncNames("spanner", "reservoir", &proc_list, &proc_count);
+  ASSERT_EQ(proc_count, 1);
+  ASSERT_EQ(proc_list[0]->pronamespace,
+            GetNamespaceByNameFromBootstrapCatalog("spanner"));
+  TableSampleFunctionSupportedInSpangres("spanner.reservoir", &is_supported);
+  EXPECT_TRUE(is_supported);
+  TableSampleFunctionSupportedInSpangres("reservoir", &is_supported);
+  EXPECT_FALSE(is_supported);
+
+  char* sampling_methods;
+  GetSupportedSamplingMethodsAsString(&sampling_methods);
+  EXPECT_STREQ(sampling_methods, "['bernoulli', 'spanner.reservoir']");
+}
+
 TEST_F(CatalogWrappersTest, Int8Proc) {
   googlesql::AnalyzerOptions analyzer_options =
       GetSpangresTestAnalyzerOptions();

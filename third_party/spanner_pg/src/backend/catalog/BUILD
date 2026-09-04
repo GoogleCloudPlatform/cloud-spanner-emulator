@@ -282,5 +282,8 @@ cc_library(
     srcs = ["placeholder.cc"],
     hdrs = [":generate_catalog_headers"],
     includes = ["."],
-    visibility = ["//:__subpackages__"],
+    visibility = [
+        "//:__subpackages__",
+        "//spanner/tests/spangres:__subpackages__",
+    ],
 )

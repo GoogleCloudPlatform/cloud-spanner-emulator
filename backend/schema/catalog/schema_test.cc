@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "google/spanner/admin/database/v1/common.pb.h"
@@ -31,6 +32,7 @@
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
 #include "absl/time/clock.h"
 #include "backend/schema/builders/change_stream_builder.h"
 #include "backend/schema/builders/column_builder.h"
@@ -51,16 +53,21 @@
 #include "backend/schema/catalog/locality_group.h"
 #include "backend/schema/catalog/named_schema.h"
 #include "backend/schema/catalog/placement.h"
+#include "backend/schema/catalog/proto_bundle.h"
 #include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/catalog/udf.h"
 #include "backend/schema/catalog/view.h"
+#include "backend/schema/graph/schema_graph.h"
+#include "backend/schema/graph/schema_graph_editor.h"
+#include "backend/schema/graph/schema_node.h"
 #include "backend/schema/printer/print_ddl.h"
 #include "backend/schema/updater/schema_validation_context.h"
 #include "common/errors.h"
 #include "common/limits.h"
 #include "tests/common/schema_constructor.h"
 #include "tests/common/scoped_feature_flags_setter.h"
+#include "google/protobuf/repeated_ptr_field.h"
 
 namespace google {
 namespace spanner {

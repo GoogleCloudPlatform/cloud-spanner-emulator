@@ -88,7 +88,9 @@ cc_library(
         "gramparse.h",
     ],
     deps = [
+        ":include",
         "//third_party/spanner_pg/interface:catalog_wrappers",
+        "//third_party/spanner_pg/src/backend/catalog:generated_catalog_headers",
         "//third_party/spanner_pg/src/include",
         "//third_party/spanner_pg/src/spangres:parser",
     ],

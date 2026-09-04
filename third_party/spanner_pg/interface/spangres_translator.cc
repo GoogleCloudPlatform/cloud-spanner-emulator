@@ -58,6 +58,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/strip.h"
 #include "absl/strings/substitute.h"
@@ -185,6 +186,41 @@ absl::Status RewriteSimpleSrfInSelect(Query* pg_query) {
   target_entry->expr = reinterpret_cast<Expr*>(var);
   return absl::OkStatus();
 }
+
+// Rewrites ZetaSQL AST to move statement-level hints to the top-level query
+// scan. This is necessary because the ZetaSQL DDL parser rejects
+// statement-level hints inside view definitions (e.g., `CREATE VIEW ... AS
+// @{hint} SELECT ...` is invalid). Moving them to query-level hints (`SELECT
+// @{hint} ...`) is syntactically valid and semantically equivalent. We use a
+// deep copy visitor to construct a new AST, mutating the child scan of the
+// newly copied ResolvedQueryStmt.
+class ViewHintRewriter : public googlesql::ResolvedASTDeepCopyVisitor {
+ public:
+  absl::Status VisitResolvedQueryStmt(
+      const googlesql::ResolvedQueryStmt* node) override {
+    // 1. Copy the query statement and its children (the query scan tree).
+    GOOGLESQL_RETURN_IF_ERROR(CopyVisitResolvedQueryStmt(node));
+
+    // 2. Get the mutable pointer to the newly copied query statement.
+    auto* query_stmt = GetUnownedTopOfStack<googlesql::ResolvedQueryStmt>();
+
+    // 3. Move the statement-level hints to the query scan if present.
+    if (!query_stmt->hint_list().empty()) {
+      // It is safe to const_cast the child query scan because the deep copy
+      // visitor has just allocated it on the heap, and we are mutating it
+      // before finalizing the copied tree.
+      // This avoids having to override the visitor methods for all concrete
+      // ResolvedScan subclasses (ProjectScan, TableScan, etc.) to intercept
+      // the top-level scan during traversal.
+      auto* mutable_query =
+          const_cast<googlesql::ResolvedScan*>(query_stmt->query());
+      mutable_query->set_hint_list(query_stmt->release_hint_list());
+    }
+
+    return absl::OkStatus();
+  }
+};
+
 }  // namespace
 
 SpangresTranslator::SpangresTranslator() {}
@@ -442,10 +478,6 @@ SpangresTranslator::TranslateParsedTree(
     GOOGLESQL_RETURN_IF_ERROR(params.pg_query_callback()(pg_query));
   }
 
-  if (query_deparser_callback) {
-    GOOGLESQL_RETURN_IF_ERROR(query_deparser_callback(pg_query));
-  }
-
   bool is_create_function_stmt = IsA(raw_stmt->stmt, CreateFunctionStmt);
 
   // Perform a rewrite for simple SRF in SELECT cases.
@@ -486,6 +518,16 @@ SpangresTranslator::TranslateParsedTree(
 
   if (progress != nullptr) {
     *progress = interfaces::TranslationProgress::COMPLETE;
+  }
+
+  // The forward transformer may modify the query tree so the deparser should be
+  // called after forward transformation.
+  if (query_deparser_callback) {
+    catalog_adapter_holder.reset();
+    GOOGLESQL_ASSIGN_OR_RETURN(
+        catalog_adapter_holder,
+        CatalogAdapterHolder::Create(transformer->ReleaseCatalogAdapter()));
+    GOOGLESQL_RETURN_IF_ERROR(query_deparser_callback(pg_query));
   }
 
   auto analyzer_output = std::make_unique<googlesql::AnalyzerOutput>(
@@ -532,7 +574,8 @@ SpangresTranslator::TranslateExpression(
   std::string wrapped_expression;
   // Wrap the expression in SELECT <expression> FROM <table_name>.
   GOOGLESQL_ASSIGN_OR_RETURN(wrapped_expression,
-                   WrapExpressionInSelect(params.sql_expression(), table_name));
+                   WrapExpressionInSelect(params.sql_expression(), table_name,
+                                          params.table_in_named_catalog()));
 
   // Get the parser to construct a new instance of TranslateQueryParams.
   GOOGLESQL_ASSIGN_OR_RETURN(interfaces::ParserInterface * parser, params.parser());
@@ -712,7 +755,8 @@ SpangresTranslator::GetParserExpressionOutput(
                    DeserializeParseExpression(*params.serialized_parse_tree()));
 
   GOOGLESQL_ASSIGN_OR_RETURN(List * parse_tree,
-                   WrapExpressionInSelect(expression, table_name));
+                   WrapExpressionInSelect(expression, table_name,
+                                          params.table_in_named_catalog()));
   return interfaces::ParserOutput(
       parse_tree,
       {.token_locations = {},
@@ -720,21 +764,36 @@ SpangresTranslator::GetParserExpressionOutput(
 }
 
 absl::StatusOr<std::string> SpangresTranslator::WrapExpressionInSelect(
-    absl::string_view expression, std::optional<std::string_view> table_name) {
+    absl::string_view expression, std::optional<std::string_view> table_name,
+    bool table_in_named_catalog) {
   // Always quote the table name: $1, otherwise it cause issues, for example:
   // table_name lost the case sensitivity which can cause "table not found".
-  static constexpr char select_template_with_table[] =
-      R"(SELECT ($0) from "$1")";
+  static constexpr char select_template_with_table[] = R"(SELECT ($0) from $1)";
   static constexpr char select_template_without_table[] = R"(SELECT ($0))";
   GOOGLESQL_RET_CHECK(!expression.empty()) << "Expression can not be null or empty";
-  return table_name.has_value()
-             ? absl::Substitute(select_template_with_table, expression,
-                                table_name.value())
-             : absl::Substitute(select_template_without_table, expression);
+  if (!table_name.has_value()) {
+    return absl::Substitute(select_template_without_table, expression);
+  }
+
+  std::string quoted_table_name;
+  if (!table_in_named_catalog) {
+    quoted_table_name = absl::Substitute("\"$0\"", table_name.value());
+  } else {
+    for (absl::string_view name_part :
+         absl::StrSplit(table_name.value(), '.')) {
+      if (!quoted_table_name.empty()) {
+        quoted_table_name += '.';
+      }
+      quoted_table_name += absl::Substitute("\"$0\"", name_part);
+    }
+  }
+  return absl::Substitute(select_template_with_table, expression,
+                          quoted_table_name);
 }
 
 absl::StatusOr<List*> SpangresTranslator::WrapExpressionInSelect(
-    Node* expression, std::optional<absl::string_view> table_name) {
+    Node* expression, std::optional<absl::string_view> table_name,
+    bool table_in_named_catalog) {
   GOOGLESQL_RET_CHECK_NE(expression, nullptr) << "Expression can not be null";
 
   // List of statements
@@ -755,7 +814,22 @@ absl::StatusOr<List*> SpangresTranslator::WrapExpressionInSelect(
   if (table_name.has_value()) {
     // Set table name in SELECT's FROM clause
     GOOGLESQL_ASSIGN_OR_RETURN(RangeVar * relation, CheckedPgMakeNode(RangeVar));
-    GOOGLESQL_ASSIGN_OR_RETURN(relation->relname, CheckedPgPstrdup(table_name->data()));
+    if (!table_in_named_catalog) {
+      GOOGLESQL_ASSIGN_OR_RETURN(relation->relname, CheckedPgPstrdup(table_name->data()));
+    } else {
+      std::vector<absl::string_view> split_name =
+          absl::StrSplit(table_name.value(), '.');
+      GOOGLESQL_RET_CHECK(split_name.size() <= 2);
+      if (split_name.size() == 1) {
+        GOOGLESQL_ASSIGN_OR_RETURN(relation->relname,
+                         CheckedPgPstrdup(table_name->data()));
+      } else {
+        GOOGLESQL_ASSIGN_OR_RETURN(relation->schemaname,
+                         CheckedPgPstrdup(split_name[0].data()));
+        GOOGLESQL_ASSIGN_OR_RETURN(relation->relname,
+                         CheckedPgPstrdup(split_name[1].data()));
+      }
+    }
     GOOGLESQL_ASSIGN_OR_RETURN(List * from_clause, CheckedPgLappend(nullptr, relation));
     RawStmt* raw_stmt =
         internal::PostgresCastNode(RawStmt, linitial(wrapped_tree));
@@ -863,8 +937,12 @@ SpangresTranslator::TranslateParsedQueryInView(
 
   SQLBuilder builder{
       SQLBuilder::SQLBuilderOptions(googlesql::PRODUCT_EXTERNAL)};
+  ViewHintRewriter rewriter;
   GOOGLESQL_RETURN_IF_ERROR(
-      builder.Process(*analyzer_output.get()->resolved_statement()));
+      analyzer_output.get()->resolved_statement()->Accept(&rewriter));
+  GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<googlesql::ResolvedStatement> rewritten_stmt,
+                   rewriter.ConsumeRootNode<googlesql::ResolvedStatement>());
+  GOOGLESQL_RETURN_IF_ERROR(builder.Process(*rewritten_stmt));
 
   return interfaces::ExpressionTranslateResult{deparsed_query, builder.sql()};
 }

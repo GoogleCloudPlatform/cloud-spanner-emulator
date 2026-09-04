@@ -135,7 +135,7 @@ static bool FunctionNameSupportedInSpanner(
 absl::StatusOr<bool> SpangresSystemCatalog::TryInitializeEngineSystemCatalog(
     std::unique_ptr<EngineBuiltinFunctionCatalog> builtin_function_catalog,
     const googlesql::LanguageOptions& language_options) {
-  absl::WriterMutexLock l(&spangres_system_catalog_mutex);
+  absl::WriterMutexLock l(spangres_system_catalog_mutex);
   SpangresSystemCatalog** spangres_system_catalog =
       GetSpangresSystemCatalogPtr();
   if (*spangres_system_catalog != nullptr) {
@@ -167,7 +167,7 @@ absl::StatusOr<bool> SpangresSystemCatalog::TryInitializeEngineSystemCatalog(
 }
 
 void SpangresSystemCatalog::ResetEngineSystemCatalog() {
-  absl::WriterMutexLock l(&spangres_system_catalog_mutex);
+  absl::WriterMutexLock l(spangres_system_catalog_mutex);
   SpangresSystemCatalog** spangres_system_catalog =
       SpangresSystemCatalog::GetSpangresSystemCatalogPtr();
   if (*spangres_system_catalog != nullptr) {
@@ -555,6 +555,12 @@ absl::Status SpangresSystemCatalog::AddFunctionRegistryFunctions(
 
 absl::Status SpangresSystemCatalog::AddFunctions(
     const googlesql::LanguageOptions& language_options) {
+  // Register sampling methods.
+  // These are not SQL functions but methods that are used with TABLESAMPLE
+  // operator, so we use a separate infrastructure to register them in the
+  // catalog.
+  GOOGLESQL_RETURN_IF_ERROR(AddSamplingMethod("bernoulli"));
+  GOOGLESQL_RETURN_IF_ERROR(AddSamplingMethod("spanner.reservoir"));
 
   // Populate the set of GoogleSQL functions supported in Spangres.
   std::vector<PostgresFunctionArguments> functions;

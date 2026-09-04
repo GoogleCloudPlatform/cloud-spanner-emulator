@@ -390,6 +390,13 @@ ForwardTransformer::BuildGsqlResolvedScanForTableExpression(
                          internal::RTEKindToString(rte->rtekind)));
     }
 
+    if (rte->tablesample) {
+        // When there is a tablesample clause, encapsulate the current scan in a
+        // tablesample scan and return that.
+        return BuildGsqlResolvedScanForTableSampleClause(
+            rte->tablesample, std::move(current_scan));
+    }
+
     return current_scan;
   } else if (IsA(&node, JoinExpr)) {
     JoinExpr* join_expr = PostgresCastNode(JoinExpr, (void*)&node);
@@ -410,6 +417,164 @@ ForwardTransformer::BuildGsqlResolvedScanForTableExpression(
     return absl::UnimplementedError(absl::StrCat(
         "Node type ", NodeTagToNodeString(node.type), " is unsupported"));
   }
+}
+
+absl::StatusOr<std::unique_ptr<googlesql::ResolvedScan>>
+ForwardTransformer::BuildGsqlResolvedScanForTableSampleClause(
+    const TableSampleClause* sample_clause,
+    std::unique_ptr<const googlesql::ResolvedScan> input_scan) {
+  // Get the sampling method name.
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      const FormData_pg_proc* proc,
+      PgBootstrapCatalog::Default()->GetProc(sample_clause->tsmhandler));
+  std::string qualified_sample_method = NameStr(proc->proname);
+  if (proc->pronamespace != PG_CATALOG_NAMESPACE) {
+    GOOGLESQL_ASSIGN_OR_RETURN(
+        const char* namespace_name,
+        PgBootstrapCatalog::Default()->GetNamespaceName(proc->pronamespace));
+    qualified_sample_method =
+        absl::StrCat(namespace_name, ".", qualified_sample_method);
+  }
+  GOOGLESQL_RET_CHECK(
+      catalog_adapter_->GetEngineSystemCatalog()->IsSamplingMethodSupported(
+          qualified_sample_method))
+      << "Unsupported sampling method: " << qualified_sample_method;
+
+  // Spanner does not support REPEATABLE clause. This is checked in the modified
+  // PG analyzer, so this should never happen.
+  GOOGLESQL_RET_CHECK_EQ(sample_clause->repeatable, nullptr)
+      << "Spanner does not support REPEATABLE in TABLESAMPLE clause.";
+
+  // Find the corresponding GoogleSQL sampling size unit.
+  googlesql::ResolvedSampleScan::SampleUnit resolved_unit;
+  if (absl::EqualsIgnoreCase(qualified_sample_method, "bernoulli")) {
+    resolved_unit = googlesql::ResolvedSampleScan::PERCENT;
+  } else if (absl::EqualsIgnoreCase(qualified_sample_method,
+                                    "spanner.reservoir")) {
+    resolved_unit = googlesql::ResolvedSampleScan::ROWS;
+  } else {
+    // This error should never happen because the modified PG analyzer has
+    // validated the sampling method.
+    return absl::InvalidArgumentError(absl::StrCat(
+        "tablesample method ", qualified_sample_method, " does not exist."));
+  }
+
+  // There are 3 supported cases for the sampling size:
+  // 1. Type casting of literal to int64_t/float64.
+  // 2. Literal of int64_t/float64.
+  // 3. Parameter of int64_t/float64.
+  // Each case is handled separately and the resolved size is built if the case
+  // is valid. If resolved_size is a nullptr in the end, an error is returned.
+  std::unique_ptr<const googlesql::ResolvedExpr> resolved_size;
+  if (IsA(linitial(sample_clause->args), FuncExpr)) {
+    // If there is type casting of literal to int64_t/float64, cast it now.
+    const FuncExpr* func_expr =
+        PostgresConstCastNode(FuncExpr, linitial(sample_clause->args));
+    GOOGLESQL_ASSIGN_OR_RETURN(bool is_cast_function, IsCastFunction(*func_expr));
+    if (is_cast_function) {
+      if (IsA(linitial(func_expr->args), Const)) {
+        const Const* arg_const =
+            PostgresConstCastNode(Const, linitial(func_expr->args));
+        if (arg_const->constisnull) {
+          return absl::InvalidArgumentError(
+              "TABLESAMPLE parameter cannot be null.");
+        }
+        if (func_expr->funcresulttype == FLOAT8OID) {
+          GOOGLESQL_ASSIGN_OR_RETURN(resolved_size,
+                           ForceBuildGsqlResolvedLiteralFromCast(
+                               func_expr->funcid, *arg_const, nullptr, nullptr,
+                               FLOAT8OID, CoercionForm::COERCE_IMPLICIT_CAST));
+        } else if (func_expr->funcresulttype == INT8OID) {
+          GOOGLESQL_ASSIGN_OR_RETURN(resolved_size,
+                           ForceBuildGsqlResolvedLiteralFromCast(
+                               func_expr->funcid, *arg_const, nullptr, nullptr,
+                               INT8OID, CoercionForm::COERCE_IMPLICIT_CAST));
+        }
+      }
+    }
+  } else if (IsA(linitial(sample_clause->args), Const)) {
+    const Const* arg_const =
+        PostgresConstCastNode(Const, linitial(sample_clause->args));
+    if (arg_const->constisnull) {
+      return absl::InvalidArgumentError(
+          "TABLESAMPLE parameter cannot be null.");
+    }
+    GOOGLESQL_ASSIGN_OR_RETURN(resolved_size, BuildGsqlResolvedLiteral(*arg_const));
+  } else if (IsA(linitial(sample_clause->args), Param)) {
+    const Param* arg_param =
+        PostgresConstCastNode(Param, linitial(sample_clause->args));
+    GOOGLESQL_ASSIGN_OR_RETURN(
+        resolved_size,
+        BuildGsqlResolvedParameter(*PostgresConstCastNode(Param, arg_param)));
+  }
+
+  // Only accept int64_t/double literal/parameter for PERCENT and int64_t
+  // literal/parameter for ROWS.
+  if (resolved_unit == googlesql::ResolvedSampleScan::PERCENT) {
+    if (resolved_size == nullptr || !(resolved_size->type()->IsDouble() ||
+                                      resolved_size->type()->IsInt64())) {
+      return absl::InvalidArgumentError(
+          "Sample percentage must be a BIGINT or DOUBLE PRECISION literal or "
+          "query parameter. Type casting to BIGINT or DOUBLE PRECISION of "
+          "literals is also supported.");
+    }
+  } else {
+    if (resolved_size == nullptr || !(resolved_size->type()->IsInt64())) {
+      return absl::InvalidArgumentError(
+          "Sample rows must be a BIGINT literal or query parameter. Type "
+          "casting to BIGINT of literals is also supported.");
+    }
+  }
+
+  if (resolved_size->node_kind() == googlesql::RESOLVED_LITERAL) {
+    const googlesql::Value value =
+        resolved_size->GetAs<googlesql::ResolvedLiteral>()->value();
+    bool is_valid = false;
+    if (resolved_unit == googlesql::ResolvedSampleScan::PERCENT) {
+      if (value.type()->IsInt64()) {
+        is_valid = (!value.is_null() && value.int64_value() >= 0 &&
+                    value.int64_value() <= 100);
+      } else if (value.type()->IsDouble()) {
+        is_valid = (!value.is_null() && value.double_value() >= 0.0 &&
+                    value.double_value() <= 100.0);
+      }
+      if (!is_valid) {
+        return absl::InvalidArgumentError(
+            "Sample percentage must be between 0 and 100.");
+      }
+    } else {
+      is_valid = (!value.is_null() && value.type()->IsInt64() &&
+                  value.int64_value() >= 0);
+      if (!is_valid) {
+        return absl::InvalidArgumentError("Sample rows must be non-negative.");
+      }
+    }
+  }
+
+  // PG does not support PARTITION BY.
+  std::vector<std::unique_ptr<const googlesql::ResolvedExpr>> partition_by_list;
+
+  // GoogleSQL does not support REPEATABLE.
+  std::unique_ptr<const googlesql::ResolvedExpr> resolved_repeatable_argument;
+
+  // PG does not support WITH WEIGHT.
+  std::unique_ptr<googlesql::ResolvedColumnHolder> weight_column;
+
+  const std::vector<googlesql::ResolvedColumn>& column_list =
+      input_scan->column_list();
+
+  // Mappings between supported PG function names and GoogleSQL function names:
+  // - spanner.reservoir -> reservoir
+  // - bernoulli -> bernoulli
+  // So, we use `NameStr(proc->proname)` to get the GoogleSQL function name.
+  std::unique_ptr<googlesql::ResolvedScan> resolved_sample_scan =
+      MakeResolvedSampleScan(
+          column_list, std::move(input_scan), NameStr(proc->proname),
+          std::move(resolved_size), resolved_unit,
+          std::move(resolved_repeatable_argument), std::move(weight_column),
+          std::move(partition_by_list));
+
+  return resolved_sample_scan;
 }
 
 absl::StatusOr<std::unique_ptr<googlesql::ResolvedScan>>

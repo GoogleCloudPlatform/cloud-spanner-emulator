@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+
 	"net/http"
 	"os"
 	"os/exec"
@@ -95,6 +96,7 @@ func (gw *Gateway) Run() {
 		fmt.Sprintf("--override_change_stream_partition_token_alive_seconds=%d",
 			gw.opts.OverrideChangeStreamPartitionTokenAliveSeconds))
 
+
 	cmd := exec.Command(gw.opts.FrontendBinary, emulatorArgs...)
 
 	// Proxy emulator log to gateway log.
@@ -130,6 +132,7 @@ func (gw *Gateway) Run() {
 		log.Println("Shutting down gateway server since grpc server is terminated.")
 		os.Exit(cmd.ProcessState.ExitCode())
 	}()
+
 
 	// Wait for the grpc server to be up.
 	ctx := context.Background()
@@ -168,6 +171,7 @@ func (gw *Gateway) Run() {
 		log.Fatal(err)
 	}
 }
+
 
 func waitForReady(ctx context.Context, endpoint string) error {
 	timeout := 30 * time.Second

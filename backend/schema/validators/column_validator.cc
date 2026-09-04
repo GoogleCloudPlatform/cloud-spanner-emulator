@@ -30,6 +30,7 @@
 #include "absl/strings/ascii.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "absl/types/span.h"
 #include "backend/datamodel/types.h"
 #include "backend/schema/backfills/column_value_backfill.h"
 #include "backend/schema/catalog/change_stream.h"
@@ -301,8 +302,9 @@ absl::Status ColumnValidator::Validate(const Column* column,
     } else {
       GOOGLESQL_RET_CHECK(!column->postgresql_oid().has_value());
     }
+    bool is_pk = column->table()->FindKeyColumn(column->Name()) != nullptr;
     if (!EmulatorFeatureFlags::instance().flags().enable_generated_pk &&
-        column->table()->FindKeyColumn(column->Name())) {
+        is_pk) {
       return error::CannotUseGeneratedColumnInPrimaryKey(
           column->table()->Name(), column->Name());
     }
@@ -320,15 +322,18 @@ absl::Status ColumnValidator::Validate(const Column* column,
 absl::Status ColumnValidator::ValidateUpdate(const Column* column,
                                              const Column* old_column,
                                              SchemaValidationContext* context) {
-  // if column has row deletion policy, then can't delete the column or change
-  // type.
+  std::string owner_name = column->table()->Name();
+  bool owner_deleted = column->table()->is_deleted();
   bool has_row_deletion_policy =
       column->table()->row_deletion_policy().has_value() &&
-      column->table()->row_deletion_policy()->column_name() == column->Name();
-  if (has_row_deletion_policy && !column->table_->is_deleted() &&
+      column->table()->row_deletion_policy()->column_name() ==
+      column->Name();
+
+  // if column has row deletion policy, then can't delete the column or change
+  // type.
+  if (has_row_deletion_policy && !owner_deleted &&
       (column->is_deleted() || !column->GetType()->IsTimestamp())) {
-    return error::RowDeletionPolicyWillBreak(column->Name(),
-                                             column->table()->Name());
+    return error::RowDeletionPolicyWillBreak(column->Name(), owner_name);
   }
 
   if (!column->change_streams_explicitly_tracking_column().empty() &&
@@ -358,33 +363,35 @@ absl::Status ColumnValidator::ValidateUpdate(const Column* column,
   for (const Column* dep : column->dependent_columns()) {
     if (dep->is_deleted()) {
       return error::InvalidDropColumnReferencedByGeneratedColumn(
-          dep->Name(), column->table()->Name(), column->Name());
+          dep->Name(), owner_name, column->Name());
     }
   }
   if (column->is_generated() && !old_column->is_generated()) {
-    return error::CannotConvertRegularColumnToGeneratedColumn(
-        column->table()->Name(), column->Name());
+    return error::CannotConvertRegularColumnToGeneratedColumn(owner_name,
+                                                              column->Name());
   }
   if (!column->is_generated() && old_column->is_generated()) {
-    return error::CannotConvertGeneratedColumnToRegularColumn(
-        column->table()->Name(), column->Name());
+    return error::CannotConvertGeneratedColumnToRegularColumn(owner_name,
+                                                              column->Name());
   }
   if (column->is_generated() && old_column->is_generated()) {
     if (!column->GetType()->Equals(old_column->GetType())) {
-      return error::CannotAlterStoredGeneratedColumnDataType(
-          column->table()->Name(), column->Name());
+      return error::CannotAlterStoredGeneratedColumnDataType(owner_name,
+                                                             column->Name());
     }
     if (column->expression().value() != old_column->expression().value()) {
-      return error::CannotAlterGeneratedColumnExpression(
-          column->table()->Name(), column->Name());
+      return error::CannotAlterGeneratedColumnExpression(owner_name,
+                                                         column->Name());
     }
     if (column->is_stored() != old_column->is_stored()) {
-      return error::CannotAlterGeneratedColumnStoredAttribute(
-          column->table()->Name(), column->Name());
+      return error::CannotAlterGeneratedColumnStoredAttribute(owner_name,
+                                                              column->Name());
     }
   }
   if (!column->GetType()->Equals(old_column->GetType())) {
-    for (const Column* generated_column : column->table()->columns()) {
+    absl::Span<const Column* const> owner_columns =
+        column->table()->columns();
+    for (const Column* generated_column : owner_columns) {
       if (generated_column->is_generated()) {
         for (const Column* dep : generated_column->dependent_columns()) {
           if (column == dep) {

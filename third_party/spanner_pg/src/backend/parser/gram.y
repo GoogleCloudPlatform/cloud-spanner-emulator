@@ -19281,6 +19281,11 @@ spangres_hint_entry:
 		{
 			$$ = makeDefElemExtended($1, $3, $5, DEFELEM_UNSPEC, @1);
 		}
+	| spangres_hint_key '=' array_expr { $$ = makeDefElem($1, $3, @1); }
+	| spangres_hint_key '.' spangres_hint_key '=' array_expr
+		{
+			$$ = makeDefElemExtended($1, $3, $5, DEFELEM_UNSPEC, @1);
+		}
 	;
 
 /* END SPANGRES ADDED GRAMMAR RULES */

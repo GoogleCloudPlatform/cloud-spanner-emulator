@@ -56,7 +56,8 @@ TranslateTableLevelExpression(
     const googlesql::AnalyzerOptions& analyzer_options,
     googlesql::TypeFactory* type_factory,
     std::unique_ptr<google::spanner::emulator::backend::FunctionCatalog>
-        emulator_function_catalog);
+        emulator_function_catalog,
+    bool table_in_named_catalog = false);
 
 absl::StatusOr<interfaces::ExpressionTranslateResult> TranslateQueryInView(
     absl::string_view query, googlesql::EnumerableCatalog& catalog,

@@ -234,6 +234,49 @@ ALTER DATABASE db SET OPTIONS (version_retention_period = 1)
                        HasSubstr("Unexpected value for option")));
 }
 
+TEST(ParseAlterDatabase, ValidSetScoreVersionToInt64) {
+  absl::string_view ddl = R"(
+    ALTER DATABASE db SET OPTIONS (score_version = 1)
+  )";
+  DDLStatement statement;
+  GOOGLESQL_EXPECT_OK(ParseDDLStatement(ddl, &statement));
+  EXPECT_THAT(
+      statement,
+      test::EqualsProto(
+          R"pb(alter_database {
+                 set_options {
+                   options { option_name: "score_version" int64_value: 1 }
+                 }
+                 db_name: "db"
+               })pb"));
+}
+
+TEST(ParseAlterDatabase, ValidSetScoreVersionToNull) {
+  absl::string_view ddl = R"(
+ALTER DATABASE db SET OPTIONS (score_version = NULL)
+  )";
+  DDLStatement statement;
+  GOOGLESQL_EXPECT_OK(ParseDDLStatement(ddl, &statement));
+  EXPECT_THAT(
+      statement,
+      test::EqualsProto(
+          R"pb(alter_database {
+                 set_options {
+                   options { option_name: "score_version" null_value: true }
+                 }
+                 db_name: "db"
+               })pb"));
+}
+
+TEST(ParseAlterDatabase, InvalidSetScoreVersion) {
+  absl::string_view ddl = R"(
+ALTER DATABASE db SET OPTIONS (score_version = '1')
+  )";
+  EXPECT_THAT(ParseDDLStatement(ddl),
+              StatusIs(StatusCode::kInvalidArgument,
+                       HasSubstr("Unexpected value for option")));
+}
+
 TEST(ParseAlterDatabase, Invalid_NoOptionSet) {
   absl::string_view ddl = R"(
     ALTER DATABASE db SET OPTIONS ()
@@ -394,7 +437,42 @@ TEST(ParseCreateTable, CannotParseCreateTableWithoutName) {
               StatusIs(StatusCode::kInvalidArgument));
 }
 
-TEST(ParseCreateTable, CannotParseCreateTableWithoutPrimaryKey) {
+TEST(ParseCreateTable, CanParseCreateTableWithoutPrimaryKey_Success) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_tables_without_primary_keys = true;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+
+  EXPECT_THAT(
+      ParseDDLStatement(
+          R"sql(
+                    CREATE TABLE Users (
+                      UserId INT64 NOT NULL,
+                      Name STRING(MAX)
+                    )
+                    )sql"),
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            create_table {
+              table_name: "Users"
+              column { column_name: "UserId" type: INT64 not_null: true }
+              column { column_name: "Name" type: STRING }
+              column {
+                column_name: "rowid"
+                type: INT64
+                not_null: true
+                hidden: true
+                identity_column { type: BIT_REVERSED_POSITIVE }
+              }
+              primary_key { key_name: "rowid" }
+            }
+          )pb")));
+}
+
+TEST(ParseCreateTable, CannotParseCreateTableWithoutPrimaryKey_DisabledFlag) {
+  EmulatorFeatureFlags::Flags flags;
+  flags.enable_tables_without_primary_keys = false;
+  test::ScopedEmulatorFeatureFlagsSetter setter(flags);
+
   EXPECT_THAT(
       ParseDDLStatement(
           R"sql(
@@ -8488,6 +8566,7 @@ TEST(FulltextDictionaryTable, HandlesOption) {
                     }
                   )pb")));
 }
+
 }  // namespace
 
 }  // namespace ddl

@@ -449,6 +449,11 @@ class EngineSystemCatalog : public googlesql::EnumerableCatalog {
       std::unique_ptr<googlesql::FunctionSignature>* result_signature,
       const googlesql::LanguageOptions& language_options);
 
+  bool IsSamplingMethodSupported(absl::string_view name_path) const;
+
+  // Returns the sorted list of supported sampling methods.
+  const absl::btree_set<std::string>& GetSupportedSamplingMethods() const;
+
  protected:
   // The EngineSystemCatalog should never be instantiated.
   explicit EngineSystemCatalog(
@@ -518,6 +523,8 @@ class EngineSystemCatalog : public googlesql::EnumerableCatalog {
   // Returns a nullptr if the function is not found.
   absl::StatusOr<const googlesql::Function*> GetBuiltinFunction(
       const std::string& name) const;
+
+  absl::Status AddSamplingMethod(const std::string& name_path);
 
  private:
   // Transforms a PostgreSQL type oid into a GoogleSQL FunctionArgumentType.
@@ -656,6 +663,10 @@ class EngineSystemCatalog : public googlesql::EnumerableCatalog {
   // engine-defined types transformed to ResolvedFunctionCalls instead.
   // Only used by the reverse transformer.
   absl::flat_hash_set<std::string> engine_cast_functions_;
+
+  // Stores the set of sampling methods' name paths supported by this storage
+  // engine.
+  absl::btree_set<std::string> sampling_method_names_;
 
   // Stores the set of builtin functions for this storage engine.
   // A subset of these functions will be exposed through the PostgreSQL

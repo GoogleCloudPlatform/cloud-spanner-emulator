@@ -306,16 +306,31 @@ CREATE TABLE "AllUsers_2" (
 );
 ==
 
-# TODO: Creating support for SET/DROP NOT NULL in Spanner, will
-# delete and update this once complete
-# ALTER TABLE Users ALTER COLUMN name SET NOT NULL;
-# --
-# ERROR: <SET/DROP NOT NULL> are allowed only after <ALTER COLUMN> action of <ALTER TABLE> statement.
-# ==
-# ALTER TABLE Users ALTER COLUMN name DROP NOT NULL;
-# --
-# ERROR: <SET/DROP NOT NULL> are allowed only after <ALTER COLUMN> action of <ALTER TABLE> statement.
-# ==
+CREATE TABLE Users (
+  id bigint PRIMARY KEY,
+  name varchar
+);
+ALTER TABLE Users ALTER COLUMN name SET NOT NULL;
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  name character varying NOT NULL,
+  PRIMARY KEY(id)
+);
+==
+
+CREATE TABLE Users (
+  id bigint PRIMARY KEY,
+  name varchar NOT NULL
+);
+ALTER TABLE Users ALTER COLUMN name DROP NOT NULL;
+--
+CREATE TABLE users (
+  id bigint NOT NULL,
+  name character varying,
+  PRIMARY KEY(id)
+);
+==
 
 ALTER TABLE Users ADD COLUMN newcol bigint PRIMARY KEY;
 --

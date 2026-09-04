@@ -1126,6 +1126,39 @@ static void GetProcsByNameFromBootstrapCatalog(
   }
 }
 
+extern "C" void TableSampleFunctionSupportedInSpangres(const char* name_path,
+                                                       bool* out_is_supported) {
+  const auto adapter = postgres_translator::GetCatalogAdapter();
+  if (!adapter.ok()) {
+    postgres_translator::ereport_helper(adapter.status(),
+                                        ERRCODE_INTERNAL_ERROR,
+                                        "Failed to get catalog adapter");
+  }
+
+  *out_is_supported =
+      adapter.value()->GetEngineSystemCatalog()->IsSamplingMethodSupported(
+          name_path);
+}
+
+extern "C" void GetSupportedSamplingMethodsAsString(char** out_string) {
+  const auto adapter = postgres_translator::GetCatalogAdapter();
+  if (!adapter.ok()) {
+    postgres_translator::ereport_helper(adapter.status(),
+                                        ERRCODE_INTERNAL_ERROR,
+                                        "Failed to get catalog adapter");
+  }
+
+  const absl::btree_set<std::string>& methods =
+      adapter.value()->GetEngineSystemCatalog()->GetSupportedSamplingMethods();
+
+  auto formatter = [](std::string* out_quoted_method,
+                      const std::string& method) {
+    absl::StrAppend(out_quoted_method, "'", method, "'");
+  };
+  std::string joined_methods = absl::StrJoin(methods, ", ", formatter);
+  *out_string = pstrdup(absl::StrCat("[", joined_methods, "]").c_str());
+}
+
 extern "C" void GetTypesByNameFromBootstrapCatalog(
     const char* name, const FormData_pg_type* const** outlist,
     size_t* outcount) {

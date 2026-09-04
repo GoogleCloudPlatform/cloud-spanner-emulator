@@ -75,7 +75,10 @@ const ChangeStream* Column::FindChangeStream(
 }
 
 std::string Column::FullName() const {
-  return absl::StrCat(table_->Name(), ".", name_);
+  if (table_ != nullptr) {
+    return absl::StrCat(table_->Name(), ".", name_);
+  }
+  return name_;
 }
 
 absl::Status Column::Validate(SchemaValidationContext* context) const {
@@ -89,12 +92,12 @@ absl::Status Column::ValidateUpdate(const SchemaNode* orig,
 
 absl::Status Column::DeepClone(SchemaGraphEditor* editor,
                                const SchemaNode* orig) {
-  GOOGLESQL_ASSIGN_OR_RETURN(const auto* table_clone, editor->Clone(table_));
-  table_ = table_clone->As<const Table>();
-  // The column should be deleted if the table containing the column
-  // is deleted.
-  if (table_->is_deleted()) {
-    MarkDeleted();
+  if (table_ != nullptr) {
+    GOOGLESQL_ASSIGN_OR_RETURN(const SchemaNode* table_clone, editor->Clone(table_));
+    table_ = table_clone->As<const Table>();
+    if (table_->is_deleted()) {
+      MarkDeleted();
+    }
   }
 
   GOOGLESQL_RETURN_IF_ERROR(editor->CloneVector(&change_streams_));

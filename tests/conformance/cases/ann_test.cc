@@ -542,7 +542,41 @@ TEST_F(ANNTest, ANNQueryNoLimit) {
                                  "is not supported in this query")));
 }
 
-TEST_F(ANNTest, AlterVectorIndex) {
+class AlterDropVectorIndexTest : public DatabaseTest {
+ public:
+  absl::Status SetUpDatabase() override {
+    GOOGLESQL_RETURN_IF_ERROR(SetSchema({
+        R"sql(
+        CREATE TABLE Base (
+          MyKey INT64 NOT NULL,
+          MyData STRING(MAX),
+          Embedding ARRAY<FLOAT32>(vector_length=>2),
+          Embedding2 ARRAY<FLOAT32>(vector_length=>2),
+          Embedding3 ARRAY<FLOAT64>(vector_length=>2)
+        ) PRIMARY KEY(MyKey)
+      )sql",
+        R"sql(
+        CREATE INDEX index2 ON Base(MyKey)
+      )sql"}));
+    return PopulateDatabase();
+  }
+
+ protected:
+  absl::Status PopulateDatabase() {
+    GOOGLESQL_RETURN_IF_ERROR(
+        MultiInsert(
+            "Base",
+            {"MyKey", "MyData", "Embedding", "Embedding2", "Embedding3"},
+            {{1, "datastr", std::vector<float>{1.0, 0.8},
+              std::vector<float>{1.0, 0.8}, std::vector<double>{1.0, 0.8}},
+             {2, "datastr", std::vector<float>{0.1, 1.0},
+              std::vector<float>{0.1, 1.0}, std::vector<double>{0.1, 1.0}}})
+            .status());
+    return absl::OkStatus();
+  }
+};
+
+TEST_F(AlterDropVectorIndexTest, AlterVectorIndex) {
   GOOGLESQL_EXPECT_OK(SetSchema({
       R"sql(
       CREATE VECTOR INDEX VI_alter ON Base(Embedding) WHERE Embedding IS NOT NULL
@@ -607,7 +641,7 @@ TEST_F(ANNTest, AlterVectorIndex) {
     )sql"}));
 }
 
-TEST_F(ANNTest, DropVectorIndex) {
+TEST_F(AlterDropVectorIndexTest, DropVectorIndex) {
   EXPECT_THAT(SetSchema({
                   R"sql(
       DROP VECTOR INDEX VI_drop

@@ -304,6 +304,15 @@ ForwardTransformer::BuildGsqlResolvedLiteralFromCast(
 }
 
 absl::StatusOr<std::unique_ptr<googlesql::ResolvedLiteral>>
+ForwardTransformer::ForceBuildGsqlResolvedLiteralFromCast(
+    Oid cast_function, const Const& input_literal, const Const* typmod,
+    const Const* explicit_cast, Oid output_type, CoercionForm cast_format) {
+  return InternalBuildGsqlResolvedLiteralFromCast(
+      cast_function, input_literal, typmod, explicit_cast, output_type,
+      cast_format, /*force_casting=*/true);
+}
+
+absl::StatusOr<std::unique_ptr<googlesql::ResolvedLiteral>>
 ForwardTransformer::InternalBuildGsqlResolvedLiteralFromCast(
     Oid cast_function, const Const& input_literal, const Const* typmod,
     const Const* explicit_cast, Oid output_type, CoercionForm cast_format,
@@ -774,6 +783,10 @@ ForwardTransformer::BuildGsqlResolvedExpr(
           *PostgresConstCastNode(SubscriptingRef, &expr),
           expr_transformer_info);
     }
+    case T_DistinctExpr: {
+      return BuildGsqlIsDistinctFromFunctionCall(
+          *PostgresConstCastNode(DistinctExpr, &expr), expr_transformer_info);
+    }
     case T_ArrayCoerceExpr: {
       return absl::UnimplementedError(
           "Array casting / coercion is not supported");
@@ -816,6 +829,11 @@ ForwardTransformer::BuildGsqlResolvedSubqueryExpr(
     if (resolved_in_expr->type()->IsArray()) {
       return absl::UnimplementedError(
           "IN subquery with array type is not supported.");
+    } else if (!resolved_in_expr->type()->SupportsEquality()) {
+      return absl::InvalidArgumentError(
+          absl::StrCat("IN subquery with non-equality type ",
+                       resolved_in_expr->type()->DebugString(),
+                       " is not supported."));
     }
 
     // Transform the hints, if there are any.

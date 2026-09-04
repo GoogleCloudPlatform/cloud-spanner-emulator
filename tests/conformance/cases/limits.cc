@@ -107,7 +107,7 @@ TEST_F(LimitsTest, MaxIndexNameLength) {
 TEST_F(LimitsTest, DISABLED_MaxTablesPerDatabase) {
   std::vector<std::string> statements;
   int i = 0;
-  for (; i < 2560; ++i) {
+  for (; i < 5000; ++i) {
     statements.emplace_back(
         absl::StrFormat("CREATE TABLE table_%d (ID INT64 NOT NULL, string_col "
                         "STRING(MAX),) PRIMARY KEY (ID)",
@@ -147,13 +147,12 @@ TEST_F(LimitsTest, MaxChangeStreamsPerDatabase) {
 // TODO: This test is timing out in the emulator.
 TEST_F(LimitsTest, DISABLED_MaxIndexesPerDatabase) {
   std::vector<std::string> statements;
-  for (int i = 0; i < 80; ++i) {
+  for (int i = 0; i < 100; ++i) {
     statements.emplace_back(
         absl::StrFormat("CREATE TABLE table_%d ( ID INT64 NOT NULL, string_col "
                         "STRING(MAX),) PRIMARY KEY (ID)",
                         i));
-    // Max 64 index per table.
-    for (int j = 0; j < 64; ++j) {
+    for (int j = 0; j < 100; ++j) {
       statements.emplace_back(absl::StrFormat(
           "CREATE INDEX test_%d_index_%d ON table_%d(string_col)", i, j, i));
     }

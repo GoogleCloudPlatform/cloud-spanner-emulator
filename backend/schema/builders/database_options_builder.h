@@ -17,6 +17,7 @@
 #ifndef THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_BUILDERS_DATABASE_OPTIONS_BUILDER_H_
 #define THIRD_PARTY_CLOUD_SPANNER_EMULATOR_BACKEND_SCHEMA_BUILDERS_DATABASE_OPTIONS_BUILDER_H_
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -76,6 +77,11 @@ class DatabaseOptions::Builder {
     return *this;
   }
 
+  Builder& set_score_version(std::optional<int64_t> score_version) {
+    instance_->score_version_ = score_version;
+    return *this;
+  }
+
  private:
   std::unique_ptr<DatabaseOptions> instance_;
 };
@@ -111,6 +117,11 @@ class DatabaseOptions::Editor {
   Editor& set_version_retention_period(
       std::optional<std::string> version_retention_period) {
     instance_->version_retention_period_ = version_retention_period;
+    return *this;
+  }
+
+  Editor& set_score_version(std::optional<int64_t> score_version) {
+    instance_->score_version_ = score_version;
     return *this;
   }
 

@@ -42,6 +42,7 @@ message DDLStatement {
     DropTable drop_table = 12;
     RenameTable rename_table = 88;
 
+
     // Index statements.
     CreateIndex create_index = 13;
     AlterIndex alter_index = 15;
@@ -512,6 +513,7 @@ message CreateTable {
   optional string synonym = 15;
 }
 
+
 message ChangeStreamForClause {
   message TrackedTables {
     message Entry {
@@ -608,6 +610,7 @@ message DropTable {
   optional string table_name = 1;
   optional ExistenceModifier existence_modifier = 2;
 }
+
 
 message DropChangeStream {
   optional string change_stream_name = 1;

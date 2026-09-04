@@ -1159,5 +1159,23 @@ TEST_F(SerializationDeserializationTest, ReturnStmt) {
   EXPECT_THAT(return_stmt, CanSerializeAndDeserialize());
 }
 
+TEST_F(SerializationDeserializationTest, TableSampleClause) {
+  TableSampleClause* table_sample_clause = makeNode(TableSampleClause);
+  table_sample_clause->tsmhandler = 123;
+  table_sample_clause->args = list_make1(PlaceHolderNode());
+  table_sample_clause->repeatable = PlaceHolderExpr();
+  EXPECT_THAT(table_sample_clause, CanSerializeAndDeserialize());
+}
+
+TEST_F(SerializationDeserializationTest, RangeTableSample) {
+  RangeTableSample* range_table_sample = makeNode(RangeTableSample);
+  range_table_sample->relation = PlaceHolderNode();
+  range_table_sample->method = list_make1(PlaceHolderNode());
+  range_table_sample->args = list_make1(PlaceHolderNode());
+  range_table_sample->repeatable = PlaceHolderNode();
+  range_table_sample->location = 99;
+  EXPECT_THAT(range_table_sample, CanSerializeAndDeserialize());
+}
+
 }  // namespace
 }  // namespace postgres_translator::test

@@ -106,6 +106,10 @@ class TransactionStore {
                     std::unique_ptr<StorageIterator>* storage_itr,
                     bool allow_pending_commit_timestamps_in_read = true) const;
 
+  // Returns true if the column has been written with a pending commit timestamp
+  // in this transaction.
+  bool HasPendingCommitTimestamp(const Column* column) const;
+
   // Returns the buffered mutations.
   std::vector<WriteOp> GetBufferedOps() const;
 

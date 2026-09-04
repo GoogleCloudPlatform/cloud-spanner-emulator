@@ -60,6 +60,14 @@ class TestReadOnlyStore : public ReadOnlyStore {
   absl::StatusOr<bool> PrefixExists(const Table* table,
                                     const Key& prefix_key) const override;
 
+  bool HasPendingCommitTimestamp(const Column* column) const override {
+    return pending_commit_ts_columns_.contains(column);
+  }
+
+  void SetHasPendingCommitTimestamp(const Column* column) {
+    pending_commit_ts_columns_.insert(column);
+  }
+
   absl::Status Insert(const Table* table, const Key& key,
                       absl::Span<const Column* const> columns,
                       const std::vector<googlesql::Value>& values = {});
@@ -68,6 +76,7 @@ class TestReadOnlyStore : public ReadOnlyStore {
 
  private:
   InMemoryStorage store_;
+  absl::flat_hash_set<const Column*> pending_commit_ts_columns_;
 };
 
 // TestEffectsBuffer provides an implementation of EffectsBuffer to test

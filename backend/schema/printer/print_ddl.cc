@@ -963,9 +963,10 @@ absl::StatusOr<std::vector<std::string>> PrintDDLStatements(
   const DatabaseOptions* options = schema->options();
   if (options != nullptr) {
     for (const auto& option : options->options()) {
+      std::string option_name = option.option_name();
       statements.push_back(absl::Substitute(
           "ALTER DATABASE $0 SET OPTIONS ($1 = '$2')", options->Name(),
-          option.option_name(), option.string_value()));
+          option_name, option.string_value()));
     }
   }
 

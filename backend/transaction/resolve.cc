@@ -190,7 +190,7 @@ absl::Status ValidateDefaultAndGeneratedKeys(
   return absl::OkStatus();
 }
 // Validate that all default primary keys are present in an UPDATE op.
-ABSL_ATTRIBUTE_UNUSED absl::Status ValidateDefaultKeysInUpdateOp(
+[[maybe_unused]] absl::Status ValidateDefaultKeysInUpdateOp(
     const Table* table, const std::vector<const Column*>& columns) {
   for (const KeyColumn* key_column : table->primary_key()) {
     const Column* column = key_column->column();

@@ -304,6 +304,10 @@ cc_test(
 cc_library(
     name = "sql_builder",
     hdrs = ["sql_builder.h"],
+    visibility = [
+        "//:__subpackages__",
+        "//spanner/tests/spangres:__subpackages__",
+    ],
     deps = [
         "@com_google_googlesql//googlesql/public:strings",
         "@com_google_googlesql//googlesql/resolved_ast:sql_builder",

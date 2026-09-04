@@ -109,6 +109,10 @@ class ReadOnlyStore {
   virtual absl::StatusOr<ValueList> ReadCommitted(
       const Table* table, const Key& key,
       std::vector<const Column*> columns) const = 0;
+
+  // Returns true if the given column has been written with a pending commit
+  // timestamp in this transaction.
+  virtual bool HasPendingCommitTimestamp(const Column* column) const = 0;
 };
 
 // ActionContext contains the context in which an action operates.
