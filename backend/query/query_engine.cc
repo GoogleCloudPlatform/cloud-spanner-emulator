@@ -1584,9 +1584,16 @@ absl::Status QueryEngine::IsValidPartitionedDML(
   analyzer_options.set_prune_unused_columns(true);
   Catalog catalog{context.schema, &function_catalog_, type_factory_,
                   analyzer_options};
-  GOOGLESQL_ASSIGN_OR_RETURN(
-      auto analyzer_output,
-      Analyze(local_query.sql, &catalog, analyzer_options, type_factory_));
+  std::unique_ptr<const googlesql::AnalyzerOutput> analyzer_output;
+  if (context.schema->dialect() == database_api::DatabaseDialect::POSTGRESQL) {
+    GOOGLESQL_ASSIGN_OR_RETURN(
+        analyzer_output,
+        AnalyzePostgreSQL(local_query.sql, &catalog, analyzer_options,
+                          type_factory_, &function_catalog_));
+  } else {
+    GOOGLESQL_ASSIGN_OR_RETURN(analyzer_output, Analyze(local_query.sql, &catalog,
+                                              analyzer_options, type_factory_));
+  }
 
   GOOGLESQL_ASSIGN_OR_RETURN(auto resolved_statement,
                    ExtractValidatedResolvedStatementAndOptions(

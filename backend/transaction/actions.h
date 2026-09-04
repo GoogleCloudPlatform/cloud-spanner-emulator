@@ -68,6 +68,8 @@ class TransactionReadOnlyStore : public ReadOnlyStore {
       absl::Span<const Column* const> columns,
       bool allow_pending_commit_timestamps_in_read) const override;
 
+  bool HasPendingCommitTimestamp(const Column* column) const override;
+
  private:
   const TransactionStore* read_only_store_;
 };

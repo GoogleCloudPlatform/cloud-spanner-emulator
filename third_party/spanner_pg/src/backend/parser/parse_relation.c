@@ -26,7 +26,12 @@
 #include "funcapi.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
+#include "nodes/nodes.h"
+#include "nodes/parsenodes.h"
+#include "nodes/pg_list.h"
 #include "parser/parse_enr.h"
+#include "parser/parse_expr.h"
+#include "parser/parse_node.h"
 #include "parser/parse_relation.h"
 #include "parser/parse_type.h"
 #include "parser/parsetree.h"
@@ -1511,9 +1516,10 @@ addRangeTableEntry(ParseState *pstate,
   // Transform table hints and attach.
   ListCell* lc;
   foreach (lc, relation->tableHints) {
-    rte->tableHints =
-        lappend(rte->tableHints,
-                transformSpangresHint(pstate, castNode(DefElem, lfirst(lc))));
+    Node* hint = transformSpangresHint(pstate, castNode(DefElem, lfirst(lc)));
+    if (hint != NULL) {
+      rte->tableHints = lappend(rte->tableHints, hint);
+    }
   }
 
 	// SPANGRES: Initialize RTEPermissionInfo for PG 16 compatibility.
@@ -1746,19 +1752,29 @@ Node* HintColumnRefToString(ColumnRef* column_ref) {
 // transformExpr() plus the type coercion done on plain string types when
 // necessary.
 Node* transformSpangresHint(ParseState* pstate, DefElem* elem) {
-  // Accept a single identifier as a hint value, transforming into a string
-  // value. Otherwise, treat the arg as a standard expression.
-  if (IsA(elem->arg, ColumnRef)) {
+  /*
+   * If the hint value is an empty array literal, we cannot determine its type
+   * in transformExpr. Return NULL to indicate it should be dropped.
+   * A_ArrayExpr with elements is handled natively by transformExpr.
+   */
+  if (elem->arg != NULL && IsA(elem->arg, A_ArrayExpr) &&
+      ((A_ArrayExpr*)elem->arg)->elements == NIL) {
+    return NULL;
+  } else if (elem->arg != NULL && IsA(elem->arg, ColumnRef)) {
+    // Accept a single identifier as a hint value, transforming into a string
+    // value. Otherwise, treat the arg as a standard expression.
     elem->arg = HintColumnRefToString(castNode(ColumnRef, elem->arg));
   }
 
-  elem->arg = transformExpr(pstate, elem->arg, EXPR_KIND_OTHER);
+  if (elem->arg != NULL) {
+    elem->arg = transformExpr(pstate, elem->arg, EXPR_KIND_OTHER);
+  }
 
   // When the type is an unannotated string, PostgreSQL's resolver leaves it as
   // UNKNOWNOID to let context handle final type resolution. In most cases, like
   // in the target list, it defaults this resolution to TEXTOID. We apply the
   // same rule here.
-  if (IsA(elem->arg, Const) &&
+  if (elem->arg != NULL && IsA(elem->arg, Const) &&
       castNode(Const, elem->arg)->consttype == UNKNOWNOID) {
     elem->arg = coerce_to_specific_type(pstate, elem->arg, TEXTOID, "HINT");
   }

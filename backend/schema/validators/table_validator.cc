@@ -453,7 +453,7 @@ absl::Status TableValidator::ValidateUpdate(const Table* table,
                                             SchemaValidationContext* context) {
   if (table->is_deleted()) {
     GOOGLESQL_RET_CHECK(!table->owner_index_ || table->owner_index_->is_deleted());
-    if (!table->child_tables_.empty()) {
+      if (!table->child_tables_.empty()) {
       // Build a sorted list of interleaved child tables and indexes.
       std::vector<std::string> interleaved_tables;
       std::vector<std::string> interleaved_indices;

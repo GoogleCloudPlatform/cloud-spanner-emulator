@@ -52,6 +52,7 @@ cc_library(
     name = "tablesample",
     srcs = [
         "bernoulli.c",
+        "spanner_reservoir.c",
         "system.c",
         "tablesample.c",
     ],

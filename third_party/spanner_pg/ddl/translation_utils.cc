@@ -192,7 +192,7 @@ absl::optional<PGAlterOption> GetOptionByInternalName(
   if (val != pg_options_map->end()) {
     return val->second;
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 // This function has a list of all the PG/Spanner DB options. It's here so we
@@ -200,8 +200,8 @@ absl::optional<absl::string_view> GetInternalOptionName(
     absl::string_view spangres_option_name) {
   absl::optional<PGAlterOption> opt =
       GetOptionByInternalName(spangres_option_name);
-  if (opt == absl::nullopt) {
-    return absl::nullopt;
+  if (opt == std::nullopt) {
+    return std::nullopt;
   }
   return opt->SpannerName();
 }
@@ -212,7 +212,7 @@ absl::optional<absl::string_view> GetSpangresOptionName(
   if (val != spanner_options_map->end()) {
     return val->second.PGName();
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 bool IsReservedName(absl::string_view name) {

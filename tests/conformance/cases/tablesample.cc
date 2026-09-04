@@ -15,6 +15,9 @@
 //
 
 #include "gmock/gmock.h"
+#include "gtest/gtest.h"
+#include "googlesql/base/testing/status_matchers.h"
+#include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "tests/conformance/common/database_test_base.h"
 
@@ -27,53 +30,92 @@ namespace {
 
 using googlesql_base::testing::StatusIs;
 
-class TablesampleTest : public DatabaseTest {
+class TablesampleTest
+    : public DatabaseTest,
+      public testing::WithParamInterface<database_api::DatabaseDialect> {
  public:
+  void SetUp() override {
+    dialect_ = GetParam();
+    DatabaseTest::SetUp();
+  }
+
   absl::Status SetUpDatabase() override {
-    GOOGLESQL_EXPECT_OK(SetSchema({
-        R"(
-          CREATE TABLE Entries(
-            Id     INT64 NOT NULL,
-          ) PRIMARY KEY (Id)
-        )",
-    }));
+    GOOGLESQL_EXPECT_OK(SetSchemaFromFile("tablesample.test"));
     GOOGLESQL_EXPECT_OK(MultiInsert("Entries", {"Id"},
                           {{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}}));
     return absl::OkStatus();
   }
 };
 
-TEST_F(TablesampleTest, SampleSomeRows) {
-  EXPECT_THAT(Query(R"(SELECT COUNT(*) > 0 FROM Entries
-                       TABLESAMPLE BERNOULLI(99.99 PERCENT))"),
-              IsOkAndHoldsRows({{true}}));
-  EXPECT_THAT(Query(R"(SELECT COUNT(*) = 1 FROM Entries
-                       TABLESAMPLE RESERVOIR(1 ROWS))"),
-              IsOkAndHoldsRows({{true}}));
+INSTANTIATE_TEST_SUITE_P(
+    PerDialectTablesampleTests, TablesampleTest,
+    testing::Values(database_api::DatabaseDialect::GOOGLE_STANDARD_SQL,
+                    database_api::DatabaseDialect::POSTGRESQL),
+    [](const testing::TestParamInfo<TablesampleTest::ParamType>& info) {
+      return database_api::DatabaseDialect_Name(info.param);
+    });
+
+TEST_P(TablesampleTest, SampleSomeRows) {
+  if (dialect_ == database_api::DatabaseDialect::POSTGRESQL) {
+    EXPECT_THAT(Query(R"(SELECT COUNT(*) > 0 FROM Entries
+                        TABLESAMPLE BERNOULLI(99.99))"),
+                IsOkAndHoldsRows({{true}}));
+    EXPECT_THAT(Query(R"(SELECT COUNT(*) = 1 FROM Entries
+                        TABLESAMPLE SPANNER.RESERVOIR(1))"),
+                IsOkAndHoldsRows({{true}}));
+  } else {
+    EXPECT_THAT(Query(R"(SELECT COUNT(*) > 0 FROM Entries
+                        TABLESAMPLE BERNOULLI(99.99 PERCENT))"),
+                IsOkAndHoldsRows({{true}}));
+    EXPECT_THAT(Query(R"(SELECT COUNT(*) = 1 FROM Entries
+                        TABLESAMPLE RESERVOIR(1 ROWS))"),
+                IsOkAndHoldsRows({{true}}));
+  }
 }
 
-TEST_F(TablesampleTest, RepeatableIsNotSupported) {
-  EXPECT_THAT(Query(R"(SELECT * FROM Entries
+TEST_P(TablesampleTest, RepeatableIsNotSupported) {
+  if (dialect_ == database_api::DatabaseDialect::POSTGRESQL) {
+    EXPECT_THAT(Query(R"(SELECT * FROM Entries
+                       TABLESAMPLE BERNOULLI(50) REPEATABLE(5))"),
+                StatusIs(absl::StatusCode::kUnimplemented));
+    EXPECT_THAT(Query(R"(SELECT * FROM Entries
+                       TABLESAMPLE SPANNER.RESERVOIR(10) REPEATABLE(6))"),
+                StatusIs(absl::StatusCode::kUnimplemented));
+    EXPECT_THAT(Query(R"(SELECT * FROM Entries
+                       TABLESAMPLE SYSTEM(20) REPEATABLE(7))"),
+                StatusIs(absl::StatusCode::kUnimplemented));
+    EXPECT_THAT(Query(R"(SELECT * FROM Entries
+                       TABLESAMPLE SYSTEM(10) REPEATABLE(8))"),
+                StatusIs(absl::StatusCode::kUnimplemented));
+  } else {
+    EXPECT_THAT(Query(R"(SELECT * FROM Entries
                        TABLESAMPLE BERNOULLI(50 PERCENT) REPEATABLE(5))"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
-  EXPECT_THAT(Query(R"(SELECT * FROM Entries
+                StatusIs(absl::StatusCode::kInvalidArgument));
+    EXPECT_THAT(Query(R"(SELECT * FROM Entries
                        TABLESAMPLE RESERVOIR(10 ROWS) REPEATABLE(6))"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
-  EXPECT_THAT(Query(R"(SELECT * FROM Entries
+                StatusIs(absl::StatusCode::kInvalidArgument));
+    EXPECT_THAT(Query(R"(SELECT * FROM Entries
                        TABLESAMPLE SYSTEM(20 PERCENT) REPEATABLE(7))"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
-  EXPECT_THAT(Query(R"(SELECT * FROM Entries
+                StatusIs(absl::StatusCode::kInvalidArgument));
+    EXPECT_THAT(Query(R"(SELECT * FROM Entries
                        TABLESAMPLE SYSTEM(10 ROWS) REPEATABLE(8))"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+                StatusIs(absl::StatusCode::kInvalidArgument));
+  }
 }
 
-TEST_F(TablesampleTest, SystemSampingIsNotSupported) {
-  EXPECT_THAT(Query(R"(SELECT * FROM Entries
-                       TABLESAMPLE SYSTEM(50 PERCENT))"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
-  EXPECT_THAT(Query(R"(SELECT * FROM Entries
-                       TABLESAMPLE SYSTEM(50 ROWS))"),
-              StatusIs(absl::StatusCode::kInvalidArgument));
+TEST_P(TablesampleTest, SystemSampingIsNotSupported) {
+  if (dialect_ == database_api::DatabaseDialect::POSTGRESQL) {
+    EXPECT_THAT(Query(R"(SELECT * FROM Entries
+                       TABLESAMPLE SYSTEM(50))"),
+                StatusIs(absl::StatusCode::kUnimplemented));
+  } else {
+    EXPECT_THAT(Query(R"(SELECT * FROM Entries
+                        TABLESAMPLE SYSTEM(50 PERCENT))"),
+                StatusIs(absl::StatusCode::kInvalidArgument));
+    EXPECT_THAT(Query(R"(SELECT * FROM Entries
+                        TABLESAMPLE SYSTEM(50 ROWS))"),
+                StatusIs(absl::StatusCode::kInvalidArgument));
+  }
 }
 
 }  // namespace

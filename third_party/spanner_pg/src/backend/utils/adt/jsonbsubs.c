@@ -80,7 +80,10 @@ jsonb_subscript_transform(SubscriptingRef *sbsref,
 
 			if (subExprType != UNKNOWNOID)
 			{
-				Oid			targets[2] = {INT4OID, TEXTOID};
+				// SPANGRES BEGIN
+				// int8 instead of int4
+				Oid			targets[2] = {INT8OID, TEXTOID};
+				// SPANGRES BEGIN
 
 				/*
 				 * Jsonb can handle multiple subscript types, but cases when a
@@ -188,9 +191,12 @@ jsonb_subscript_check_subscripts(ExprState *state,
 	 * if the source jsonb is NULL the expected type will be used to construct
 	 * an empty source.
 	 */
+	// SPANGRES BEGIN
+	// int8 instead of int4
 	if (sbsrefstate->numupper > 0 && sbsrefstate->upperprovided[0] &&
-		!sbsrefstate->upperindexnull[0] && workspace->indexOid[0] == INT4OID)
+		!sbsrefstate->upperindexnull[0] && workspace->indexOid[0] == INT8OID)
 		workspace->expectArray = true;
+	// SPANGRES END
 
 	/* Process upper subscripts */
 	for (int i = 0; i < sbsrefstate->numupper; i++)
@@ -212,15 +218,18 @@ jsonb_subscript_check_subscripts(ExprState *state,
 			 * For jsonb fetch and assign functions we need to provide path in
 			 * text format. Convert if it's not already text.
 			 */
-			if (workspace->indexOid[i] == INT4OID)
+			// SPANGRES BEGIN
+			// int8 instead of int4
+			if (workspace->indexOid[i] == INT8OID)
 			{
 				Datum		datum = sbsrefstate->upperindex[i];
-				char	   *cs = DatumGetCString(DirectFunctionCall1(int4out, datum));
+				char	   *cs = DatumGetCString(DirectFunctionCall1(int8out, datum));
 
 				workspace->index[i] = CStringGetTextDatum(cs);
 			}
 			else
 				workspace->index[i] = sbsrefstate->upperindex[i];
+			// SPANGRES END
 		}
 	}
 

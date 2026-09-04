@@ -59,8 +59,8 @@ cc_library(
         "//third_party/spanner_pg/transformer:__pkg__",
         "//third_party/spanner_pg/ddl:__pkg__",
         "//spanner/datatypes/common/jsonb:__pkg__",
-        "//spanner/tests/spangres_end_to_end_test:__subpackages__",
-        # Use spangres/postgres_includes for safe PostgreSQL headers in non-PostgreSQL code.
+        "//spanner/tests/spanner_pg_end_to_end_test:__subpackages__",
+        # Use spanner_pg/postgres_includes for safe PostgreSQL headers in non-PostgreSQL code.
         "//third_party/spanner_pg/postgres_includes:__pkg__",
         "//third_party/spanner_pg/src:__subpackages__",
         # Bootstrap Catalog needs to directly parse the PostgreSQL headers to build the catalog.
@@ -147,7 +147,7 @@ filegroup(
         "nodes/nodes.h",
     ],
     visibility = [
-        # Use spangres/postgres_includes for safe PostgreSQL headers in non-PostgreSQL code.
+        # Use spanner_pg/postgres_includes for safe PostgreSQL headers in non-PostgreSQL code.
         "//third_party/spanner_pg/postgres_includes:__pkg__",
     ],
 )
@@ -207,6 +207,7 @@ filegroup(
     srcs = [
         "catalog/pg_language.dat",
         "catalog/pg_proc.dat",
+        "//third_party/spanner_pg/bootstrap_catalog:spanner_pg_fmgr_datfiles",
     ],
 )
 

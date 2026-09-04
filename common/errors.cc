@@ -1733,11 +1733,12 @@ absl::Status MultipleRefsToKeyColumn(absl::string_view object_type,
 }
 
 absl::Status UnsupportedAlterDatabaseOption(absl::string_view option_name) {
-  return absl::Status(absl::StatusCode::kFailedPrecondition,
-                      absl::Substitute("Invalid Alter Database Option: $0. "
-                                       "Supported options are witness_location "
-                                       "and default_leader.",
-                                       option_name));
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Invalid Alter Database Option: $0. "
+                       "Supported options are witness_location, "
+                       "default_leader, and score_version.",
+                       option_name));
 }
 
 absl::Status NullValueAlterDatabaseOption() {

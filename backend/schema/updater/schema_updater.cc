@@ -341,6 +341,10 @@ class SchemaUpdaterImpl {
       const ddl::AlterTable::AlterColumn& alter_column, const Table* table,
       const Column* column, Column::Editor* editor);
 
+  absl::Status AlterColumnSetDropNotNull(
+      const ddl::AlterTable::AlterColumn& alter_column, const Table* table,
+      const Column* column, Column::Editor* editor);
+
   absl::StatusOr<const Column*> CreateColumn(
       const ddl::ColumnDefinition& ddl_column, const Table* table,
       const ddl::CreateTable* ddl_table,
@@ -1389,6 +1393,14 @@ absl::Status SchemaUpdaterImpl::SetDatabaseOptions(
         modifier->set_columnar_policy(std::nullopt);
       }
     }
+    if (absl::StripPrefix(option.option_name(), "spanner.internal.cloud_") ==
+        ddl::kScoreVersionOptionName) {
+      if (option.has_int64_value()) {
+        modifier->set_score_version(option.int64_value());
+      } else if (option.has_null_value()) {
+        modifier->set_score_version(std::nullopt);
+      }
+    }
     if (absl::StripPrefix(option.option_name(), "spanner.internal.minimum_") ==
         ddl::kVersionRetentionPeriodOptionName) {
       if (option.has_string_value()) {
@@ -1705,6 +1717,22 @@ absl::Status SchemaUpdaterImpl::AlterColumnSetDropOnUpdate(
       return absl::OkStatus();
     }
     editor->set_has_on_update(false);
+  }
+  return absl::OkStatus();
+}
+
+absl::Status SchemaUpdaterImpl::AlterColumnSetDropNotNull(
+    const ddl::AlterTable::AlterColumn& alter_column, const Table* table,
+    const Column* column, Column::Editor* editor) {
+  const ddl::AlterTable::AlterColumn::AlterColumnOp type =
+      alter_column.operation();
+  GOOGLESQL_RET_CHECK(type == ddl::AlterTable::AlterColumn::SET_NOT_NULL ||
+            type == ddl::AlterTable::AlterColumn::DROP_NOT_NULL);
+
+  if (type == ddl::AlterTable::AlterColumn::SET_NOT_NULL) {
+    editor->set_nullable(false);
+  } else {
+    editor->set_nullable(true);
   }
   return absl::OkStatus();
 }
@@ -2283,11 +2311,17 @@ absl::Status SchemaUpdaterImpl::UnregisterChangeStreamFromTrackedObjects(
     std::string table_name = pair.first;
     std::vector<std::string> column_name_list = pair.second;
     const Table* table = latest_schema_->FindTable(table_name);
+    if (table == nullptr) {
+      continue;
+    }
     if (table->FindChangeStream(change_stream->Name())) {
       GOOGLESQL_RETURN_IF_ERROR(AlterNode(table, table_cb));
     }
     for (std::string& column_name : column_name_list) {
       const Column* column = table->FindColumn(column_name);
+      if (column == nullptr) {
+        continue;
+      }
       if (!table->FindKeyColumn(column->Name())) {
         GOOGLESQL_RETURN_IF_ERROR(AlterNode(column, column_cb));
       }
@@ -3176,6 +3210,10 @@ absl::Status SchemaUpdaterImpl::CreateTable(
       .set_name(ddl_table.table_name());
 
   for (const ddl::ColumnDefinition& ddl_column : ddl_table.column()) {
+    if (builder.get()->FindColumn(ddl_column.column_name()) != nullptr) {
+      return error::DuplicateColumnName(
+          absl::StrCat(ddl_table.table_name(), ".", ddl_column.column_name()));
+    }
     GOOGLESQL_ASSIGN_OR_RETURN(
         const Column* column,
         CreateColumn(ddl_column, builder.get(), &ddl_table, dialect));
@@ -5113,6 +5151,12 @@ absl::Status SchemaUpdaterImpl::ValidateAlterDatabaseOptions(
         continue;
       }
       return error::UnsupportedVersionRetentionPeriodOptionValues();
+    } else if (option_name == ddl::kScoreVersionOptionName) {
+      if (option.has_int64_value() || option.has_null_value()) {
+        continue;
+      }
+      return error::DdlInvalidArgumentError(
+          "score_version must be an integer or NULL.");
     } else {
       return error::UnsupportedAlterDatabaseOption(option_name);
     }
@@ -5528,6 +5572,17 @@ absl::Status SchemaUpdaterImpl::AlterTable(
                &table](Column::Editor* editor) -> absl::Status {
                 return AlterColumnSetDropOnUpdate(alter_column, table, column,
                                                   editor);
+              }));
+        } else if (alter_column.operation() ==
+                       ddl::AlterTable::AlterColumn::SET_NOT_NULL ||
+                   alter_column.operation() ==
+                       ddl::AlterTable::AlterColumn::DROP_NOT_NULL) {
+          GOOGLESQL_RETURN_IF_ERROR(AlterNode<Column>(
+              column,
+              [this, &alter_column, &column,
+               &table](Column::Editor* editor) -> absl::Status {
+                return AlterColumnSetDropNotNull(alter_column, table, column,
+                                                 editor);
               }));
         } else {
           GOOGLESQL_RETURN_IF_ERROR(AlterNode<Column>(
@@ -7002,6 +7057,10 @@ absl::StatusOr<std::unique_ptr<ddl::DDLStatement>> ParseDDLByDialect(
                                    .flags()
                                    .enable_serial_auto_increment,
         .enable_uuid_type = true,
+        .enable_tables_without_primary_keys =
+            EmulatorFeatureFlags::instance()
+                .flags()
+                .enable_tables_without_primary_keys,
         .enable_alter_table_if_exists = EmulatorFeatureFlags::instance()
                                             .flags()
                                             .enable_alter_table_if_exists,

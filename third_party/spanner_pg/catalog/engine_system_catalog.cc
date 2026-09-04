@@ -1143,6 +1143,24 @@ EngineSystemCatalog::GetBuiltinFunction(const std::string& name) const {
   return builtin_function_catalog_->GetFunction(name);
 }
 
+absl::Status EngineSystemCatalog::AddSamplingMethod(
+    const std::string& name_path) {
+  GOOGLESQL_RET_CHECK(!sampling_method_names_.contains(name_path))
+      << "Attempting to insert duplicate sampling method: " << name_path;
+  sampling_method_names_.insert(name_path);
+  return absl::OkStatus();
+}
+
+bool EngineSystemCatalog::IsSamplingMethodSupported(
+    absl::string_view name_path) const {
+  return sampling_method_names_.contains(name_path);
+}
+
+const absl::btree_set<std::string>&
+EngineSystemCatalog::GetSupportedSamplingMethods() const {
+  return sampling_method_names_;
+}
+
 bool EngineSystemCatalog::IsBuiltinSqlRewriteFunction(
     const std::string& function_name,
     const googlesql::LanguageOptions& language_options,

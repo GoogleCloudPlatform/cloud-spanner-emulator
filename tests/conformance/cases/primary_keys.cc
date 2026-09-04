@@ -14,6 +14,7 @@
 // limitations under the License.
 //
 
+#include <cstdint>
 #include <string>
 
 #include "gmock/gmock.h"
@@ -136,6 +137,98 @@ TEST_P(PrimaryKeysTest, NumericKey) {
   EXPECT_THAT(
       ReadAll("TableWithNumericKey", {"key", "val"}),
       IsOkAndHoldsRows({{key2, "val2"}, {key3, "val3"}, {key1, "val1"}}));
+}
+
+TEST_P(PrimaryKeysTest, TableWithoutPrimaryKey_BasicOperations) {
+  // Verify that we can insert rows into a table without a primary key.
+  GOOGLESQL_ASSERT_OK(Insert("tablewithoutpk", {"col1"}, {"val1"}));
+  GOOGLESQL_ASSERT_OK(Insert("tablewithoutpk", {"col1"}, {"val2"}));
+
+  // Verify that SELECT * does not return the hidden rowid column.
+  EXPECT_THAT(Query("SELECT * FROM tablewithoutpk ORDER BY col1"),
+              IsOkAndHoldsRows({{"val1"}, {"val2"}}));
+
+  // Verify that SELECT rowid explicitly works and returns auto-generated
+  // row IDs.
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      auto rows, Query("SELECT rowid, col1 FROM tablewithoutpk ORDER BY col1"));
+  EXPECT_EQ(rows.size(), 2);
+
+  int64_t rowid1 = rows[0].values()[0].get<int64_t>().value();
+  int64_t rowid2 = rows[1].values()[0].get<int64_t>().value();
+  EXPECT_NE(rowid1, rowid2);
+  EXPECT_EQ(rows[0].values()[1].get<std::string>().value(), "val1");
+  EXPECT_EQ(rows[1].values()[1].get<std::string>().value(), "val2");
+
+  // Verify that we can update rows using rowid in WHERE clause.
+  std::string update_query =
+      "UPDATE tablewithoutpk SET col1 = 'val1_updated' WHERE rowid = " +
+      std::to_string(rowid1);
+  GOOGLESQL_ASSERT_OK(CommitDml({SqlStatement(update_query)}));
+
+  EXPECT_THAT(Query("SELECT col1 FROM tablewithoutpk WHERE rowid = " +
+                    std::to_string(rowid1)),
+              IsOkAndHoldsRows({{"val1_updated"}}));
+
+  // Verify that we can delete rows using rowid in WHERE clause.
+  std::string delete_query =
+      "DELETE FROM tablewithoutpk WHERE rowid = " + std::to_string(rowid1);
+  GOOGLESQL_ASSERT_OK(CommitDml({SqlStatement(delete_query)}));
+
+  EXPECT_THAT(Query("SELECT col1 FROM tablewithoutpk"),
+              IsOkAndHoldsRows({{"val2"}}));
+}
+
+TEST_P(PrimaryKeysTest, TableWithoutPrimaryKey_ExplicitRowIdInsert) {
+  // Verify that we can insert explicit values into the rowid column.
+  GOOGLESQL_ASSERT_OK(Insert("tablewithoutpk", {"rowid", "col1"}, {100, "explicit_val"}));
+
+  // Verify that we can read it back.
+  EXPECT_THAT(Query("SELECT rowid, col1 FROM tablewithoutpk WHERE rowid = 100"),
+              IsOkAndHoldsRows({{100, "explicit_val"}}));
+
+  // Verify that auto-generation still works after explicit insert.
+  GOOGLESQL_ASSERT_OK(Insert("tablewithoutpk", {"col1"}, {"auto_val"}));
+
+  // Verify both rows exist. Order by col1 to ensure stable ordering in test
+  // assertion.
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      auto rows, Query("SELECT rowid, col1 FROM tablewithoutpk ORDER BY col1"));
+  EXPECT_EQ(rows.size(), 2);
+
+  EXPECT_EQ(rows[0].values()[1].get<std::string>().value(), "auto_val");
+  int64_t auto_rowid = rows[0].values()[0].get<int64_t>().value();
+  EXPECT_NE(auto_rowid, 100);
+
+  EXPECT_EQ(rows[1].values()[1].get<std::string>().value(), "explicit_val");
+  EXPECT_EQ(rows[1].values()[0].get<int64_t>().value(), 100);
+}
+
+TEST_P(PrimaryKeysTest, TableWithoutPrimaryKey_RowIdConflict) {
+  // Verify that trying to create a table with rowid column and no PK fails.
+  if (dialect_ == database_api::DatabaseDialect::POSTGRESQL) {
+    EXPECT_THAT(
+        UpdateSchema({R"(
+      CREATE TABLE tablewithrowidconflict (
+        rowid bigint,
+        col1 varchar
+      )
+    )"}),
+        StatusIs(absl::StatusCode::kFailedPrecondition,
+                 testing::HasSubstr(
+                     "Duplicate column name tablewithrowidconflict.rowid")));
+  } else {
+    EXPECT_THAT(
+        UpdateSchema({R"(
+      CREATE TABLE tablewithrowidconflict (
+        rowid INT64,
+        col1 STRING(MAX)
+      )
+    )"}),
+        StatusIs(absl::StatusCode::kFailedPrecondition,
+                 testing::HasSubstr(
+                     "Duplicate column name tablewithrowidconflict.rowid")));
+  }
 }
 
 }  // namespace

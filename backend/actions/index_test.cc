@@ -24,9 +24,11 @@
 #include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
 #include "absl/memory/memory.h"
+#include "absl/status/status.h"
 #include "absl/types/variant.h"
 #include "backend/actions/context.h"
 #include "backend/actions/ops.h"
+#include "backend/datamodel/key.h"
 #include "tests/common/actions.h"
 #include "tests/common/schema_constructor.h"
 #include "tests/common/scoped_feature_flags_setter.h"
@@ -334,6 +336,42 @@ TEST_F(RemoteIndexTest, BaseTableUpdateCascadesToIndexEntry) {
                            Key({String("new-value"), Int64(1)}),
                            {index_columns_.begin(), index_columns_.end()},
                            {String("new-value"), Int64(1), String("value2")}}));
+}
+
+TEST_F(IndexTest, CannotDeleteWithPendingCommitTimestampOnIndexKey) {
+  // Add row in base table & index.
+  GOOGLESQL_EXPECT_OK(store()->Insert(table_, Key({Int64(1)}), base_columns_,
+                            {Int64(1), String("value"), String("value2")}));
+  GOOGLESQL_EXPECT_OK(store()->Insert(index_->index_data_table(),
+                            Key({String("value"), Int64(1)}), index_columns_,
+                            {Int64(1), String("value"), String("value2")}));
+
+  // Mark string_col as having pending commit timestamp.
+  store()->SetHasPendingCommitTimestamp(table_->FindColumn("string_col"));
+
+  EXPECT_THAT(
+      effector_->Effect(ctx(), Delete(table_, Key({Int64(1)}))),
+      googlesql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument,
+                                testing::HasSubstr("Column string_col")));
+}
+
+TEST_F(IndexTest, CannotUpdateWithPendingCommitTimestampOnIndexKey) {
+  // Add row in base table & index.
+  GOOGLESQL_EXPECT_OK(store()->Insert(table_, Key({Int64(1)}), base_columns_,
+                            {Int64(1), String("value"), String("value2")}));
+  GOOGLESQL_EXPECT_OK(store()->Insert(index_->index_data_table(),
+                            Key({String("value"), Int64(1)}), index_columns_,
+                            {Int64(1), String("value"), String("value2")}));
+
+  // Mark string_col as having pending commit timestamp.
+  store()->SetHasPendingCommitTimestamp(table_->FindColumn("string_col"));
+
+  EXPECT_THAT(
+      effector_->Effect(ctx(), Update(table_, Key({Int64(1)}),
+                                      {table_->FindColumn("string_col")},
+                                      {String("new-value")})),
+      googlesql_base::testing::StatusIs(absl::StatusCode::kInvalidArgument,
+                                testing::HasSubstr("Column string_col")));
 }
 
 TEST_F(RemoteIndexTest, CanDeleteParentRowIfIndexEntryExists) {

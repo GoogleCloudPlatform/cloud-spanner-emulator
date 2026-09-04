@@ -26,6 +26,7 @@
 #include "googlesql/public/value.h"
 #include "absl/base/no_destructor.h"
 #include "absl/container/flat_hash_set.h"
+#include "absl/log/check.h"
 #include "absl/strings/str_cat.h"
 #include "backend/query/info_schema_columns_metadata_values.h"
 #include "backend/query/tables_from_metadata.h"
@@ -386,6 +387,7 @@ PGCatalog::PGCatalog(const EnumerableCatalog* root_catalog,
   tables_by_name_ = AddTablesFromMetadata(
       PGCatalogColumnsMetadata(), *kSpannerPGTypeToGSQLType, *kSupportedTables);
   for (auto& [name, table] : tables_by_name_) {
+    ABSL_CHECK_OK(table->set_full_name(absl::StrCat(kName, ".", name)));  // Crash OK
     AddTable(table.get());
   }
 

@@ -195,6 +195,23 @@ TEST_F(DdlTest, DisableUUIDType) {
                                    "Type <uuid> is not supported."));
 }
 
+TEST_F(DdlTest, UnsupportedColumnCompression) {
+  const std::string input =
+      "CREATE TABLE users(id BIGINT PRIMARY KEY, val TEXT COMPRESSION pglz);";
+
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(parsed_statements, {});
+
+  EXPECT_THAT(statements, StatusIs(absl::StatusCode::kInvalidArgument,
+                                   "Column compression is not supported."));
+}
+
 TEST_F(DdlTest, DisableAnalyze) {
   const std::string input = "ANALYZE;";
 

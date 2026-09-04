@@ -16,9 +16,11 @@ CREATE TABLE NonKeyCommitTsTable (
   id STRING(MAX) NOT NULL,
   key STRING(MAX) NOT NULL,
   ts TIMESTAMP OPTIONS (allow_commit_timestamp = true),
+  val STRING(MAX),
 ) PRIMARY KEY (id, key);
 CREATE INDEX NonKeyCommitTsIndexOnTs ON NonKeyCommitTsTable(ts);
 CREATE INDEX NonKeyCommitTsIndexOnKey ON NonKeyCommitTsTable(key);
+CREATE UNIQUE INDEX NonKeyCommitTsUniqueIndexStoringTs ON NonKeyCommitTsTable(key) STORING (ts);
 CREATE TABLE Users (
   userid INT64 NOT NULL,
   email STRING(MAX)
@@ -45,10 +47,12 @@ CREATE TABLE NonKeyCommitTsTable (
   id text NOT NULL,
   key text NOT NULL,
   ts SPANNER.COMMIT_TIMESTAMP,
+  val text,
   PRIMARY KEY (id, key)
 );
 CREATE INDEX NonKeyCommitTsIndexOnTs ON NonKeyCommitTsTable(ts);
 CREATE INDEX NonKeyCommitTsIndexOnKey ON NonKeyCommitTsTable(key);
+CREATE UNIQUE INDEX NonKeyCommitTsUniqueIndexStoringTs ON NonKeyCommitTsTable(key) INCLUDE (ts);
 CREATE TABLE Users (
   userid int8 NOT NULL,
   email text,

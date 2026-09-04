@@ -320,6 +320,9 @@ void DumpColumn(const Column* column, ddl::ColumnDefinition& column_def) {
   if (column->is_placement_key()) {
     column_def.set_placement_key(true);
   }
+  if (column->hidden()) {
+    column_def.set_hidden(true);
+  }
   if (column->allows_commit_timestamp()) {
     ddl::SetOption* set_option = column_def.add_set_options();
     set_option->set_option_name(ddl::kPGCommitTimestampOptionName);

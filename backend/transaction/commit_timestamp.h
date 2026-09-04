@@ -79,6 +79,11 @@ class CommitTimestampTracker {
                          absl::Span<const Column* const> columns) const
       ABSL_LOCKS_EXCLUDED(mu_);
 
+  // Returns true if the given column has been written with a pending commit
+  // timestamp in this transaction.
+  bool HasPendingCommitTimestamp(const Column* column) const
+      ABSL_LOCKS_EXCLUDED(mu_);
+
   // Informs the commit timestamp tracker of recent write operations which may
   // include writing pending commit timestamps. If such writes are found then
   // subsequent reads may be restricted as defined by `CheckRead`. This

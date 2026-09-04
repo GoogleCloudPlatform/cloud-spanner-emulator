@@ -14,15 +14,20 @@
 // limitations under the License.
 //
 
-#include "backend/actions/index.h"
+#include "backend/schema/catalog/index.h"
 
 #include <iterator>
 #include <vector>
 
 #include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
+#include "backend/actions/index.h"
 #include "backend/common/indexing.h"
+#include "backend/common/rows.h"
+#include "backend/datamodel/key.h"
+#include "backend/datamodel/key_range.h"
+#include "backend/datamodel/value.h"
 #include "backend/schema/catalog/column.h"
-#include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/table.h"
 #include "common/errors.h"
 #include "googlesql/base/status_macros.h"
@@ -41,7 +46,8 @@ absl::StatusOr<Row> ReadBaseTableRow(
     const std::vector<const Column*>& base_columns) {
   GOOGLESQL_ASSIGN_OR_RETURN(
       std::unique_ptr<StorageIterator> itr,
-      ctx->store()->Read(table, KeyRange::Point(key), base_columns));
+      ctx->store()->Read(table, KeyRange::Point(key), base_columns,
+                         /*allow_pending_commit_timestamps_in_read=*/true));
 
   Row base_row;
   if (itr->Next()) {
@@ -89,7 +95,6 @@ absl::Status IndexEffector::Effect(const ActionContext* ctx,
                      "is executed. Base Table: ",
                      op.table->Name(), " Key: ", op.key.DebugString()));
   }
-
   // If a previous index entry existed, delete it.
   GOOGLESQL_ASSIGN_OR_RETURN(Key old_index_key, ComputeIndexKey(base_row, index_));
   if (!ShouldFilterIndexKeyOrValue(index_, old_index_key, base_row)) {
@@ -97,12 +102,28 @@ absl::Status IndexEffector::Effect(const ActionContext* ctx,
   }
 
   // Patch new values into value map.
+  Row new_row = base_row;
   for (int i = 0; i < op.columns.size(); ++i) {
-    base_row[op.columns[i]] = op.values[i];
+    new_row[op.columns[i]] = op.values[i];
   }
-  GOOGLESQL_ASSIGN_OR_RETURN(Key new_index_key, ComputeIndexKey(base_row, index_));
-  ValueList index_values = ComputeIndexValues(base_row, index_);
-  if (ShouldFilterIndexKeyOrValue(index_, new_index_key, base_row)) {
+  for (const KeyColumn* const key_col : index_->key_columns()) {
+    const Column* col = key_col->column();
+    if (col->source_column() != nullptr) {
+      col = col->source_column();
+    }
+    auto old_it = base_row.find(col);
+    auto new_it = new_row.find(col);
+    // Index key columns cannot reference a pending commit timestamp.
+    if (old_it != base_row.end() && new_it != new_row.end() &&
+        old_it->second != new_it->second &&
+        ctx->store()->HasPendingCommitTimestamp(col)) {
+      return error::CannotReadPendingCommitTimestamp(
+          absl::StrCat("Column ", col->Name()));
+    }
+  }
+  GOOGLESQL_ASSIGN_OR_RETURN(Key new_index_key, ComputeIndexKey(new_row, index_));
+  ValueList index_values = ComputeIndexValues(new_row, index_);
+  if (ShouldFilterIndexKeyOrValue(index_, new_index_key, new_row)) {
     return absl::OkStatus();
   }
 
@@ -121,6 +142,16 @@ absl::Status IndexEffector::Effect(const ActionContext* ctx,
   // Did not find an entry to delete from the index.
   if (base_row.empty()) {
     return absl::OkStatus();
+  }
+  for (const KeyColumn* const key_col : index_->key_columns()) {
+    const Column* col = key_col->column();
+    if (col->source_column() != nullptr) {
+      col = col->source_column();
+    }
+    if (ctx->store()->HasPendingCommitTimestamp(col)) {
+      return error::CannotReadPendingCommitTimestamp(
+          absl::StrCat("Column ", col->Name()));
+    }
   }
 
   // Compute the index key to delete.

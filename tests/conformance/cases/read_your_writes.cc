@@ -540,6 +540,12 @@ TEST_P(ReadYourWritesTest,
             "SELECT key FROM "
             "NonKeyCommitTsTable /* @force_index=NonKeyCommitTsIndexOnKey */"),
         IsOkAndHoldsRows({{"key1"}}));
+    EXPECT_THAT(
+        QueryTransaction(txn,
+                         "SELECT key FROM "
+                         "NonKeyCommitTsTable /* "
+                         "@force_index=NonKeyCommitTsUniqueIndexStoringTs */"),
+        IsOkAndHoldsRows({{"key1"}}));
   } else {
     EXPECT_THAT(
         QueryTransaction(
@@ -547,6 +553,56 @@ TEST_P(ReadYourWritesTest,
             "SELECT key FROM "
             "NonKeyCommitTsTable@{force_index=NonKeyCommitTsIndexOnKey}"),
         IsOkAndHoldsRows({{"key1"}}));
+    EXPECT_THAT(QueryTransaction(txn,
+                                 "SELECT key FROM "
+                                 "NonKeyCommitTsTable@{force_index="
+                                 "NonKeyCommitTsUniqueIndexStoringTs}"),
+                IsOkAndHoldsRows({{"key1"}}));
+  }
+}
+
+TEST_P(ReadYourWritesTest,
+       CanUpdateTableWithPendingCommitTimestampAndUniqueIndexStoringTs) {
+  auto txn = Transaction(Transaction::ReadWriteOptions());
+  if (dialect_ == database_api::POSTGRESQL) {
+    GOOGLESQL_ASSERT_OK(ExecuteDmlTransaction(
+        txn,
+        SqlStatement("INSERT INTO NonKeyCommitTsTable (id, key, val, ts) "
+                     "VALUES ($1, $2, $3, SPANNER.PENDING_COMMIT_TIMESTAMP())",
+                     {{"p1", Value("id1")},
+                      {"p2", Value("key1")},
+                      {"p3", Value("val1")}})));
+    GOOGLESQL_ASSERT_OK(ExecuteDmlTransaction(
+        txn, SqlStatement("UPDATE NonKeyCommitTsTable SET val = $1 WHERE id = "
+                          "$2 AND key = $3",
+                          {{"p1", Value("val2")},
+                           {"p2", Value("id1")},
+                           {"p3", Value("key1")}})));
+    EXPECT_THAT(
+        QueryTransaction(txn,
+                         "SELECT key FROM "
+                         "NonKeyCommitTsTable /* "
+                         "@force_index=NonKeyCommitTsUniqueIndexStoringTs */"),
+        IsOkAndHoldsRows({{"key1"}}));
+  } else {
+    GOOGLESQL_ASSERT_OK(ExecuteDmlTransaction(
+        txn,
+        SqlStatement("INSERT INTO NonKeyCommitTsTable (id, key, val, ts) "
+                     "VALUES (@id, @key, @val, PENDING_COMMIT_TIMESTAMP())",
+                     {{"id", Value("id1")},
+                      {"key", Value("key1")},
+                      {"val", Value("val1")}})));
+    GOOGLESQL_ASSERT_OK(ExecuteDmlTransaction(
+        txn, SqlStatement("UPDATE NonKeyCommitTsTable SET val = @val WHERE id "
+                          "= @id AND key = @key",
+                          {{"val", Value("val2")},
+                           {"id", Value("id1")},
+                           {"key", Value("key1")}})));
+    EXPECT_THAT(QueryTransaction(txn,
+                                 "SELECT key FROM "
+                                 "NonKeyCommitTsTable@{force_index="
+                                 "NonKeyCommitTsUniqueIndexStoringTs}"),
+                IsOkAndHoldsRows({{"key1"}}));
   }
 }
 

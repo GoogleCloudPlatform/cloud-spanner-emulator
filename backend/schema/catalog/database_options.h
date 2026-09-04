@@ -59,6 +59,8 @@ class DatabaseOptions : public SchemaNode {
     return version_retention_period_;
   }
 
+  std::optional<int64_t> score_version() const { return score_version_; }
+
   // SchemaNode interface implementation.
   // ------------------------------------
   std::optional<SchemaNameInfo> GetSchemaNameInfo() const override {
@@ -109,6 +111,8 @@ class DatabaseOptions : public SchemaNode {
   std::optional<std::string> columnar_policy_;
   // Version retention period for the database.
   std::optional<std::string> version_retention_period_;
+  // Score version for the database.
+  std::optional<int64_t> score_version_;
 };
 }  // namespace backend
 }  // namespace emulator

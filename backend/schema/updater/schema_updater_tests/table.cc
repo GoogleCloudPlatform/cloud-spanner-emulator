@@ -150,6 +150,63 @@ TEST_P(SchemaUpdaterTest, CreateTable_NoKey) {
   EXPECT_THAT(col1, testing::Not(IsKeyColumnOf(t, "ASC")));
 }
 
+TEST_P(SchemaUpdaterTest, CreateTable_WithoutPrimaryKey) {
+  std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
+                         CreateSchema({R"(
+      CREATE TABLE T(
+        col1 bigint
+      ))"},
+                                      /*proto_descriptor_bytes=*/"",
+                                      /*dialect=*/POSTGRESQL,
+                                      /*use_gsql_to_pg_translation=*/false));
+  } else {
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+      CREATE TABLE T(
+        col1 INT64
+      ))"}));
+  }
+
+  const Table* t = schema->FindTable("T");
+  EXPECT_NE(t, nullptr);
+
+  // Should have col1 and injected rowid.
+  EXPECT_EQ(t->columns().size(), 2);
+  EXPECT_EQ(t->primary_key().size(), 1);
+
+  auto col1 = t->FindColumn("col1");
+  EXPECT_NE(col1, nullptr);
+  EXPECT_FALSE(col1->hidden());
+
+  auto rowid = t->FindColumn("rowid");
+  EXPECT_NE(rowid, nullptr);
+  EXPECT_TRUE(rowid->hidden());
+  EXPECT_TRUE(rowid->is_identity_column());
+  EXPECT_THAT(rowid, IsKeyColumnOf(t, "ASC"));
+}
+
+TEST_P(SchemaUpdaterTest, CreateTable_rowidConflict) {
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_THAT(CreateSchema({R"(
+      CREATE TABLE T(
+        rowid bigint,
+        col1 bigint
+      ))"},
+                             /*proto_descriptor_bytes=*/"",
+                             /*dialect=*/POSTGRESQL,
+                             /*use_gsql_to_pg_translation=*/false),
+                StatusIs(error::DuplicateColumnName("t.rowid")));
+  } else {
+    EXPECT_THAT(CreateSchema({R"(
+      CREATE TABLE T(
+        rowid INT64,
+        col1 INT64
+      ))"}),
+                StatusIs(error::DuplicateColumnName("T.rowid")));
+  }
+}
+
 TEST_P(SchemaUpdaterTest, CreateTable_NoColumns) {
   // Empty key columns are unsupported in PG.
   if (GetParam() == POSTGRESQL) GTEST_SKIP();
@@ -943,25 +1000,34 @@ TEST_P(SchemaUpdaterTest, AlterColumn_ChangeNonArrayToArray) {
       StatusIs(error::CannotChangeColumnType("c1", "STRING", "ARRAY<BYTES>")));
 }
 
-TEST_P(SchemaUpdaterTest, AlterColumn_NotNullToNullable) {
+TEST_P(SchemaUpdaterTest, AlterColumn_ChangeNullability) {
   GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
                                         R"(
       CREATE TABLE T (
         k1 INT64 NOT NULL,
         c1 STRING(MAX),
-        c2 INT64 NOT NULL,
+        c2 INT64,
       ) PRIMARY KEY (k1)
     )"}));
 
   const Table* t = schema->FindTable("T");
   auto c2 = t->FindColumn("c2");
+  EXPECT_TRUE(c2->is_nullable());
+
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema_set_not_null, UpdateSchema(schema.get(), {R"(
+      ALTER TABLE T ALTER COLUMN c2 INT64 NOT NULL
+    )"}));
+
+  t = schema_set_not_null->FindTable("T");
+  c2 = t->FindColumn("c2");
   EXPECT_FALSE(c2->is_nullable());
 
-  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {R"(
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema_drop_not_null,
+                       UpdateSchema(schema_set_not_null.get(), {R"(
       ALTER TABLE T ALTER COLUMN c2 INT64
     )"}));
 
-  t = new_schema->FindTable("T");
+  t = schema_drop_not_null->FindTable("T");
   c2 = t->FindColumn("c2");
   EXPECT_TRUE(c2->is_nullable());
 }

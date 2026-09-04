@@ -6,7 +6,10 @@
 
 {
   "name": "emulator",
-  "image": "gcr.io/cloud-spanner-emulator/devcontainer",
+  "build": {
+    "dockerfile": "../build/docker/devcontainer.dockerfile",
+    "context": ".."
+  },
 
   // Features to add to the dev container.
   "features": {},

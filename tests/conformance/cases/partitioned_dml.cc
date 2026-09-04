@@ -234,6 +234,29 @@ TEST_P(PartitionedDmlTest, UpdateRowsWithCommitTimestampSucceed) {
               IsOkAndHoldsRows({{2}}));
 }
 
+TEST_P(PartitionedDmlTest, UpdateRowsWithParametersSucceed) {
+  PopulateDatabase();
+
+  SqlStatement sql_statement;
+  if (dialect_ == database_api::DatabaseDialect::POSTGRESQL) {
+    sql_statement =
+        SqlStatement("UPDATE Users SET Name = $1 WHERE ID > $2",
+                     SqlStatement::ParamType{{"p1", Value("UpdatedName")},
+                                             {"p2", Value(1)}});
+  } else {
+    sql_statement =
+        SqlStatement("UPDATE Users SET Name = @name WHERE ID > @id",
+                     SqlStatement::ParamType{{"name", Value("UpdatedName")},
+                                             {"id", Value(1)}});
+  }
+
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(PartitionedDmlResult result,
+                       ExecutePartitionedDml(sql_statement));
+  EXPECT_EQ(result.row_count_lower_bound, 2);
+  EXPECT_THAT(Query("SELECT ID, Name FROM Users WHERE ID > 1 ORDER BY ID"),
+              IsOkAndHoldsRows({{2, "UpdatedName"}, {10, "UpdatedName"}}));
+}
+
 }  // namespace
 
 }  // namespace test

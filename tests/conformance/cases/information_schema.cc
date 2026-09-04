@@ -2724,7 +2724,7 @@ TEST_P(InformationSchemaTest, NamedSchemaIndexColumns) {
 }
 
 TEST_P(InformationSchemaTest, DefaultDatabaseOptions) {
-  auto results = Query(R"(
+  std::string query = R"(
       select
         t.option_name,
         t.option_type,
@@ -2736,9 +2736,12 @@ TEST_P(InformationSchemaTest, DefaultDatabaseOptions) {
         t.option_name = 'database_dialect' OR
         t.option_name = 'default_sequence_kind' OR
         t.option_name = 'version_retention_period'
+)";
+  absl::StrAppend(&query, R"(
       order by
         t.option_name
     )");
+  auto results = Query(query);
   LogResults(results);
   std::string type =
       (GetParam() == POSTGRESQL) ? "character varying" : "STRING";

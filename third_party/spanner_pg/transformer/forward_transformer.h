@@ -336,6 +336,12 @@ class ForwardTransformer {
       const VarIndexScope* external_scope, const VarIndexScope* local_scope,
       VarIndexScope* output_scope);
 
+  // Build a GoogleSQL ResolvedScan from the sample clause.
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedScan>>
+  BuildGsqlResolvedScanForTableSampleClause(
+      const TableSampleClause* sample_clause,
+      std::unique_ptr<const googlesql::ResolvedScan> input_scan);
+
   // Helper to BuildGsqlResolvedScanForTableExpression for validating and
   // dispatching the various RTE_FUNCTION cases. Currently supported are:
   // UNNEST, Change Stream TVF.
@@ -1080,6 +1086,14 @@ class ForwardTransformer {
       Oid cast_function, const Const& input_literal, const Const* typmod,
       const Const* explicit_cast, Oid output_type, CoercionForm cast_format,
       bool force_casting);
+
+  // Folds the cast function and return a resolved literal.
+  // - The casting is executed regardless of the input literal's type.
+  // - The output type must be supported.
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedLiteral>>
+  ForceBuildGsqlResolvedLiteralFromCast(
+      Oid cast_function, const Const& input_literal, const Const* typmod,
+      const Const* explicit_cast, Oid output_type, CoercionForm cast_format);
 
   absl::StatusOr<int> GetEndLocationForStartLocation(int start_location);
 

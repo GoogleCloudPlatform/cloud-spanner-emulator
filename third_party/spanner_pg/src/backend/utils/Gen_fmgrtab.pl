@@ -19,6 +19,9 @@ use Catalog;
 use strict;
 use warnings;
 use Getopt::Long;
+# SPANGRES BEGIN
+use File::Basename;
+# SPANGRES END
 
 my $output_path = '';
 my $include_path;
@@ -44,24 +47,38 @@ die "--include-path must be specified.\n" unless $include_path;
 # We currently only need pg_proc, but retain the possibility of reading
 # more than one data file.
 
+# SPANGRES BEGIN
 my %catalogs;
-my %catalog_data;
 foreach my $datfile (@ARGV)
 {
 	$datfile =~ /(.+)\.dat$/
 	  or die "Input files need to be data (.dat) files.\n";
 
 	my $header = "$1.h";
-	die "There in no header file corresponding to $datfile"
-	  if !-e $header;
-
-	my $catalog = Catalog::ParseHeader($header);
-	my $catname = $catalog->{catname};
-	my $schema  = $catalog->{columns};
-
-	$catalogs{$catname} = $catalog;
-	$catalog_data{$catname} = Catalog::ParseData($datfile, $schema, 0);
+	if (-e $header) {
+		my $catalog = Catalog::ParseHeader($header);
+		my $catname = $catalog->{catname};
+		$catalogs{$catname} = $catalog;
+	}
 }
+
+my %catalog_data;
+foreach my $datfile (@ARGV)
+{
+	# Example: path/to/file/pg_proc.dat -> pg_proc
+	my $datfile_basename = basename($datfile, '.dat');
+	die "There in no header file corresponding to $datfile"
+		if !exists $catalogs{$datfile_basename};
+
+	my $schema  = $catalogs{$datfile_basename}->{columns};
+	if (exists $catalog_data{$datfile_basename}) {
+		my $new_data = Catalog::ParseData($datfile, $schema, 0);
+		push @{ $catalog_data{$datfile_basename} }, @{ $new_data };
+	} else {
+		$catalog_data{$datfile_basename} = Catalog::ParseData($datfile, $schema, 0);
+	}
+}
+# SPANGRES END
 
 # Collect certain fields from pg_proc.dat.
 my @fmgr = ();

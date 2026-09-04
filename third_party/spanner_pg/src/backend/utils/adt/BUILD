@@ -177,10 +177,12 @@ cc_library(
     ],
     deps = [
         "//third_party/spanner_pg/interface:catalog_wrappers",
+        "//third_party/spanner_pg/src/backend/catalog:generated_catalog_headers",
         "//third_party/spanner_pg/src/backend/utils:generated_headers",
         "//third_party/spanner_pg/src/backend/utils/activity",
         "//third_party/spanner_pg/src/backend/utils/sort",
         "//third_party/spanner_pg/src/include",
+        "//third_party/spanner_pg/util:integral_types",
         "//third_party/spanner_pg/util:nodetag_to_string",
     ],
     alwayslink = 1,

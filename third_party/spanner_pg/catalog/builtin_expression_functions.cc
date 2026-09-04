@@ -119,6 +119,8 @@ void AddComparisonFunctions(
                         /*use_or=*/true,
                         /*comparator_type=*/"="),
                     "$in"});
+  functions.insert(
+      {PostgresExprIdentifier::Expr(T_DistinctExpr), "$is_distinct_from"});
 }
 
 void AddLeastGreatestFunctions(

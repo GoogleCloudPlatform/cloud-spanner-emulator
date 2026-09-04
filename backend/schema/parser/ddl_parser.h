@@ -65,6 +65,7 @@ extern const char kDefaultSequenceKindOptionName[];
 extern const char kDefaultTimeZoneOptionName[];
 extern const char kColumnarPolicyOptionName[];
 extern const char kFulltextDictionaryTableOptionName[];
+extern const char kScoreVersionOptionName[];
 
 extern const char kLocalityGroupOptionName[];
 extern const char kLocalityGroupStorageOptionName[];

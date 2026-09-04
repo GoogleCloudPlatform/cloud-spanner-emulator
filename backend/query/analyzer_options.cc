@@ -108,6 +108,7 @@ googlesql::LanguageOptions MakeGoogleSqlLanguageOptions() {
       googlesql::FEATURE_UUID_TYPE,
       googlesql::FEATURE_FOR_UPDATE,
       googlesql::FEATURE_INLINE_LAMBDA_ARGUMENT,
+      googlesql::FEATURE_IS_DISTINCT,
   });
   if (EmulatorFeatureFlags::instance().flags().enable_protos) {
     options.EnableLanguageFeature(googlesql::FEATURE_PROTO_BASE);
