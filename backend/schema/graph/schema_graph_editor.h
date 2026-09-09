@@ -248,6 +248,9 @@ class SchemaGraphEditor {
     return original_graph_->GetSchemaNodes().size();
   }
 
+  // Set of nodes in `original_graph_`, built on first use by IsOriginalNode().
+  mutable absl::flat_hash_set<const SchemaNode*> original_nodes_;
+
   // Clones the original schema and creates the mapping of
   // original nodes to clones.
   absl::Status InitCloneMap();
