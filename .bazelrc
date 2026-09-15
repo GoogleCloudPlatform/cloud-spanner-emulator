@@ -5,6 +5,9 @@ build --cxxopt=-std=c++20
 build --host_cxxopt=-std=c++20
 build --conlyopt=-std=gnu11
 
+# Keep dependencies that still use native C++ and proto rules working on Bazel 9.
+build --incompatible_autoload_externally=+cc_binary,+cc_library,+cc_test,+cc_proto_library,+java_proto_library,+proto_library
+
 # Ensure Bazel uses the correct system paths for the compiler
 build --action_env=CC
 build --action_env=CXX
