@@ -233,9 +233,13 @@ archive_override(
     module_name = "googlesql",
     # Patches applied:
     # - Give visibility to GoogleSQL's base library to reuse some utilities
+    # - Complete node types before their C++23 unique_ptr operations
     integrity = "sha256-9zT65nfWcsYaJ41WJHO/iuLQF/R9TdKzf6Jh5RNoUng=",
     patch_strip = 1,
-    patches = ["//build/bazel:googlesql.patch"],
+    patches = [
+        "//build/bazel:googlesql.patch",
+        "//build/bazel:googlesql_cxx23.patch",
+    ],
     strip_prefix = "googlesql-2026.7.2",
     urls = ["https://github.com/google/googlesql/archive/refs/tags/2026.7.2.zip"],
 )
