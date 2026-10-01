@@ -27,6 +27,7 @@
 #include "absl/status/statusor.h"
 #include "absl/types/span.h"
 #include "backend/access/read.h"
+#include "backend/query/column_expression_analysis_cache.h"
 #include "backend/query/queryable_column.h"
 #include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/schema.h"
@@ -46,9 +47,11 @@ class QueryableTable : public googlesql::Table {
   // QueryableTable with default value columns.
   QueryableTable(
       const backend::Table* table, RowReader* reader,
-      std::optional<const googlesql::AnalyzerOptions> options = std::nullopt,
+      const std::optional<const googlesql::AnalyzerOptions>& options =
+          std::nullopt,
       googlesql::Catalog* catalog = nullptr,
-      googlesql::TypeFactory* type_factory = nullptr, bool is_synonym = false);
+      googlesql::TypeFactory* type_factory = nullptr, bool is_synonym = false,
+      ColumnExpressionAnalysisCache* analyses = nullptr);
 
   std::string Name() const override {
     return std::string(SDLObjectName::GetInSchemaName(SynonymOrName()));
@@ -80,11 +83,12 @@ class QueryableTable : public googlesql::Table {
       absl::Span<const int> column_idxs) const override;
 
  private:
-  absl::StatusOr<std::unique_ptr<const googlesql::AnalyzerOutput>>
+  absl::StatusOr<std::shared_ptr<const googlesql::AnalyzerOutput>>
   AnalyzeColumnExpression(
       const Column* column, googlesql::TypeFactory* type_factory,
       googlesql::Catalog* catalog,
-      std::optional<const googlesql::AnalyzerOptions> opt_options) const;
+      const std::optional<const googlesql::AnalyzerOptions>& opt_options,
+      ColumnExpressionAnalysisCache* analyses) const;
 
   // Whether the table should be treated as a synonym.
   bool is_synonym_;

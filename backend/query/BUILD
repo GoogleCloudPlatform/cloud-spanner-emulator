@@ -728,6 +728,24 @@ cc_library(
 )
 
 cc_library(
+    name = "column_expression_analysis_cache",
+    srcs = ["column_expression_analysis_cache.cc"],
+    hdrs = ["column_expression_analysis_cache.h"],
+    deps = [
+        "//backend/schema/catalog:schema",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
+        "@com_google_googlesql//googlesql/public:analyzer_options",
+        "@com_google_googlesql//googlesql/public:analyzer_output",
+        "@com_google_googlesql//googlesql/public:function",
+        "@com_google_googlesql//googlesql/resolved_ast",
+        "@com_google_googlesql//googlesql/resolved_ast:resolved_node_kind_cc_proto",
+    ],
+)
+
+cc_library(
     name = "queryable_table",
     srcs = [
         "queryable_table.cc",
@@ -736,6 +754,7 @@ cc_library(
         "queryable_table.h",
     ],
     deps = [
+        ":column_expression_analysis_cache",
         ":queryable_column",
         "//backend/access:read",
         "//backend/datamodel:key",
@@ -822,6 +841,7 @@ cc_library(
         "function_catalog.h",
     ],
     deps = [
+        ":column_expression_analysis_cache",
         ":analyzer_options",
         "//backend/common:case",
         "//backend/query/graph:mock_graph_algo_table_valued_function",

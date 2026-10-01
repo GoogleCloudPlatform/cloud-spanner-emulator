@@ -182,9 +182,10 @@ class Catalog : public googlesql::EnumerableCatalog {
   CaseInsensitiveStringMap<std::unique_ptr<const QueryableView>> views_;
   CaseInsensitiveStringMap<std::unique_ptr<const QueryableModel>> models_;
 
-  // Property graphs available in the default schema.
+  // Property graphs available in the default schema, wrapped on first use.
   CaseInsensitiveStringMap<std::unique_ptr<const QueryablePropertyGraph>>
       property_graphs_;
+  CaseInsensitiveStringMap<const PropertyGraph*> unwrapped_property_graphs_;
 
   // Types available in the default schema.
   CaseInsensitiveStringMap<const googlesql::Type*> types_;

@@ -17,6 +17,7 @@
 #include "backend/query/queryable_table.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <cstdlib>
 #include <memory>
 #include <optional>
@@ -39,12 +40,14 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/match.h"
 #include "absl/strings/string_view.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/strip.h"  //
 #include "absl/types/span.h"
 #include "backend/access/read.h"
 #include "backend/datamodel/key.h"
 #include "backend/datamodel/key_range.h"
 #include "backend/datamodel/key_set.h"
+#include "backend/query/column_expression_analysis_cache.h"
 #include "backend/query/queryable_column.h"
 #include "backend/schema/catalog/column.h"
 #include "common/constants.h"
@@ -250,17 +253,27 @@ class KeyFilteredTableIterator : public googlesql::EvaluatorTableIterator {
   absl::Status read_status_;
 };
 
-absl::StatusOr<std::unique_ptr<const googlesql::AnalyzerOutput>>
+
+absl::StatusOr<std::shared_ptr<const googlesql::AnalyzerOutput>>
 QueryableTable::AnalyzeColumnExpression(
     const Column* column, googlesql::TypeFactory* type_factory,
     googlesql::Catalog* catalog,
-    std::optional<const googlesql::AnalyzerOptions> opt_options) const {
-  std::unique_ptr<const googlesql::AnalyzerOutput> output = nullptr;
+    const std::optional<const googlesql::AnalyzerOptions>& opt_options,
+    ColumnExpressionAnalysisCache* analyses) const {
+  std::shared_ptr<const googlesql::AnalyzerOutput> output = nullptr;
   bool enable_generated_pk =
       EmulatorFeatureFlags::instance().flags().enable_generated_pk;
   bool is_generated_column = enable_generated_pk && column->is_generated();
   if (opt_options.has_value() &&
       (column->has_default_value() || (is_generated_column))) {
+    std::string key;
+    if (analyses != nullptr) {
+      key = ColumnExpressionAnalysisCache::KeyFor(column, opt_options.value());
+      output = analyses->Find(key);
+      if (output != nullptr) {
+        return output;
+      }
+    }
     googlesql::AnalyzerOptions options = opt_options.value();
     if (is_generated_column) {
       for (const Column* dep : column->dependent_columns()) {
@@ -274,29 +287,35 @@ QueryableTable::AnalyzeColumnExpression(
     if (is_generated_column) {
       expression_type = "generated";
     }
+    std::unique_ptr<const googlesql::AnalyzerOutput> analyzed;
     GOOGLESQL_RETURN_IF_ERROR(googlesql::AnalyzeExpressionForAssignmentToType(
         column->expression().value(), options, catalog, type_factory,
-        column->GetType(), &output))
+        column->GetType(), &analyzed))
         << "Failed to analyze " << expression_type << " expression for column "
         << column->FullName();
+    output = std::move(analyzed);
+    if (analyses != nullptr) {
+      analyses->Store(key, output);
+    }
   }
-  return std::move(output);
+  return output;
 }
 
 QueryableTable::QueryableTable(
     const backend::Table* table, RowReader* reader,
-    std::optional<const googlesql::AnalyzerOptions> opt_options,
+    const std::optional<const googlesql::AnalyzerOptions>& opt_options,
     googlesql::Catalog* catalog, googlesql::TypeFactory* type_factory,
-    bool is_synonym)
+    bool is_synonym, ColumnExpressionAnalysisCache* analyses)
     : is_synonym_(is_synonym), wrapped_table_(table), reader_(reader) {
   bool enable_generated_pk =
       EmulatorFeatureFlags::instance().flags().enable_generated_pk;
   for (const auto* column : table->columns()) {
-    absl::StatusOr<std::unique_ptr<const googlesql::AnalyzerOutput>>
+    absl::StatusOr<std::shared_ptr<const googlesql::AnalyzerOutput>>
         analyzer_output =
-            AnalyzeColumnExpression(column, type_factory, catalog, opt_options);
+            AnalyzeColumnExpression(column, type_factory, catalog, opt_options,
+                                    analyses);
     ABSL_CHECK_OK(analyzer_output.status());  // Crash OK
-    std::unique_ptr<const googlesql::AnalyzerOutput> output =
+    std::shared_ptr<const googlesql::AnalyzerOutput> output =
         std::move(analyzer_output.value());
     bool is_generated_column = enable_generated_pk && column->is_generated();
     if (column->has_default_value() || (is_generated_column)) {
