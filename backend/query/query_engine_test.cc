@@ -2404,6 +2404,14 @@ TEST_P(QueryEngineTest, TestGetEmptyChangeStreamMetadataFromNormalQuery) {
 }
 
 TEST_P(QueryEngineTest,
+       TestGetEmptyChangeStreamMetadataFromSchemaWithoutChangeStreams) {
+  Query query{"SELECT * FROM READ_change_stream_test_table ('a', 'b', 'c', 1)"};
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto metadata, query_engine().TryGetChangeStreamMetadata(
+                                          query, schema()));
+  ASSERT_FALSE(metadata.is_change_stream_query);
+}
+
+TEST_P(QueryEngineTest,
        TestPreventChanegStreamQueriesFromGenericExecuteSqlAPI) {
   Query query;
   absl::Time start_time = absl::Now();

@@ -139,6 +139,9 @@ constexpr char kChangeStreamTvfOutputFormat[] = R"(ARRAY<STRUCT<
       parent_partition_tokens ARRAY<STRING>>>>>>>)";
 // Prefix for change stream tvf in googlesql dialect
 constexpr char kChangeStreamTvfStructPrefix[] = "READ_";
+// Common to every change stream TVF name in both dialects: READ_<stream>,
+// spanner.read_json_<stream> and spanner.read_proto_bytes_<stream>.
+constexpr char kChangeStreamTvfPrefixStem[] = "read_";
 // Prefix for change stream tvf in postgres dialect
 constexpr char kChangeStreamTvfJsonPrefix[] = "read_json_";
 // Prefix for change stream tvf in postgres dialect for mutable change streams.

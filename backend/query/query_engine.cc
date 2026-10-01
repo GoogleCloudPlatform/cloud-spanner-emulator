@@ -1614,6 +1614,14 @@ absl::StatusOr<ChangeStreamQueryValidator::ChangeStreamMetadata>
 QueryEngine::TryGetChangeStreamMetadata(const Query& query,
                                         const Schema* schema,
                                         bool in_read_write_txn) {
+  // A change stream query names a READ_<stream> table-valued function of a
+  // change stream the schema holds. Without both, the query is a regular one,
+  // which ExecuteSql analyzes anyway; analyzing it here as well would double
+  // the cost of every streaming query.
+  if (schema->change_streams().empty() ||
+      !absl::StrContainsIgnoreCase(query.sql, kChangeStreamTvfPrefixStem)) {
+    return ChangeStreamQueryValidator::ChangeStreamMetadata();
+  }
   const absl::Time start_time = absl::Now();
   Query local_query;
   NormalizeParameterNames(schema, query, &local_query);
