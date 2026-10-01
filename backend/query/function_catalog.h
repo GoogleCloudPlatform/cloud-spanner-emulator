@@ -28,6 +28,7 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "backend/common/case.h"
+#include "backend/query/column_expression_analysis_cache.h"
 #include "backend/schema/catalog/schema.h"
 
 namespace google {
@@ -68,11 +69,18 @@ class FunctionCatalog {
 
   const backend::Schema* GetLatestSchema() const { return latest_schema_; }
 
+  // Analyses of column expressions that reference this catalog's functions.
+  ColumnExpressionAnalysisCache* column_expression_analyses() const {
+    return &column_expression_analyses_;
+  }
+
  private:
   void AddGoogleSQLBuiltInFunctions(googlesql::TypeFactory* type_factory);
   void AddPGLambdaFunctions();
   void AddSpannerFunctions();
   void AddGraphSafeToJsonSignatures();
+
+  mutable ColumnExpressionAnalysisCache column_expression_analyses_;
   void AddMlFunctions(googlesql::TypeFactory* type_factory);
   void AddSearchFunctions(googlesql::TypeFactory* type_factory);
 
