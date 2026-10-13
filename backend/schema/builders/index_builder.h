@@ -100,6 +100,13 @@ class Index::Builder {
     return *this;
   }
 
+  Builder& set_expression_index_type(bool is_expression_index) {
+    instance_->index_type_ = is_expression_index
+                                 ? Index::IndexType::kExpressionIndex
+                                 : Index::IndexType::kIndex;
+    return *this;
+  }
+
   Builder& add_partition_by_column(const Column* column) {
     instance_->partition_by_.push_back(column);
     return *this;

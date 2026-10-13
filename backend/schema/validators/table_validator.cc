@@ -17,6 +17,7 @@
 #include "backend/schema/validators/table_validator.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
@@ -38,6 +39,7 @@
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/index.h"
+#include "backend/schema/catalog/queue.h"
 #include "backend/schema/updater/global_schema_names.h"
 #include "common/errors.h"
 #include "common/feature_flags.h"
@@ -213,11 +215,24 @@ absl::Status ValidateRowDeletionPolicy(
                                                         table_name);
   }
 
+  for (const Queue* child_queue : table->child_queues()) {
+    if (child_queue->on_delete_action() != Table::OnDeleteAction::kCascade) {
+      return error::RowDeletionPolicyHasChildWithOnDeleteNoAction(
+          table_name, child_queue->Name());
+    }
+  }
+
   GOOGLESQL_RETURN_IF_ERROR(ValidateDescendantTables(table, [&](const Table* children) {
     if (children->has_on_delete_action() &&
         children->on_delete_action() == Table::OnDeleteAction::kNoAction) {
       return error::RowDeletionPolicyHasChildWithOnDeleteNoAction(
           table_name, children->Name());
+    }
+    for (const Queue* child_queue : children->child_queues()) {
+      if (child_queue->on_delete_action() != Table::OnDeleteAction::kCascade) {
+        return error::RowDeletionPolicyHasChildWithOnDeleteNoAction(
+            table_name, child_queue->Name());
+      }
     }
     for (const ForeignKey* fk : children->foreign_keys()) {
       if (fk->enforced() &&
@@ -350,6 +365,13 @@ absl::Status TableValidator::Validate(const Table* table,
                               limits::kMaxKeyColumns);
   }
 
+  int64_t total_non_key_columns_size = table->GetTotalNonKeyColumnSizeBytes();
+  if (total_non_key_columns_size > limits::kMaxTotalNonKeyColumnsSizeBytes) {
+    return error::TotalNonKeyColumnsSizeTooLarge(
+        object_type, object_name, total_non_key_columns_size,
+        limits::kMaxTotalNonKeyColumnsSizeBytes);
+  }
+
   if (!table->indexes_.empty()) {
     GOOGLESQL_RET_CHECK(!table->columns_.empty());
   }
@@ -453,24 +475,44 @@ absl::Status TableValidator::ValidateUpdate(const Table* table,
                                             SchemaValidationContext* context) {
   if (table->is_deleted()) {
     GOOGLESQL_RET_CHECK(!table->owner_index_ || table->owner_index_->is_deleted());
-      if (!table->child_tables_.empty()) {
+    GOOGLESQL_RET_CHECK(!table->owner_queue_ || table->owner_queue_->is_deleted());
+    if (!table->child_tables_.empty() || !table->child_queues_.empty()) {
       // Build a sorted list of interleaved child tables and indexes.
       std::vector<std::string> interleaved_tables;
       std::vector<std::string> interleaved_indices;
+      std::vector<std::string> interleaved_queues;
       for (const auto& entry : table->child_tables_) {
         if (entry->owner_index()) {
           interleaved_indices.push_back(entry->owner_index()->Name());
+        } else if (entry->owner_queue()) {
+          interleaved_queues.push_back(entry->owner_queue()->Name());
         } else {
           interleaved_tables.push_back(entry->Name());
         }
       }
+      for (const Queue* entry : table->child_queues_) {
+        interleaved_queues.push_back(entry->Name());
+      }
+      std::sort(interleaved_queues.begin(), interleaved_queues.end());
+      interleaved_queues.erase(
+          std::unique(interleaved_queues.begin(), interleaved_queues.end()),
+          interleaved_queues.end());
       std::sort(interleaved_tables.begin(), interleaved_tables.end());
+      interleaved_tables.erase(
+          std::unique(interleaved_tables.begin(), interleaved_tables.end()),
+          interleaved_tables.end());
       std::sort(interleaved_indices.begin(), interleaved_indices.end());
+      interleaved_indices.erase(
+          std::unique(interleaved_indices.begin(), interleaved_indices.end()),
+          interleaved_indices.end());
 
       // Cannot drop a table with interleaved child tables or indexes.
       if (!interleaved_tables.empty()) {
         return error::DropTableWithInterleavedTables(
             table->name_, absl::StrJoin(interleaved_tables, ","));
+      } else if (!interleaved_queues.empty()) {
+        return error::DropTableWithInterleavedQueues(
+            table->name_, absl::StrJoin(interleaved_queues, ","));
       } else if (!interleaved_indices.empty()) {
         return error::DropTableWithDependentIndices(
             table->name_, absl::StrJoin(interleaved_indices, ","));
@@ -535,6 +577,17 @@ absl::Status TableValidator::ValidateUpdate(const Table* table,
     if (!table->owner_index_ && !column->is_nullable() &&
         !column->is_generated() && !column->has_default_value()) {
       return error::AddingNotNullColumn(table->name_, column->Name());
+    }
+
+    if (table->FindKeyColumn(column->Name()) == nullptr) {
+      int64_t total_non_key_columns_size =
+          table->GetTotalNonKeyColumnSizeBytes();
+      if (total_non_key_columns_size >
+          limits::kMaxTotalNonKeyColumnsSizeBytes) {
+        return error::AddColumnExceedsTotalNonKeyColumnSizeBytes(
+            column->Name(), table->Name(), total_non_key_columns_size,
+            limits::kMaxTotalNonKeyColumnsSizeBytes);
+      }
     }
   }
 

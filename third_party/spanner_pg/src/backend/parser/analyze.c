@@ -595,6 +595,13 @@ transformDeleteStmt(ParseState *pstate, DeleteStmt *stmt)
 	if (pstate->p_hasAggs)
 		parseCheckAggregates(pstate, qry);
 
+	// SPANGRES BEGIN
+	if (stmt->assertRowsModified != NULL) {
+		qry->assertRowsModified =
+				transformExpr(pstate, stmt->assertRowsModified, EXPR_KIND_OTHER);
+	}
+	// SPANGRES END
+
   return qry;
 }
 

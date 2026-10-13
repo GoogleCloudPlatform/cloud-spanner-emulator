@@ -36,14 +36,74 @@ namespace {
 using testing::HasSubstr;
 using googlesql_base::testing::StatusIs;
 
+// Each vector index is backfilled serially through several schema change
+// steps, which is slow in test environments even on an empty table. To keep
+// test run times low, each fixture only creates the vector indexes its tests
+// actually need. The full schema with all indexes together is still covered by
+// the file-based schema change tests (ann.test).
+constexpr char kBaseTable[] = R"sql(
+  CREATE TABLE Base (
+    MyKey INT64 NOT NULL,
+    MyData STRING(MAX),
+    Embedding ARRAY<FLOAT32>(vector_length=>2),
+    Embedding2 ARRAY<FLOAT32>(vector_length=>2),
+    Embedding3 ARRAY<FLOAT64>(vector_length=>2),
+  ) PRIMARY KEY(MyKey)
+)sql";
+
+constexpr char kNonVectorIndex[] = R"sql(
+  CREATE INDEX index2 ON Base(MyData)
+)sql";
+
+constexpr char kCosineVectorIndex[] = R"sql(
+  CREATE VECTOR INDEX vec_index ON Base(Embedding)
+  WHERE Embedding IS NOT NULL
+  OPTIONS(distance_type = 'COSINE', tree_depth = 2)
+)sql";
+
+constexpr char kDotProductVectorIndex[] = R"sql(
+  CREATE VECTOR INDEX vec_index_dot_product ON Base(Embedding)
+  WHERE Embedding IS NOT NULL
+  OPTIONS(distance_type = 'DOT_PRODUCT', tree_depth = 3)
+)sql";
+
+constexpr char kEuclideanVectorIndex[] = R"sql(
+  CREATE VECTOR INDEX vec_index_euclidean ON Base(Embedding2)
+  WHERE Embedding2 IS NOT NULL
+  OPTIONS(distance_type = 'EUCLIDEAN', tree_depth = 2)
+)sql";
+
+constexpr char kStoringVectorIndex[] = R"sql(
+  CREATE VECTOR INDEX vec_index_store ON Base(Embedding)
+  STORING (MyData)
+  WHERE Embedding IS NOT NULL
+  OPTIONS(distance_type = 'COSINE', tree_depth = 2)
+)sql";
+
+constexpr char kDoubleVectorIndex[] = R"sql(
+  CREATE VECTOR INDEX vec_index_double ON Base(Embedding3)
+  WHERE Embedding3 IS NOT NULL
+  OPTIONS(distance_type = 'COSINE', tree_depth = 2)
+)sql";
+
+// Base fixture: creates the `Base` table, the `index2` non-vector index and the
+// `vec_index` cosine vector index.
 class ANNTest : public DatabaseTest {
  public:
   absl::Status SetUpDatabase() override {
-    GOOGLESQL_RETURN_IF_ERROR(SetSchemaFromFile("ann.test"));
+    std::vector<std::string> schema = {kBaseTable, kNonVectorIndex,
+                                       kCosineVectorIndex};
+    for (const std::string& statement : AdditionalSchema()) {
+      schema.push_back(statement);
+    }
+    GOOGLESQL_RETURN_IF_ERROR(SetSchema(schema));
     return PopulateDatabase();
   }
 
  protected:
+  // Additional DDL statements to apply together with the base schema.
+  virtual std::vector<std::string> AdditionalSchema() const { return {}; }
+
   absl::Status PopulateDatabase() {
     GOOGLESQL_RETURN_IF_ERROR(
         MultiInsert(
@@ -55,6 +115,38 @@ class ANNTest : public DatabaseTest {
               std::vector<float>{0.1, 1.0}, std::vector<double>{0.1, 1.0}}})
             .status());
     return absl::OkStatus();
+  }
+};
+
+// Additionally creates `vec_index_dot_product` on `Embedding`.
+class ANNDotProductIndexTest : public ANNTest {
+ protected:
+  std::vector<std::string> AdditionalSchema() const override {
+    return {kDotProductVectorIndex};
+  }
+};
+
+// Additionally creates `vec_index_euclidean` on `Embedding2`.
+class ANNEuclideanIndexTest : public ANNTest {
+ protected:
+  std::vector<std::string> AdditionalSchema() const override {
+    return {kEuclideanVectorIndex};
+  }
+};
+
+// Additionally creates `vec_index_store`, which stores `MyData`.
+class ANNStoringIndexTest : public ANNTest {
+ protected:
+  std::vector<std::string> AdditionalSchema() const override {
+    return {kStoringVectorIndex};
+  }
+};
+
+// Additionally creates `vec_index_double` on the FLOAT64 column `Embedding3`.
+class ANNDoubleIndexTest : public ANNTest {
+ protected:
+  std::vector<std::string> AdditionalSchema() const override {
+    return {kDoubleVectorIndex};
   }
 };
 
@@ -79,7 +171,7 @@ TEST_F(ANNTest, BasicANNQuery) {
               IsOkAndHoldsRows({{1}, {2}}));
 }
 
-TEST_F(ANNTest, BasicANNQueryWithParams) {
+TEST_F(ANNDoubleIndexTest, BasicANNQueryWithParams) {
   EXPECT_THAT(QueryWithParams(
                   R"sql(
           SELECT b.MyKey FROM Base@{FORCE_INDEX=vec_index_double} b
@@ -102,7 +194,7 @@ TEST_F(ANNTest, BasicANNQueryWithParams) {
               IsOkAndHoldsRows({{1}, {2}}));
 }
 
-TEST_F(ANNTest, ANNQueryNoForceIndex) {
+TEST_F(ANNDotProductIndexTest, ANNQueryNoForceIndex) {
   EXPECT_THAT(Query(
                   R"sql(
           SELECT b.MyKey FROM Base b
@@ -114,7 +206,7 @@ TEST_F(ANNTest, ANNQueryNoForceIndex) {
               IsOkAndHoldsRows({{2}, {1}}));
 }
 
-TEST_F(ANNTest, ANNQueryNoForceIndexDifferentColumn) {
+TEST_F(ANNEuclideanIndexTest, ANNQueryNoForceIndexDifferentColumn) {
   EXPECT_THAT(Query(
                   R"sql(
           SELECT b.MyKey FROM Base b
@@ -435,7 +527,7 @@ TEST_F(ANNTest, ANNQueryOffset) {
               IsOkAndHoldsRows({{2}}));
 }
 
-TEST_F(ANNTest, ANNQueryStoreColumn) {
+TEST_F(ANNStoringIndexTest, ANNQueryStoreColumn) {
   EXPECT_THAT(Query(
                   R"sql(
           SELECT b.MyData FROM Base@{FORCE_INDEX=vec_index_store} b
@@ -662,6 +754,27 @@ TEST_F(AlterDropVectorIndexTest, DropVectorIndex) {
   GOOGLESQL_EXPECT_OK(SetSchema({
       R"sql(
       DROP VECTOR INDEX VI_drop
+    )sql"}));
+}
+
+TEST_F(AlterDropVectorIndexTest, CreateVectorIndexWithMultipleKeyColumns) {
+  GOOGLESQL_EXPECT_OK(SetSchema({
+      R"sql(
+      CREATE VECTOR INDEX VI_multi ON Base(Embedding, MyData) WHERE Embedding IS NOT NULL
+        OPTIONS(distance_type = 'COSINE')
+    )sql"}));
+  EXPECT_THAT(Query(
+                  R"sql(
+          SELECT b.MyKey FROM Base@{FORCE_INDEX=VI_multi} b
+          WHERE b.Embedding IS NOT NULL
+          ORDER BY APPROX_COSINE_DISTANCE(
+            b.Embedding, ARRAY<FLOAT32>[1.0, 0.1],
+            options => JSON '{"num_leaves_to_search": 1}')
+          LIMIT 2)sql"),
+              IsOkAndHoldsRows({{1}, {2}}));
+  GOOGLESQL_EXPECT_OK(SetSchema({
+      R"sql(
+      DROP VECTOR INDEX VI_multi
     )sql"}));
 }
 }  // namespace

@@ -35,6 +35,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -686,6 +687,13 @@ class ForwardTransformer {
   BuildGsqlWhereClauseExprForDML(Node* pg_where_clause,
                                  const VarIndexScope* var_index_scope);
 
+  // Builds a GoogleSQL ResolvedAssertRowsModified for DML statements using the
+  // input PostgreSQL `pg_assert_rows_modified`. If the input is nullptr, the
+  // function returns a null value for ResolvedAssertRowsModified.
+  absl::StatusOr<std::unique_ptr<const googlesql::ResolvedAssertRowsModified>>
+  BuildGsqlAssertRowsModifiedExprForDML(Node* pg_assert_rows_modified,
+                                        const VarIndexScope* var_index_scope);
+
   // Builds a GoogleSQL ResolvedReturningClause for the DML statements, using
   // the input PostgreSQL query `returningList`. If the input is nullptr, the
   // function return a null value for ResolvedReturningClause. It's modeled
@@ -1062,6 +1070,7 @@ class ForwardTransformer {
   // argument instead of appending the array values individually.
   absl::StatusOr<bool> AppendGsqlInFunctionCallArrayArg(
       void* array_argument, ExprTransformerInfo* expr_transformer_info,
+      bool cast_float_to_double,
       std::vector<std::unique_ptr<googlesql::ResolvedExpr>>& argument_list);
 
   // Transform postgres ScalarArrayOpExpr that represent ALL into an
@@ -1210,6 +1219,30 @@ class ForwardTransformer {
       int var_levels_up,
       CorrelatedColumnsSetList* correlated_columns_sets = nullptr);
 
+  // Returns true if `gsql_expr` requires a comparison/ordering wrapper
+  // transformation (e.g., pg.map_double_to_int / pg.map_float_to_int). Returns
+  // false for double/float expressions when `use_googlesql_double_comparison_`
+  // is enabled.
+  bool IsTransformationRequiredForComparison(
+      const googlesql::ResolvedExpr& gsql_expr) const;
+
+  // Wraps `gsql_expr` with any required comparison/ordering transformations
+  // unless `use_googlesql_double_comparison_` is enabled, in which case
+  // double/float expressions are left unwrapped (or cast from float to double
+  // when `cast_float_to_double` is true for cross-type float4/float8
+  // comparisons).
+  absl::StatusOr<std::unique_ptr<googlesql::ResolvedExpr>>
+  GetResolvedExprForComparison(
+      std::unique_ptr<googlesql::ResolvedExpr> gsql_expr,
+      bool cast_float_to_double);
+
+  // Returns the remapped comparison function OID for `funcid` if remapping is
+  // needed, or std::nullopt if the original operator OID should be used as-is.
+  // When `use_googlesql_double_comparison_` is enabled, returns std::nullopt
+  // for same-type float8/float4 comparisons and remaps cross-type
+  // float48/float84 comparisons to float8 comparisons.
+  std::optional<Oid> GetMappedOidForComparisonFuncid(Oid funcid) const;
+
   std::unique_ptr<CatalogAdapter> catalog_adapter_;
   // True if the source DDL statement is a create function statement.
   const bool is_create_function_stmt_;
@@ -1264,6 +1297,9 @@ class ForwardTransformer {
   // Space for streamz flags
   // Flags if a from clause contains both implicit and explicit joins
   bool is_mixed_joins_query_ = false;
+
+  // True if the statement hint use_googlesql_double_comparison=true is set.
+  bool use_googlesql_double_comparison_ = false;
 
   // The coercer defines common supertypes for individual types (including
   // n-ary supertypes) and whether one type can be coerced to another type.

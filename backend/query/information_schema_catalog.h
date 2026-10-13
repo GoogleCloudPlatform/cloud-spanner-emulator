@@ -134,6 +134,9 @@ class InformationSchemaCatalog : public googlesql::SimpleCatalog {
   void FillLocalityGroupOptionsTable();
 
   void FillPropertyGraphsTable();
+
+  void FillPlacementsTable();
+  void FillPlacementOptionsTable();
 };
 
 }  // namespace backend

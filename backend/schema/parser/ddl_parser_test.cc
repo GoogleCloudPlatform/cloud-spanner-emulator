@@ -189,6 +189,75 @@ TEST(ParseAlterDatabase, InvalidReadLeaseRegions) {
               StatusIs(StatusCode::kInvalidArgument));
 }
 
+TEST(ParseAlterDatabase, ValidPerPlacementRoutingMetadata) {
+  absl::string_view ddl1 = R"(
+    ALTER DATABASE db SET OPTIONS ( per_placement_routing_metadata = true )
+  )";
+  DDLStatement statement1;
+  GOOGLESQL_EXPECT_OK(ParseDDLStatement(ddl1, &statement1));
+  EXPECT_THAT(statement1,
+              test::EqualsProto(
+                  R"pb(alter_database {
+                         set_options {
+                           options {
+                             option_name: "per_placement_routing_metadata"
+                             bool_value: true
+                           }
+                         }
+                         db_name: "db"
+                       })pb"));
+
+  absl::string_view ddl2 = R"(
+    ALTER DATABASE db SET OPTIONS ( per_placement_routing_metadata = false )
+  )";
+  DDLStatement statement2;
+  GOOGLESQL_EXPECT_OK(ParseDDLStatement(ddl2, &statement2));
+  EXPECT_THAT(statement2,
+              test::EqualsProto(
+                  R"pb(alter_database {
+                         set_options {
+                           options {
+                             option_name: "per_placement_routing_metadata"
+                             bool_value: false
+                           }
+                         }
+                         db_name: "db"
+                       })pb"));
+
+  absl::string_view ddl3 = R"(
+    ALTER DATABASE db SET OPTIONS ( per_placement_routing_metadata = NULL )
+  )";
+  DDLStatement statement3;
+  GOOGLESQL_EXPECT_OK(ParseDDLStatement(ddl3, &statement3));
+  EXPECT_THAT(statement3,
+              test::EqualsProto(
+                  R"pb(alter_database {
+                         set_options {
+                           options {
+                             option_name: "per_placement_routing_metadata"
+                             null_value: true
+                           }
+                         }
+                         db_name: "db"
+                       })pb"));
+}
+
+TEST(ParseAlterDatabase, InvalidPerPlacementRoutingMetadata) {
+  // Numeric value.
+  absl::string_view ddl1 = R"(
+    ALTER DATABASE db SET OPTIONS ( per_placement_routing_metadata = 1 )
+  )";
+  // String value.
+  absl::string_view ddl2 = R"(
+    ALTER DATABASE db SET OPTIONS ( per_placement_routing_metadata = 'true' )
+  )";
+  DDLStatement statement;
+  EXPECT_THAT(ParseDDLStatement(ddl1, &statement),
+              StatusIs(StatusCode::kInvalidArgument));
+  EXPECT_THAT(ParseDDLStatement(ddl2, &statement),
+              StatusIs(StatusCode::kInvalidArgument));
+}
+
 TEST(ParseAlterDatabase, ValidSetVersionRetentionPeriodToNonEmptyString) {
   absl::string_view ddl = R"(
     ALTER DATABASE db SET OPTIONS (version_retention_period = '7d' )
@@ -8563,6 +8632,491 @@ TEST(FulltextDictionaryTable, HandlesOption) {
                         option_name: "fulltext_dictionary_table"
                         bool_value: true
                       }
+                    }
+                  )pb")));
+}
+
+TEST(ExpressionIndex, CreateExpressionIndex) {
+  // Test cases are taken from spanner/schema/golden/cloud_ddl_parser_test.input
+  // Expression index.
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+        CREATE INDEX ExpressionIndex ON Users((UserId + 1))
+  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    create_index {
+                      index_name: "ExpressionIndex"
+                      index_base_name: "Users"
+                      key {
+                        key_name: "(UserId + 1)"
+                        expression_index { expression: "(UserId + 1)" }
+                      }
+                    }
+                  )pb")));
+
+  // Expression index with function.
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+  CREATE INDEX ExpressionIndex ON Users(LOWER(UserName))
+  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    create_index {
+                      index_name: "ExpressionIndex"
+                      index_base_name: "Users"
+                      key {
+                        key_name: "LOWER(UserName)"
+                        expression_index { expression: "LOWER(UserName)" }
+                      }
+                    }
+                  )pb")));
+
+  // Expression index with function with multiple arguments.
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+  CREATE INDEX ExpressionIndex ON Users(LOWER(UserName, Email))
+  )sql"),
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            create_index {
+              index_name: "ExpressionIndex"
+              index_base_name: "Users"
+              key {
+                key_name: "LOWER(UserName, Email)"
+                expression_index { expression: "LOWER(UserName, Email)" }
+              }
+            }
+          )pb")));
+
+  // Expression index with function with multiple arguments and an expression.
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+  CREATE INDEX ExpressionIndex ON Users(LOWER(UserName+1, Email))
+  )sql"),
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            create_index {
+              index_name: "ExpressionIndex"
+              index_base_name: "Users"
+              key {
+                key_name: "LOWER(UserName+1, Email)"
+                expression_index { expression: "LOWER(UserName+1, Email)" }
+              }
+            }
+          )pb")));
+
+  // Expression index with nested function name and multiple arguments.
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+  CREATE INDEX ExpressionIndex ON Users(SchemaName.Foo(UserName+1, Email))
+  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    create_index {
+                      index_name: "ExpressionIndex"
+                      index_base_name: "Users"
+                      key {
+                        key_name: "SchemaName.Foo(UserName+1, Email)"
+                        expression_index {
+                          expression: "SchemaName.Foo(UserName+1, Email)"
+                        }
+                      }
+                    }
+                  )pb")));
+
+  // Expression index with multiple columns of different types.
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+  CREATE INDEX ExpressionIndex ON Users((UserId + 1), LOWER(UserName), Email, LOWER(Email))
+  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    create_index {
+                      index_name: "ExpressionIndex"
+                      index_base_name: "Users"
+                      key {
+                        key_name: "(UserId + 1)"
+                        expression_index { expression: "(UserId + 1)" }
+                      }
+                      key {
+                        key_name: "LOWER(UserName)"
+                        expression_index { expression: "LOWER(UserName)" }
+                      }
+                      key { key_name: "Email" }
+                      key {
+                        key_name: "LOWER(Email)"
+                        expression_index { expression: "LOWER(Email)" }
+                      }
+                    }
+                  )pb")));
+
+  // Expression index on scalar integer.
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+  CREATE INDEX ExpressionIndex ON Users((1234))
+  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    create_index {
+                      index_name: "ExpressionIndex"
+                      index_base_name: "Users"
+                      key {
+                        key_name: "(1234)"
+                        expression_index { expression: "(1234)" }
+                      }
+                    }
+                  )pb")));
+
+  // Expression index on column name: validation will happen in the schema.
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+  CREATE INDEX ExpressionIndex ON Users((UserId))
+  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    create_index {
+                      index_name: "ExpressionIndex"
+                      index_base_name: "Users"
+                      key {
+                        key_name: "(UserId)"
+                        expression_index { expression: "(UserId)" }
+                      }
+                    }
+                  )pb")));
+}
+
+TEST(ParseCreateQueue, CanParseCreateQueue) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    CREATE QUEUE myqueue (
+      id INT64 NOT NULL,
+      payload BYTES(MAX)
+    ) PRIMARY KEY (id)
+  )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_queue {
+                  queue_name: "myqueue"
+                  column { column_name: "id" type: INT64 not_null: true }
+                  column { column_name: "payload" type: BYTES }
+                  primary_key { key_name: "id" }
+                }
+              )pb")));
+}
+
+TEST(ParseCreateQueue, CanParseCreateQueueIfNotExists) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    CREATE QUEUE IF NOT EXISTS myqueue (
+      id INT64 NOT NULL,
+      payload BYTES(MAX)
+    ) PRIMARY KEY (id)
+  )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                create_queue {
+                  queue_name: "myqueue"
+                  column { column_name: "id" type: INT64 not_null: true }
+                  column { column_name: "payload" type: BYTES }
+                  primary_key { key_name: "id" }
+                  existence_modifier: IF_NOT_EXISTS
+                }
+              )pb")));
+}
+
+TEST(ParseCreateQueue, CanParseCreateQueueWithOptions) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+    CREATE QUEUE myqueue (
+      id INT64 NOT NULL,
+      payload BYTES(MAX)
+    ) PRIMARY KEY (id),
+      OPTIONS (receive_mode = 'pull')
+  )sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        create_queue {
+          queue_name: "myqueue"
+          column { column_name: "id" type: INT64 not_null: true }
+          column { column_name: "payload" type: BYTES }
+          primary_key { key_name: "id" }
+          set_options { option_name: "receive_mode" string_value: "pull" }
+        }
+      )pb")));
+}
+
+TEST(ParseCreateQueue, CannotParseCreateQueueWithNoColumns) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    CREATE QUEUE myqueue (
+    ) PRIMARY KEY (id)
+  )sql"),
+              StatusIs(StatusCode::kInvalidArgument));
+}
+
+TEST(ParseCreateQueue, CannotParseCreateQueueWithoutPrimaryKey) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    CREATE QUEUE myqueue (
+      id INT64 NOT NULL,
+      payload BYTES(MAX)
+    )
+  )sql"),
+              StatusIs(StatusCode::kInvalidArgument,
+                       HasSubstr("Expecting 'PRIMARY' but found 'EOF'")));
+}
+
+TEST(ParseDropQueue, CanParseDropQueue) {
+  EXPECT_THAT(ParseDDLStatement("DROP QUEUE myqueue"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                drop_queue { queue_name: "myqueue" }
+              )pb")));
+}
+
+TEST(ParseDropQueue, CanParseDropQueueIfExists) {
+  EXPECT_THAT(
+      ParseDDLStatement("DROP QUEUE IF EXISTS myqueue"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        drop_queue { queue_name: "myqueue" existence_modifier: IF_EXISTS }
+      )pb")));
+}
+
+TEST(ParseDropQueue, CannotParseDropQueueMissingQueueName) {
+  EXPECT_THAT(ParseDDLStatement("DROP QUEUE"),
+              StatusIs(StatusCode::kInvalidArgument));
+}
+
+TEST(ParseCreateQueue, CanParseCreateQueueWithAllOptions) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+    CREATE QUEUE myqueue (
+      id INT64 NOT NULL,
+      payload BYTES(MAX)
+    ) PRIMARY KEY (id),
+      OPTIONS (
+        receive_mode = 'PULL',
+        disable_delivery = true,
+        disable_send = false,
+        pubsub_topic = 'projects/p/topics/t',
+        locality_group = 'lg1',
+        per_placement_tvf = true
+      )
+  )sql"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        create_queue {
+          queue_name: "myqueue"
+          column { column_name: "id" type: INT64 not_null: true }
+          column { column_name: "payload" type: BYTES }
+          primary_key { key_name: "id" }
+          set_options { option_name: "receive_mode" string_value: "PULL" }
+          set_options { option_name: "disable_delivery" bool_value: true }
+          set_options { option_name: "disable_send" bool_value: false }
+          set_options {
+            option_name: "pubsub_topic"
+            string_value: "projects/p/topics/t"
+          }
+          set_options { option_name: "locality_group" string_value: "lg1" }
+          set_options { option_name: "per_placement_tvf" bool_value: true }
+        }
+      )pb")));
+}
+
+TEST(ParseCreateQueue, CannotParseCreateQueueWithUnknownOption) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+    CREATE QUEUE myqueue (
+      id INT64 NOT NULL,
+      payload BYTES(MAX)
+    ) PRIMARY KEY (id),
+      OPTIONS (unknown_opt = true)
+  )sql"),
+      StatusIs(StatusCode::kInvalidArgument,
+               HasSubstr("Option: unknown_opt is unknown in Queue Options.")));
+}
+
+TEST(ParseAlterQueue, CanParseAlterQueueSetOptions) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    ALTER QUEUE myqueue SET OPTIONS (
+      disable_delivery = true,
+      disable_send = false,
+      receive_mode = 'PULL'
+    )
+  )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_queue {
+                  queue_name: "myqueue"
+                  set_options {
+                    options { option_name: "disable_delivery" bool_value: true }
+                    options { option_name: "disable_send" bool_value: false }
+                    options { option_name: "receive_mode" string_value: "PULL" }
+                  }
+                }
+              )pb")));
+}
+
+TEST(ParseAlterQueue, CanParseAlterQueueSetOptionsWithNull) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    ALTER QUEUE myqueue SET OPTIONS (disable_delivery = NULL)
+  )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_queue {
+                  queue_name: "myqueue"
+                  set_options {
+                    options { option_name: "disable_delivery" null_value: true }
+                  }
+                }
+              )pb")));
+}
+
+TEST(ParseAlterQueue, CanParseAlterQueueAddRowDeletionPolicy) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    ALTER QUEUE myqueue ADD ROW DELETION POLICY (
+      OLDER_THAN(CreateTime, INTERVAL 2 DAY)
+    )
+  )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_queue {
+                  queue_name: "myqueue"
+                  add_row_deletion_policy {
+                    column_name: "CreateTime"
+                    older_than { count: 2 unit: DAYS }
+                  }
+                }
+              )pb")));
+}
+
+TEST(ParseAlterQueue, CanParseAlterQueueReplaceRowDeletionPolicy) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    ALTER QUEUE myqueue REPLACE ROW DELETION POLICY (
+      OLDER_THAN(CreateTime, INTERVAL 7 DAY)
+    )
+  )sql"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_queue {
+                  queue_name: "myqueue"
+                  alter_row_deletion_policy {
+                    column_name: "CreateTime"
+                    older_than { count: 7 unit: DAYS }
+                  }
+                }
+              )pb")));
+}
+
+TEST(ParseAlterQueue, CanParseAlterQueueDropRowDeletionPolicy) {
+  EXPECT_THAT(ParseDDLStatement("ALTER QUEUE myqueue DROP ROW DELETION POLICY"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_queue {
+                  queue_name: "myqueue"
+                  drop_row_deletion_policy {}
+                }
+              )pb")));
+}
+
+TEST(ParseAlterQueue, CanParseAlterQueueSetInterleave) {
+  EXPECT_THAT(
+      ParseDDLStatement("ALTER QUEUE myqueue SET INTERLEAVE IN PARENT mytable "
+                        "ON DELETE CASCADE"),
+      IsOkAndHolds(test::EqualsProto(R"pb(
+        alter_queue {
+          queue_name: "myqueue"
+          set_interleave_clause {
+            interleave_clause { table_name: "mytable" on_delete: CASCADE }
+          }
+        }
+      )pb")));
+}
+
+TEST(ParseAlterQueue, CanParseAlterQueueSetOnDelete) {
+  EXPECT_THAT(ParseDDLStatement("ALTER QUEUE myqueue SET ON DELETE NO ACTION"),
+              IsOkAndHolds(test::EqualsProto(R"pb(
+                alter_queue {
+                  queue_name: "myqueue"
+                  set_on_delete { action: NO_ACTION }
+                }
+              )pb")));
+}
+
+TEST(ParseCreateQueue, CannotParseCreateQueueWithInvalidOptionType) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+    CREATE QUEUE myqueue (
+      id INT64 NOT NULL,
+      payload BYTES(MAX)
+    ) PRIMARY KEY (id),
+      OPTIONS (receive_mode = true)
+  )sql"),
+      StatusIs(StatusCode::kInvalidArgument,
+               HasSubstr("Unexpected value for option: receive_mode. "
+                         "Supported option values are strings and NULL.")));
+}
+
+TEST(ParseAlterQueue, CannotParseAlterQueueWithUnknownOption) {
+  EXPECT_THAT(
+      ParseDDLStatement(
+          "ALTER QUEUE myqueue SET OPTIONS (invalid_option = 'val')"),
+      StatusIs(
+          StatusCode::kInvalidArgument,
+          HasSubstr("Option: invalid_option is unknown in Queue Options.")));
+}
+
+TEST(ParseAlterQueue, CannotParseAlterQueueWithInvalidOptionType) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+    ALTER QUEUE myqueue SET OPTIONS (disable_delivery = 'invalid')
+  )sql"),
+      StatusIs(StatusCode::kInvalidArgument,
+               HasSubstr("Unexpected value for option: disable_delivery. "
+                         "Supported option values are booleans and NULL.")));
+}
+
+TEST(ParseCreateVectorIndex, CanParseCreateVectorIndexWithSingleKeyColumn) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+    CREATE VECTOR INDEX ProductsVectorIndex
+    ON products (embedding)
+    WHERE embedding IS NOT NULL
+    OPTIONS (distance_type = 'COSINE', tree_depth = 2, num_leaves = 1000)
+  )sql"),
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            create_vector_index {
+              index_name: "ProductsVectorIndex"
+              index_base_name: "products"
+              key { key_name: "embedding" }
+              null_filtered_column: "embedding"
+              set_options {
+                option_name: "distance_type"
+                string_value: "COSINE"
+              }
+              set_options { option_name: "tree_depth" int64_value: 2 }
+              set_options { option_name: "num_leaves" int64_value: 1000 }
+            }
+          )pb")));
+}
+
+TEST(ParseCreateVectorIndex, CanParseCreateVectorIndexWithMultipleKeyColumns) {
+  EXPECT_THAT(
+      ParseDDLStatement(R"sql(
+    CREATE VECTOR INDEX ProductsVectorAndCategoryIndex
+    ON products (embedding, category)
+    WHERE embedding IS NOT NULL
+    OPTIONS (distance_type = 'COSINE', tree_depth = 2, num_leaves = 1000)
+  )sql"),
+      IsOkAndHolds(test::EqualsProto(
+          R"pb(
+            create_vector_index {
+              index_name: "ProductsVectorAndCategoryIndex"
+              index_base_name: "products"
+              key { key_name: "embedding" }
+              key { key_name: "category" }
+              null_filtered_column: "embedding"
+              set_options {
+                option_name: "distance_type"
+                string_value: "COSINE"
+              }
+              set_options { option_name: "tree_depth" int64_value: 2 }
+              set_options { option_name: "num_leaves" int64_value: 1000 }
+            }
+          )pb")));
+}
+
+TEST(ParseAlterVectorIndex, CanParseAlterVectorIndexRebuild) {
+  EXPECT_THAT(ParseDDLStatement(R"sql(
+    ALTER VECTOR INDEX ProductsVectorIndex REBUILD
+  )sql"),
+              IsOkAndHolds(test::EqualsProto(
+                  R"pb(
+                    alter_vector_index {
+                      index_name: "ProductsVectorIndex"
+                      rebuild {}
                     }
                   )pb")));
 }

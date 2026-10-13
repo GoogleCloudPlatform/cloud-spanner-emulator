@@ -108,6 +108,7 @@ cc_library(
     hdrs = ["types.h"],
     deps = [
         "//common:feature_flags",
+        "//common:limits",
         "//third_party/spanner_pg/datatypes/extended:spanner_extended_type",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_proto",
         "@com_google_googlesql//googlesql/public:options_cc_proto",

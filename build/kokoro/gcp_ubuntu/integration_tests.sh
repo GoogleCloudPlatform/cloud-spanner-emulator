@@ -69,6 +69,17 @@ function emulator::run_integration_tests() {
     mvn clean test-compile failsafe:integration-test -DskipITs=false \
     -Dspanner.testenv.instance=""
   elif [[ $client == "cpp" ]]; then
+    # google-cloud-cpp v2.19.0 (see build/gcb/integration/cpp.dockerfile) is a
+    # WORKSPACE-based project that does not ship a .bazelversion file, so
+    # bazelisk would download the latest Bazel release. Bazel >= 8 no longer
+    # loads WORKSPACE files, which makes the `--@io_opentelemetry_cpp//...`
+    # option in the client's .bazelrc unresolvable. Pin the Bazel version used
+    # by the google-cloud-cpp CI for this release (see
+    # ci/cloudbuild/builds/lib/bazel.sh in that release). Newer client releases
+    # ship a .bazelversion file, which bazelisk honors, so the pin is skipped.
+    if [[ -z "${USE_BAZEL_VERSION:-}" && ! -f "cpp/.bazelversion" ]]; then
+      export USE_BAZEL_VERSION=6.4.0
+    fi
     cd "cpp/google/cloud/spanner/"
     bazel test --test_env=SPANNER_EMULATOR_HOST=localhost:9010 \
       --test_env=SPANNER_EMULATOR_REST_HOST=http://localhost:9020 \

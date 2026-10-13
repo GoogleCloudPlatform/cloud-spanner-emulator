@@ -42,6 +42,10 @@ message DDLStatement {
     DropTable drop_table = 12;
     RenameTable rename_table = 88;
 
+    // Queue statements.
+    CreateQueue create_queue = 23;
+    DropQueue drop_queue = 24;
+    AlterQueue alter_queue = 29;
 
     // Index statements.
     CreateIndex create_index = 13;
@@ -291,6 +295,12 @@ message KeyPartClause {
   }
   // The ordering specified by this key component (if at all)
   optional Order order = 2 [default = ASC];
+
+  message Expression {
+    optional string expression = 1;
+    optional SQLExpressionOrigin expression_origin = 2;
+  }
+  optional Expression expression_index = 9;
 }
 
 message ForeignKey {
@@ -513,6 +523,15 @@ message CreateTable {
   optional string synonym = 15;
 }
 
+message CreateQueue {
+  optional string queue_name = 1;
+  repeated ColumnDefinition column = 2;
+  repeated KeyPartClause primary_key = 3;
+  optional InterleaveClause interleave_clause = 5;
+  repeated SetOption set_options = 6;
+  optional RowDeletionPolicy row_deletion_policy = 9;
+  optional ExistenceModifier existence_modifier = 12;
+}
 
 message ChangeStreamForClause {
   message TrackedTables {
@@ -611,6 +630,37 @@ message DropTable {
   optional ExistenceModifier existence_modifier = 2;
 }
 
+message DropQueue {
+  optional string queue_name = 1;
+  optional ExistenceModifier existence_modifier = 2;
+}
+
+message AlterQueue {
+  optional string queue_name = 1;
+
+  message SetOptions {
+    repeated SetOption options = 1;
+  }
+
+  message SetInterleaveClause {
+    optional InterleaveClause interleave_clause = 1;
+  }
+
+  message SetOnDelete {
+    optional InterleaveClause.Action action = 1;
+  }
+
+  message DropRowDeletionPolicy {}
+
+  oneof alter_type {
+    SetOptions set_options = 4;
+    SetOnDelete set_on_delete = 9;
+    RowDeletionPolicy add_row_deletion_policy = 10;
+    RowDeletionPolicy alter_row_deletion_policy = 11;
+    DropRowDeletionPolicy drop_row_deletion_policy = 12;
+    SetInterleaveClause set_interleave_clause = 13;
+  }
+}
 
 message DropChangeStream {
   optional string change_stream_name = 1;
@@ -969,7 +1019,7 @@ message CreateVectorIndex {
   // Required.
   optional string index_base_name = 2;
   // Required.
-  optional KeyPartClause key = 3;
+  repeated KeyPartClause key = 3;
   repeated StoredColumnDefinition stored_column_definition = 4;
   repeated KeyPartClause partition_by = 5;
   repeated SetOption set_options = 6;
@@ -1030,11 +1080,14 @@ message AlterVectorIndex {
     repeated SetOption options = 1;
   }
 
+  message Rebuild {}
+
   oneof alter_type {
     AddStoredColumn add_stored_column = 2;
     string drop_stored_column = 3;
     AlterStoredColumn alter_stored_column = 4;
     SetOptions set_options = 5;
+    Rebuild rebuild = 6;
   }
 }
 

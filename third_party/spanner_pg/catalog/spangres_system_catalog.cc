@@ -573,8 +573,7 @@ absl::Status SpangresSystemCatalog::AddFunctions(
       GOOGLESQL_RETURN_IF_ERROR(AddPgNumericCastFunction("pg.cast_to_int64"));
       GOOGLESQL_RETURN_IF_ERROR(AddPgNumericCastFunction("pg.cast_to_double"));
       GOOGLESQL_RETURN_IF_ERROR(AddPgNumericCastFunction("pg.cast_to_string"));
-
-        GOOGLESQL_RETURN_IF_ERROR(AddPgNumericCastFunction("pg.cast_to_float"));
+      GOOGLESQL_RETURN_IF_ERROR(AddPgNumericCastFunction("pg.cast_to_float"));
 
   // Add casting override functions for STRING->DATE and STRING->TIMESTAMP.
   GOOGLESQL_RETURN_IF_ERROR(AddCastOverrideFunction(

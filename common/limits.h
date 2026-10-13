@@ -123,6 +123,12 @@ constexpr int kMinInstanceNameLength = 2;
 // Maximum instance name length.
 constexpr int kMaxInstanceNameLength = 64;
 
+// Size of UUID column value in bytes.
+constexpr int kUuidByteSize = 16;
+
+// Maximum total size of non-key columns per table in bytes (2000 MiB).
+constexpr int64_t kMaxTotalNonKeyColumnsSizeBytes = (2000LL << 20);  // 2000 MiB
+
 // Maximum length for a BYTES column value.
 constexpr int kMaxBytesColumnLength = (10 << 20);  // 10 MB
 

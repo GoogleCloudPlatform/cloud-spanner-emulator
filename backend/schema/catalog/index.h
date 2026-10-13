@@ -125,6 +125,10 @@ class Index : public SchemaNode {
     return index_type_ == IndexType::kVectorIndex;
   }
 
+  bool is_expression_index() const {
+    return index_type_ == IndexType::kExpressionIndex;
+  }
+
   // Returns the list of partition by column defined in the search index.
   absl::Span<const Column* const> partition_by() const { return partition_by_; }
 

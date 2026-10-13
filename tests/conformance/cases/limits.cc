@@ -59,6 +59,18 @@ TEST_F(LimitsTest, MaxColumnsPerTable) {
               StatusIs(absl::StatusCode::kFailedPrecondition));
 }
 
+TEST_F(LimitsTest, MaxTotalNonKeyColumnsSize) {
+  std::string create_table_statement =
+      "CREATE TABLE test_table ( ID INT64 NOT NULL, ";
+  for (int i = 0; i < 201; ++i) {
+    absl::StrAppend(&create_table_statement, "str_col_", i, " STRING(MAX), ");
+  }
+  absl::StrAppend(&create_table_statement, " ) PRIMARY KEY (ID)");
+
+  EXPECT_THAT(UpdateSchema({create_table_statement}),
+              StatusIs(absl::StatusCode::kFailedPrecondition));
+}
+
 TEST_F(LimitsTest, MaxChangeStreamNameLength) {
   std::string create_change_stream_statement = absl::StrCat(
       "CREATE CHANGE STREAM "

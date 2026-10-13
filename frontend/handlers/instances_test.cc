@@ -276,6 +276,24 @@ TEST_F(InstanceApiTest, DeleteInstance) {
                        MatchesRegex(".*Instance not found.*")));
 }
 
+TEST_F(InstanceApiTest, DeleteInstanceDeletesOperations) {
+  longrunning::Operation operation;
+  GOOGLESQL_EXPECT_OK(CreateInstance(test_instance_name_, &operation));
+  GOOGLESQL_EXPECT_OK(WaitForOperation(operation.name(), &operation));
+
+  instance_api::DeleteInstanceRequest request;
+  request.set_name(test_instance_uri_);
+  protobuf::Empty response;
+  grpc::ClientContext context;
+  GOOGLESQL_EXPECT_OK(test_env()->instance_admin_client()->DeleteInstance(
+      &context, request, &response));
+
+  // The operation that tracked the instance creation is deleted along with the
+  // instance.
+  EXPECT_THAT(GetOperation(operation.name(), &operation),
+              StatusIs(absl::StatusCode::kNotFound));
+}
+
 }  // namespace
 
 }  // namespace frontend

@@ -255,7 +255,7 @@ absl::StatusOr<const Index*> FindVectorIndex(
   bool found_column = false;
   for (; i < indexes.size(); ++i) {
     const Index* index = indexes[i];
-    GOOGLESQL_RET_CHECK(index->key_columns().size() == 1);
+    GOOGLESQL_RET_CHECK(!index->key_columns().empty());
     const Column* key_column = index->key_columns()[0]->column();
     if (index->indexed_table()->Name() == ann_func_column.table_name() &&
         key_column->Name() == ann_func_column.name()) {
@@ -358,7 +358,7 @@ absl::Status ANNValidator::VisitResolvedLimitOffsetScan(
                    FindVectorIndex(indexes, ann_func_column, ann_func_value,
                                    last_ann_func, is_force_index));
 
-  GOOGLESQL_RET_CHECK(vec_index->key_columns().size() == 1);
+  GOOGLESQL_RET_CHECK(!vec_index->key_columns().empty());
   const KeyColumn* key_column = vec_index->key_columns()[0];
   bool is_key_null_filtered = false;
   for (const auto* column : vec_index->null_filtered_columns()) {

@@ -188,6 +188,9 @@ TEST_F(ToDateTest, AsanViolationTest) {
   EXPECT_THAT(PgToDate("8888888888", "idddi"),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("date out of range: \"8888888888\"")));
+  EXPECT_THAT(PgToDate("-662147482747", "idddi\027\037\003\t`p3\372\201{C"),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("date out of range: \"-662147482747\"")));
 }
 }  // namespace
 }  // namespace postgres_translator::function_evaluators

@@ -953,12 +953,16 @@ EventTriggerSupportsObjectType(ObjectType obtype)
     case OBJECT_CHANGE_STREAM:
     	/* no support for event triggers on change streams */
       return false;
+		// SPANGRES BEGIN
+		case OBJECT_DATA_PLACEMENT:
+    	/* no support for event triggers on placements */
+      return false;
 		case OBJECT_SEARCH_INDEX:
 			return false;
 		// SPANGRES END
 		case OBJECT_LOCALITY_GROUP:
 		// SPANGRES BEGIN
-		// TODO: expose when queue is implemented.
+		case OBJECT_QUEUE:
 		// SPANGRES END
 		case OBJECT_ACCESS_METHOD:
 		case OBJECT_AGGREGATE:
@@ -2233,10 +2237,12 @@ stringify_grant_objtype(ObjectType objtype)
 		case OBJECT_USER_MAPPING:
 		case OBJECT_VIEW:
     case OBJECT_CHANGE_STREAM:
+		// SPANGRES BEGIN
+		case OBJECT_DATA_PLACEMENT:
 		case OBJECT_SEARCH_INDEX:
 		// SPANGRES END
 		// SPANGRES BEGIN
-		// TODO: expose when queue is implemented.
+		case OBJECT_QUEUE:
 		// SPANGRES END
 		case OBJECT_LOCALITY_GROUP:
 			elog(ERROR, "unsupported object type: %d", (int) objtype);
@@ -2324,10 +2330,12 @@ stringify_adefprivs_objtype(ObjectType objtype)
 		case OBJECT_USER_MAPPING:
 		case OBJECT_VIEW:
     case OBJECT_CHANGE_STREAM:
+		// SPANGRES BEGIN
+    case OBJECT_DATA_PLACEMENT:
 		case OBJECT_SEARCH_INDEX:
 		// SPANGRES END
 		// SPANGRES BEGIN
-		// TODO: expose when queue is implemented.
+		case OBJECT_QUEUE:
 		// SPANGRES END
 		case OBJECT_LOCALITY_GROUP:
 			elog(ERROR, "unsupported object type: %d", (int) objtype);

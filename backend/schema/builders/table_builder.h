@@ -37,6 +37,7 @@
 #include "backend/schema/ddl/operations.pb.h"
 #include "backend/schema/updater/schema_validation_context.h"
 #include "backend/schema/validators/table_validator.h"
+class Queue;
 
 namespace google {
 namespace spanner {
@@ -70,6 +71,11 @@ class Table::Builder {
 
   Builder& set_owner_change_stream(const ChangeStream* change_stream) {
     instance_->owner_change_stream_ = change_stream;
+    return *this;
+  }
+
+  Builder& set_owner_queue(const Queue* queue) {
+    instance_->owner_queue_ = queue;
     return *this;
   }
 
@@ -275,6 +281,11 @@ class Table::Editor {
 
   Editor& clear_locality_group() {
     instance_->locality_group_ = nullptr;
+    return *this;
+  }
+
+  Editor& add_child_queue(const Queue* queue) {
+    instance_->child_queues_.push_back(queue);
     return *this;
   }
 

@@ -254,6 +254,10 @@ typedef struct Query
 	List	   *statementHints;	/* list of DefElem nodes containing statement-level
 														 * hints for this query. */
 	/* SPANGRES END */
+
+	// SPANGRES BEGIN
+	Node	   *assertRowsModified;	/* ASSERT_ROWS_MODIFIED clause */
+	// SPANGRES END
 } Query;
 
 /****************************************************************************
@@ -1964,6 +1968,9 @@ typedef struct DeleteStmt
 	Node	   *whereClause;	/* qualifications */
 	List	   *returningList;	/* list of expressions to return */
 	WithClause *withClause;		/* WITH clause */
+	// SPANGRES BEGIN
+	Node	   *assertRowsModified;	/* ASSERT_ROWS_MODIFIED clause */
+	// SPANGRES END
 } DeleteStmt;
 
 /* ----------------------
@@ -2213,7 +2220,8 @@ typedef enum ObjectType
   OBJECT_CHANGE_STREAM,
   OBJECT_LOCALITY_GROUP,
 	// SPANGRES BEGIN
-	// TODO: expose when queue is implemented.
+	OBJECT_QUEUE,
+  OBJECT_DATA_PLACEMENT,
   OBJECT_SEARCH_INDEX,
 	// SPANGRES END
 } ObjectType;
@@ -2661,6 +2669,7 @@ typedef enum ConstrType			/* types of constraints */
 	CONSTR_FOREIGN,
 	// SPANGRES BEGIN
 	CONSTR_VECTOR_LENGTH,
+	CONSTR_PLACEMENT_KEY,
 	CONSTR_HIDDEN,
 	// SPANGRES END
 	CONSTR_ATTR_DEFERRABLE,		/* attributes for previous constraint node */
@@ -3120,7 +3129,31 @@ typedef struct AlterSeqStmt
 } AlterSeqStmt;
 
 // SPANGRES BEGIN
-// TODO: expose when queue is implemented.
+/*
+ * CreateQueueStmt -
+ *	   a CREATE QUEUE statement
+ */
+typedef struct CreateQueueStmt
+{
+	NodeTag		type;
+	RangeVar   *queue;		/* name of the queue to create */
+	List	   *tableElts;		/* column definitions */
+	List	   *options;		/* WITH clause options */
+	bool		if_not_exists;	/* do nothing if the queue already exists */
+	InterleaveSpec *interleavespec; /* INTERLEAVE IN clause */
+	Ttl        *ttl;            /* TTL for queue message */
+} CreateQueueStmt;
+/*
+ * AlterQueueStmt -
+ *	   an ALTER QUEUE statement
+ */
+typedef struct AlterQueueStmt
+{
+  NodeTag		type;
+  RangeVar   *queue;			/* name of the queue to alter */
+  List	   *options;		/* SET OPTIONS clause options */
+  bool		missing_ok;		/* skip error if the queue does not exist */
+} AlterQueueStmt;
 // SPANGRES END
 
 
@@ -4332,6 +4365,26 @@ typedef struct ChangeStreamTrackedTable
   List *columns;        /* Name of the tracked columns */
   bool for_all_columns; /* Whether all columns in table are tracked */
 } ChangeStreamTrackedTable;
+
+/* ----------------------
+ *		Placement
+ * ----------------------
+*/
+typedef struct CreatePlacementStmt
+{
+  NodeTag type;
+  RangeVar *placement_name; /* Name of the placement */
+  List *options;            /* List of DefElem nodes */
+  bool if_not_exists;       /* do nothing if placement already exists */
+} CreatePlacementStmt;
+
+typedef struct AlterPlacementStmt
+{
+  NodeTag type;
+  RangeVar *placement_name; /* Name of the placement */
+  List *options;            /* List of DefElem nodes */
+  bool missing_ok;          /* do nothing if placement does not exist */
+} AlterPlacementStmt;
 
 /* ----------------------
  *		SearchIndex

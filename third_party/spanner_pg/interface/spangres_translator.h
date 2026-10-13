@@ -162,8 +162,8 @@ class SpangresTranslator : public interfaces::SpangresTranslatorInterface {
   // Wraps string of expression in a SELECT $expression FROM $table_name
   // statement.
   static absl::StatusOr<std::string> WrapExpressionInSelect(
-      absl::string_view expression, std::optional<absl::string_view> table_name,
-      bool table_in_named_catalog);
+      absl::string_view expression,
+      std::optional<absl::string_view> table_name);
 
   // Checks if the function is a built-in function of Spangres or PostgreSQL.
   absl::StatusOr<bool> IsBuiltinFunction(
@@ -174,8 +174,7 @@ class SpangresTranslator : public interfaces::SpangresTranslatorInterface {
   // Wraps node of expression in a SELECT $expression (with a `FROM $table_name`
   // clause if table_name is provided).
   static absl::StatusOr<List*> WrapExpressionInSelect(
-      Node* expression, std::optional<absl::string_view> table_name,
-      bool table_in_named_catalog);
+      Node* expression, std::optional<absl::string_view> table_name);
 
   absl::StatusOr<interfaces::ExpressionTranslateResult> TranslateExpression(
       interfaces::TranslateQueryParams params,

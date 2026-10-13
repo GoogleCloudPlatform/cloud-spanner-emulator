@@ -24,6 +24,7 @@
 #include "absl/base/thread_annotations.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "frontend/entities/operation.h"
 #include "absl/status/status.h"
@@ -79,6 +80,14 @@ class OperationManager {
   // Deletes the operation with the specified URI. Delete is idempotent - OK is
   // returned even if the operation does not exist.
   absl::Status DeleteOperation(const std::string& operation_uri)
+      ABSL_LOCKS_EXCLUDED(mu_);
+
+  // Deletes all the operations registered for the resource with the specified
+  // URI, i.e. every operation with a URI of the form
+  // "<resource_uri>/operations/<operation_id>". Operations of other resources,
+  // including child resources of the specified resource, are left untouched.
+  // Delete is idempotent - OK is returned even if no such operation exists.
+  absl::Status DeleteOperations(absl::string_view resource_uri)
       ABSL_LOCKS_EXCLUDED(mu_);
 
   // Lists all the operations registered with the operation manager.

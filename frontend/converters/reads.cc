@@ -33,6 +33,7 @@
 #include "backend/datamodel/key_set.h"
 #include "backend/datamodel/value.h"
 #include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/queue.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/transaction/options.h"
@@ -206,6 +207,11 @@ absl::Status ReadArgFromProto(const backend::Schema& schema,
   read_arg->columns.assign(request.columns().begin(), request.columns().end());
 
   const backend::Table* table = schema.FindTable(request.table());
+  if (table == nullptr) {
+    if (const backend::Queue* queue = schema.FindQueue(request.table())) {
+      table = queue->backing_table();
+    }
+  }
   if (table == nullptr) {
     return error::TableNotFound(request.table());
   }

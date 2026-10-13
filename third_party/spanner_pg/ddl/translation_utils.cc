@@ -140,6 +140,24 @@ static std::vector<PGAlterOption> GetOptionList() {
           PostgreSQLConstants::kInternalDatabaseReadLeaseLabelsOptionName,
           T_String),
       PGAlterOption(
+          PostgreSQLConstants::kSpangresDatabaseOptInDataplacementOptionName,
+          T_Boolean,
+          PostgreSQLConstants::kInternalDatabaseOptInDataplacementOptionName,
+          T_Boolean),
+      PGAlterOption(
+          PostgreSQLConstants::
+              kSpangresDatabaseAutoManagedRootPlacementTableOptionName,
+          T_String,
+          PostgreSQLConstants::
+              kInternalDatabaseAutoManagedRootPlacementTableOptionName,
+          T_String),
+      PGAlterOption(PostgreSQLConstants::
+                        kSpangresDatabasePerPlacementRoutingMetadataOptionName,
+                    T_Boolean,
+                    PostgreSQLConstants::
+                        kDataPlacementPerPlacementRoutingMetadataOptionName,
+                    T_Boolean),
+      PGAlterOption(
           PostgreSQLConstants::kSpangresDefaultSequenceKindOptionName, T_String,
           PostgreSQLConstants::kInternalDatabaseDefaultSequenceKindOptionName,
           T_String),
@@ -316,7 +334,10 @@ absl::StatusOr<std::string> ObjectTypeToString(ObjectType object_type) {
       return "OPERATOR FAMILY";
     case OBJECT_LOCALITY_GROUP:
       return "LOCALITY GROUP";
-    // TODO: expose when queue is implemented.
+    case OBJECT_QUEUE:
+      return "QUEUE";
+    case OBJECT_DATA_PLACEMENT:
+      return "PLACEMENT";
     case OBJECT_SEARCH_INDEX:
       return "SEARCH INDEX";
     case OBJECT_POLICY:

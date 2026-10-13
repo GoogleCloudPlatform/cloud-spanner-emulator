@@ -27,6 +27,7 @@
 #include "googlesql/public/type.h"
 #include "absl/strings/str_cat.h"
 #include "backend/schema/catalog/column.h"
+#include "backend/schema/catalog/table.h"
 
 namespace google {
 namespace spanner {
@@ -45,14 +46,25 @@ class QueryableColumn : public googlesql::Column {
   QueryableColumn(const backend::Column* column,
                   std::unique_ptr<const googlesql::AnalyzerOutput> output,
                   std::optional<const googlesql::Column::ExpressionAttributes>
-                      expression_attributes)
+                      expression_attributes,
+                  std::optional<std::string> custom_name = std::nullopt,
+                  std::optional<bool> is_pseudo_column = std::nullopt)
       : wrapped_column_(column),
         output_(std::move(output)),
-        column_expression_(expression_attributes) {}
+        column_expression_(expression_attributes),
+        custom_name_(std::move(custom_name)),
+        is_pseudo_column_(is_pseudo_column) {}
 
-  std::string Name() const override { return wrapped_column_->Name(); }
+  std::string Name() const override {
+    return custom_name_.has_value() ? *custom_name_ : wrapped_column_->Name();
+  }
 
-  std::string FullName() const override { return wrapped_column_->FullName(); }
+  std::string FullName() const override {
+    return custom_name_.has_value()
+               ? absl::StrCat(wrapped_column_->table()->Name(), ".",
+                              *custom_name_)
+               : wrapped_column_->FullName();
+  }
 
   const googlesql::Type* GetType() const override {
     return wrapped_column_->GetType();
@@ -62,7 +74,9 @@ class QueryableColumn : public googlesql::Column {
     return !wrapped_column_->is_generated();
   }
 
-  bool IsPseudoColumn() const override { return wrapped_column_->hidden(); }
+  bool IsPseudoColumn() const override {
+    return is_pseudo_column_.value_or(wrapped_column_->hidden());
+  }
 
   // Returns optional ExpressionAttributes if a column has default or generated
   // Expression.
@@ -82,6 +96,8 @@ class QueryableColumn : public googlesql::Column {
   // Column Expression for generated or default columns.
   std::optional<const googlesql::Column::ExpressionAttributes>
       column_expression_;
+  std::optional<std::string> custom_name_;
+  std::optional<bool> is_pseudo_column_;
 };
 
 }  // namespace backend

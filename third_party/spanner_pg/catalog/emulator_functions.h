@@ -143,6 +143,7 @@ namespace postgres_translator {
       "pg.jsonb_strip_nulls";
   inline constexpr char kPGJsonbSetFunctionName[] = "pg.jsonb_set";
   inline constexpr char kPGJsonbSetLaxFunctionName[] = "pg.jsonb_set_lax";
+  inline constexpr char kSpanJsonbSetFunctionName[] = "span_jsonb_set";
   inline constexpr char kPGJsonbContainsFunctionName[] = "pg.jsonb_contains";
   inline constexpr char kPGJsonbContainedFunctionName[] = "pg.jsonb_contained";
   inline constexpr char kPGJsonbExistsFunctionName[] = "pg.jsonb_exists";

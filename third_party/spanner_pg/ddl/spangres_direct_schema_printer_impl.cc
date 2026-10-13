@@ -126,6 +126,10 @@ static auto kSupportedStatements =
     google::spanner::emulator::backend::ddl::DDLStatement::kAlterChangeStream,
     google::spanner::emulator::backend::ddl::DDLStatement::kDropChangeStream,
 
+    google::spanner::emulator::backend::ddl::DDLStatement::kCreatePlacement,
+    google::spanner::emulator::backend::ddl::DDLStatement::kDropPlacement,
+    google::spanner::emulator::backend::ddl::DDLStatement::kAlterPlacement,
+
     google::spanner::emulator::backend::ddl::DDLStatement::kCreateSearchIndex,
 
     google::spanner::emulator::backend::ddl::DDLStatement::kDropSearchIndex,
@@ -137,6 +141,9 @@ static auto kSupportedStatements =
     google::spanner::emulator::backend::ddl::DDLStatement::kCreateLocalityGroup,
     google::spanner::emulator::backend::ddl::DDLStatement::kAlterLocalityGroup,
     google::spanner::emulator::backend::ddl::DDLStatement::kDropLocalityGroup,
+    google::spanner::emulator::backend::ddl::DDLStatement::kCreateQueue,
+    google::spanner::emulator::backend::ddl::DDLStatement::kDropQueue,
+    google::spanner::emulator::backend::ddl::DDLStatement::kAlterQueue,
 });
 // LINT.ThenChange(:print_sdl_statement)
 
@@ -256,6 +263,15 @@ class SpangresSchemaPrinterImpl : public SpangresSchemaPrinter {
       const google::spanner::emulator::backend::ddl::AlterChangeStream& statement) const;
   std::string PrintDropChangeStream(
       const google::spanner::emulator::backend::ddl::DropChangeStream& statement) const;
+  std::string PrintCreatePlacement(
+      const google::spanner::emulator::backend::ddl::CreatePlacement& statement) const;
+  std::string PrintPlacementSetOptions(
+      const google::protobuf::RepeatedPtrField<google::spanner::emulator::backend::ddl::SetOption>& list,
+      bool use_set) const;
+  std::string PrintDropPlacement(
+      const google::spanner::emulator::backend::ddl::DropPlacement& statement) const;
+  std::string PrintAlterPlacement(
+      const google::spanner::emulator::backend::ddl::AlterPlacement& statement) const;
   absl::StatusOr<std::string> PrintCreateSearchIndex(
       const google::spanner::emulator::backend::ddl::CreateSearchIndex& statement) const;
   std::string FormatOptionAsNameValuePair(
@@ -278,7 +294,12 @@ class SpangresSchemaPrinterImpl : public SpangresSchemaPrinter {
   absl::StatusOr<std::string> PrintRenameTable(
       const google::spanner::emulator::backend::ddl::RenameTable& statement) const;
 
-  // TODO: expose when queue is implemented.
+  absl::StatusOr<std::string> PrintCreateQueue(
+      const google::spanner::emulator::backend::ddl::CreateQueue& statement) const;
+  absl::StatusOr<std::string> PrintDropQueue(
+      const google::spanner::emulator::backend::ddl::DropQueue& statement) const;
+  absl::StatusOr<std::string> PrintAlterQueue(
+      const google::spanner::emulator::backend::ddl::AlterQueue& statement) const;
 
   absl::StatusOr<std::vector<std::string>> WrapOutput(
       absl::StatusOr<std::string> printing_result) const;
@@ -363,6 +384,12 @@ SpangresSchemaPrinterImpl::PrintDDLStatement(
           PrintAlterChangeStream(statement.alter_change_stream()));
     case google::spanner::emulator::backend::ddl::DDLStatement::kDropChangeStream:
       return WrapOutput(PrintDropChangeStream(statement.drop_change_stream()));
+    case google::spanner::emulator::backend::ddl::DDLStatement::kCreatePlacement:
+      return WrapOutput(PrintCreatePlacement(statement.create_placement()));
+    case google::spanner::emulator::backend::ddl::DDLStatement::kDropPlacement:
+      return WrapOutput(PrintDropPlacement(statement.drop_placement()));
+    case google::spanner::emulator::backend::ddl::DDLStatement::kAlterPlacement:
+      return WrapOutput(PrintAlterPlacement(statement.alter_placement()));
     case google::spanner::emulator::backend::ddl::DDLStatement::kCreateSearchIndex:
       return WrapOutput(
           PrintCreateSearchIndex(statement.create_search_index()));
@@ -386,7 +413,12 @@ SpangresSchemaPrinterImpl::PrintDDLStatement(
       return WrapOutput(
           PrintDropLocalityGroup(statement.drop_locality_group()));
 
-    // TODO: expose when queue is implemented.
+    case google::spanner::emulator::backend::ddl::DDLStatement::kCreateQueue:
+      return WrapOutput(PrintCreateQueue(statement.create_queue()));
+    case google::spanner::emulator::backend::ddl::DDLStatement::kDropQueue:
+      return WrapOutput(PrintDropQueue(statement.drop_queue()));
+    case google::spanner::emulator::backend::ddl::DDLStatement::kAlterQueue:
+      return WrapOutput(PrintAlterQueue(statement.alter_queue()));
     default:
       // Ignore unsupported statements
       return StatementTranslationError("Unsupported statement");
@@ -914,6 +946,88 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintDropIndex(
                     QuoteQualifiedIdentifier(statement.index_name()));
 }
 
+std::string SpangresSchemaPrinterImpl::PrintPlacementSetOptions(
+    const google::protobuf::RepeatedPtrField<google::spanner::emulator::backend::ddl::SetOption>& list,
+    bool use_set) const {
+  std::string output;
+  if (use_set) {
+    StrAppend(&output, "SET");
+  } else {
+    StrAppend(&output, "WITH");
+  }
+  const char* sep = " (";
+  for (const google::spanner::emulator::backend::ddl::SetOption& item : list) {
+    StrAppend(&output, sep);
+    sep = ", ";
+    StrAppend(&output, QuoteIdentifier(item.option_name()));
+    StrAppend(&output, " = ");
+    if (item.null_value()) {
+      StrAppend(&output, "NULL");
+    } else {
+      StrAppend(&output, QuoteStringLiteral(item.string_value()));
+    }
+  }
+  StrAppend(&output, ")");
+  return output;
+}
+
+std::string SpangresSchemaPrinterImpl::PrintCreatePlacement(
+    const google::spanner::emulator::backend::ddl::CreatePlacement& statement) const {
+  std::vector<std::string> output;
+
+  const bool if_not_exists = statement.has_existence_modifier() &&
+                             statement.existence_modifier() ==
+                                 google::spanner::emulator::backend::ddl::ExistenceModifier::IF_NOT_EXISTS;
+  std::string existence_modifier = if_not_exists ? "IF NOT EXISTS " : "";
+
+  std::string base =
+      StrCat("CREATE PLACEMENT ", existence_modifier,
+             QuoteQualifiedIdentifier(statement.placement_name()));
+
+  output.push_back(std::move(base));
+
+  if (!statement.set_options().empty()) {
+    std::string placement_set_options =
+        PrintPlacementSetOptions(statement.set_options(), /*use_set=*/false);
+    output.push_back(placement_set_options);
+  }
+
+  return absl::StrJoin(output, "\n");
+}
+
+std::string SpangresSchemaPrinterImpl::PrintDropPlacement(
+    const google::spanner::emulator::backend::ddl::DropPlacement& statement) const {
+  const bool if_exists = statement.has_existence_modifier() &&
+                         statement.existence_modifier() ==
+                             google::spanner::emulator::backend::ddl::ExistenceModifier::IF_EXISTS;
+  std::string existence_modifier = if_exists ? "IF EXISTS " : "";
+  return Substitute("DROP PLACEMENT $0$1", existence_modifier,
+                    QuoteQualifiedIdentifier(statement.placement_name()));
+}
+
+std::string SpangresSchemaPrinterImpl::PrintAlterPlacement(
+    const google::spanner::emulator::backend::ddl::AlterPlacement& statement) const {
+  std::string output;
+
+  const bool if_exists = statement.has_existence_modifier() &&
+                         statement.existence_modifier() ==
+                             google::spanner::emulator::backend::ddl::ExistenceModifier::IF_EXISTS;
+  std::string existence_modifier = if_exists ? "IF EXISTS " : "";
+
+  std::string base =
+      StrCat("ALTER PLACEMENT ", existence_modifier,
+             QuoteQualifiedIdentifier(statement.placement_name()));
+
+  StrAppend(&output, base);
+
+  if (!statement.set_options().empty()) {
+    std::string placement_set_options =
+        PrintPlacementSetOptions(statement.set_options(), /*use_set=*/true);
+    StrAppend(&output, " ", placement_set_options);
+  }
+  return output;
+}
+
 std::string PrintSearchIndexClause(std::vector<std::string>& columns,
                                    absl::string_view clause) {
   std::string output = "";
@@ -1219,7 +1333,86 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintDropFunction(
                    << static_cast<int64_t>(statement.function_kind());
 }
 
-// TODO: expose when queue is implemented.
+absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateQueue(
+    const google::spanner::emulator::backend::ddl::CreateQueue& statement) const {
+  std::vector<std::string> output;
+  std::string if_not_exists = "";
+  if (statement.existence_modifier() == google::spanner::emulator::backend::ddl::IF_NOT_EXISTS) {
+    if_not_exists = "IF NOT EXISTS ";
+  }
+  output.push_back(StrCat("CREATE QUEUE ", if_not_exists,
+                          QuoteQualifiedIdentifier(statement.queue_name()),
+                          " ("));
+
+  std::vector<std::string> create_queue_entries;
+  // Pattern with indent for each clause in create queue
+  const std::string_view pattern = "  $0";
+  for (const ColumnDefinition& column_definition : statement.column()) {
+    GOOGLESQL_ASSIGN_OR_RETURN(std::string column_string, PrintColumn(column_definition));
+    create_queue_entries.push_back(Substitute(pattern, column_string));
+  }
+
+  GOOGLESQL_ASSIGN_OR_RETURN(std::string primary_key_string,
+                   PrintPrimaryKey(statement.primary_key()));
+  create_queue_entries.push_back(Substitute(pattern, primary_key_string));
+
+  output.push_back(absl::StrJoin(create_queue_entries, ",\n"));
+
+  std::string after_create = ")";
+  if (statement.has_interleave_clause()) {
+    GOOGLESQL_ASSIGN_OR_RETURN(std::string interleave_in_string,
+                     PrintInterleaveClause(statement.interleave_clause()));
+    StrAppend(&after_create, " ", interleave_in_string);
+  }
+
+  if (statement.has_row_deletion_policy()) {
+    StrAppend(&after_create, " TTL INTERVAL ",
+              RowDeletionPolicyToInterval(statement.row_deletion_policy()));
+  }
+
+  if (statement.set_options_size() > 0) {
+    std::vector<std::string> options;
+    for (const google::spanner::emulator::backend::ddl::SetOption& option : statement.set_options()) {
+      options.push_back(FormatOptionAsNameValuePair(option));
+    }
+    StrAppend(&after_create, " WITH (\n  ", absl::StrJoin(options, ",\n  "),
+              "\n)");
+  }
+
+  output.push_back(std::move(after_create));
+
+  return absl::StrJoin(output, "\n");
+}
+
+absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintDropQueue(
+    const google::spanner::emulator::backend::ddl::DropQueue& statement) const {
+  const bool if_exists = statement.has_existence_modifier() &&
+                         statement.existence_modifier() ==
+                             google::spanner::emulator::backend::ddl::ExistenceModifier::IF_EXISTS;
+  std::string existence_modifier = if_exists ? "IF EXISTS " : "";
+  return Substitute("DROP QUEUE $0$1", existence_modifier,
+                    QuoteQualifiedIdentifier(statement.queue_name()));
+}
+
+absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintAlterQueue(
+    const google::spanner::emulator::backend::ddl::AlterQueue& statement) const {
+  std::string alter_queue =
+      Substitute("ALTER QUEUE $0",
+                 QuoteQualifiedIdentifier(statement.queue_name()));
+
+  if (statement.has_set_options()) {
+    std::vector<std::string> options;
+    for (const google::spanner::emulator::backend::ddl::SetOption& option :
+         statement.set_options().options()) {
+      options.push_back(FormatOptionAsNameValuePair(option));
+    }
+    StrAppend(&alter_queue, " SET OPTIONS (\n  ",
+              absl::StrJoin(options, ",\n  "), "\n)");
+  }
+
+  return alter_queue;
+}
+
 absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintRenameTable(
     const google::spanner::emulator::backend::ddl::RenameTable& statement) const {
   std::string output;
@@ -1290,6 +1483,17 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintAlterIndex(
                 column_name);
 }
 
+namespace {
+absl::StatusOr<std::string> AddOriginalExpression(
+    const KeyPartClause::Expression& expression_index,
+    const absl::string_view sort_order) {
+  GOOGLESQL_RET_CHECK(expression_index.has_expression_origin());
+  GOOGLESQL_RET_CHECK(expression_index.expression_origin().has_original_expression());
+  return StrCat("(", expression_index.expression_origin().original_expression(),
+                ")", sort_order);
+}
+}  // namespace
+
 absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateIndex(
     const google::spanner::emulator::backend::ddl::CreateIndex& statement) const {
   std::string modifier = "";
@@ -1304,10 +1508,17 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintCreateIndex(
 
   std::vector<std::string> key_parts;
   for (const google::spanner::emulator::backend::ddl::KeyPartClause& index_part : statement.key()) {
-    std::string key_part;
-    const std::string name = QuoteIdentifier(index_part.key_name());
     GOOGLESQL_ASSIGN_OR_RETURN(absl::string_view sort_order,
                      PrintSortOrder(index_part.order()));
+    if (index_part.has_expression_index()) {
+      GOOGLESQL_ASSIGN_OR_RETURN(
+          std::string original_expression,
+          AddOriginalExpression(index_part.expression_index(), sort_order));
+      key_parts.push_back(original_expression);
+      continue;
+    }
+    std::string key_part;
+    const std::string name = QuoteIdentifier(index_part.key_name());
     key_part = StrCat(name, sort_order);
     key_parts.push_back(key_part);
   }
@@ -1873,6 +2084,7 @@ absl::StatusOr<std::string> SpangresSchemaPrinterImpl::PrintColumn(
   }
 
   StrAppend(&constraint, column.not_null() ? " NOT NULL" : "");
+  StrAppend(&constraint, column.has_placement_key() ? " PLACEMENT KEY" : "");
   StrAppend(&constraint, column.hidden() ? " HIDDEN" : "");
   for (const google::spanner::emulator::backend::ddl::SetOption& option : column.set_options()) {
     if (option.option_name() == "locality_group") {
@@ -2043,6 +2255,9 @@ SpangresSchemaPrinterImpl::PrintAlterDatabaseSetOptions(
         value = QuoteStringLiteral(option.string_value());
       } else if (option.has_int64_value()) {
         value = std::to_string(option.int64_value());
+      } else if (option.has_bool_value()) {
+        value = option.bool_value() ? PGConstants::kPgTrueLiteral
+                                    : PGConstants::kPgFalseLiteral;
       } else if (!option.string_list_value().empty()) {
         std::vector<std::string> option_list_value;
         option_list_value.reserve(option.string_list_value().size());

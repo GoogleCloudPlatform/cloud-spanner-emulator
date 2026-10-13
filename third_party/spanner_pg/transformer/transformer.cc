@@ -31,7 +31,6 @@
 
 #include "third_party/spanner_pg/transformer/transformer.h"
 
-#include <algorithm>
 #include <climits>
 #include <map>
 #include <string>
@@ -57,21 +56,12 @@
 #include "third_party/spanner_pg/shims/error_shim.h"
 #include "third_party/spanner_pg/transformer/transformer_helper.h"
 #include "third_party/spanner_pg/util/postgres.h"
+#include "googlesql/base/ret_check.h"
 #include "googlesql/base/status_macros.h"
 
 namespace postgres_translator {
 
 using ::postgres_translator::internal::PostgresCastToString;
-
-// Returns true if all alphabetic characters in `qualified_table_name` are
-// lower-case.
-static bool IsLowerCaseReference(const TableName& qualified_table_name) {
-  return std::all_of(
-      qualified_table_name.AsSpan().begin(),
-      qualified_table_name.AsSpan().end(), [](const std::string& str) {
-        return !std::any_of(str.begin(), str.end(), absl::ascii_isupper);
-      });
-}
 
 // Build eref from alias, falling back to column names from the GoogleSQL
 //  Table object where aliases are not available.
@@ -139,8 +129,10 @@ static absl::StatusOr<Alias*> BuildRelationEref(
 }
 
 absl::StatusOr<RangeTblEntry*> Transformer::BuildPgRangeTblEntry(
-    CatalogAdapter& adapter, Oid oid,
+    CatalogAdapter& adapter, Oid oid, const googlesql::Table* table,
     Alias* alias, bool inFromCl, AclMode acl_mode) {
+  GOOGLESQL_RET_CHECK_NE(table, nullptr);
+
   RangeTblEntry* rte;
   GOOGLESQL_ASSIGN_OR_RETURN(rte, internal::makePartialRangeTblEntry(inFromCl, acl_mode));
   rte->rtekind = RTE_RELATION;
@@ -151,50 +143,15 @@ absl::StatusOr<RangeTblEntry*> Transformer::BuildPgRangeTblEntry(
   rte->inh = acl_mode == ACL_INSERT ? false : true;
   rte->relid = oid;
   rte->relkind = RELKIND_RELATION;
-  GOOGLESQL_ASSIGN_OR_RETURN(
-      TableName qualified_table_name, adapter.GetTableNameFromOid(oid));
-
-  const googlesql::Table* table;
-  GOOGLESQL_RETURN_IF_ERROR(adapter.GetEngineUserCatalog()->FindTable(
-      qualified_table_name.AsSpan(), &table));
-  GOOGLESQL_RET_CHECK_NE(table, nullptr);
-
-  // Checks whether table/view is part of a system catalog that is incluced in
-  // the supplied schema list. Catalogs included in the list have all object
-  // names in upper-case. If we keep such names as is, the only way for users to
-  // access these objects from Spangres will be through quoted identifiers: e.g.
-  // SELECT *FROM "SPANNER_SYS"."QUERY_STATS_TOP_MINUTE". To allow users to
-  // access such objects without quotes, we will convert their names to
-  // lower-case. Note: to match PostgreSQL semantic for unquoted identifiers we
-  // disallow access to these objects using upper-case quoted identifiers, like
-  // in the example above.
-
-  GOOGLESQL_ASSIGN_OR_RETURN(
-      const bool in_uppercase_catalog_path,
-      adapter.GetEngineUserCatalog()->InUppercaseCatalogPath(table));
-
-  // GoogleSQL's catalogs are not case-sensitive, but PostgreSQL's analyzer
-  // is. Verify we adhere to the stricter rules because PostgreSQL may do
-  // case-sensitive comparisons against the RTE's fields during analysis.
-  // For system tables that use upper-case for their names, we will translate
-  // these names to lower-case and thus have to check that references to these
-  // names are in lower-case (note: PG automatically lower-cases all unquoted
-  // identifiers).
-  const bool case_mismatch_error =
-      in_uppercase_catalog_path
-          ? !IsLowerCaseReference(qualified_table_name)
-          : qualified_table_name.UnqualifiedName() != table->Name();
-  if (case_mismatch_error) {
-    return googlesql_base::NotFoundErrorBuilder()
-           << "Table not found: `" << qualified_table_name
-           << "` not found in catalog "
-           << adapter.GetEngineUserCatalog()->FullName() << " (case mismatch?)";
-  }
 
   // Attach provided alias and use it to populate the effective column names
   // (actual names or user-supplied aliases as applicable).
   rte->alias = alias;
 
+  GOOGLESQL_RET_CHECK_NE(table, nullptr);
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      const bool in_uppercase_catalog_path,
+      adapter.GetEngineUserCatalog()->InUppercaseCatalogPath(table));
   GOOGLESQL_ASSIGN_OR_RETURN(rte->eref,
                    BuildRelationEref(*table, alias, in_uppercase_catalog_path));
 
@@ -209,7 +166,8 @@ absl::StatusOr<RangeTblEntry*> Transformer::BuildPgRangeTblEntry(
       adapter.GetEngineUserCatalog()->GetTableNameForGsqlTable(resolved_table));
   GOOGLESQL_ASSIGN_OR_RETURN(auto oid,
                    adapter.GetOrGenerateOidFromTableName(qualified_table_name));
-  return BuildPgRangeTblEntry(adapter, oid, alias, inFromCl, acl_mode);
+  return BuildPgRangeTblEntry(adapter, oid, &resolved_table, alias, inFromCl,
+                              acl_mode);
 }
 
 absl::StatusOr<Oid> Transformer::BuildPgTypeOid(

@@ -57,6 +57,9 @@ struct SchemaChangeContext {
   // Unique table ID generator for the database.
   TableIDGenerator* table_id_generator;
 
+  // Unique queue ID generator for the database.
+  QueueIDGenerator* queue_id_generator;
+
   // Unique column ID generator for the database.
   ColumnIDGenerator* column_id_generator;
 

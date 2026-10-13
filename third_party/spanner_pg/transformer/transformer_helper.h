@@ -80,6 +80,10 @@ inline constexpr absl::string_view kEqualFunction = "$equal";
 // FULL JOIN with USING.
 inline constexpr absl::string_view kFullJoin = "$full_join";
 
+inline constexpr absl::string_view kSpannerHintQualifier = "spanner";
+inline constexpr absl::string_view kHintUseGoogleSqlDoubleComparison =
+    "use_googlesql_double_comparison";
+
 // Pushes back an empty element to the vector on initialization and
 // pops it on destruction.
 template <typename Element>

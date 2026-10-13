@@ -78,9 +78,8 @@ class InformationSchemaTest
            GetNameForDialect("ROLES"), GetNameForDialect("ROLE_GRANTEES"),
            GetNameForDialect("TABLE_PRIVILEGES"),
            GetNameForDialect("COLUMN_PRIVILEGES"),
-           GetNameForDialect("PARAMETERS"), GetNameForDialect("PLACEMENTS"),
-           GetNameForDialect("PLACEMENT_OPTIONS"),
-           GetNameForDialect("ROUTINES"), GetNameForDialect("ROUTINE_OPTIONS"),
+           GetNameForDialect("PARAMETERS"), GetNameForDialect("ROUTINES"),
+           GetNameForDialect("ROUTINE_OPTIONS"),
            GetNameForDialect("ROUTINE_PRIVILEGES"),
            GetNameForDialect("ROLE_TABLE_GRANTS"),
            GetNameForDialect("ROLE_COLUMN_GRANTS"),
@@ -379,6 +378,8 @@ TEST_P(InformationSchemaTest, MetaTables) {
     expected.push_back({TableCatalogForDialect(), table_schema, "VIEW", GetNameForDialect("INDEXES"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
     expected.push_back({TableCatalogForDialect(), table_schema, "VIEW", GetNameForDialect("KEY_COLUMN_USAGE"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
     expected.push_back({TableCatalogForDialect(), table_schema, "VIEW", GetNameForDialect("LOCALITY_GROUP_OPTIONS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({TableCatalogForDialect(), table_schema, "VIEW", GetNameForDialect("PLACEMENT_OPTIONS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({TableCatalogForDialect(), table_schema, "VIEW", GetNameForDialect("PLACEMENTS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
     expected.push_back({TableCatalogForDialect(), table_schema, "VIEW", GetNameForDialect("REFERENTIAL_CONSTRAINTS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
     expected.push_back({TableCatalogForDialect(), table_schema, "VIEW", GetNameForDialect("SCHEMATA"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
     expected.push_back({TableCatalogForDialect(), table_schema, "VIEW", GetNameForDialect("SEQUENCES"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
@@ -411,6 +412,8 @@ TEST_P(InformationSchemaTest, MetaTables) {
     expected.push_back({"", table_schema, "VIEW", GetNameForDialect("MODEL_COLUMNS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
     expected.push_back({"", table_schema, "VIEW", GetNameForDialect("MODEL_OPTIONS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
     expected.push_back({"", table_schema, "VIEW", GetNameForDialect("MODELS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({"", table_schema, "VIEW", GetNameForDialect("PLACEMENTS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
+    expected.push_back({"", table_schema, "VIEW", GetNameForDialect("PLACEMENT_OPTIONS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
     expected.push_back({"", table_schema, "VIEW", GetNameForDialect("PROPERTY_GRAPHS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
     expected.push_back({"", table_schema, "VIEW", GetNameForDialect("REFERENTIAL_CONSTRAINTS"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
     expected.push_back({"", table_schema, "VIEW", GetNameForDialect("SCHEMATA"), Ns(), Ns(), Ns(), Ns()});  // NOLINT
@@ -624,6 +627,12 @@ TEST_P(InformationSchemaTest, GSQLMetaColumns) {
     {"", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "OPTION_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false, Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "OPTION_TYPE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false, Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "OPTION_VALUE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false, Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "PLACEMENTS", "IS_DEFAULT", Ns(), Ns(), "NO", "BOOL", "NEVER", Ns(), Ns(), Ns(), false, Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "PLACEMENTS", "PLACEMENT_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false, Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "PLACEMENT_OPTIONS", "OPTION_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false, Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "PLACEMENT_OPTIONS", "OPTION_TYPE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false, Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "PLACEMENT_OPTIONS", "OPTION_VALUE", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false, Ns()},  // NOLINT
+    {"", "INFORMATION_SCHEMA", "PLACEMENT_OPTIONS", "PLACEMENT_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false, Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_CATALOG", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false, Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_METADATA_JSON", Ns(), Ns(), "YES", "JSON", "NEVER", Ns(), Ns(), Ns(), false, Ns()},  // NOLINT
     {"", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_NAME", Ns(), Ns(), "NO", "STRING(MAX)", "NEVER", Ns(), Ns(), Ns(), false, Ns()},  // NOLINT
@@ -812,6 +821,8 @@ TEST_P(InformationSchemaTest, MetaIndexes) {
         {"", "INFORMATION_SCHEMA", "MODEL_COLUMNS", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns()},  // NOLINT
         {"", "INFORMATION_SCHEMA", "MODEL_COLUMN_OPTIONS", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns()},  // NOLINT
         {"", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns()},  // NOLINT
+        {"", "INFORMATION_SCHEMA", "PLACEMENTS", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns()},  // NOLINT
+        {"", "INFORMATION_SCHEMA", "PLACEMENT_OPTIONS", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns()},  // NOLINT
         {"", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns()},  // NOLINT
         {"", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns()},  // NOLINT
         {"", "INFORMATION_SCHEMA", "SCHEMATA", "PRIMARY_KEY", "PRIMARY_KEY", "", true, false, Ns()},  // NOLINT
@@ -958,6 +969,8 @@ TEST_P(InformationSchemaTest, MetaIndexColumns) {
       {"INFORMATION_SCHEMA", "MODEL_OPTIONS", "PRIMARY_KEY", "PRIMARY_KEY", "MODEL_SCHEMA", 2, "ASC", "NO", "STRING(MAX)"},  // NOLINT
       {"INFORMATION_SCHEMA", "MODEL_OPTIONS", "PRIMARY_KEY", "PRIMARY_KEY", "MODEL_NAME", 3, "ASC", "NO", "STRING(MAX)"},  // NOLINT
       {"INFORMATION_SCHEMA", "MODEL_OPTIONS", "PRIMARY_KEY", "PRIMARY_KEY", "OPTION_NAME", 4, "ASC", "NO", "STRING(MAX)"},  // NOLINT
+      {"INFORMATION_SCHEMA", "PLACEMENTS", "PRIMARY_KEY", "PRIMARY_KEY", "PLACEMENT_NAME", 1, "ASC", "NO", "STRING(MAX)"},  // NOLINT
+      {"INFORMATION_SCHEMA", "PLACEMENT_OPTIONS", "PRIMARY_KEY", "PRIMARY_KEY", "PLACEMENT_NAME", 1, "ASC", "NO", "STRING(MAX)"},  // NOLINT
       {"INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PRIMARY_KEY", "PRIMARY_KEY", "PROPERTY_GRAPH_CATALOG", 1, "ASC", "NO", "STRING(MAX)"},  // NOLINT
       {"INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PRIMARY_KEY", "PRIMARY_KEY", "PROPERTY_GRAPH_SCHEMA", 2, "ASC", "NO", "STRING(MAX)"},  // NOLINT
       {"INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PRIMARY_KEY", "PRIMARY_KEY", "PROPERTY_GRAPH_NAME", 3, "ASC", "NO", "STRING(MAX)"},  // NOLINT
@@ -1152,6 +1165,12 @@ TEST_P(InformationSchemaTest, MetaTableConstraints) {
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_MODEL_OPTIONS_OPTION_NAME", "", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "CHECK", "NO", "NO", "YES"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_MODEL_OPTIONS_OPTION_TYPE", "", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "CHECK", "NO", "NO", "YES"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_MODEL_OPTIONS_OPTION_VALUE", "", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "CHECK", "NO", "NO", "YES"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PLACEMENTS_IS_DEFAULT", "", "INFORMATION_SCHEMA", "PLACEMENTS", "CHECK", "NO", "NO", "YES"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PLACEMENTS_PLACEMENT_NAME", "", "INFORMATION_SCHEMA", "PLACEMENTS", "CHECK", "NO", "NO", "YES"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PLACEMENT_OPTIONS_OPTION_NAME", "", "INFORMATION_SCHEMA", "PLACEMENT_OPTIONS", "CHECK", "NO", "NO", "YES"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PLACEMENT_OPTIONS_OPTION_TYPE", "", "INFORMATION_SCHEMA", "PLACEMENT_OPTIONS", "CHECK", "NO", "NO", "YES"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PLACEMENT_OPTIONS_OPTION_VALUE", "", "INFORMATION_SCHEMA", "PLACEMENT_OPTIONS", "CHECK", "NO", "NO", "YES"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PLACEMENT_OPTIONS_PLACEMENT_NAME", "", "INFORMATION_SCHEMA", "PLACEMENT_OPTIONS", "CHECK", "NO", "NO", "YES"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_CATALOG", "", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "CHECK", "NO", "NO", "YES"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_NAME", "", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "CHECK", "NO", "NO", "YES"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_SCHEMA", "", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "CHECK", "NO", "NO", "YES"},  // NOLINT
@@ -1210,6 +1229,8 @@ TEST_P(InformationSchemaTest, MetaTableConstraints) {
       {"", "INFORMATION_SCHEMA", "PK_MODEL_COLUMNS", "", "INFORMATION_SCHEMA", "MODEL_COLUMNS", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PK_MODEL_COLUMN_OPTIONS", "", "INFORMATION_SCHEMA", "MODEL_COLUMN_OPTIONS", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PK_MODEL_OPTIONS", "", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PK_PLACEMENTS", "", "INFORMATION_SCHEMA", "PLACEMENTS", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PK_PLACEMENT_OPTIONS", "", "INFORMATION_SCHEMA", "PLACEMENT_OPTIONS", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PK_PROPERTY_GRAPHS", "", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PK_REFERENTIAL_CONSTRAINTS", "", "INFORMATION_SCHEMA", "REFERENTIAL_CONSTRAINTS", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PK_SCHEMATA", "", "INFORMATION_SCHEMA", "SCHEMATA", "PRIMARY KEY", "NO", "NO", "YES"},  // NOLINT
@@ -1252,8 +1273,6 @@ TEST_P(InformationSchemaTest, MetaCheckConstraints) {
         "and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_MODEL_COLUMNS%' "
         "and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_MODEL_COLUMN_OPTIONS%' "
         "and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_MODEL_PRIVILEGES%' "
-        "and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_PLACEMENTS%' "
-        "and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_PLACEMENT_OPTIONS%' "
         "and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_PARAMETERS%' "
         "and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROUTINES%' "
         "and t.constraint_name NOT LIKE 'CK_IS_NOT_NULL_ROUTINE_OPTIONS%' "
@@ -1354,6 +1373,12 @@ TEST_P(InformationSchemaTest, MetaCheckConstraints) {
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_KEY_COLUMN_USAGE_TABLE_SCHEMA", "TABLE_SCHEMA IS NOT NULL", "COMMITTED"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_LOCALITY_GROUP_OPTIONS_LOCALITY_GROUP_NAME", "LOCALITY_GROUP_NAME IS NOT NULL", "COMMITTED"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_LOCALITY_GROUP_OPTIONS_OPTION_NAME", "OPTION_NAME IS NOT NULL", "COMMITTED"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PLACEMENTS_IS_DEFAULT", "IS_DEFAULT IS NOT NULL", "COMMITTED"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PLACEMENTS_PLACEMENT_NAME", "PLACEMENT_NAME IS NOT NULL", "COMMITTED"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PLACEMENT_OPTIONS_OPTION_NAME", "OPTION_NAME IS NOT NULL", "COMMITTED"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PLACEMENT_OPTIONS_OPTION_TYPE", "OPTION_TYPE IS NOT NULL", "COMMITTED"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PLACEMENT_OPTIONS_OPTION_VALUE", "OPTION_VALUE IS NOT NULL", "COMMITTED"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PLACEMENT_OPTIONS_PLACEMENT_NAME", "PLACEMENT_NAME IS NOT NULL", "COMMITTED"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_CATALOG", "PROPERTY_GRAPH_CATALOG IS NOT NULL", "COMMITTED"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_NAME", "PROPERTY_GRAPH_NAME IS NOT NULL", "COMMITTED"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_SCHEMA", "PROPERTY_GRAPH_SCHEMA IS NOT NULL", "COMMITTED"},  // NOLINT
@@ -1581,6 +1606,14 @@ TEST_P(InformationSchemaTest, MetaConstraintTableUsage) {
       {"", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_MODEL_OPTIONS_OPTION_TYPE"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_MODEL_OPTIONS_OPTION_VALUE"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "", "INFORMATION_SCHEMA", "PK_MODEL_OPTIONS"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PLACEMENTS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PLACEMENTS_IS_DEFAULT"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PLACEMENTS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PLACEMENTS_PLACEMENT_NAME"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PLACEMENTS", "", "INFORMATION_SCHEMA", "PK_PLACEMENTS"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PLACEMENT_OPTIONS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PLACEMENT_OPTIONS_OPTION_NAME"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PLACEMENT_OPTIONS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PLACEMENT_OPTIONS_OPTION_TYPE"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PLACEMENT_OPTIONS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PLACEMENT_OPTIONS_OPTION_VALUE"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PLACEMENT_OPTIONS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PLACEMENT_OPTIONS_PLACEMENT_NAME"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PLACEMENT_OPTIONS", "", "INFORMATION_SCHEMA", "PK_PLACEMENT_OPTIONS"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_CATALOG"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_NAME"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_SCHEMA"},  // NOLINT
@@ -1790,6 +1823,8 @@ TEST_P(InformationSchemaTest, MetaKeyColumnUsage) {
       {"", "INFORMATION_SCHEMA", "PK_MODEL_OPTIONS", "", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "MODEL_SCHEMA", 2, Ni()},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PK_MODEL_OPTIONS", "", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "MODEL_NAME", 3, Ni()},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PK_MODEL_OPTIONS", "", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "OPTION_NAME", 4, Ni()},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PK_PLACEMENTS", "", "INFORMATION_SCHEMA", "PLACEMENTS", "PLACEMENT_NAME", 1, Ni()},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PK_PLACEMENT_OPTIONS", "", "INFORMATION_SCHEMA", "PLACEMENT_OPTIONS", "PLACEMENT_NAME", 1, Ni()},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PK_PROPERTY_GRAPHS", "", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_CATALOG", 1, Ni()},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PK_PROPERTY_GRAPHS", "", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_SCHEMA", 2, Ni()},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PK_PROPERTY_GRAPHS", "", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_NAME", 3, Ni()},  // NOLINT
@@ -2070,6 +2105,14 @@ TEST_P(InformationSchemaTest, MetaConstraintColumnUsage) {
       {"", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "OPTION_NAME", "", "INFORMATION_SCHEMA", "PK_MODEL_OPTIONS"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "OPTION_TYPE", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_MODEL_OPTIONS_OPTION_TYPE"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "MODEL_OPTIONS", "OPTION_VALUE", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_MODEL_OPTIONS_OPTION_VALUE"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PLACEMENTS", "IS_DEFAULT", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PLACEMENTS_IS_DEFAULT"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PLACEMENTS", "PLACEMENT_NAME", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PLACEMENTS_PLACEMENT_NAME"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PLACEMENTS", "PLACEMENT_NAME", "", "INFORMATION_SCHEMA", "PK_PLACEMENTS"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PLACEMENT_OPTIONS", "OPTION_NAME", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PLACEMENT_OPTIONS_OPTION_NAME"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PLACEMENT_OPTIONS", "OPTION_TYPE", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PLACEMENT_OPTIONS_OPTION_TYPE"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PLACEMENT_OPTIONS", "OPTION_VALUE", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PLACEMENT_OPTIONS_OPTION_VALUE"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PLACEMENT_OPTIONS", "PLACEMENT_NAME", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PLACEMENT_OPTIONS_PLACEMENT_NAME"},  // NOLINT
+      {"", "INFORMATION_SCHEMA", "PLACEMENT_OPTIONS", "PLACEMENT_NAME", "", "INFORMATION_SCHEMA", "PK_PLACEMENT_OPTIONS"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_CATALOG", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_CATALOG"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_CATALOG", "", "INFORMATION_SCHEMA", "PK_PROPERTY_GRAPHS"},  // NOLINT
       {"", "INFORMATION_SCHEMA", "PROPERTY_GRAPHS", "PROPERTY_GRAPH_NAME", "", "INFORMATION_SCHEMA", "CK_IS_NOT_NULL_PROPERTY_GRAPHS_PROPERTY_GRAPH_NAME"},  // NOLINT
@@ -4652,6 +4695,369 @@ TEST_P(InformationSchemaTest, SchemataWithProtoBundleQuery) {
   auto expected = std::vector<ValueRow>({{"", "", true}});
 
   EXPECT_THAT(results, IsOkAndHoldsRows(expected));
+}
+
+TEST_P(InformationSchemaTest, DefaultPlacementsAndPlacementOptions) {
+  auto placements_results = Query(R"(
+      SELECT
+        placement_name,
+        is_default
+      FROM
+        information_schema.placements
+      ORDER BY
+        placement_name
+    )");
+  LogResults(placements_results);
+  if (GetParam() == POSTGRESQL) {
+    auto expected_placements = std::vector<ValueRow>({
+        {"default", "YES"},
+    });
+    EXPECT_THAT(placements_results, IsOkAndHoldsRows(expected_placements));
+  } else {
+    auto expected_placements = std::vector<ValueRow>({
+        {"default", true},
+    });
+    EXPECT_THAT(placements_results, IsOkAndHoldsRows(expected_placements));
+  }
+
+  auto options_results = Query(R"(
+      SELECT
+        placement_name,
+        option_name,
+        option_type,
+        option_value
+      FROM
+        information_schema.placement_options
+      ORDER BY
+        placement_name, option_name
+    )");
+  LogResults(options_results);
+  std::string type =
+      (GetParam() == POSTGRESQL) ? "character varying" : "STRING(MAX)";
+  auto expected_options = std::vector<ValueRow>({
+      {"default", "instance_partition", type, "default"},
+  });
+  EXPECT_THAT(options_results, IsOkAndHoldsRows(expected_options));
+}
+
+TEST_P(InformationSchemaTest, CustomPlacementsAndPlacementOptions) {
+  if (in_prod_env()) {
+    GTEST_SKIP() << "Instance configuration in prod test environment does not "
+                    "support default_leader settings.";
+  }
+
+  if (GetParam() == POSTGRESQL) {
+    GOOGLESQL_ASSERT_OK(UpdateSchema({
+        "ALTER DATABASE db SET spanner.default_leader = 'us-east1'",
+        "CREATE PLACEMENT p1 WITH (instance_partition = 'us-central1')",
+        "CREATE PLACEMENT p2 WITH (instance_partition = 'us-west1', "
+        "default_leader = 'us-west1-a')",
+    }));
+  } else {
+    GOOGLESQL_ASSERT_OK(UpdateSchema({
+        "ALTER DATABASE db SET OPTIONS (default_leader = 'us-east1')",
+        "CREATE PLACEMENT p1 OPTIONS (instance_partition = 'us-central1')",
+        "CREATE PLACEMENT p2 OPTIONS (instance_partition = 'us-west1', "
+        "default_leader = 'us-west1-a')",
+    }));
+  }
+
+  auto placements_results = Query(R"(
+      SELECT
+        placement_name,
+        is_default
+      FROM
+        information_schema.placements
+      ORDER BY
+        placement_name
+    )");
+  LogResults(placements_results);
+  if (GetParam() == POSTGRESQL) {
+    auto expected_placements = std::vector<ValueRow>({
+        {"default", "YES"},
+        {"p1", "NO"},
+        {"p2", "NO"},
+    });
+    EXPECT_THAT(placements_results, IsOkAndHoldsRows(expected_placements));
+  } else {
+    auto expected_placements = std::vector<ValueRow>({
+        {"default", true},
+        {"p1", false},
+        {"p2", false},
+    });
+    EXPECT_THAT(placements_results, IsOkAndHoldsRows(expected_placements));
+  }
+
+  std::string type =
+      (GetParam() == POSTGRESQL) ? "character varying" : "STRING(MAX)";
+  auto options_results = Query(R"(
+      SELECT
+        placement_name,
+        option_name,
+        option_type,
+        option_value
+      FROM
+        information_schema.placement_options
+      ORDER BY
+        placement_name, option_name
+    )");
+  LogResults(options_results);
+  auto expected_options = std::vector<ValueRow>({
+      {"default", "default_leader", type, "us-east1"},
+      {"default", "instance_partition", type, "default"},
+      {"p1", "instance_partition", type, "us-central1"},
+      {"p2", "default_leader", type, "us-west1-a"},
+      {"p2", "instance_partition", type, "us-west1"},
+  });
+  EXPECT_THAT(options_results, IsOkAndHoldsRows(expected_options));
+
+  // Also verify default_leader in database_options.
+  std::string db_option_type =
+      (GetParam() == POSTGRESQL) ? "character varying" : "STRING";
+  auto db_options_results = Query(R"(
+      SELECT
+        option_name,
+        option_type,
+        option_value
+      FROM
+        information_schema.database_options
+      WHERE
+        option_name = 'default_leader'
+    )");
+  LogResults(db_options_results);
+  EXPECT_THAT(
+      db_options_results,
+      IsOkAndHoldsRows({{"default_leader", db_option_type, "us-east1"}}));
+
+  // Verify ALTER PLACEMENT and DROP PLACEMENT update INFORMATION_SCHEMA.
+  if (GetParam() == POSTGRESQL) {
+    GOOGLESQL_ASSERT_OK(UpdateSchema({
+        "ALTER PLACEMENT p1 SET (instance_partition = 'us-central1', "
+        "default_leader = 'us-central1-a')",
+        "DROP PLACEMENT p2",
+    }));
+  } else {
+    GOOGLESQL_ASSERT_OK(UpdateSchema({
+        "ALTER PLACEMENT p1 SET OPTIONS (instance_partition = 'us-central1', "
+        "default_leader = 'us-central1-a')",
+        "DROP PLACEMENT p2",
+    }));
+  }
+
+  auto updated_options_results = Query(R"(
+      SELECT
+        placement_name,
+        option_name,
+        option_type,
+        option_value
+      FROM
+        information_schema.placement_options
+      ORDER BY
+        placement_name, option_name
+    )");
+  LogResults(updated_options_results);
+  auto expected_updated_options = std::vector<ValueRow>({
+      {"default", "default_leader", type, "us-east1"},
+      {"default", "instance_partition", type, "default"},
+      {"p1", "default_leader", type, "us-central1-a"},
+      {"p1", "instance_partition", type, "us-central1"},
+  });
+  EXPECT_THAT(updated_options_results,
+              IsOkAndHoldsRows(expected_updated_options));
+}
+
+TEST_P(InformationSchemaTest, Queues) {
+  if (in_prod_env()) {
+    GTEST_SKIP() << "Skipping in prod environment.";
+  }
+
+  if (GetParam() == POSTGRESQL) {
+    GOOGLESQL_ASSERT_OK(UpdateSchema({R"sql(
+      CREATE TABLE queue_parent (
+        id bigint NOT NULL,
+        PRIMARY KEY (id)
+      )
+    )sql",
+                            R"sql(
+      CREATE QUEUE test_queue_1 (
+        id bigint NOT NULL,
+        payload bytea NOT NULL,
+        PRIMARY KEY (id)
+      ) WITH (receive_mode = 'PULL')
+    )sql",
+                            R"sql(
+      CREATE QUEUE test_queue_2 (
+        id bigint NOT NULL,
+        commit_ts spanner.commit_timestamp NOT NULL,
+        payload text NOT NULL,
+        PRIMARY KEY (id, commit_ts)
+      ) INTERLEAVE IN PARENT queue_parent ON DELETE CASCADE
+        TTL INTERVAL '1 day' ON commit_ts
+        WITH (receive_mode = 'PULL')
+    )sql"}));
+  } else {
+    GOOGLESQL_ASSERT_OK(UpdateSchema({R"sql(
+      CREATE TABLE QueueParent (
+        Id INT64 NOT NULL,
+      ) PRIMARY KEY (Id)
+    )sql",
+                            R"sql(
+      CREATE QUEUE TestQueue1 (
+        Id INT64 NOT NULL,
+        Payload BYTES(MAX) NOT NULL,
+      ) PRIMARY KEY (Id),
+        OPTIONS (receive_mode = 'PULL')
+    )sql",
+                            R"sql(
+      CREATE QUEUE TestQueue2 (
+        Id INT64 NOT NULL,
+        CommitTimestamp TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp = true),
+        Payload STRING(MAX) NOT NULL,
+      ) PRIMARY KEY (Id, CommitTimestamp),
+        INTERLEAVE IN PARENT QueueParent ON DELETE CASCADE,
+        ROW DELETION POLICY (OLDER_THAN(CommitTimestamp, INTERVAL 1 DAY)),
+        OPTIONS (receive_mode = 'PULL')
+    )sql"}));
+  }
+
+  auto tables_results = Query(R"(
+      SELECT
+        table_name,
+        table_type,
+        parent_table_name,
+        on_delete_action,
+        interleave_type,
+        spanner_state,
+        row_deletion_policy_expression
+      FROM
+        information_schema.tables
+      WHERE
+        table_type = 'QUEUE'
+      ORDER BY
+        table_name
+    )");
+  LogResults(tables_results);
+
+  if (GetParam() == POSTGRESQL) {
+    auto expected_tables = std::vector<ValueRow>({
+        {"test_queue_1", "QUEUE", Ns(), Ns(), Ns(), Ns(), Ns()},
+        {"test_queue_2", "QUEUE", "queue_parent", "CASCADE", "IN PARENT", Ns(),
+         "INTERVAL '24 HOURS' ON commit_ts"},
+    });
+    EXPECT_THAT(tables_results, IsOkAndHoldsRows(expected_tables));
+  } else {
+    auto expected_tables = std::vector<ValueRow>({
+        {"TestQueue1", "QUEUE", Ns(), Ns(), Ns(), Ns(), Ns()},
+        {"TestQueue2", "QUEUE", "QueueParent", "CASCADE", "IN PARENT", Ns(),
+         "OLDER_THAN(CommitTimestamp, INTERVAL 1 DAY)"},
+    });
+    EXPECT_THAT(tables_results, IsOkAndHoldsRows(expected_tables));
+  }
+
+  auto columns_results = Query(R"(
+      SELECT
+        table_name,
+        column_name,
+        ordinal_position,
+        is_nullable,
+        spanner_type
+      FROM
+        information_schema.columns
+      WHERE
+        table_name IN (
+          SELECT table_name FROM information_schema.tables WHERE table_type = 'QUEUE'
+        )
+      ORDER BY
+        table_name,
+        ordinal_position
+    )");
+  LogResults(columns_results);
+
+  if (GetParam() == POSTGRESQL) {
+    auto expected_columns = std::vector<ValueRow>({
+        {"test_queue_1", "deliver_time", 1, "NO", "timestamp with time zone"},
+        {"test_queue_1", "id", 2, "NO", "bigint"},
+        {"test_queue_1", "payload", 3, "NO", "bytea"},
+        {"test_queue_2", "deliver_time", 1, "NO", "timestamp with time zone"},
+        {"test_queue_2", "id", 2, "NO", "bigint"},
+        {"test_queue_2", "commit_ts", 3, "NO", "spanner.commit_timestamp"},
+        {"test_queue_2", "payload", 4, "NO", "character varying"},
+    });
+    EXPECT_THAT(columns_results, IsOkAndHoldsRows(expected_columns));
+  } else {
+    auto expected_columns = std::vector<ValueRow>({
+        {"TestQueue1", "Id", 1, "NO", "INT64"},
+        {"TestQueue1", "Payload", 2, "NO", "BYTES(MAX)"},
+        {"TestQueue1", "DeliverTime", 3, "NO", "TIMESTAMP"},
+        {"TestQueue2", "Id", 1, "NO", "INT64"},
+        {"TestQueue2", "CommitTimestamp", 2, "NO", "TIMESTAMP"},
+        {"TestQueue2", "Payload", 3, "NO", "STRING(MAX)"},
+        {"TestQueue2", "DeliverTime", 4, "NO", "TIMESTAMP"},
+    });
+    EXPECT_THAT(columns_results, IsOkAndHoldsRows(expected_columns));
+  }
+
+  auto indexes_results = Query(R"(
+      SELECT
+        table_name,
+        index_name,
+        index_type
+      FROM
+        information_schema.indexes
+      WHERE
+        table_name IN (
+          SELECT table_name FROM information_schema.tables WHERE table_type = 'QUEUE'
+        )
+      ORDER BY
+        table_name,
+        index_name
+    )");
+  LogResults(indexes_results);
+
+  if (GetParam() == POSTGRESQL) {
+    auto expected_indexes = std::vector<ValueRow>({
+        {"test_queue_1", "PRIMARY_KEY", "PRIMARY_KEY"},
+        {"test_queue_2", "PRIMARY_KEY", "PRIMARY_KEY"},
+    });
+    EXPECT_THAT(indexes_results, IsOkAndHoldsRows(expected_indexes));
+  } else {
+    auto expected_indexes = std::vector<ValueRow>({
+        {"TestQueue1", "PRIMARY_KEY", "PRIMARY_KEY"},
+        {"TestQueue2", "PRIMARY_KEY", "PRIMARY_KEY"},
+    });
+    EXPECT_THAT(indexes_results, IsOkAndHoldsRows(expected_indexes));
+  }
+
+  auto column_options_results = Query(R"(
+      SELECT
+        table_name,
+        column_name,
+        option_name,
+        option_value
+      FROM
+        information_schema.column_options
+      WHERE
+        table_name IN (
+          SELECT table_name FROM information_schema.tables WHERE table_type = 'QUEUE'
+        )
+      ORDER BY
+        table_name,
+        column_name,
+        option_name
+    )");
+  LogResults(column_options_results);
+
+  if (GetParam() == POSTGRESQL) {
+    auto expected_options = std::vector<ValueRow>({
+        {"test_queue_2", "commit_ts", "allow_commit_timestamp", "TRUE"},
+    });
+    EXPECT_THAT(column_options_results, IsOkAndHoldsRows(expected_options));
+  } else {
+    auto expected_options = std::vector<ValueRow>({
+        {"TestQueue2", "CommitTimestamp", "allow_commit_timestamp", "TRUE"},
+    });
+    EXPECT_THAT(column_options_results, IsOkAndHoldsRows(expected_options));
+  }
 }
 
 }  // namespace

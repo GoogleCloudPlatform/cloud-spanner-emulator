@@ -86,6 +86,7 @@ using ::emulator::tests::common::TestEnum;
 
 using googlesql::values::Array;
 using googlesql::values::Bool;
+using googlesql::values::Bytes;
 using googlesql::values::Date;
 using googlesql::values::Enum;
 using googlesql::values::Int64;
@@ -259,6 +260,8 @@ class QueryEngineTestBase : public testing::Test {
   const Schema* dynamic_property_graph_schema() {
     return dynamic_property_graph_schema_.get();
   }
+  const Schema* queue_schema() { return queue_schema_.get(); }
+  RowReader* queue_reader() { return &queue_reader_; }
   RowReader* change_stream_partition_table_reader() {
     return &change_stream_partition_table_reader_;
   }
@@ -360,6 +363,7 @@ class QueryEngineTestBase : public testing::Test {
   std::unique_ptr<const Schema> timestamp_date_schema_;
   std::unique_ptr<const Schema> property_graph_schema_;
   std::unique_ptr<const Schema> dynamic_property_graph_schema_;
+  std::unique_ptr<const Schema> queue_schema_;
   std::unique_ptr<const Schema> proto_schema_ =
       test::CreateSchemaWithProtoEnumColumn(&type_factory_, read_descriptors());
 
@@ -377,6 +381,14 @@ class QueryEngineTestBase : public testing::Test {
            Timestamp(absl::FromUnixSeconds(2))},
           {Int64(4), String("four"), Date(4),
            Timestamp(absl::FromUnixSeconds(4))}}}}}};
+
+  test::TestRowReader queue_reader_{
+      {{"myqueue",
+        {{"id", "Payload", "DeliverTime"},
+         {googlesql::types::Int64Type(), googlesql::types::BytesType(),
+          googlesql::types::TimestampType()},
+         {{Int64(1), Bytes("one"), Timestamp(absl::FromUnixSeconds(1))},
+          {Int64(2), Bytes("two"), Timestamp(absl::FromUnixSeconds(2))}}}}}};
 
   test::TestRowReader property_graph_reader_{
       {{"node_table",
@@ -482,6 +494,8 @@ class QueryEngineTest
                                                  &type_factory_, POSTGRESQL));
       timestamp_date_schema_ =
           test::CreateSchemaWithTimestampDateTable(&type_factory_, POSTGRESQL);
+      queue_schema_ =
+          test::CreateSchemaWithOneQueue(&type_factory_, POSTGRESQL);
     } else if (GetParam() == GOOGLE_STANDARD_SQL) {
       schema_ = test::CreateSchemaWithOneTable(&type_factory_);
       multi_table_schema_ = test::CreateSchemaWithMultiTables(&type_factory_);
@@ -499,6 +513,7 @@ class QueryEngineTest
                            test::CreateSchemaWithOneSequence(&type_factory_));
       timestamp_date_schema_ =
           test::CreateSchemaWithTimestampDateTable(&type_factory_);
+      queue_schema_ = test::CreateSchemaWithOneQueue(&type_factory_);
     }
     query_engine_ =
         std::make_unique<QueryEngine>(&type_factory_, sequence_schema_.get());
@@ -601,6 +616,431 @@ TEST_P(QueryEngineTest, DetectsDMLQueries) {
   EXPECT_TRUE(IsDMLQuery("UPDATE Users SET Name = 'John' WHERE UserId = 1"));
   EXPECT_TRUE(IsDMLQuery("DELETE from Users where UserId = 'John'"));
   EXPECT_FALSE(IsDMLQuery("SELECT * from Users"));
+}
+
+TEST_P(QueryEngineTest, RejectUpdateOnQueue) {
+  MockRowWriter writer;
+  std::string sql =
+      GetParam() == POSTGRESQL
+          ? "UPDATE myqueue SET \"Payload\" = 'new'::bytea WHERE id = 1"
+          : "UPDATE myqueue SET Payload = b'new' WHERE id = 1";
+  EXPECT_THAT(
+      query_engine().ExecuteSql(
+          Query{sql}, QueryContext{queue_schema(), queue_reader(), &writer}),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("UPDATE is not supported on Queue myqueue")));
+
+  if (GetParam() == GOOGLE_STANDARD_SQL) {
+    EXPECT_THAT(
+        query_engine().ExecuteSql(
+            Query{"INSERT OR UPDATE INTO myqueue (id, Payload) VALUES (3, "
+                  "b'three')"},
+            QueryContext{queue_schema(), queue_reader(), &writer}),
+        StatusIs(
+            absl::StatusCode::kInvalidArgument,
+            HasSubstr("Insert mode OR UPDATE is not supported on queues.")));
+  }
+}
+
+TEST_P(QueryEngineTest, SelectFromQueue) {
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(Query{"SELECT * FROM myqueue ORDER BY id"},
+                                QueryContext{queue_schema(), queue_reader()}));
+
+  EXPECT_THAT(
+      GetColumnNames(*result.rows),
+      ElementsAre("id", "Payload",
+                  GetParam() == POSTGRESQL ? "deliver_time" : "DeliverTime"));
+  EXPECT_THAT(
+      GetAllColumnValues(std::move(result.rows)),
+      IsOkAndHolds(ElementsAre(
+          std::vector<googlesql::Value>{Int64(1), Bytes("one"),
+                                        Timestamp(absl::FromUnixSeconds(1))},
+          std::vector<googlesql::Value>{Int64(2), Bytes("two"),
+                                        Timestamp(absl::FromUnixSeconds(2))})));
+
+  if (GetParam() == POSTGRESQL) {
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+        QueryResult camel_result,
+        query_engine().ExecuteSql(
+            Query{"SELECT \"DeliverTime\" FROM myqueue WHERE \"DeliverTime\" "
+                  "IS NOT NULL ORDER BY id"},
+            QueryContext{queue_schema(), queue_reader()}));
+    EXPECT_THAT(GetColumnNames(*camel_result.rows), ElementsAre("DeliverTime"));
+    EXPECT_THAT(
+        GetAllColumnValues(std::move(camel_result.rows)),
+        IsOkAndHolds(ElementsAre(
+            std::vector<googlesql::Value>{Timestamp(absl::FromUnixSeconds(1))},
+            std::vector<googlesql::Value>{
+                Timestamp(absl::FromUnixSeconds(2))})));
+  }
+}
+
+TEST_P(QueryEngineTest, InsertIntoQueue) {
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(
+          &Mutation::ops,
+          ElementsAre(AllOf(
+              Field(&MutationOp::type, MutationOpType::kInsert),
+              Field(&MutationOp::table, "myqueue"),
+              Field(&MutationOp::columns, ElementsAre("id", "Payload")),
+              Field(&MutationOp::rows, UnorderedElementsAre(ValueList{
+                                           Int64(3), Bytes("three")})))))))
+      .WillOnce(Return(absl::OkStatus()));
+
+  std::string sql =
+      GetParam() == POSTGRESQL
+          ? "INSERT INTO myqueue (id, \"Payload\") VALUES (3, 'three'::bytea)"
+          : "INSERT INTO myqueue (id, Payload) VALUES (3, b'three')";
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(
+          Query{sql}, QueryContext{queue_schema(), queue_reader(), &writer}));
+  EXPECT_EQ(result.modified_row_count, 1);
+}
+
+TEST_P(QueryEngineTest, DeleteFromQueue) {
+  MockRowWriter writer;
+  EXPECT_CALL(
+      writer,
+      Write(Property(&Mutation::ops,
+                     ElementsAre(AllOf(
+                         Field(&MutationOp::type, MutationOpType::kDelete),
+                         Field(&MutationOp::table, "myqueue"),
+                         Field(&MutationOp::key_set,
+                               Property(&KeySet::keys, UnorderedElementsAre(Key{
+                                                           {Int64(1)}}))))))))
+      .WillRepeatedly(Return(absl::OkStatus()));
+
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(
+          Query{"DELETE FROM myqueue WHERE id = 1"},
+          QueryContext{queue_schema(), queue_reader(), &writer}));
+  EXPECT_EQ(result.modified_row_count, 1);
+
+  if (GetParam() == GOOGLE_STANDARD_SQL) {
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+        result,
+        query_engine().ExecuteSql(
+            Query{"DELETE FROM myqueue WHERE id = 1 ASSERT_ROWS_MODIFIED 1"},
+            QueryContext{queue_schema(), queue_reader(), &writer}));
+    EXPECT_EQ(result.modified_row_count, 1);
+
+    EXPECT_THAT(
+        query_engine().ExecuteSql(
+            Query{"DELETE FROM myqueue WHERE id = 1 ASSERT_ROWS_MODIFIED 2"},
+            QueryContext{queue_schema(), queue_reader(), &writer}),
+        StatusIs(absl::StatusCode::kOutOfRange,
+                 HasSubstr("ASSERT_ROWS_MODIFIED expected 2 rows modified, but "
+                           "found 1")));
+  }
+}
+
+TEST_P(QueryEngineTest, QueueReceiveTvf) {
+  std::string sql =
+      GetParam() == POSTGRESQL
+          ? "SELECT * FROM spanner.receive_myqueue(10, 1, '10s')"
+          : "SELECT * FROM RECEIVE_myqueue("
+            "max_batch_size => 10, max_duration => '10s', priority => 1)";
+
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(Query{sql},
+                                QueryContext{queue_schema(), queue_reader()}));
+
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_THAT(
+        GetColumnNames(*result.rows),
+        ElementsAre("id", "Payload", "deliver_time",
+                    "spanner_lease_expiration_timestamp", "spanner_lease_token",
+                    "spanner_last_batch_message"));
+  } else {
+    EXPECT_THAT(GetColumnNames(*result.rows),
+                ElementsAre("id", "Payload", "DeliverTime",
+                            "SpannerLeaseExpirationTimestamp",
+                            "SpannerLeaseToken", "SpannerLastBatchMessage"));
+  }
+
+  EXPECT_TRUE(result.rows->Next());
+  EXPECT_EQ(result.rows->ColumnValue(0), Int64(1));
+  EXPECT_EQ(result.rows->ColumnValue(1), Bytes("one"));
+  EXPECT_EQ(result.rows->ColumnValue(2), Timestamp(absl::FromUnixSeconds(1)));
+  EXPECT_GT(result.rows->ColumnValue(3).ToUnixPicos().ToAbslTime(),
+            result.rows->ColumnValue(2).ToUnixPicos().ToAbslTime());
+  EXPECT_EQ(result.rows->ColumnValue(4), String("mock-lease-token-1"));
+  EXPECT_EQ(result.rows->ColumnValue(5), Bool(false));
+
+  EXPECT_TRUE(result.rows->Next());
+  EXPECT_EQ(result.rows->ColumnValue(0), Int64(2));
+  EXPECT_EQ(result.rows->ColumnValue(1), Bytes("two"));
+  EXPECT_EQ(result.rows->ColumnValue(2), Timestamp(absl::FromUnixSeconds(2)));
+  EXPECT_GT(result.rows->ColumnValue(3).ToUnixPicos().ToAbslTime(),
+            result.rows->ColumnValue(2).ToUnixPicos().ToAbslTime());
+  EXPECT_EQ(result.rows->ColumnValue(4), String("mock-lease-token-2"));
+  EXPECT_EQ(result.rows->ColumnValue(5), Bool(true));
+
+  // Row 3 has future DeliverTime (now + 1h), so it must be filtered out.
+  EXPECT_FALSE(result.rows->Next());
+}
+
+TEST_P(QueryEngineTest, QueueRenewLeaseTvf) {
+  std::string sql =
+      GetParam() == POSTGRESQL
+          ? "SELECT * FROM spanner.renewlease_myqueue(ARRAY['tok1', 'tok2'])"
+          : "SELECT * FROM RENEWLEASE_myqueue("
+            "lease_tokens => ARRAY['tok1', 'tok2'])";
+
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(Query{sql},
+                                QueryContext{queue_schema(), queue_reader()}));
+
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_THAT(
+        GetColumnNames(*result.rows),
+        ElementsAre("spanner_old_lease_token", "spanner_new_lease_token",
+                    "spanner_lease_expiration_timestamp"));
+  } else {
+    EXPECT_THAT(GetColumnNames(*result.rows),
+                ElementsAre("SpannerOldLeaseToken", "SpannerNewLeaseToken",
+                            "SpannerLeaseExpirationTimestamp"));
+  }
+
+  EXPECT_TRUE(result.rows->Next());
+  EXPECT_EQ(result.rows->ColumnValue(0), String("tok1"));
+  EXPECT_EQ(result.rows->ColumnValue(1), String("tok1-renewed"));
+  EXPECT_FALSE(result.rows->ColumnValue(2).is_null());
+
+  EXPECT_TRUE(result.rows->Next());
+  EXPECT_EQ(result.rows->ColumnValue(0), String("tok2"));
+  EXPECT_EQ(result.rows->ColumnValue(1), String("tok2-renewed"));
+  EXPECT_FALSE(result.rows->ColumnValue(2).is_null());
+
+  EXPECT_FALSE(result.rows->Next());
+
+  // Parameterized query with ARRAY[@t1, @t2].
+  Query param_query =
+      GetParam() == POSTGRESQL
+          ? Query{"SELECT * FROM spanner.renewlease_myqueue(ARRAY[$1, $2])",
+                  {{"p1", String("tok1")}, {"p2", String("tok2")}}}
+          : Query{
+                "SELECT * FROM RENEWLEASE_myqueue("
+                "lease_tokens => ARRAY[@t1, @t2])",
+                {{"t1", String("tok1")}, {"t2", String("tok2")}}};
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult param_result,
+      query_engine().ExecuteSql(param_query,
+                                QueryContext{queue_schema(), queue_reader()}));
+  EXPECT_TRUE(param_result.rows->Next());
+  EXPECT_EQ(param_result.rows->ColumnValue(0), String("tok1"));
+  EXPECT_EQ(param_result.rows->ColumnValue(1), String("tok1-renewed"));
+  EXPECT_FALSE(param_result.rows->ColumnValue(2).is_null());
+  EXPECT_TRUE(param_result.rows->Next());
+  EXPECT_EQ(param_result.rows->ColumnValue(0), String("tok2"));
+  EXPECT_EQ(param_result.rows->ColumnValue(1), String("tok2-renewed"));
+  EXPECT_FALSE(param_result.rows->ColumnValue(2).is_null());
+  EXPECT_FALSE(param_result.rows->Next());
+
+  // NULL token in lease_tokens array fails with INVALID_ARGUMENT.
+  std::string null_token_sql =
+      GetParam() == POSTGRESQL
+          ? "SELECT * FROM spanner.renewlease_myqueue(ARRAY['tok1', NULL])"
+          : "SELECT * FROM RENEWLEASE_myqueue("
+            "lease_tokens => ARRAY['tok1', NULL])";
+  EXPECT_THAT(
+      query_engine().ExecuteSql(Query{null_token_sql},
+                                QueryContext{queue_schema(), queue_reader()}),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("The request has an invalid lease token.")));
+}
+TEST_P(QueryEngineTest, QueueTvfValidationAndExtensions) {
+  auto pg_recv_sql = [](absl::string_view args, absl::string_view suffix = "") {
+    return absl::StrCat("SELECT * FROM spanner.receive_myqueue(", args, ")",
+                        suffix);
+  };
+
+  // Test DeliverTime > now filtering.
+  test::TestRowReader reader_with_future{
+      {{"myqueue",
+        {{"id", "Payload", "DeliverTime"},
+         {googlesql::types::Int64Type(), googlesql::types::BytesType(),
+          googlesql::types::TimestampType()},
+         {{Int64(1), Bytes("one"), NullTimestamp()},
+          {Int64(2), Bytes("future"),
+           Timestamp(absl::Now() + absl::Hours(1))}}}}}};
+  std::string recv_all_sql = GetParam() == POSTGRESQL
+                                 ? pg_recv_sql("NULL, NULL, NULL")
+                                 : "SELECT * FROM RECEIVE_myqueue()";
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(QueryResult future_res,
+                       query_engine().ExecuteSql(
+                           Query{recv_all_sql},
+                           QueryContext{queue_schema(), &reader_with_future}));
+  EXPECT_TRUE(future_res.rows->Next());
+  EXPECT_EQ(future_res.rows->ColumnValue(0), Int64(1));
+  ASSERT_FALSE(future_res.rows->ColumnValue(2).is_null());
+  EXPECT_LT(future_res.rows->ColumnValue(2).ToUnixPicos().ToAbslTime(),
+            future_res.rows->ColumnValue(3).ToUnixPicos().ToAbslTime());
+  EXPECT_EQ(future_res.rows->ColumnValue(5), Bool(true));
+  EXPECT_FALSE(future_res.rows->Next());
+
+  // 1. Test max_batch_size = 1 sets SpannerLastBatchMessage = true on row 1.
+  std::string batch1_sql =
+      GetParam() == POSTGRESQL
+          ? pg_recv_sql("1, NULL, NULL")
+          : "SELECT * FROM RECEIVE_myqueue(max_batch_size => 1)";
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult batch1_res,
+      query_engine().ExecuteSql(Query{batch1_sql},
+                                QueryContext{queue_schema(), queue_reader()}));
+  EXPECT_TRUE(batch1_res.rows->Next());
+  EXPECT_EQ(batch1_res.rows->ColumnValue(0), Int64(1));
+  EXPECT_EQ(batch1_res.rows->ColumnValue(5), Bool(true));
+  EXPECT_FALSE(batch1_res.rows->Next());
+
+  // 2. Test argument validation errors.
+  EXPECT_THAT(
+      query_engine().ExecuteSql(
+          Query{GetParam() == POSTGRESQL
+                    ? pg_recv_sql("0, NULL, NULL")
+                    : "SELECT * FROM RECEIVE_myqueue(max_batch_size => 0)"},
+          QueryContext{queue_schema(), queue_reader()}),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Max batch size 0 for Queue Receive TVF is invalid; "
+                         "must be between 1 and 1000.")));
+
+  EXPECT_THAT(query_engine().ExecuteSql(
+                  Query{GetParam() == POSTGRESQL
+                            ? pg_recv_sql("10, 5, NULL")
+                            : "SELECT * FROM RECEIVE_myqueue(priority => 5)"},
+                  QueryContext{queue_schema(), queue_reader()}),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Invalid priority for Queue Receive TVF.")));
+
+  EXPECT_THAT(
+      query_engine().ExecuteSql(
+          Query{
+              GetParam() == POSTGRESQL
+                  ? pg_recv_sql("10, 1, 'invalid'")
+                  : "SELECT * FROM RECEIVE_myqueue(max_duration => 'invalid')"},
+          QueryContext{queue_schema(), queue_reader()}),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Invalid max_duration format.")));
+
+  if (GetParam() == GOOGLE_STANDARD_SQL) {
+    EXPECT_THAT(
+        query_engine().ExecuteSql(
+            Query{"SELECT * FROM RECEIVE_myqueue(max_batch_size => 1 + 1)"},
+            QueryContext{queue_schema(), queue_reader()}),
+        StatusIs(absl::StatusCode::kInvalidArgument,
+                 HasSubstr("Argument 0 is not a literal or parameter. Implicit "
+                           "type conversions are not supported.")));
+  }
+
+  // 3. Test QueueTVFRule syntax restriction errors (WHERE, ORDER BY, LIMIT).
+  for (const std::string& invalid_sql : std::vector<std::string>{
+           GetParam() == POSTGRESQL
+               ? pg_recv_sql("NULL, NULL, NULL", " WHERE id = 1")
+               : "SELECT * FROM RECEIVE_myqueue() WHERE id = 1",
+           GetParam() == POSTGRESQL
+               ? pg_recv_sql("NULL, NULL, NULL", " ORDER BY id")
+               : "SELECT * FROM RECEIVE_myqueue() ORDER BY id",
+           GetParam() == POSTGRESQL
+               ? pg_recv_sql("NULL, NULL, NULL", " LIMIT 1")
+               : "SELECT * FROM RECEIVE_myqueue() LIMIT 1",
+           GetParam() == POSTGRESQL
+               ? "SELECT * FROM spanner.renewlease_myqueue(ARRAY['t1']) ORDER "
+                 "BY 1"
+               : "SELECT * FROM RENEWLEASE_myqueue(ARRAY['t1']) ORDER BY 1"}) {
+    EXPECT_THAT(
+        query_engine().ExecuteSql(Query{invalid_sql},
+                                  QueryContext{queue_schema(), queue_reader()}),
+        StatusIs(absl::StatusCode::kInvalidArgument,
+                 HasSubstr("Queue TVF must not be combined with any other SQL "
+                           "statements.")));
+  }
+
+  // 4. Verify Named Schema Queues are rejected.
+  if (GetParam() == GOOGLE_STANDARD_SQL) {
+    EXPECT_THAT(
+        test::CreateSchemaFromDDL(
+            {R"(CREATE SCHEMA myschema)",
+             R"(CREATE QUEUE myschema.nsqueue (id INT64 NOT NULL, Payload BYTES(MAX) NOT NULL) PRIMARY KEY (id), OPTIONS (receive_mode = 'PULL'))"},
+            type_factory()),
+        StatusIs(absl::StatusCode::kUnimplemented,
+                 HasSubstr("Queue not yet supported in named schema")));
+  }
+
+  // 5. Test Per-Placement Queue TVFs in both dialects.
+  if (GetParam() == GOOGLE_STANDARD_SQL
+  ) {
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+        std::unique_ptr<const Schema> placement_schema,
+        test::CreateSchemaFromDDL(
+            GetParam() == POSTGRESQL
+                ? std::vector<
+                      std::
+                          string>{R"(CREATE PLACEMENT p1 WITH (instance_partition = 'part1'))",
+                                  R"(CREATE QUEUE pqueue (id bigint NOT NULL, "Payload" bytea NOT NULL, PRIMARY KEY(id)))"}
+                : std::vector<
+                      std::
+                          string>{R"(CREATE PLACEMENT p1 OPTIONS (instance_partition = 'part1'))",
+                                  R"(CREATE QUEUE pqueue (id INT64 NOT NULL, Payload BYTES(MAX) NOT NULL) PRIMARY KEY (id), OPTIONS (receive_mode = 'PULL'))"},
+            type_factory(), /*proto_descriptor_bytes=*/"", GetParam()));
+    test::TestRowReader placement_reader{
+        {{"pqueue",
+          {{"id", "Payload", "DeliverTime"},
+           {googlesql::types::Int64Type(), googlesql::types::BytesType(),
+            googlesql::types::TimestampType()},
+           {{Int64(42), Bytes("p-msg"), NullTimestamp()}}}}}};
+
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+        QueryResult placement_res,
+        query_engine().ExecuteSql(
+            Query{
+                GetParam() == POSTGRESQL
+                    ? "SELECT id, \"Payload\" FROM "
+                      "spanner.receive_pqueue_placement_p1(NULL, NULL, NULL)"
+                    : "SELECT id, Payload FROM RECEIVE_pqueue_PLACEMENT_p1()"},
+            QueryContext{placement_schema.get(), &placement_reader}));
+    EXPECT_THAT(
+        GetAllColumnValues(std::move(placement_res.rows)),
+        IsOkAndHolds(ElementsAre(ElementsAre(Int64(42), Bytes("p-msg")))));
+  }
+
+  if (GetParam() == GOOGLE_STANDARD_SQL) {
+    // 6. A queue that declares DeliverTime itself must not get a second
+    // system-generated deliver time column in the TVF output.
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+        std::unique_ptr<const Schema> deliver_time_schema,
+        test::CreateSchemaFromDDL(
+            {R"(CREATE QUEUE dtqueue (DeliverTime TIMESTAMP NOT NULL, Payload BYTES(MAX) NOT NULL) PRIMARY KEY (DeliverTime), OPTIONS (receive_mode = 'PULL'))"},
+            type_factory()));
+    test::TestRowReader deliver_time_reader{
+        {{"dtqueue",
+          {{"DeliverTime", "Payload"},
+           {googlesql::types::TimestampType(), googlesql::types::BytesType()},
+           {{Timestamp(absl::FromUnixSeconds(7)), Bytes("dt-msg")}}}}}};
+
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+        QueryResult deliver_time_res,
+        query_engine().ExecuteSql(
+            Query{"SELECT * FROM RECEIVE_dtqueue()"},
+            QueryContext{deliver_time_schema.get(), &deliver_time_reader}));
+    EXPECT_THAT(
+        GetColumnNames(*deliver_time_res.rows),
+        ElementsAre("DeliverTime", "Payload", "SpannerLeaseExpirationTimestamp",
+                    "SpannerLeaseToken", "SpannerLastBatchMessage"));
+    EXPECT_TRUE(deliver_time_res.rows->Next());
+    EXPECT_EQ(deliver_time_res.rows->ColumnValue(0),
+              Timestamp(absl::FromUnixSeconds(7)));
+    EXPECT_EQ(deliver_time_res.rows->ColumnValue(1), Bytes("dt-msg"));
+    EXPECT_EQ(deliver_time_res.rows->ColumnValue(4), Bool(true));
+    EXPECT_FALSE(deliver_time_res.rows->Next());
+  }
 }
 
 TEST_P(QueryEngineTest, CallCancelQuery) {
@@ -4913,18 +5353,21 @@ TEST_P(QueryEngineTest, ExecuteColumnExpressionUDF) {
 }
 
 TEST_P(QueryEngineTest, ExecuteUDFWithDefault) {
+  std::string ddl;
   if (GetParam() == POSTGRESQL) {
-    GTEST_SKIP();
+    ddl =
+        R"(CREATE FUNCTION test_udf(x bigint DEFAULT 1) RETURNS bigint IMMUTABLE
+          RETURN (x+1))";
+  } else {
+    ddl =
+        R"(CREATE FUNCTION test_udf(x INT64 DEFAULT 1) RETURNS INT64 SQL SECURITY
+          INVOKER AS (x+1))";
   }
 
-  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<const Schema> schema,
-      test::CreateSchemaFromDDL(
-          {
-              R"(CREATE FUNCTION test_udf(x INT64 DEFAULT 1) RETURNS INT64 SQL SECURITY
-            INVOKER AS (x+1))"},
-          type_factory(),
-          /*proto_descriptor_bytes=*/""));
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const Schema> schema,
+                       test::CreateSchemaFromDDL({ddl}, type_factory(),
+                                                 /*proto_descriptor_bytes=*/"",
+                                                 /*dialect=*/GetParam()));
 
   test::TestRowReader reader{
       {{"test_table",
@@ -4948,6 +5391,75 @@ TEST_P(QueryEngineTest, ExecuteUDFWithDefault) {
   ASSERT_NE(result.rows, nullptr);
   EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
               IsOkAndHolds(UnorderedElementsAre(ElementsAre(Int64(4)))));
+
+  if (GetParam() == POSTGRESQL) {
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+        result, query_engine().ExecuteSql(Query{"SELECT test_udf(x => 5)"},
+                                          QueryContext{schema.get(), &reader}));
+    ASSERT_NE(result.rows, nullptr);
+    EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+                IsOkAndHolds(UnorderedElementsAre(ElementsAre(Int64(6)))));
+  }
+}
+
+TEST_P(QueryEngineTest, ExecuteUDFWithMultipleArgumentsAndDefaults) {
+  std::string ddl;
+  if (GetParam() == POSTGRESQL) {
+    ddl =
+        R"(CREATE FUNCTION pg_add_values(x bigint, y bigint DEFAULT 10) RETURNS bigint IMMUTABLE
+          RETURN (x+y))";
+  } else {
+    ddl =
+        R"(CREATE FUNCTION pg_add_values(x INT64, y INT64 DEFAULT 10) RETURNS INT64 SQL SECURITY
+          INVOKER AS (x+y))";
+  }
+
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::unique_ptr<const Schema> schema,
+                       test::CreateSchemaFromDDL({ddl}, type_factory(),
+                                                 /*proto_descriptor_bytes=*/"",
+                                                 /*dialect=*/GetParam()));
+
+  test::TestRowReader reader{{}};
+
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      QueryResult result,
+      query_engine().ExecuteSql(Query{"SELECT pg_add_values(5)"},
+                                QueryContext{schema.get(), &reader}));
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(UnorderedElementsAre(ElementsAre(Int64(15)))));
+
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      result, query_engine().ExecuteSql(Query{"SELECT pg_add_values(5, 20)"},
+                                        QueryContext{schema.get(), &reader}));
+  ASSERT_NE(result.rows, nullptr);
+  EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+              IsOkAndHolds(UnorderedElementsAre(ElementsAre(Int64(25)))));
+
+  if (GetParam() == POSTGRESQL) {
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+        result, query_engine().ExecuteSql(Query{"SELECT pg_add_values(x => 5)"},
+                                          QueryContext{schema.get(), &reader}));
+    ASSERT_NE(result.rows, nullptr);
+    EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+                IsOkAndHolds(UnorderedElementsAre(ElementsAre(Int64(15)))));
+
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(result,
+                         query_engine().ExecuteSql(
+                             Query{"SELECT pg_add_values(x => 5, y => 20)"},
+                             QueryContext{schema.get(), &reader}));
+    ASSERT_NE(result.rows, nullptr);
+    EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+                IsOkAndHolds(UnorderedElementsAre(ElementsAre(Int64(25)))));
+
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(result,
+                         query_engine().ExecuteSql(
+                             Query{"SELECT pg_add_values(y => 20, x => 5)"},
+                             QueryContext{schema.get(), &reader}));
+    ASSERT_NE(result.rows, nullptr);
+    EXPECT_THAT(GetAllColumnValues(std::move(result.rows)),
+                IsOkAndHolds(UnorderedElementsAre(ElementsAre(Int64(25)))));
+  }
 }
 
 TEST_P(QueryEngineTest, ExecuteScalarSubqueryUDF) {

@@ -36,6 +36,7 @@
 #include "backend/schema/catalog/placement.h"
 #include "backend/schema/catalog/property_graph.h"
 #include "backend/schema/catalog/proto_bundle.h"
+#include "backend/schema/catalog/queue.h"
 #include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/catalog/udf.h"
@@ -106,6 +107,13 @@ class Schema {
   // Same as FindTableUsingSynonym but case-sensitive.
   const Table* FindTableUsingSynonymCaseSensitive(
       const std::string& table_synonym) const;
+
+  // Finds a queue by its name. Returns a const pointer of the queue,
+  // or nullptr if the queue is not found. Name comparison is case-insensitive.
+  const Queue* FindQueue(const std::string& queue_name) const;
+
+  // Same as FindQueue but case-sensitive.
+  const Queue* FindQueueCaseSensitive(const std::string& queue_name) const;
 
   // Finds an index by its name. Returns a const pointer of the index, or
   // nullptr if the index is not found. Name comparison is case-insensitive.
@@ -209,6 +217,9 @@ class Schema {
     return locality_groups_;
   }
 
+  // List all the user-visible queues in this schema.
+  absl::Span<const Queue* const> queues() const { return queues_; }
+
   // Returns the default time zone for this schema.
   std::string default_time_zone() const {
     if (options() != nullptr && options()->default_time_zone().has_value()) {
@@ -248,6 +259,9 @@ class Schema {
 
   // Returns the number of locality groups in the schema.
   int num_locality_groups() const { return locality_groups_map_.size(); }
+
+  // Returns the number of queues in the schema.
+  int num_queue() const { return queues_map_.size(); }
 
   absl::Span<const Placement* const> placements() const { return placements_; }
 
@@ -370,6 +384,13 @@ class Schema {
   // A map that owns all the property graphs. Key is the name of the property
   // graph. Hash and comparison on the keys are case-insensitive.
   CaseInsensitiveStringMap<const PropertyGraph*> property_graphs_map_;
+
+  // A vector that maintains the original order of queues in the DDL.
+  std::vector<const Queue*> queues_;
+
+  // A map that owns all the queues. Key is the name of the queue. Hash and
+  // comparison on the keys are case-insensitive.
+  CaseInsensitiveStringMap<const Queue*> queues_map_;
 
   // Database options in the DDL.
   const DatabaseOptions* database_options_ = nullptr;

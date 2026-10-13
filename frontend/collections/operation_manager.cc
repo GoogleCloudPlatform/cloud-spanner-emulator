@@ -24,6 +24,7 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "common/errors.h"
 #include "frontend/common/uris.h"
@@ -74,6 +75,21 @@ absl::Status OperationManager::DeleteOperation(
     const std::string& operation_uri) {
   absl::MutexLock lock(mu_);
   operations_map_.erase(operation_uri);
+  return absl::OkStatus();
+}
+
+absl::Status OperationManager::DeleteOperations(
+    absl::string_view resource_uri) {
+  absl::MutexLock lock(mu_);
+  // Operations are keyed by "<resource_uri>/operations/<operation_id>", so all
+  // the operations of the resource are contiguous in the map.
+  const std::string operation_uri_prefix =
+      MakeOperationUri(resource_uri, /*operation_id=*/"");
+  auto itr = operations_map_.lower_bound(operation_uri_prefix);
+  while (itr != operations_map_.end() &&
+         absl::StartsWith(itr->first, operation_uri_prefix)) {
+    itr = operations_map_.erase(itr);
+  }
   return absl::OkStatus();
 }
 

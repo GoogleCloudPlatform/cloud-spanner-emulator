@@ -1886,6 +1886,134 @@ TEST_P(SchemaUpdaterTest, CreateVectorIndexTwoLayers) {
     )sql"})));
   EXPECT_EQ(new_schema2->FindIndex("VectorIndex")->locality_group()->Name(),
             "lg");
+  GOOGLESQL_EXPECT_OK(UpdateSchema(new_schema2.get(), {R"sql(
+    ALTER VECTOR INDEX VectorIndex REBUILD
+  )sql"}));
+  EXPECT_THAT(UpdateSchema(new_schema2.get(), {R"sql(
+    ALTER VECTOR INDEX NonExistent REBUILD
+  )sql"}),
+              StatusIs(error::IndexNotFound("NonExistent")));
+}
+
+TEST_P(SchemaUpdaterTest, CreateVectorIndexWithMultipleKeyColumns) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                        R"sql(
+      CREATE TABLE Products(
+        id STRING(64) NOT NULL,
+        embedding ARRAY<FLOAT32>(vector_length=>128),
+        category STRING(64),
+      ) PRIMARY KEY(id)
+    )sql",
+                                        R"sql(
+      CREATE VECTOR INDEX ProductsVectorAndCategoryIndex
+      ON Products(embedding, category)
+      WHERE embedding IS NOT NULL
+      OPTIONS(distance_type='COSINE', tree_depth=2, num_leaves=1000)
+    )sql"}));
+
+  auto idx = schema->FindIndex("ProductsVectorAndCategoryIndex");
+  EXPECT_NE(idx, nullptr);
+  EXPECT_TRUE(idx->is_vector_index());
+  EXPECT_EQ(idx->key_columns().size(), 2);
+  EXPECT_EQ(idx->key_columns()[0]->column()->Name(), "embedding");
+  EXPECT_EQ(idx->key_columns()[1]->column()->Name(), "category");
+
+  auto idx_data = idx->index_data_table();
+  EXPECT_NE(idx_data, nullptr);
+  EXPECT_EQ(idx_data->primary_key().size(), 3);  // embedding, category, id
+  EXPECT_EQ(idx_data->primary_key()[0]->column()->Name(), "embedding");
+  EXPECT_EQ(idx_data->primary_key()[1]->column()->Name(), "category");
+  EXPECT_EQ(idx_data->primary_key()[2]->column()->Name(), "id");
+}
+
+TEST_P(SchemaUpdaterTest,
+       CreateVectorIndexMultipleKeyColumnsNonLeadingArrayError) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  EXPECT_THAT(CreateSchema({
+                  R"sql(
+      CREATE TABLE Products(
+        id STRING(64) NOT NULL,
+        embedding ARRAY<FLOAT32>(vector_length=>128),
+        tags ARRAY<STRING(64)>,
+      ) PRIMARY KEY(id)
+    )sql",
+                  R"sql(
+      CREATE VECTOR INDEX ProductsVectorAndTagsIndex
+      ON Products(embedding, tags)
+      WHERE embedding IS NOT NULL
+      OPTIONS(distance_type='COSINE', tree_depth=2, num_leaves=1000)
+    )sql"}),
+              StatusIs(error::VectorIndexProtoArrayKeysUnsupported(
+                  "tags", "ProductsVectorAndTagsIndex")));
+}
+
+TEST_P(SchemaUpdaterTest, CreateVectorIndexWithFloat32KeyFails) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  EXPECT_THAT(CreateSchema({
+                  R"sql(
+      CREATE TABLE Products(
+        id INT64 NOT NULL,
+        embedding ARRAY<FLOAT32>(vector_length=>128) NOT NULL,
+        price FLOAT32,
+      ) PRIMARY KEY(id)
+    )sql",
+                  R"sql(
+      CREATE VECTOR INDEX ProductsVectorAndPriceIndex
+      ON Products(embedding, price)
+      WHERE embedding IS NOT NULL
+      OPTIONS(distance_type='COSINE', tree_depth=2, num_leaves=1000)
+    )sql"}),
+              StatusIs(error::VectorIndexKeyRefsUnsupportedColumn(
+                  "ProductsVectorAndPriceIndex", "price", "FLOAT32")));
+}
+
+TEST_P(SchemaUpdaterTest, CreateVectorIndexWithJsonKeyFails) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  EXPECT_THAT(CreateSchema({
+                  R"sql(
+      CREATE TABLE Products(
+        id INT64 NOT NULL,
+        embedding ARRAY<FLOAT32>(vector_length=>128) NOT NULL,
+        metadata JSON,
+      ) PRIMARY KEY(id)
+    )sql",
+                  R"sql(
+      CREATE VECTOR INDEX ProductsVectorAndMetadataIndex
+      ON Products(embedding, metadata)
+      WHERE embedding IS NOT NULL
+      OPTIONS(distance_type='COSINE', tree_depth=2, num_leaves=1000)
+    )sql"}),
+              StatusIs(error::VectorIndexKeyRefsUnsupportedColumn(
+                  "ProductsVectorAndMetadataIndex", "metadata", "JSON")));
+}
+
+TEST_P(SchemaUpdaterTest, CreateVectorIndexWithValidKeyTypesSucceeds) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({
+                                        R"sql(
+      CREATE TABLE Products(
+        id INT64 NOT NULL,
+        embedding ARRAY<FLOAT32>(vector_length=>128) NOT NULL,
+        int_col INT64,
+        str_col STRING(64),
+        bytes_col BYTES(64),
+        bool_col BOOL,
+        date_col DATE,
+        ts_col TIMESTAMP,
+        num_col NUMERIC,
+      ) PRIMARY KEY(id)
+    )sql",
+                                        R"sql(
+      CREATE VECTOR INDEX ProductsVectorAllValidKeysIndex
+      ON Products(embedding, int_col, str_col, bytes_col, bool_col, date_col, ts_col, num_col)
+      WHERE embedding IS NOT NULL
+      OPTIONS(distance_type='COSINE', tree_depth=2, num_leaves=1000)
+    )sql"}));
+
+  auto idx = schema->FindIndex("ProductsVectorAllValidKeysIndex");
+  ASSERT_NE(idx, nullptr);
+  EXPECT_EQ(idx->key_columns().size(), 8);
 }
 
 TEST_P(SchemaUpdaterTest, CreateVectorIndexThreelayers) {
@@ -2487,6 +2615,9 @@ TEST_P(SchemaUpdaterTest, AlterVectorIndex) {
   GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto new_schema, UpdateSchema(schema.get(), {
                                                                        R"sql(
       ALTER VECTOR INDEX VI DROP STORED COLUMN V
+    )sql",
+                                                                       R"sql(
+      ALTER VECTOR INDEX VI REBUILD
     )sql"}));
   EXPECT_EQ(new_schema->FindIndex("VI")->stored_columns().size(), 0);
 }

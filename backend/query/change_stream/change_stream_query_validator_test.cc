@@ -515,10 +515,74 @@ TEST_F(ChangeStreamMutableKeyRangeQueryValidatorTest,
 }
 
 TEST_F(ChangeStreamMutableKeyRangeQueryValidatorTest,
-       ValidateEndTimestampTooFarInFutureNonValid) {
+       ValidateEndTimestampWithPastStartTimestampValid) {
+  absl::Time start_time = absl::Now();
+  absl::Time query_start_time = start_time + absl::Hours(1);
+  absl::Time end_time = query_start_time + absl::Minutes(30);
+  auto stmt =
+      AnalyzeQuery(absl::Substitute("SELECT * FROM "
+                                    "READ_change_stream_test_table ('$0', "
+                                    "'$1', 'test_token', 1000 )",
+                                    start_time, end_time));
+  ChangeStreamQueryValidator validator{
+      schema_.get(),
+      query_start_time,
+      params_,
+  };
+  ASSERT_THAT(validator.IsChangeStreamQuery(stmt->resolved_statement()),
+              IsOkAndHolds(true));
+  GOOGLESQL_EXPECT_OK(stmt->resolved_statement()->Accept(&validator));
+}
+
+TEST_F(ChangeStreamMutableKeyRangeQueryValidatorTest,
+       ValidateEndTimestampWithFutureStartTimestampValid) {
   absl::Time query_start_time = absl::Now();
-  absl::Time start_time = query_start_time;
+  absl::Time start_time = query_start_time + absl::Minutes(5);
+  absl::Time end_time = start_time + absl::Minutes(30);
+  auto stmt =
+      AnalyzeQuery(absl::Substitute("SELECT * FROM "
+                                    "READ_change_stream_test_table ('$0', "
+                                    "'$1', 'test_token', 1000 )",
+                                    start_time, end_time));
+  ChangeStreamQueryValidator validator{
+      schema_.get(),
+      query_start_time,
+      params_,
+  };
+  ASSERT_THAT(validator.IsChangeStreamQuery(stmt->resolved_statement()),
+              IsOkAndHolds(true));
+  GOOGLESQL_EXPECT_OK(stmt->resolved_statement()->Accept(&validator));
+}
+
+TEST_F(ChangeStreamMutableKeyRangeQueryValidatorTest,
+       ValidateEndTimestampTooFarInFutureNonValid) {
+  absl::Time start_time = absl::Now();
+  absl::Time query_start_time = start_time + absl::Hours(1);
   absl::Time end_time = query_start_time + absl::Minutes(31);
+  auto stmt =
+      AnalyzeQuery(absl::Substitute("SELECT * FROM "
+                                    "READ_change_stream_test_table ('$0', "
+                                    "'$1', 'test_token', 1000 )",
+                                    start_time, end_time));
+  ChangeStreamQueryValidator validator{
+      schema_.get(),
+      query_start_time,
+      params_,
+  };
+  ASSERT_THAT(validator.IsChangeStreamQuery(stmt->resolved_statement()),
+              IsOkAndHolds(true));
+  EXPECT_THAT(
+      stmt->resolved_statement()->Accept(&validator),
+      StatusIs(absl::StatusCode::kOutOfRange,
+               testing::HasSubstr(
+                   "Specified end_timestamp is too far in the future.")));
+}
+
+TEST_F(ChangeStreamMutableKeyRangeQueryValidatorTest,
+       ValidateEndTimestampTooFarInFutureWithFutureStartTimestampNonValid) {
+  absl::Time query_start_time = absl::Now();
+  absl::Time start_time = query_start_time + absl::Minutes(5);
+  absl::Time end_time = start_time + absl::Minutes(31);
   auto stmt =
       AnalyzeQuery(absl::Substitute("SELECT * FROM "
                                     "READ_change_stream_test_table ('$0', "

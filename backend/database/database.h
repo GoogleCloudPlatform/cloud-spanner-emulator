@@ -145,6 +145,9 @@ class Database {
   // Unique ID generator for storage ChangeStreamIDs.
   ChangeStreamIDGenerator change_stream_id_generator_;
 
+  // Unique ID generator for storage QueueIDs.
+  QueueIDGenerator queue_id_generator_;
+
   // Unique ID generator for storage ColumnIDs.
   ColumnIDGenerator column_id_generator_;
 

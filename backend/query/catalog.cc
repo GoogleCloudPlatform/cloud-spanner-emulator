@@ -53,10 +53,13 @@
 #include "backend/query/queryable_table.h"
 #include "backend/query/queryable_udf.h"
 #include "backend/query/queryable_view.h"
+#include "backend/query/queue/queryable_queue_tvfs.h"
 #include "backend/query/spanner_sys_catalog.h"
 #include "backend/schema/catalog/change_stream.h"
+#include "backend/schema/catalog/placement.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/sequence.h"
+#include "common/constants.h"
 #include "common/errors.h"
 #include "googlesql/base/ret_check.h"
 #include "googlesql/base/status_macros.h"
@@ -288,6 +291,15 @@ Catalog::Catalog(
     }
   }
 
+  for (const auto* queue : schema->queues()) {
+    if (queue->backing_table() != nullptr) {
+      tables_[queue->Name()] = std::make_unique<QueryableTable>(
+          queue->backing_table(), reader, options, this, type_factory,
+          /*is_synonym=*/false,
+          schema->dialect() == database_api::DatabaseDialect::POSTGRESQL);
+    }
+  }
+
   for (const auto* model : schema->models()) {
     std::string name = model->Name();
     if (SDLObjectName::IsFullyQualifiedName(name)) {
@@ -361,6 +373,51 @@ Catalog::Catalog(
                 database_api::DatabaseDialect::POSTGRESQL,
             /*is_mutable_key_range=*/change_stream->partition_mode() ==
                 kChangeStreamPartitionModeMutableKeyRange));
+  }
+
+  // Register table valued functions for each queue (RECEIVE_, RENEWLEASE_, and
+  // per-placement RECEIVE_<queue>_PLACEMENT_<placement>).
+  const bool is_pg_queue_dialect =
+      schema->dialect() == database_api::DatabaseDialect::POSTGRESQL;
+  for (const Queue* queue : schema->queues()) {
+    absl::StatusOr<std::unique_ptr<QueryableQueueReceiveTvf>> receive_tvf =
+        QueryableQueueReceiveTvf::Create(queue, this, type_factory,
+                                         is_pg_queue_dialect);
+    if (!receive_tvf.ok()) {
+      ABSL_LOG(FATAL) << "Failed to create RECEIVE_ TVF: " << receive_tvf.status();
+    }
+    tvfs_[(*receive_tvf)->FullName()] = std::move(*receive_tvf);
+
+    absl::StatusOr<std::unique_ptr<QueryableQueueRenewLeaseTvf>> renew_tvf =
+        QueryableQueueRenewLeaseTvf::Create(queue, type_factory,
+                                            is_pg_queue_dialect);
+    if (!renew_tvf.ok()) {
+      ABSL_LOG(FATAL) << "Failed to create RENEWLEASE_ TVF: " << renew_tvf.status();
+    }
+    tvfs_[(*renew_tvf)->FullName()] = std::move(*renew_tvf);
+
+    const std::string queue_name = queue->Name();
+    for (const Placement* placement : schema->placements()) {
+      std::string placement_tvf_name =
+          is_pg_queue_dialect
+              ? absl::StrCat(
+                    absl::AsciiStrToLower(kQueueReceiverTvfPrefix), queue_name,
+                    "_",
+                    absl::AsciiStrToLower(kPerPlacementTvfPlacementNamePrefix),
+                    placement->PlacementName())
+              : absl::StrCat(kQueueReceiverTvfPrefix, queue_name, "_",
+                             kPerPlacementTvfPlacementNamePrefix,
+                             placement->PlacementName());
+      absl::StatusOr<std::unique_ptr<QueryableQueueReceiveTvf>> placement_tvf =
+          QueryableQueueReceiveTvf::Create(
+              queue, this, type_factory, is_pg_queue_dialect,
+              std::vector<std::string>{placement_tvf_name});
+      if (!placement_tvf.ok()) {
+        ABSL_LOG(FATAL) << "Failed to create per-placement RECEIVE_ TVF: "
+                   << placement_tvf.status();
+      }
+      tvfs_[(*placement_tvf)->FullName()] = std::move(*placement_tvf);
+    }
   }
 
   // Read types.

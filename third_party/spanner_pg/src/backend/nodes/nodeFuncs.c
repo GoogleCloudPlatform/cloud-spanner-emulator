@@ -3991,6 +3991,10 @@ raw_expression_tree_walker_impl(Node *node,
 					return true;
 				if (WALK(stmt->withClause))
 					return true;
+				// SPANGRES BEGIN
+				if (walker(stmt->assertRowsModified, context))
+					return true;
+				// SPANGRES END
 			}
 			break;
 		case T_UpdateStmt:

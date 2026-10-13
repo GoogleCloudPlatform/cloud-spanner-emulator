@@ -486,7 +486,7 @@ absl::Status AnalyzeUdfDefinition(
     absl::StrAppend(&body, " SQL SECURITY INVOKER");
   }
 
-  if (!language.empty()) {
+  if (!language.empty() && (language != "SQL" || udf_definition.empty())) {
     absl::StrAppend(&body, " LANGUAGE ", language);
   }
 

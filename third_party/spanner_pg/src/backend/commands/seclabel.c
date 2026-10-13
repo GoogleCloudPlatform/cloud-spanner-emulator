@@ -49,6 +49,10 @@ SecLabelSupportsObjectType(ObjectType objtype)
 		case OBJECT_LANGUAGE:
 		case OBJECT_LARGEOBJECT:
 		case OBJECT_MATVIEW:
+		// SPANGRES BEGIN
+		case OBJECT_DATA_PLACEMENT:
+		case OBJECT_SEARCH_INDEX:
+		// SPANGRES END
 		case OBJECT_LOCALITY_GROUP:
 		case OBJECT_PROCEDURE:
 		case OBJECT_PUBLICATION:
@@ -61,7 +65,7 @@ SecLabelSupportsObjectType(ObjectType objtype)
 		case OBJECT_TABLESPACE:
 		case OBJECT_TYPE:
 		// SPANGRES BEGIN
-		// TODO: expose when queue is implemented.
+		case OBJECT_QUEUE:
 		// SPANGRES END
 		case OBJECT_VIEW:
 			return true;

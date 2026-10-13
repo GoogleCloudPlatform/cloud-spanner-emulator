@@ -16,6 +16,7 @@
 
 #include "backend/schema/validators/column_validator.h"
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -36,6 +37,7 @@
 #include "backend/schema/catalog/change_stream.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/proto_bundle.h"
+#include "backend/schema/catalog/queue.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/catalog/udf.h"
 #include "backend/schema/graph/schema_node.h"
@@ -123,6 +125,10 @@ absl::Status CheckAllowedColumnTypeChange(
   if (new_base_type->Equals(old_base_type)) {
     if (IsResizeable(old_base_type) && new_column->effective_max_length() <
                                            old_column->effective_max_length()) {
+      if (old_column->queue() != nullptr) {
+        return error::Internal(
+            "Altering queue column length is not supported.");
+      }
       context->AddAction([old_column,
                           new_column](const SchemaValidationContext* context) {
         return VerifyColumnLength(old_column->table(), old_column,
@@ -130,6 +136,9 @@ absl::Status CheckAllowedColumnTypeChange(
       });
     }
   } else {
+    if (old_column->queue() != nullptr) {
+      return error::Internal("Altering queue column type is not supported.");
+    }
     context->AddAction(
         [old_column, new_column](const SchemaValidationContext* context) {
           return VerifyColumnTypeChange(old_column->table(), old_column,
@@ -212,7 +221,7 @@ absl::Status ColumnValidator::ValidateTypeExistsInProtoBundle(
 
 absl::Status ColumnValidator::Validate(const Column* column,
                                        SchemaValidationContext* context) {
-  GOOGLESQL_RET_CHECK_NE(column->table_, nullptr);
+  GOOGLESQL_RET_CHECK(column->table_ != nullptr || column->queue_ != nullptr);
   GOOGLESQL_RET_CHECK(!column->name_.empty());
   GOOGLESQL_RET_CHECK(!column->id_.empty());
   GOOGLESQL_RET_CHECK(column->type_ != nullptr && IsSupportedColumnType(column->type_));
@@ -223,7 +232,8 @@ absl::Status ColumnValidator::Validate(const Column* column,
   if (column->name_.length() > limits::kMaxSchemaIdentifierLength) {
     return error::InvalidSchemaName("Column", column->Name());
   }
-    if (column->Name()[0] == '_') {
+  if (column->Name()[0] == '_' &&
+      !column->is_expression_index_injected_column()) {
     return error::InvalidSchemaName("Column", column->Name());
   }
 
@@ -302,11 +312,21 @@ absl::Status ColumnValidator::Validate(const Column* column,
     } else {
       GOOGLESQL_RET_CHECK(!column->postgresql_oid().has_value());
     }
-    bool is_pk = column->table()->FindKeyColumn(column->Name()) != nullptr;
+    const Table* table = column->table();
+    const Queue* queue = column->queue();
+    bool is_pk = false;
+    std::string owner_name;
+    if (table != nullptr) {
+      is_pk = table->FindKeyColumn(column->Name()) != nullptr;
+      owner_name = table->Name();
+    } else if (queue != nullptr) {
+      is_pk = queue->FindKeyColumn(column->Name()) != nullptr;
+      owner_name = queue->Name();
+    }
     if (!EmulatorFeatureFlags::instance().flags().enable_generated_pk &&
         is_pk) {
-      return error::CannotUseGeneratedColumnInPrimaryKey(
-          column->table()->Name(), column->Name());
+      return error::CannotUseGeneratedColumnInPrimaryKey(owner_name,
+                                                         column->Name());
     }
     for (const Column* dep : column->dependent_columns()) {
       if (dep->allows_commit_timestamp()) {
@@ -322,12 +342,22 @@ absl::Status ColumnValidator::Validate(const Column* column,
 absl::Status ColumnValidator::ValidateUpdate(const Column* column,
                                              const Column* old_column,
                                              SchemaValidationContext* context) {
-  std::string owner_name = column->table()->Name();
-  bool owner_deleted = column->table()->is_deleted();
-  bool has_row_deletion_policy =
-      column->table()->row_deletion_policy().has_value() &&
-      column->table()->row_deletion_policy()->column_name() ==
-      column->Name();
+  std::string owner_name;
+  bool owner_deleted = false;
+  bool has_row_deletion_policy = false;
+  if (column->table() != nullptr) {
+    owner_name = column->table()->Name();
+    owner_deleted = column->table()->is_deleted();
+    has_row_deletion_policy =
+        column->table()->row_deletion_policy().has_value() &&
+        column->table()->row_deletion_policy()->column_name() == column->Name();
+  } else if (column->queue() != nullptr) {
+    owner_name = column->queue()->Name();
+    owner_deleted = column->queue()->is_deleted();
+    has_row_deletion_policy =
+        column->queue()->row_deletion_policy().has_value() &&
+        column->queue()->row_deletion_policy()->column_name() == column->Name();
+  }
 
   // if column has row deletion policy, then can't delete the column or change
   // type.
@@ -358,10 +388,19 @@ absl::Status ColumnValidator::ValidateUpdate(const Column* column,
 
   // For a non-deleted column, the objects it depends on should
   // also be alive.
-  GOOGLESQL_RET_CHECK(!column->table_->is_deleted());
+  if (column->table_ != nullptr) {
+    GOOGLESQL_RET_CHECK(!column->table_->is_deleted());
+  } else if (column->queue_ != nullptr) {
+    GOOGLESQL_RET_CHECK(!column->queue_->is_deleted());
+  }
   // It is invalid to drop a column which is referenced by a generated column.
   for (const Column* dep : column->dependent_columns()) {
     if (dep->is_deleted()) {
+      if (column->is_expression_index_injected_column()) {
+        return error::InvalidDropColumnWithDependency(
+            dep->Name(), owner_name,
+            column->GetExpressionIndexSourceName().value());
+      }
       return error::InvalidDropColumnReferencedByGeneratedColumn(
           dep->Name(), owner_name, column->Name());
     }
@@ -389,8 +428,12 @@ absl::Status ColumnValidator::ValidateUpdate(const Column* column,
     }
   }
   if (!column->GetType()->Equals(old_column->GetType())) {
-    absl::Span<const Column* const> owner_columns =
-        column->table()->columns();
+    absl::Span<const Column* const> owner_columns;
+    if (column->table() != nullptr) {
+      owner_columns = column->table()->columns();
+    } else if (column->queue() != nullptr) {
+      owner_columns = column->queue()->columns();
+    }
     for (const Column* generated_column : owner_columns) {
       if (generated_column->is_generated()) {
         for (const Column* dep : generated_column->dependent_columns()) {
@@ -416,6 +459,10 @@ absl::Status ColumnValidator::ValidateUpdate(const Column* column,
   }
 
   if (old_column->is_nullable_ && !column->is_nullable_) {
+    if (old_column->table() == nullptr) {
+      return error::Internal(
+          "Altering queue column to NOT NULL is not supported.");
+    }
     context->AddAction([old_column](const SchemaValidationContext* context) {
       return VerifyColumnNotNull(old_column->table(), old_column, context);
     });
@@ -425,9 +472,27 @@ absl::Status ColumnValidator::ValidateUpdate(const Column* column,
   GOOGLESQL_RETURN_IF_ERROR(CheckAllowedColumnTypeChange(
       old_column, column, old_column->GetType(), column->type_, context));
 
+  if (column->table() != nullptr &&
+      column->table()->FindKeyColumn(column->Name()) == nullptr) {
+    int64_t total_non_key_columns_size =
+        column->table()->GetTotalNonKeyColumnSizeBytes();
+    if (total_non_key_columns_size > limits::kMaxTotalNonKeyColumnsSizeBytes &&
+        column->GetScalarOrBlobColumnSizeBytes() >
+            old_column->GetScalarOrBlobColumnSizeBytes()) {
+      return error::InvalidTotalColumnSize(
+          column->Name(), column->table()->Name(), total_non_key_columns_size,
+          limits::kMaxTotalNonKeyColumnsSizeBytes);
+    }
+  }
+
   if (column->type_->IsTimestamp()) {
     if (column->allows_commit_timestamp() &&
         !old_column->allows_commit_timestamp()) {
+      if (column->table_ == nullptr) {
+        return error::Internal(
+            "Altering queue column to allow commit timestamp is not "
+            "supported.");
+      }
       context->AddAction([column](const SchemaValidationContext* context) {
         return VerifyColumnCommitTimestamp(column->table_, column, context);
       });
@@ -452,6 +517,11 @@ absl::Status ColumnValidator::ValidateUpdate(const Column* column,
       std::string dependency_type =
           (dep_info->global ? absl::AsciiStrToUpper(dep_info->kind)
                             : absl::AsciiStrToLower(dep_info->kind));
+      if (column->is_expression_index_injected_column()) {
+        return error::InvalidDropDependentIndex(
+            dependency_type, dep_info->name,
+            column->GetExpressionIndexSourceName().value());
+      }
       return error::InvalidDropDependentColumn(dependency_type, dep_info->name,
                                                column->FullName());
     }
@@ -513,15 +583,32 @@ absl::Status KeyColumnValidator::Validate(const KeyColumn* key_column,
       return absl::OkStatus();
     }
 
-    if (owner_index != nullptr && owner_index->is_vector_index() &&
-        key_column->column_->GetType()->IsArray()) {
-      const googlesql::Type* element_type =
-          key_column->column_->GetType()->AsArray()->element_type();
-      if (element_type->IsFloat() || element_type->IsDouble()) {
-        return absl::OkStatus();
+    if (owner_index != nullptr && owner_index->is_vector_index()) {
+      const bool is_leading_key =
+          !owner_index->key_columns().empty() &&
+          key_column->column()->Name() ==
+              owner_index->key_columns()[0]->column()->Name();
+      if (is_leading_key && key_column->column_->GetType()->IsArray()) {
+        const googlesql::Type* element_type =
+            key_column->column_->GetType()->AsArray()->element_type();
+        if (element_type->IsFloat() || element_type->IsDouble()) {
+          return absl::OkStatus();
+        }
+        type_name = key_column->column_->GetType()->ShortTypeName(
+            googlesql::PRODUCT_EXTERNAL, true);
+      } else if (!is_leading_key) {
+        if (key_column->column_->GetType()->IsArray()) {
+          return error::VectorIndexProtoArrayKeysUnsupported(
+              key_column->column()->Name(), owner_index->Name());
+        }
+        if (!IsSupportedKeyColumnType(key_column->column_->GetType(),
+                                      /*is_vector_index=*/false) ||
+            key_column->column_->GetType()->IsProto()) {
+          return error::VectorIndexKeyRefsUnsupportedColumn(
+              owner_index->Name(), key_column->column()->Name(),
+              ToString(key_column->column_->GetType()));
+        }
       }
-      type_name = key_column->column_->GetType()->ShortTypeName(
-          googlesql::PRODUCT_EXTERNAL, true);
     }
 
     if (owner_index != nullptr) {

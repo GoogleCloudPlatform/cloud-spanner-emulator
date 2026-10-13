@@ -243,7 +243,7 @@ absl::Status DeleteInstancePartition(
 
   ctx->env()->instance_partition_manager()->DeleteInstancePartition(
       request->name());
-  return absl::OkStatus();
+  return ctx->env()->operation_manager()->DeleteOperations(request->name());
 }
 REGISTER_GRPC_HANDLER(InstanceAdmin, DeleteInstancePartition);
 

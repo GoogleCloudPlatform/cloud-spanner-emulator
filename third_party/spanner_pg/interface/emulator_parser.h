@@ -49,6 +49,8 @@ ParseAndAnalyzePostgreSQL(
     std::unique_ptr<google::spanner::emulator::backend::FunctionCatalog>
         emulator_function_catalog);
 
+// TODO: b/548413902 - remove no-op table_in_named_catalog once the emulator
+// code stops passing it in.
 absl::StatusOr<interfaces::ExpressionTranslateResult>
 TranslateTableLevelExpression(
     absl::string_view expression, absl::string_view table_name,

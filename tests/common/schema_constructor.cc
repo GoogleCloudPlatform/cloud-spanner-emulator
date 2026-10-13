@@ -45,12 +45,14 @@ absl::StatusOr<std::unique_ptr<const backend::Schema>> CreateSchemaFromDDL(
     googlesql::TypeFactory* type_factory, std::string proto_descriptor_bytes,
     database_api::DatabaseDialect dialect, std::string_view database_id) {
   backend::TableIDGenerator table_id_gen;
+  backend::QueueIDGenerator queue_id_gen;
   backend::ColumnIDGenerator column_id_gen;
   backend::PgOidAssigner pg_oid_assigner(
       dialect == database_api::DatabaseDialect::POSTGRESQL);
   backend::SchemaChangeContext context{
       .type_factory = type_factory,
       .table_id_generator = &table_id_gen,
+      .queue_id_generator = &queue_id_gen,
       .column_id_generator = &column_id_gen,
       .pg_oid_assigner = &pg_oid_assigner,
       .database_id = std::string(database_id),
@@ -374,6 +376,31 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithOnePropertyGraph(
       type_factory, "" /*proto_descriptor_bytes*/
       ,
       dialect);
+  ABSL_CHECK_OK(maybe_schema.status());  // Crash OK
+  return std::move(maybe_schema.value());
+}
+
+std::unique_ptr<const backend::Schema> CreateSchemaWithOneQueue(
+    googlesql::TypeFactory* type_factory,
+    database_api::DatabaseDialect dialect) {
+  std::string create_queue = R"(
+      CREATE QUEUE myqueue (
+        id INT64 NOT NULL,
+        Payload BYTES(MAX) NOT NULL
+      ) PRIMARY KEY (id)
+  )";
+  if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
+    create_queue = R"(
+        CREATE QUEUE myqueue (
+          id bigint NOT NULL,
+          "Payload" bytea NOT NULL,
+          PRIMARY KEY(id)
+        )
+    )";
+  }
+  auto maybe_schema =
+      CreateSchemaFromDDL({create_queue}, type_factory,
+                          /*proto_descriptor_bytes=*/"", dialect);
   ABSL_CHECK_OK(maybe_schema.status());  // Crash OK
   return std::move(maybe_schema.value());
 }

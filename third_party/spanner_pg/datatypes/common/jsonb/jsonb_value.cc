@@ -776,6 +776,13 @@ PgJsonbValue PgJsonbValue::CreateEmptyObject(
                       /*max_depth_estimate=*/0, /*total_bytes_estimate=*/0);
 }
 
+PgJsonbValue PgJsonbValue::CreateNull(
+    std::vector<std::unique_ptr<TreeNode>>* tree_nodes) {
+  tree_nodes->push_back(std::make_unique<TreeNode>(NodeType::kNull));
+  return PgJsonbValue(tree_nodes->back().get(), tree_nodes,
+                      /*max_depth_estimate=*/0, /*total_bytes_estimate=*/0);
+}
+
 TreeNode* PgJsonbValue::CreateTreeNode(NodeType tag) {
   std::unique_ptr<TreeNode> tree_node = std::make_unique<TreeNode>(tag);
   tree_nodes_->push_back(std::move(tree_node));

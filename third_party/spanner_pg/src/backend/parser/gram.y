@@ -350,11 +350,12 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
 		CreateSubscriptionStmt AlterSubscriptionStmt DropSubscriptionStmt
     CreateChangeStreamStmt AlterChangeStreamStmt
 		// SPANGRES BEGIN
+		CreatePlacementStmt AlterPlacementStmt
 		CreateSearchIndexStmt AlterSearchIndexStmt
 		// SPANGRES END
 		CreateLocalityGroupStmt AlterLocalityGroupStmt
     // SPANGRES BEGIN
-		// TODO: expose when queue is implemented.
+    CreateQueueStmt AlterQueueStmt
     // SPANGRES END
 
 %type <node>	select_no_parens select_with_parens select_clause
@@ -456,6 +457,9 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
 %type <ival>	import_qualification_type
 %type <importqual> import_qualification
 %type <node>	vacuum_relation
+// SPANGRES BEGIN
+%type <node>	opt_assert_rows_modified_clause possibly_cast_int
+// SPANGRES END
 %type <selectlimit> opt_select_limit select_limit limit_clause
 
 %type <list>	parse_toplevel stmtmulti routine_body_stmt_list
@@ -748,6 +752,9 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
 %token <keyword> ABORT_P ABSENT ABSOLUTE_P ACCESS ACTION ADD_P ADMIN AFTER
 	AGGREGATE ALL ALSO ALTER ALWAYS ANALYSE ANALYZE AND ANY ARRAY AS ASC
 	ASENSITIVE ASSERTION
+	// SPANGRES BEGIN
+	ASSERT_ROWS_MODIFIED
+	// SPANGRES END
 	ASSIGNMENT ASYMMETRIC ATOMIC AT ATTACH ATTRIBUTE AUTHORIZATION
 
 	BACKWARD BEFORE BEGIN_P BETWEEN BIGINT BINARY BIT
@@ -813,11 +820,14 @@ static void incrementTypeCastCount(int position, core_yyscan_t yyscanner);
 
 	PARALLEL PARAMETER PARENT PARSER PARTIAL PARTITION PASSING PASSWORD
 	PLACING
+	// SPANGRES BEGIN
+	PLACEMENT
+	// SPANGRES END
 	PLANS POLICY
 	POSITION PRECEDING PRECISION PRESERVE PREPARE PREPARED PRIMARY
 	PRIOR PRIVILEGES PROCEDURAL PROCEDURE PROCEDURES PROGRAM PUBLICATION
 	// SPANGRES BEGIN
-	// TODO: expose when queue is implemented.
+	QUEUE
 	// SPANGRES END
 
 	QUOTE
@@ -1125,12 +1135,17 @@ stmt:
 			| CreateMatViewStmt
 			| CreateOpClassStmt
 			| CreateOpFamilyStmt
+			// SPANGRES BEGIN
+			| CreatePlacementStmt
+			| AlterPlacementStmt
+			// SPANGRES END
 			| CreatePublicationStmt
 			| AlterOpFamilyStmt
 			| CreatePolicyStmt
 			| CreatePLangStmt
       // SPANGRES BEGIN
-		  // TODO: expose when queue is implemented.
+      | CreateQueueStmt
+      | AlterQueueStmt
       // SPANGRES END
 			| CreateSchemaStmt
 			// SPANGRES BEGIN
@@ -2568,6 +2583,14 @@ alter_index_cmd:
 					n->subtype = AT_SetColumnarPolicy;
 					n->columnar_policy_name = makeNode(ColumnarPolicyOption);
 					n->columnar_policy_name->is_null = true;
+					$$ = (Node *) n;
+				}
+			/* ALTER INDEX <name> SET (...) */
+			| SET reloptions
+				{
+					AlterTableCmd *n = makeNode(AlterTableCmd);
+					n->subtype = AT_SetRelOptions;
+					n->def = (Node *) $2;
 					$$ = (Node *) n;
 				}
 
@@ -4415,6 +4438,13 @@ ColConstraintElem:
 					n->contype = CONSTR_VECTOR_LENGTH;
 					n->location = @1;
 					n->vector_length = $3;
+					$$ = (Node *)n;
+				}
+			| PLACEMENT KEY
+				{
+					Constraint *n = makeNode(Constraint);
+					n->contype = CONSTR_PLACEMENT_KEY;
+					n->location = @1;
 					$$ = (Node *)n;
 				}
 			| HIDDEN
@@ -7402,6 +7432,22 @@ DropStmt:	DROP object_type_any_name IF_P EXISTS any_name_list opt_drop_behavior
 					$$ = (Node *)n;
 				}
 			// SPANGRES BEGIN
+			| DROP PLACEMENT qualified_name
+				{
+					DropStmt *n = makeNode(DropStmt);
+					n->removeType = OBJECT_DATA_PLACEMENT;
+					n->missing_ok = false;
+					n->objects = list_make1($3);
+					$$ = (Node *)n;
+				}
+			| DROP PLACEMENT IF_P EXISTS qualified_name
+				{
+					DropStmt *n = makeNode(DropStmt);
+					n->removeType = OBJECT_DATA_PLACEMENT;
+					n->missing_ok = true;
+					n->objects = list_make1($5);
+					$$ = (Node *)n;
+				}
 			| DROP SEARCH INDEX any_name_list
 				{
 					DropStmt *n = makeNode(DropStmt);
@@ -7436,7 +7482,22 @@ DropStmt:	DROP object_type_any_name IF_P EXISTS any_name_list opt_drop_behavior
 					$$ = (Node *)n;
 				}
 			// SPANGRES BEGIN
-			// TODO: expose when queue is implemented.
+			| DROP QUEUE qualified_name
+				{
+					DropStmt *n = makeNode(DropStmt);
+					n->removeType = OBJECT_QUEUE;
+					n->missing_ok = false;
+					n->objects = list_make1($3);
+					$$ = (Node *) n;
+				}
+			| DROP QUEUE IF_P EXISTS qualified_name
+				{
+					DropStmt *n = makeNode(DropStmt);
+					n->removeType = OBJECT_QUEUE;
+					n->missing_ok = true;
+					n->objects = list_make1($5);
+					$$ = (Node *) n;
+				}
 			// SPANGRES END
 		;
 
@@ -11641,7 +11702,48 @@ change_stream_tracked_tables:
          }
 
 // SPANGRES BEGIN
-// TODO: expose when queue is implemented.
+/*****************************************************************************
+ *
+ * CREATE QUEUE [IF NOT EXISTS] name (...) WITH (...)
+ *
+ *****************************************************************************/
+CreateQueueStmt:
+			CREATE QUEUE qualified_name '(' OptTableElementList ')' OptInterleave OptTtl opt_reloptions
+				{
+					CreateQueueStmt *n = makeNode(CreateQueueStmt);
+					n->queue = $3;
+					n->tableElts = $5;
+					n->interleavespec = $7;
+					n->ttl = $8;
+					n->options = $9;
+					n->if_not_exists = false;
+					$$ = (Node *)n;
+				}
+			| CREATE QUEUE IF_P NOT EXISTS qualified_name '(' OptTableElementList ')' OptInterleave OptTtl opt_reloptions
+				{
+					CreateQueueStmt *n = makeNode(CreateQueueStmt);
+					n->queue = $6;
+					n->tableElts = $8;
+					n->interleavespec = $10;
+					n->ttl = $11;
+					n->options = $12;
+					n->if_not_exists = true;
+					$$ = (Node *)n;
+				}
+			;
+/*
+ * ALTER QUEUE [IF EXISTS] name SET OPTIONS ( options )
+ */
+AlterQueueStmt:
+			ALTER QUEUE qualified_name SET OPTIONS '(' reloption_list ')'
+				{
+					AlterQueueStmt *n = makeNode(AlterQueueStmt);
+					n->queue = $3;
+					n->options = $7;
+					n->missing_ok = false;
+					$$ = (Node *)n;
+				}
+			;
 // SPANGRES END
 
 /*****************************************************************************
@@ -11739,6 +11841,55 @@ AlterLocalityGroupStmt:
 			;
 
 // SPANGRES BEGIN
+/*****************************************************************************
+ *
+ * CREATE PLACEMENT [IF NOT EXISTS] name WITH ( def_list )
+ *
+ *****************************************************************************/
+// The `instance_partition` options is required in `def_list`, so
+// `CREATE PLACEMENT` should always have a `WITH ( def_list )`.
+CreatePlacementStmt:
+			CREATE PLACEMENT qualified_name any_with definition
+				{
+					CreatePlacementStmt *n = makeNode(CreatePlacementStmt);
+					n->placement_name = $3;
+					n->options = $5;
+					n->if_not_exists = false;
+					$$ = (Node *)n;
+				}
+			| CREATE PLACEMENT IF_P NOT EXISTS qualified_name any_with definition
+				{
+					CreatePlacementStmt *n = makeNode(CreatePlacementStmt);
+					n->placement_name = $6;
+					n->options = $8;
+					n->if_not_exists = true;
+					$$ = (Node *)n;
+				}
+
+/*****************************************************************************
+ *
+ * ALTER PLACEMENT [IF EXISTS] name SET ( def_list )
+ *
+ *****************************************************************************/
+
+AlterPlacementStmt:
+ 			ALTER PLACEMENT qualified_name SET definition
+			 	{
+					AlterPlacementStmt *n = makeNode(AlterPlacementStmt);
+					n->placement_name = $3;
+					n->options = $5;
+					n->missing_ok = false;
+					$$ = (Node *)n;
+         }
+			| ALTER PLACEMENT IF_P EXISTS qualified_name SET definition
+			 	{
+					AlterPlacementStmt *n = makeNode(AlterPlacementStmt);
+					n->placement_name = $5;
+					n->options = $7;
+					n->missing_ok = true;
+					$$ = (Node *)n;
+         }
+
 /*****************************************************************************
  *
  * CREATE SEARCH INDEX index_name ON table_name ( columns )
@@ -13283,6 +13434,9 @@ returning_clause:
 
 DeleteStmt: opt_with_clause DELETE_P FROM relation_expr_opt_alias
 			using_clause where_or_current_clause
+			// SPANGRES BEGIN
+			opt_assert_rows_modified_clause
+			// SPANGRES END
 			returning_clause
 				{
 					DeleteStmt *n = makeNode(DeleteStmt);
@@ -13291,10 +13445,51 @@ DeleteStmt: opt_with_clause DELETE_P FROM relation_expr_opt_alias
 					n->usingClause = $5;
 					n->whereClause = $6;
 					n->withClause = $1;
-					n->returningList = $7;
+					// SPANGRES BEGIN
+					n->assertRowsModified = $7;
+					n->returningList = $8;
+					// SPANGRES END
 					$$ = (Node *) n;
 				}
 		;
+
+// SPANGRES BEGIN
+possibly_cast_int:
+            Iconst
+                {
+                    $$ = makeIntConst($1, @1);
+                }
+            | PARAM
+                {
+                    ParamRef *p = makeNode(ParamRef);
+                    p->number = $1;
+                    p->location = @1;
+                    $$ = (Node *) p;
+                }
+            | possibly_cast_int TYPECAST Typename
+                {
+                    $$ = makeTypeCast($1, $3, @2, yyscanner);
+                }
+            | CAST '(' possibly_cast_int AS Typename ')'
+                {
+                    $$ = makeTypeCast($3, $5, @1, yyscanner);
+                }
+            | '(' possibly_cast_int ')'
+                {
+                    $$ = $2;
+                }
+        ;
+opt_assert_rows_modified_clause:
+            ASSERT_ROWS_MODIFIED possibly_cast_int
+                {
+                    $$ = $2;
+                }
+            | /* EMPTY */
+                {
+                    $$ = NULL;
+                }
+        ;
+// SPANGRES END
 
 using_clause:
 				USING from_list						{ $$ = $2; }
@@ -18480,6 +18675,9 @@ unreserved_keyword:
 			| PASSING
 			| PASSWORD
 			| PLANS
+			// SPANGRES BEGIN
+			| PLACEMENT
+			// SPANGRES END
 			| POLICY
 			| PRECEDING
 			| PREPARE
@@ -18493,7 +18691,7 @@ unreserved_keyword:
 			| PROGRAM
 			| PUBLICATION
       // SPANGRES BEGIN
-      // TODO: expose when queue is implemented.
+      | QUEUE
       // SPANGRES END
 			| QUOTE
 			| RANGE
@@ -18731,6 +18929,9 @@ reserved_keyword:
 			| AS
 			| ASC
 			| ASYMMETRIC
+			// SPANGRES BEGIN
+			| ASSERT_ROWS_MODIFIED
+			// SPANGRES END
 			| BOTH
 			| CASE
 			| CAST
@@ -18832,6 +19033,9 @@ bare_label_keyword:
 			| ASC
 			| ASENSITIVE
 			| ASSERTION
+			// SPANGRES BEGIN
+			| ASSERT_ROWS_MODIFIED
+			// SPANGRES END
 			| ASSIGNMENT
 			| ASYMMETRIC
 			| AT
@@ -19106,7 +19310,7 @@ bare_label_keyword:
 			| PROGRAM
 			| PUBLICATION
       // SPANGRES BEGIN
-      // TODO: expose when queue is implemented.
+      | QUEUE
       // SPANGRES END
 			| QUOTE
 			| RANGE

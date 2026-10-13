@@ -100,6 +100,12 @@ absl::Status Queue::DeepClone(SchemaGraphEditor* editor,
     key_column = schema_node->As<const KeyColumn>();
   }
 
+  if (backing_table_) {
+    GOOGLESQL_ASSIGN_OR_RETURN(const SchemaNode* schema_node,
+                     editor->Clone(backing_table_));
+    backing_table_ = schema_node->As<const Table>();
+  }
+
   return absl::OkStatus();
 }
 

@@ -99,6 +99,13 @@ static googlesql::Value CreatePgJsonbNullValue() {
   return googlesql::values::Null(gsql_pg_jsonb);
 }
 
+static googlesql::Value CreatePgJsonbValueOrDie(absl::string_view json_string) {
+  absl::StatusOr<googlesql::Value> jsonb_value =
+      CreatePgJsonbValueWithMemoryContext(json_string);
+  ABSL_CHECK_OK(jsonb_value) << "Failed to parse JSONB string: " << json_string;
+  return *jsonb_value;
+}
+
 static googlesql::Value CreatePgNumericNullValue() {
   static const googlesql::Type* gsql_pg_numeric =
       spangres::datatypes::GetPgNumericType();
@@ -2649,6 +2656,102 @@ TEST_F(EmulatorFunctionsTest, PGJsonbMutatorFunctions) {
                    googlesql::values::String("invalid_value")})),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("null_value_treatment must be")));
+
+  const googlesql::Function* span_jsonb_set_function =
+      functions_[kSpanJsonbSetFunctionName].get();
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(evaluator_,
+                       (span_jsonb_set_function->GetFunctionEvaluatorFactory())(
+                           span_jsonb_set_function->signatures().front()));
+  EXPECT_THAT(
+      evaluator_(absl::MakeConstSpan(
+          {pg_jsonb_object, googlesql::values::Int64(1),
+           googlesql::values::String("a"), CreatePgJsonbValueOrDie("10")})),
+      IsOkAndHolds(CreatePgJsonbValueOrDie("{\"a\": 10, \"b\": 2}")));
+  EXPECT_THAT(
+      evaluator_(absl::MakeConstSpan(
+          {pg_jsonb_array, googlesql::values::Int64(1),
+           googlesql::values::Int64(3), CreatePgJsonbValueOrDie("10")})),
+      IsOkAndHolds(CreatePgJsonbValueOrDie("[\"a\", \"b\", null, 10]")));
+  EXPECT_THAT(
+      evaluator_(absl::MakeConstSpan(
+          {jsonb_typed_null, googlesql::values::Int64(1),
+           googlesql::values::String("a"), CreatePgJsonbValueOrDie("1")})),
+      IsOkAndHolds(CreatePgJsonbValueOrDie("{\"a\": 1}")));
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(
+                  {jsonb_typed_null, googlesql::values::Int64(1),
+                   googlesql::values::Int64(0), CreatePgJsonbValueOrDie("1")})),
+              IsOkAndHolds(CreatePgJsonbValueOrDie("[1]")));
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(
+                  {pg_jsonb_object, googlesql::values::Int64(1),
+                   googlesql::values::String("a"), jsonb_typed_null})),
+              IsOkAndHolds(CreatePgJsonbValueOrDie("{\"a\": null, \"b\": 2}")));
+  EXPECT_THAT(
+      evaluator_(absl::MakeConstSpan(
+          {pg_jsonb_object, googlesql::values::Int64(1),
+           googlesql::values::String("a"), CreatePgJsonbValueOrDie("10"),
+           googlesql::values::Int64(2), googlesql::values::String("c"),
+           googlesql::values::Int64(1), CreatePgJsonbValueOrDie("20")})),
+      IsOkAndHolds(
+          CreatePgJsonbValueOrDie("{\"a\": 10, \"b\": 2, \"c\": [null, 20]}")));
+  EXPECT_THAT(
+      evaluator_(absl::MakeConstSpan(
+          {pg_jsonb_object, googlesql::values::Int64(1),
+           googlesql::values::NullString(), CreatePgJsonbValueOrDie("1")})),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("jsonb subscript in assignment must not be null")));
+  EXPECT_THAT(
+      evaluator_(absl::MakeConstSpan(
+          {pg_jsonb_array, googlesql::values::Int64(1),
+           googlesql::values::String("foo"), CreatePgJsonbValueOrDie("1")})),
+      StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          HasSubstr("path element at position 1 is not an integer: \"foo\"")));
+  EXPECT_THAT(
+      evaluator_(absl::MakeConstSpan(
+          {pg_jsonb_array, googlesql::values::Int64(1),
+           googlesql::values::Int64(-10), CreatePgJsonbValueOrDie("1")})),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("path element at position 1 is out of range: -10")));
+  EXPECT_THAT(
+      evaluator_(absl::MakeConstSpan(
+          {pg_jsonb_array, googlesql::values::Int64(1),
+           googlesql::values::Int64(-2), CreatePgJsonbValueOrDie("1")})),
+      IsOkAndHolds(
+          CreatePgJsonbValueOrDie(R"([1, "b"])")));
+  EXPECT_THAT(
+      evaluator_(absl::MakeConstSpan(
+          {pg_jsonb_object, googlesql::values::Int64(2),
+           googlesql::values::String("a"), googlesql::values::String("b"),
+           CreatePgJsonbValueOrDie("1")})),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("cannot replace existing key")));
+
+  // Test INT64_MIN to ensure the `-index` bounds check doesn't overflow
+  EXPECT_THAT(
+      evaluator_(absl::MakeConstSpan(
+          {pg_jsonb_array, googlesql::values::Int64(1),
+           googlesql::values::Int64(std::numeric_limits<int64_t>::min()),
+           CreatePgJsonbValueOrDie("1")})),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("is out of range")));
+
+  // Test multi-level creation where intermediate nodes are missing
+  EXPECT_THAT(evaluator_(absl::MakeConstSpan(
+                  {pg_jsonb_object, googlesql::values::Int64(2),
+                   googlesql::values::String("new_key"),
+                   googlesql::values::String("nested_key"),
+                   CreatePgJsonbValueOrDie("1")})),
+              IsOkAndHolds(CreatePgJsonbValueOrDie(
+                  R"({"a": 1, "b": 2, "new_key": {"nested_key": 1}})")));
+
+  // Test multi-level creation where the intermediate node becomes an array
+  EXPECT_THAT(
+      evaluator_(absl::MakeConstSpan(
+          {pg_jsonb_object, googlesql::values::Int64(2),
+           googlesql::values::String("new_array"),
+           googlesql::values::String("0"), CreatePgJsonbValueOrDie("1")})),
+      IsOkAndHolds(
+          CreatePgJsonbValueOrDie(R"({"a": 1, "b": 2, "new_array": [1]})")));
 
   const googlesql::Function* jsonb_concat_function =
       functions_[kPGJsonbConcatFunctionName].get();

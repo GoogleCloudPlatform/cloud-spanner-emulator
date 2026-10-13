@@ -17,6 +17,7 @@
 #include "backend/schema/catalog/column.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <string>
 
 #include "googlesql/public/options.pb.h"
@@ -25,7 +26,9 @@
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "backend/datamodel/types.h"
 #include "backend/schema/catalog/locality_group.h"
+#include "backend/schema/catalog/queue.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/graph/schema_graph_editor.h"
 #include "backend/schema/graph/schema_node.h"
@@ -78,7 +81,15 @@ std::string Column::FullName() const {
   if (table_ != nullptr) {
     return absl::StrCat(table_->Name(), ".", name_);
   }
+  if (queue_ != nullptr) {
+    return absl::StrCat(queue_->Name(), ".", name_);
+  }
   return name_;
+}
+
+int64_t Column::GetScalarOrBlobColumnSizeBytes() const {
+  return ::google::spanner::emulator::backend::GetScalarOrBlobColumnSizeBytes(
+      type_, declared_max_length_);
 }
 
 absl::Status Column::Validate(SchemaValidationContext* context) const {
@@ -96,6 +107,13 @@ absl::Status Column::DeepClone(SchemaGraphEditor* editor,
     GOOGLESQL_ASSIGN_OR_RETURN(const SchemaNode* table_clone, editor->Clone(table_));
     table_ = table_clone->As<const Table>();
     if (table_->is_deleted()) {
+      MarkDeleted();
+    }
+  }
+  if (queue_ != nullptr) {
+    GOOGLESQL_ASSIGN_OR_RETURN(const SchemaNode* queue_clone, editor->Clone(queue_));
+    queue_ = queue_clone->As<const Queue>();
+    if (queue_->is_deleted()) {
       MarkDeleted();
     }
   }

@@ -35,6 +35,7 @@
 #include "backend/query/change_stream/change_stream_query_validator.h"
 #include "backend/query/function_catalog.h"
 #include "backend/query/query_context.h"
+#include "backend/query/queue/queryable_queue_tvfs.h"
 #include "backend/schema/catalog/schema.h"
 #include "absl/status/status.h"
 
@@ -62,6 +63,9 @@ struct Query {
   // If not empty,the current query is an internal query against a non public
   // partition or data table of this change stream
   std::optional<std::string> change_stream_internal_lookup;
+
+  // Optional metadata for long-running RECEIVE_<queue> streaming queries.
+  QueueReceiveMetadata* queue_receive_metadata = nullptr;
 };
 
 // Returns true if the given query is a DML statement.

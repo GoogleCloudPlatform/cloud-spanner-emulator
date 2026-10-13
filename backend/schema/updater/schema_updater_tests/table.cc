@@ -17,6 +17,7 @@
 #include "backend/schema/catalog/table.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <iterator>
 #include <memory>
 #include <string>
@@ -31,10 +32,13 @@
 #include "tests/common/proto_matchers.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_format.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/updater/schema_updater_tests/base.h"
 #include "common/errors.h"
 #include "common/feature_flags.h"
+#include "common/limits.h"
 #include "tests/common/scoped_feature_flags_setter.h"
 #include "third_party/spanner_pg/datatypes/extended/spanner_extended_type.h"
 
@@ -2452,6 +2456,113 @@ TEST_P(SchemaUpdaterTest, CreateTable_IntervalStruct_Column_Fail) {
 
   absl::StatusOr<std::unique_ptr<const Schema>> status = CreateSchema({sql});
   EXPECT_FALSE(status.ok());
+}
+
+TEST_P(SchemaUpdaterTest, CreateTableTotalNonKeyColumnsSizeTooLarge) {
+  if (GetParam() == POSTGRESQL) {
+    std::string ddl = "CREATE TABLE \"T\" (k bigint PRIMARY KEY";
+    for (int i = 0; i < 201; ++i) {
+      absl::StrAppend(&ddl, absl::StrFormat(", c%d text", i));
+    }
+    absl::StrAppend(&ddl, ")");
+
+    const int64_t expected_size = 201LL * limits::kMaxBytesColumnLength;
+    EXPECT_THAT(CreateSchema({ddl}, /*proto_descriptor_bytes=*/"",
+                             /*dialect=*/POSTGRESQL,
+                             /*use_gsql_to_pg_translation=*/false),
+                StatusIs(error::TotalNonKeyColumnsSizeTooLarge(
+                    "Table", "T", expected_size,
+                    limits::kMaxTotalNonKeyColumnsSizeBytes)));
+  } else {
+    std::string ddl = "CREATE TABLE T (k INT64";
+    for (int i = 0; i < 201; ++i) {
+      absl::StrAppend(&ddl, absl::StrFormat(", c%d STRING(MAX)", i));
+    }
+    absl::StrAppend(&ddl, ") PRIMARY KEY (k)");
+
+    const int64_t expected_size = 201LL * limits::kMaxBytesColumnLength;
+    EXPECT_THAT(CreateSchema({ddl}),
+                StatusIs(error::TotalNonKeyColumnsSizeTooLarge(
+                    "Table", "T", expected_size,
+                    limits::kMaxTotalNonKeyColumnsSizeBytes)));
+  }
+}
+
+TEST_P(SchemaUpdaterTest,
+       AlterTableAddColumnExceedsTotalNonKeyColumnSizeBytes) {
+  if (GetParam() == POSTGRESQL) {
+    std::string ddl = "CREATE TABLE \"T\" (k bigint PRIMARY KEY";
+    for (int i = 0; i < 200; ++i) {
+      absl::StrAppend(&ddl, absl::StrFormat(", c%d text", i));
+    }
+    absl::StrAppend(&ddl, ")");
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema,
+                         CreateSchema({ddl}, /*proto_descriptor_bytes=*/"",
+                                      /*dialect=*/POSTGRESQL,
+                                      /*use_gsql_to_pg_translation=*/false));
+
+    // Adding a bigint column succeeds because bigint uses 0 bytes.
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+        schema, UpdateSchema(schema.get(),
+                             {"ALTER TABLE \"T\" ADD COLUMN c_int bigint"},
+                             /*proto_descriptor_bytes=*/"",
+                             /*dialect=*/POSTGRESQL,
+                             /*use_gsql_to_pg_translation=*/false));
+
+    // Adding another text column exceeds the 2000 MiB limit.
+    const int64_t expected_size = 201LL * limits::kMaxBytesColumnLength;
+    EXPECT_THAT(UpdateSchema(schema.get(),
+                             {"ALTER TABLE \"T\" ADD COLUMN c_extra text"},
+                             /*proto_descriptor_bytes=*/"",
+                             /*dialect=*/POSTGRESQL,
+                             /*use_gsql_to_pg_translation=*/false),
+                StatusIs(error::AddColumnExceedsTotalNonKeyColumnSizeBytes(
+                    "c_extra", "T", expected_size,
+                    limits::kMaxTotalNonKeyColumnsSizeBytes)));
+  } else {
+    std::string ddl = "CREATE TABLE T (k INT64";
+    for (int i = 0; i < 200; ++i) {
+      absl::StrAppend(&ddl, absl::StrFormat(", c%d STRING(MAX)", i));
+    }
+    absl::StrAppend(&ddl, ") PRIMARY KEY (k)");
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({ddl}));
+
+    // Adding an INT64 column succeeds because INT64 uses 0 bytes.
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+        schema,
+        UpdateSchema(schema.get(), {"ALTER TABLE T ADD COLUMN c_int INT64"}));
+
+    // Adding another STRING(MAX) column exceeds the 2000 MiB limit.
+    const int64_t expected_size = 201LL * limits::kMaxBytesColumnLength;
+    EXPECT_THAT(UpdateSchema(schema.get(),
+                             {"ALTER TABLE T ADD COLUMN c_extra STRING(MAX)"}),
+                StatusIs(error::AddColumnExceedsTotalNonKeyColumnSizeBytes(
+                    "c_extra", "T", expected_size,
+                    limits::kMaxTotalNonKeyColumnsSizeBytes)));
+  }
+}
+
+TEST_P(SchemaUpdaterTest, AlterTableAlterColumnInvalidTotalColumnSize) {
+  // Altering column type/length is only supported for GoogleSQL dialect
+  // currently.
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  std::string ddl =
+      "CREATE TABLE T (k INT64, c_other STRING(2621439), c_small STRING(1)";
+  for (int i = 0; i < 199; ++i) {
+    absl::StrAppend(&ddl, absl::StrFormat(", c%d STRING(MAX)", i));
+  }
+  absl::StrAppend(&ddl, ") PRIMARY KEY (k)");
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(auto schema, CreateSchema({ddl}));
+
+  // Increasing length of c_small from 1 to 10 causes total non-key size to
+  // exceed 2000 MiB limit.
+  const int64_t expected_size = 2097152036LL;
+  EXPECT_THAT(UpdateSchema(schema.get(), {R"(
+      ALTER TABLE T ALTER COLUMN c_small STRING(10)
+    )"}),
+              StatusIs(error::InvalidTotalColumnSize(
+                  "c_small", "T", expected_size,
+                  limits::kMaxTotalNonKeyColumnsSizeBytes)));
 }
 
 }  // namespace

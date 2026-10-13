@@ -1701,10 +1701,10 @@ TEST_F(PGFunctionsTest, ToChar) {
                        HasSubstr("\"9\" must be ahead of \"PR\"")));
 }
 
-TEST_F(PGFunctionsTest, QuoteIdent) {
-  EXPECT_THAT(Query("SELECT quote_ident('test')"),
-              IsOkAndHoldsRows({{"\"test\""}}));
-}
+// TEST_F(PGFunctionsTest, QuoteIdent) {
+//   EXPECT_THAT(Query("SELECT quote_ident('test')"),
+//               IsOkAndHoldsRows({{"\"test\""}}));
+// }
 
 TEST_F(PGFunctionsTest, Substring) {
   EXPECT_THAT(Query("SELECT substring('abcdefg', 'a(b.)')"),

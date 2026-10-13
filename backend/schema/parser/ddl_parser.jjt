@@ -106,6 +106,7 @@ void create_statement() #void :
   (   create_database_statement()
     | create_proto_bundle_statement()
     | create_table_statement()
+    | create_queue_statement()
     | create_index_statement()
     | create_search_index_statement()
     | create_vector_index_statement()
@@ -539,9 +540,7 @@ void create_vector_index_statement() :
   [ if_not_exists() ]
   qualified_identifier() #name
   <ON> qualified_identifier() #index_base
-  "("
-  key_part() #index_key
-  ")"
+  key() #index_keys
   [ <STORING> stored_column_list() ]
   [ <PARTITION> <BY> partition_key() ]
   [ <WHERE> create_index_where_clause() ]
@@ -772,10 +771,18 @@ void index_keys() :
   ")"
 }
 
+void function_expression() :
+{}
+{
+ qualified_identifier() #function_name "(" expression() ")"
+}
+
 void index_key_part() :
 {}
 {
-  key_part()
+  LOOKAHEAD(function_expression()) function_expression()
+  | "(" expression() #expression ")"
+  | key_part()
 }
 
 void option_list() #void :
@@ -884,6 +891,16 @@ void model_column_list() #void:
   "(" column_def() ( LOOKAHEAD(2) "," column_def() )* [ "," ] ")"
 }
 
+void create_queue_statement() :
+{}
+{
+  <QUEUE> [ if_not_exists() ] ( qualified_identifier() #name )
+  "(" column_def() ( LOOKAHEAD(2) "," column_def() )* [ "," ] ")"
+  primary_key()
+  [ LOOKAHEAD(2) "," table_interleave_clause() ]
+  [ LOOKAHEAD(2) "," row_deletion_policy_clause() ]
+  [ LOOKAHEAD(2) "," options_clause() ]
+}
 
 void drop_statement() :
 {}
@@ -891,6 +908,7 @@ void drop_statement() :
   <DROP>
   (
     ( <TABLE> #table [ if_exists() ]
+      | <QUEUE> #queue [ if_exists() ]
       | <INDEX> #index [ if_exists() ]
       | <SEARCH> <INDEX> #search_index [ if_exists() ]
       | <VECTOR> <INDEX> #vector_index [ if_exists() ]
@@ -916,6 +934,7 @@ void alter_statement() #void :
   (
     alter_database_statement()
     | alter_table_statement()
+    | alter_queue_statement()
     | alter_change_stream_statement()
     | alter_index_statement()
     | alter_proto_bundle_statement()
@@ -962,6 +981,18 @@ void alter_table_statement() :
   )
 }
 
+void alter_queue_statement() :
+{}
+{
+  <QUEUE> (qualified_identifier() #queue_name)
+  (   LOOKAHEAD(3) <ADD> row_deletion_policy_clause() #add_row_deletion_policy
+    | LOOKAHEAD(2) <DROP> <ROW> <DELETION> <POLICY> #drop_row_deletion_policy
+    | LOOKAHEAD(2) <REPLACE> row_deletion_policy_clause() #alter_row_deletion_policy
+    | LOOKAHEAD(3) <SET> options_clause()
+    | LOOKAHEAD(2) <SET> table_interleave_clause()
+    | <SET> #set_on_delete on_delete_clause()
+  )
+}
 
 void rename_op() :
 {}
@@ -1026,6 +1057,7 @@ void alter_vector_index_statement() :
     | <DROP> <STORED> <COLUMN> identifier() #drop_stored_column_name
     | <ALTER> <STORED> <COLUMN> alter_stored_column() #alter_stored_column
     | <SET> options_clause()
+    | <REBUILD> #rebuild
   )
 }
 

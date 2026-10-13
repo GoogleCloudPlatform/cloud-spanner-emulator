@@ -1037,6 +1037,38 @@ absl::Status TooManyColumns(absl::string_view object_type,
                        object_type, object_name, limit));
 }
 
+absl::Status TotalNonKeyColumnsSizeTooLarge(absl::string_view object_type,
+                                            absl::string_view object_name,
+                                            int64_t total_size, int64_t limit) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "Total size of non-key columns in $0 $1 $2 exceeds the limit of $3.",
+          object_type, object_name, total_size, limit));
+}
+
+absl::Status AddColumnExceedsTotalNonKeyColumnSizeBytes(
+    absl::string_view column_name, absl::string_view table_name,
+    int64_t total_size, int64_t limit) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "Cannot add column $0. Total size of non-key columns in table $1 $2 "
+          "exceeds the limit of $3.",
+          column_name, table_name, total_size, limit));
+}
+
+absl::Status InvalidTotalColumnSize(absl::string_view column_name,
+                                    absl::string_view table_name,
+                                    int64_t total_size, int64_t limit) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "Cannot increase length of column $0. Total size of non-key "
+          "columns in table $1 is $2 which exceeds the limit of $3.",
+          column_name, table_name, total_size, limit));
+}
+
 absl::Status TooManyKeys(absl::string_view object_type,
                          absl::string_view object_name, int64_t key_count,
                          int64_t limit) {
@@ -1645,6 +1677,14 @@ absl::Status DropTableWithInterleavedTables(absl::string_view table_name,
       absl::StatusCode::kFailedPrecondition,
       absl::Substitute("Cannot drop table $0 with interleaved tables: $1.",
                        table_name, child_tables));
+}
+
+absl::Status DropTableWithInterleavedQueues(absl::string_view table_name,
+                                            absl::string_view child_queues) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute("Cannot drop table $0 with interleaved queues: $1.",
+                       table_name, child_queues));
 }
 
 absl::Status DropTableWithDependentIndices(absl::string_view table_name,
@@ -2265,6 +2305,70 @@ absl::Status TableNotFoundAtTimestamp(absl::string_view table_name,
 absl::Status IndexNotFound(absl::string_view index_name) {
   return absl::Status(absl::StatusCode::kNotFound,
                       absl::Substitute("Index not found: $0", index_name));
+}
+
+absl::Status MutationQueueRequired() {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      "Mutation does not specify queue.");
+}
+
+absl::Status QueueNotFound(absl::string_view queue_name) {
+  return absl::Status(absl::StatusCode::kNotFound,
+                      absl::Substitute("Queue not found: $0", queue_name));
+}
+
+absl::Status QueueMessageNotFound(absl::string_view queue_name,
+                                  absl::string_view key) {
+  return absl::Status(absl::StatusCode::kNotFound,
+                      absl::StrCat("Message not found: ", queue_name, key));
+}
+
+absl::Status QueueMissingPayloadColumn(absl::string_view queue_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Queue $0 must have a Payload column.", queue_name));
+}
+
+absl::Status QueueWithNullablePayloadColumn(absl::string_view queue_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Queue $0 Payload column must be NOT NULL.",
+                       queue_name));
+}
+
+absl::Status QueuePayloadWithWrongType(absl::string_view queue_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "Queue $0 Payload column must be type BYTES, PROTO, STRING, or JSON.",
+          queue_name));
+}
+
+absl::Status QueueWithoutPrimaryKeys(absl::string_view queue_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "Queue $0 must have Primary Key with at least one key part.",
+          queue_name));
+}
+
+absl::Status QueueWithExtraColumns(absl::string_view queue_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "Queue $0 must have no additional columns other than its Primary "
+          "Key and Payload.",
+          queue_name));
+}
+
+absl::Status InvalidQueueReceiveMode(absl::string_view queue_name,
+                                     absl::string_view receive_mode) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "Queue $0 has invalid receive_mode option: $1.  Must be one of "
+          "[PULL].",
+          queue_name, receive_mode));
 }
 
 absl::Status ChangeStreamNotFound(absl::string_view change_stream_name) {
@@ -3098,6 +3202,16 @@ absl::Status InvalidDropDependentColumn(absl::string_view type_kind,
           type_kind, dependency_name, dependent_column));
 }
 
+absl::Status InvalidDropDependentIndex(absl::string_view type_kind,
+                                       absl::string_view dependency_name,
+                                       absl::string_view dependent_index) {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      absl::Substitute(
+          "Cannot drop $0 `$1` on which there is a dependent index: $2.",
+          type_kind, dependency_name, dependent_index));
+}
+
 absl::Status DependentColumnBecomesInvalid(absl::string_view modify_action,
                                            absl::string_view dependency_name,
                                            absl::string_view dependent_column,
@@ -3443,6 +3557,28 @@ absl::Status PendingCommitTimestampDmlValueOnly() {
       "value for INSERT or UPDATE of an appropriately typed column. It "
       "cannot be used in SELECT, or as the input to any other scalar "
       "expression.");
+}
+
+absl::Status DmlUnsupportedOnQueue(absl::string_view operation,
+                                   absl::string_view queue_name) {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      absl::Substitute("$0 is not supported on Queue $1",
+                                       operation, queue_name));
+}
+
+absl::Status InsertModeNotSupportedForQueues(absl::string_view insert_mode) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Insert mode $0 is not supported on queues.",
+                       insert_mode));
+}
+
+absl::Status ConflictActionNotSupportedForQueues(
+    absl::string_view conflict_action) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("On conflict action $0 is not supported on queues.",
+                       conflict_action));
 }
 
 absl::Status CannotInsertDuplicateKeyInsertOrUpdateDml(absl::string_view key) {
@@ -3863,6 +3999,26 @@ absl::Status VectorIndexNonArrayKey(absl::string_view column_string,
       absl::Substitute(
           "The key column $0 in vector index $1 must be ARRAY type.",
           column_string, index_string));
+}
+
+absl::Status VectorIndexProtoArrayKeysUnsupported(
+    absl::string_view column_string, absl::string_view index_string) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "PROTO / ARRAY columns like `$0` are not supported to be keys in "
+          "vector index `$1`.",
+          column_string, index_string));
+}
+
+absl::Status VectorIndexKeyRefsUnsupportedColumn(
+    absl::string_view index_string, absl::string_view column_string,
+    absl::string_view type) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute(
+          "Vector Index $0 has key column $1 of unsupported type $2.",
+          index_string, column_string, type));
 }
 
 absl::Status VectorIndexArrayKeyMustBeFloatOrDouble(
@@ -4670,6 +4826,21 @@ absl::Status ChangeDefaultTimeZoneOnNonEmptyDatabase() {
                       "changed on a database with user defined tables.");
 }
 
+absl::Status CannotTogglePerPlacementRoutingMetadataWithPlacements() {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      "The per_placement_routing_metadata database option cannot be toggled "
+      "while there are Cloud Placements still present. Please run DROP "
+      "PLACEMENT on all Cloud Placements before changing the value of this "
+      "option.");
+}
+
+absl::Status UnsupportedPerPlacementRoutingMetadataOptionValues() {
+  return absl::Status(
+      absl::StatusCode::kFailedPrecondition,
+      "The per_placement_routing_metadata option only supports bool or null.");
+}
+
 absl::Status UnsupportedDefaultTimeZoneOptionValues() {
   return absl::Status(
       absl::StatusCode::kFailedPrecondition,
@@ -4883,6 +5054,49 @@ absl::Status RepeatableReadNotSupportedInPDMLTransactions() {
 absl::Status RenameTableNotSupportedInPostgreSQL() {
   return absl::Status(absl::StatusCode::kUnimplemented,
                       "RENAME TABLE is not supported in PostgreSQL dialect.");
+}
+
+absl::Status IllegalQueueQuerySyntax(absl::string_view tvf_name) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Queue TVF must not be combined with any other SQL "
+                       "statements. Queue records should be read using "
+                       "`SELECT ... FROM $0(<args>)`.",
+                       tvf_name));
+}
+
+absl::Status InvalidQueueReceiveTvfArgumentWithArgIndex(int arg_index) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Argument $0 is not a literal or parameter. Implicit "
+                       "type conversions are not supported.",
+                       arg_index));
+}
+
+absl::Status QueueTvfInvalidMaxDurationFormat() {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      "Invalid max_duration format.");
+}
+
+absl::Status QueueTvfInvalidMaxBatchSize(int64_t max_batch_size,
+                                         int64_t max_limit) {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      absl::Substitute("Max batch size $0 for Queue Receive TVF is invalid; "
+                       "must be between 1 and $1.",
+                       max_batch_size, max_limit));
+}
+
+absl::Status QueueTvfInvalidPriority() {
+  return absl::Status(absl::StatusCode::kInvalidArgument,
+                      "Invalid priority for Queue Receive TVF.");
+}
+
+absl::Status InvalidQueueLeaseToken() {
+  return absl::Status(
+      absl::StatusCode::kInvalidArgument,
+      "The request has an invalid lease token. Please provide a valid lease "
+      "token returned by the queue receiver APIs.");
 }
 
 }  // namespace error

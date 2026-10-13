@@ -42,6 +42,7 @@ namespace emulator {
 namespace backend {
 
 class Table;
+class Queue;
 
 class Column::Builder {
  public:
@@ -135,6 +136,11 @@ class Column::Builder {
 
   Builder& set_table(const Table* table) {
     instance_->table_ = table;
+    return *this;
+  }
+
+  Builder& set_queue(const Queue* queue) {
+    instance_->queue_ = queue;
     return *this;
   }
 

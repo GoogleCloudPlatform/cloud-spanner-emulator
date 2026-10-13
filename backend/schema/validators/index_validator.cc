@@ -102,11 +102,17 @@ absl::Status IndexValidator::Validate(const Index* index,
   }
 
   if (index->key_columns_.empty()) {
+    // Expression indexes do not have their columns stored in the emulator
+    // because they are not used at query time. They are allowed to not have
+    // any keys.
+    if (!index->is_expression_index()) {
       return error::IndexWithNoKeys(index->name_);
+    }
   }
 
   CaseInsensitiveStringSet keys_set;
-  for (const auto* key_column : index->key_columns_) {
+  for (int i = 0; i < index->key_columns_.size(); ++i) {
+    const auto* key_column = index->key_columns_[i];
     std::string column_name = key_column->column()->Name();
     if (keys_set.contains(column_name)) {
       return error::IndexRefsColumnTwice(index->name_, column_name);
@@ -117,9 +123,27 @@ absl::Status IndexValidator::Validate(const Index* index,
       keys_set.insert(column_name);
       continue;
     }
-    if (!IsSupportedKeyColumnType(column_type, index->is_vector_index())) {
-      return error::IndexRefsUnsupportedColumn(index->name_,
-                                               ToString(column_type));
+    if (index->is_vector_index()) {
+      if (i == 0) {
+        if (!column_type->IsArray()) {
+          return error::VectorIndexNonArrayKey(column_name, index->name_);
+        }
+      } else {
+        if (column_type->IsArray()) {
+          return error::VectorIndexProtoArrayKeysUnsupported(column_name,
+                                                             index->name_);
+        }
+        if (!IsSupportedKeyColumnType(column_type, /*is_vector_index=*/false) ||
+            column_type->IsProto()) {
+          return error::VectorIndexKeyRefsUnsupportedColumn(
+              index->name_, column_name, ToString(column_type));
+        }
+      }
+    } else {
+      if (!IsSupportedKeyColumnType(column_type, index->is_vector_index())) {
+        return error::IndexRefsUnsupportedColumn(index->name_,
+                                                 ToString(column_type));
+      }
     }
     if (index->is_null_filtered_) {
       GOOGLESQL_RET_CHECK(!key_column->column()->is_nullable());
@@ -206,7 +230,7 @@ absl::Status IndexValidator::Validate(const Index* index,
       return error::VectorIndexPartitionByUnsupported(index->name_);
     }
 
-    GOOGLESQL_RET_CHECK(index->key_columns_.size() == 1);
+    GOOGLESQL_RET_CHECK(!index->key_columns_.empty());
     const KeyColumn* key_column = index->key_columns_[0];
     if (!key_column->column()->GetType()->IsArray()) {
       return error::VectorIndexNonArrayKey(key_column->column()->Name(),

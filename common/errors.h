@@ -324,6 +324,15 @@ absl::Status TooManyIndicesPerDatabase(absl::string_view index_name,
                                        int64_t limit);
 absl::Status TooManyColumns(absl::string_view object_type,
                             absl::string_view object_name, int64_t limit);
+absl::Status TotalNonKeyColumnsSizeTooLarge(absl::string_view object_type,
+                                            absl::string_view object_name,
+                                            int64_t total_size, int64_t limit);
+absl::Status AddColumnExceedsTotalNonKeyColumnSizeBytes(
+    absl::string_view column_name, absl::string_view table_name,
+    int64_t total_size, int64_t limit);
+absl::Status InvalidTotalColumnSize(absl::string_view column_name,
+                                    absl::string_view table_name,
+                                    int64_t total_size, int64_t limit);
 absl::Status TooManyKeys(absl::string_view object_type,
                          absl::string_view object_name, int64_t key_count,
                          int64_t limit);
@@ -336,6 +345,8 @@ absl::Status DeepNesting(absl::string_view object_type,
                          absl::string_view object_name, int limit);
 absl::Status DropTableWithInterleavedTables(absl::string_view table_name,
                                             absl::string_view child_tables);
+absl::Status DropTableWithInterleavedQueues(absl::string_view table_name,
+                                            absl::string_view child_queues);
 absl::Status DropTableWithDependentIndices(absl::string_view table_name,
                                            absl::string_view indexes);
 absl::Status DropTableWithDependentChangeStreams(
@@ -511,6 +522,17 @@ absl::Status TableNotFound(absl::string_view table_name);
 absl::Status TableNotFoundAtTimestamp(absl::string_view table_name,
                                       absl::Time timestamp);
 absl::Status IndexNotFound(absl::string_view index_name);
+absl::Status MutationQueueRequired();
+absl::Status QueueNotFound(absl::string_view queue_name);
+absl::Status QueueMessageNotFound(absl::string_view queue_name,
+                                  absl::string_view key);
+absl::Status QueueMissingPayloadColumn(absl::string_view queue_name);
+absl::Status QueueWithNullablePayloadColumn(absl::string_view queue_name);
+absl::Status QueuePayloadWithWrongType(absl::string_view queue_name);
+absl::Status QueueWithoutPrimaryKeys(absl::string_view queue_name);
+absl::Status QueueWithExtraColumns(absl::string_view queue_name);
+absl::Status InvalidQueueReceiveMode(absl::string_view queue_name,
+                                     absl::string_view receive_mode);
 
 absl::Status ChangeStreamNotFound(absl::string_view change_stream_name);
 absl::Status UnknownPlacement(absl::string_view placement_name);
@@ -732,6 +754,9 @@ absl::Status NonDeterministicFunctionInColumnExpression(
 absl::Status InvalidDropDependentColumn(absl::string_view type_kind,
                                         absl::string_view dependency_name,
                                         absl::string_view dependent_column);
+absl::Status InvalidDropDependentIndex(absl::string_view type_kind,
+                                       absl::string_view dependency_name,
+                                       absl::string_view dependent_index);
 absl::Status DependentColumnBecomesInvalid(absl::string_view modify_action,
                                            absl::string_view dependency_name,
                                            absl::string_view dependent_column,
@@ -804,6 +829,11 @@ absl::Status ComparisonNotSupported(int arg_num,
                                     absl::string_view function_name);
 absl::Status StructComparisonNotSupported(absl::string_view function_name);
 absl::Status PendingCommitTimestampDmlValueOnly();
+absl::Status DmlUnsupportedOnQueue(absl::string_view operation,
+                                   absl::string_view queue_name);
+absl::Status InsertModeNotSupportedForQueues(absl::string_view insert_mode);
+absl::Status ConflictActionNotSupportedForQueues(
+    absl::string_view conflict_action);
 absl::Status UnsupportedUpsertQueries(absl::string_view insert_mode);
 absl::Status UnsupportedReturningWithUpsertQueries(
     absl::string_view insert_mode);
@@ -908,6 +938,11 @@ absl::Status SearchIndexTokenlistKeyOrderUnsupported(
 absl::Status VectorIndexPartitionByUnsupported(absl::string_view index_name);
 absl::Status VectorIndexNonArrayKey(absl::string_view column_string,
                                     absl::string_view index_string);
+absl::Status VectorIndexProtoArrayKeysUnsupported(
+    absl::string_view column_string, absl::string_view index_string);
+absl::Status VectorIndexKeyRefsUnsupportedColumn(
+    absl::string_view index_string, absl::string_view column_string,
+    absl::string_view type);
 absl::Status VectorIndexArrayKeyMustBeFloatOrDouble(
     absl::string_view column_string, absl::string_view index_string);
 absl::Status VectorIndexArrayKeyMustHaveVectorLength(
@@ -1108,6 +1143,8 @@ absl::Status UnspecifiedIdentityColumnSequenceKind(
 absl::Status ChangeDefaultTimeZoneOnNonEmptyDatabase();
 absl::Status UnsupportedDefaultTimeZoneOptionValues();
 absl::Status InvalidDefaultTimeZoneOption(absl::string_view time_zone);
+absl::Status CannotTogglePerPlacementRoutingMetadataWithPlacements();
+absl::Status UnsupportedPerPlacementRoutingMetadataOptionValues();
 
 absl::Status InvalidColumnIdentifierFormat(
     absl::string_view column_path_string);
@@ -1156,6 +1193,15 @@ absl::Status VectorIndexesUnusableForceIndexWrongColumn(
     absl::string_view column_string);
 absl::Status NotVectorIndexes(absl::string_view index_string);
 absl::Status RenameTableNotSupportedInPostgreSQL();
+
+// Queue TVF errors.
+absl::Status IllegalQueueQuerySyntax(absl::string_view tvf_name);
+absl::Status InvalidQueueReceiveTvfArgumentWithArgIndex(int arg_index);
+absl::Status QueueTvfInvalidMaxDurationFormat();
+absl::Status QueueTvfInvalidMaxBatchSize(int64_t max_batch_size,
+                                         int64_t max_limit);
+absl::Status QueueTvfInvalidPriority();
+absl::Status InvalidQueueLeaseToken();
 }  // namespace error
 }  // namespace emulator
 }  // namespace spanner

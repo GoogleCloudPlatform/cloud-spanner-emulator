@@ -39,6 +39,7 @@
 #include "backend/schema/catalog/placement.h"
 #include "backend/schema/catalog/property_graph.h"
 #include "backend/schema/catalog/proto_bundle.h"
+#include "backend/schema/catalog/queue.h"
 #include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/schema/catalog/udf.h"
@@ -126,6 +127,22 @@ const Table* Schema::FindTableUsingSynonymCaseSensitive(
     return nullptr;
   }
   return table;
+}
+
+const Queue* Schema::FindQueue(const std::string& queue_name) const {
+  if (auto itr = queues_map_.find(queue_name); itr != queues_map_.end()) {
+    return itr->second;
+  }
+  return nullptr;
+}
+
+const Queue* Schema::FindQueueCaseSensitive(
+    const std::string& queue_name) const {
+  if (const Queue* queue = FindQueue(queue_name);
+      queue && queue->Name() == queue_name) {
+    return queue;
+  }
+  return nullptr;
 }
 
 const Index* Schema::FindIndex(const std::string& index_name) const {
@@ -642,6 +659,39 @@ ddl::DDLStatementList Schema::Dump() const {
     }
   }
 
+  for (const Queue* queue : queues_) {
+    ddl::CreateQueue* create_queue =
+        ddl_statements.add_statement()->mutable_create_queue();
+    create_queue->set_queue_name(queue->Name());
+    for (const Column* column : queue->columns()) {
+      DumpColumn(column, *create_queue->add_column());
+    }
+    for (const KeyColumn* key_column : queue->primary_key()) {
+      ddl::KeyPartClause* key_part_clause = create_queue->add_primary_key();
+      key_part_clause->set_key_name(key_column->column()->Name());
+      if (key_column->is_descending()) {
+        key_part_clause->set_order(ddl::KeyPartClause::DESC);
+      }
+    }
+    if (queue->parent() != nullptr) {
+      ddl::InterleaveClause* interleave_clause =
+          create_queue->mutable_interleave_clause();
+      interleave_clause->set_table_name(queue->parent()->Name());
+      interleave_clause->set_type(ddl::InterleaveClause::IN_PARENT);
+      interleave_clause->set_on_delete(queue->on_delete_action() ==
+                                               Table::OnDeleteAction::kCascade
+                                           ? ddl::InterleaveClause::CASCADE
+                                           : ddl::InterleaveClause::NO_ACTION);
+    }
+    if (queue->row_deletion_policy().has_value()) {
+      *create_queue->mutable_row_deletion_policy() =
+          *queue->row_deletion_policy();
+    }
+    for (const ddl::SetOption& option : queue->options()) {
+      *create_queue->add_set_options() = option;
+    }
+  }
+
   for (const auto& [unused_name, index] : index_map_) {
     if (!index->is_managed()) {
       DumpIndex(index, *ddl_statements.add_statement()->mutable_create_index());
@@ -737,6 +787,8 @@ Schema::Schema(const SchemaGraph* graph,
   synonyms_map_.clear();
   locality_groups_.clear();
   locality_groups_map_.clear();
+  queues_.clear();
+  queues_map_.clear();
   for (const SchemaNode* node : graph_->GetSchemaNodes()) {
     const View* view = node->As<const View>();
     if (view != nullptr) {
@@ -815,6 +867,13 @@ Schema::Schema(const SchemaGraph* graph,
     if (locality_group != nullptr) {
       locality_groups_.push_back(locality_group);
       locality_groups_map_[locality_group->Name()] = locality_group;
+      continue;
+    }
+
+    const Queue* queue = node->As<Queue>();
+    if (queue != nullptr) {
+      queues_.push_back(queue);
+      queues_map_[queue->Name()] = queue;
       continue;
     }
 

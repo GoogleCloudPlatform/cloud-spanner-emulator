@@ -36,6 +36,7 @@
 #include "backend/query/query_context.h"
 #include "backend/query/query_engine_options.h"
 #include "backend/query/queryable_table.h"
+#include "backend/query/queue/queryable_queue_tvfs.h"
 #include "backend/schema/catalog/column.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/sequence.h"
@@ -599,6 +600,34 @@ absl::Status QueryValidator::VisitResolvedQueryStmt(
       return error::UnsupportedReturnStructAsColumn();
   }
 
+  std::vector<const googlesql::ResolvedNode*> tvf_scans;
+  node->GetDescendantsSatisfying(
+      &googlesql::ResolvedNode::Is<googlesql::ResolvedTVFScan>, &tvf_scans);
+  for (const googlesql::ResolvedNode* scan_node : tvf_scans) {
+    const auto* tvf_scan = scan_node->GetAs<googlesql::ResolvedTVFScan>();
+    if (tvf_scan->tvf()->Is<QueryableQueueReceiveTvf>() ||
+        tvf_scan->tvf()->Is<QueryableQueueRenewLeaseTvf>()) {
+      if (tvf_scan->tvf()->Is<QueryableQueueReceiveTvf>()) {
+        for (int i = 0; i < tvf_scan->argument_list_size(); ++i) {
+          const googlesql::ResolvedExpr* expr =
+              tvf_scan->argument_list(i)->expr();
+          if (expr != nullptr &&
+              expr->node_kind() != googlesql::RESOLVED_LITERAL &&
+              expr->node_kind() != googlesql::RESOLVED_PARAMETER) {
+            return error::InvalidQueueReceiveTvfArgumentWithArgIndex(i);
+          }
+        }
+      }
+      const googlesql::ResolvedScan* cur = node->query();
+      while (cur != nullptr && cur->Is<googlesql::ResolvedProjectScan>()) {
+        cur = cur->GetAs<googlesql::ResolvedProjectScan>()->input_scan();
+      }
+      if (cur != tvf_scan) {
+        return error::IllegalQueueQuerySyntax(tvf_scan->tvf()->FullName());
+      }
+    }
+  }
+
   if (IsSelectForUpdateQuery(*node)) {
     query_features_.has_for_update = true;
   }
@@ -832,6 +861,23 @@ absl::Status QueryValidator::CheckPendingCommitTimestampReads(
 absl::Status QueryValidator::VisitResolvedInsertStmt(
     const googlesql::ResolvedInsertStmt* node) {
   if (node->table_scan() != nullptr) {
+    const googlesql::Table* sql_table = node->table_scan()->table();
+    const QueryableTable* queryable_table =
+        dynamic_cast<const QueryableTable*>(sql_table);
+    if (queryable_table != nullptr) {
+      const Table* table = queryable_table->wrapped_table();
+      if (table->owner_queue() != nullptr) {
+        if (node->on_conflict_clause() != nullptr) {
+          return error::ConflictActionNotSupportedForQueues(
+              node->on_conflict_clause()->GetConflictActionString());
+        }
+        if (node->insert_mode() != googlesql::ResolvedInsertStmt::OR_ERROR &&
+            node->insert_mode() != googlesql::ResolvedInsertStmt::OR_IGNORE) {
+          return error::InsertModeNotSupportedForQueues(
+              node->GetInsertModeString());
+        }
+      }
+    }
     dml_table_scans_.insert(node->table_scan());
   }
   return DefaultVisit(node);
@@ -840,6 +886,16 @@ absl::Status QueryValidator::VisitResolvedInsertStmt(
 absl::Status QueryValidator::VisitResolvedUpdateStmt(
     const googlesql::ResolvedUpdateStmt* node) {
   if (node->table_scan() != nullptr) {
+    const googlesql::Table* sql_table = node->table_scan()->table();
+    const QueryableTable* queryable_table =
+        dynamic_cast<const QueryableTable*>(sql_table);
+    if (queryable_table != nullptr) {
+      const Table* table = queryable_table->wrapped_table();
+      if (table->owner_queue() != nullptr) {
+        return error::DmlUnsupportedOnQueue("UPDATE",
+                                            table->owner_queue()->Name());
+      }
+    }
     GOOGLESQL_RETURN_IF_ERROR(CheckPendingCommitTimestampReads(
         node->table_scan(), node->column_access_list()));
     dml_table_scans_.insert(node->table_scan());

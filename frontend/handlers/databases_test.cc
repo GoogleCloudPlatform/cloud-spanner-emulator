@@ -18,6 +18,7 @@
 #include <string>
 #include <vector>
 
+#include "google/longrunning/operations.pb.h"
 #include "google/protobuf/any.pb.h"
 #include "google/spanner/admin/database/v1/spanner_database_admin.pb.h"
 #include "google/spanner/v1/commit_response.pb.h"
@@ -28,6 +29,7 @@
 #include "tests/common/proto_matchers.h"
 #include "absl/flags/flag.h"
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/synchronization/mutex.h"
 #include "backend/database/database.h"
@@ -48,6 +50,7 @@ namespace frontend {
 namespace {
 
 using google::spanner::emulator::backend::Sequence;
+using googlesql_base::testing::IsOkAndHolds;
 using googlesql_base::testing::StatusIs;
 
 namespace database_api = ::google::spanner::admin::database::v1;
@@ -145,6 +148,23 @@ class DatabaseApiTest : public test::ServerTest {
     protobuf_api::Empty response;
     return test_env()->database_admin_client()->DropDatabase(&context, request,
                                                              &response);
+  }
+
+  // Returns the names of the long-running operations registered under the
+  // resource with the given URI.
+  absl::StatusOr<std::vector<std::string>> ListOperationNames(
+      const std::string& resource_uri) {
+    grpc::ClientContext context;
+    operations_api::ListOperationsRequest request;
+    request.set_name(absl::StrCat(resource_uri, "/operations"));
+    operations_api::ListOperationsResponse response;
+    GOOGLESQL_RETURN_IF_ERROR(test_env()->operations_client()->ListOperations(
+        &context, request, &response));
+    std::vector<std::string> operation_names;
+    for (const auto& operation : response.operations()) {
+      operation_names.push_back(operation.name());
+    }
+    return operation_names;
   }
 
  private:
@@ -477,6 +497,39 @@ TEST_F(DatabaseApiTest, DropDatabaseIdempotent) {
               StatusIs(absl::StatusCode::kNotFound));
 
   GOOGLESQL_EXPECT_OK(DropDatabase(test_database_uri_));
+}
+
+TEST_F(DatabaseApiTest, DropDatabaseDeletesOperations) {
+  // Create two databases and update the schema of the first one, which
+  // registers a long-running operation per database and per schema update.
+  GOOGLESQL_EXPECT_OK(CreateDatabase(test_instance_uri_, test_database_name_));
+  GOOGLESQL_EXPECT_OK(UpdateDatabaseDdl(
+      test_database_uri_,
+      {"CREATE TABLE test_table (int64_col INT64) PRIMARY KEY(int64_col)"}));
+  const std::string other_database_uri =
+      MakeDatabaseUri(test_instance_uri_, "other-database");
+  GOOGLESQL_EXPECT_OK(CreateDatabase(test_instance_uri_, "other-database"));
+
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<std::string> operation_names,
+                       ListOperationNames(test_database_uri_));
+  ASSERT_EQ(operation_names.size(), 2);
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<std::string> other_operation_names,
+                       ListOperationNames(other_database_uri));
+  ASSERT_EQ(other_operation_names.size(), 1);
+
+  GOOGLESQL_EXPECT_OK(DropDatabase(test_database_uri_));
+
+  // The operations of the dropped database are gone, the operations of the
+  // other database are not affected.
+  for (const std::string& operation_name : operation_names) {
+    operations_api::Operation operation;
+    EXPECT_THAT(GetOperation(operation_name, &operation),
+                StatusIs(absl::StatusCode::kNotFound));
+  }
+  EXPECT_THAT(ListOperationNames(test_database_uri_),
+              IsOkAndHolds(testing::IsEmpty()));
+  EXPECT_THAT(ListOperationNames(other_database_uri),
+              IsOkAndHolds(other_operation_names));
 }
 
 TEST_F(DatabaseApiTest, UpdateAndGetDatabaseDDL) {

@@ -34,6 +34,7 @@
 #include "backend/schema/catalog/named_schema.h"
 #include "backend/schema/catalog/placement.h"
 #include "backend/schema/catalog/proto_bundle.h"
+#include "backend/schema/catalog/queue.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/table.h"
@@ -59,6 +60,9 @@ std::string PrintIndexFilter(const Index* index);
 
 // Prints the DDL statements for a table.
 std::string PrintTable(const Table* table);
+
+// Prints the DDL statements for a queue.
+std::string PrintQueue(const Queue* queue);
 
 // Prints the DDL statements for options.
 std::string PrintOptions(::google::protobuf::RepeatedPtrField<ddl::SetOption> options);

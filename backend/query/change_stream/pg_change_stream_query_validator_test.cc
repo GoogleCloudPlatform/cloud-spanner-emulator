@@ -512,10 +512,82 @@ TEST_F(PgChangeStreamMutableKeyRangeQueryValidatorTest,
 }
 
 TEST_F(PgChangeStreamMutableKeyRangeQueryValidatorTest,
+       ValidateEndTimestampWithPastStartTimestampValid) {
+  absl::Time start_time = absl::FromUnixMicros(absl::ToUnixMicros(absl::Now()));
+  absl::Time query_start_time = start_time + absl::Hours(1);
+  absl::Time end_time = query_start_time + absl::Minutes(30);
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      auto stmt, AnalyzePGQuery(absl::Substitute(
+                     "SELECT * FROM "
+                     "spanner.read_proto_bytes_change_stream_test_table ("
+                     "'$0'::timestamptz,"
+                     "'$1'::timestamptz, 'test_token', 1000 , null::text[] )",
+                     start_time, end_time)));
+  ChangeStreamQueryValidator validator{
+      schema_.get(),
+      query_start_time,
+      params_,
+  };
+  ASSERT_THAT(validator.IsChangeStreamQuery(stmt->resolved_statement()),
+              IsOkAndHolds(true));
+  GOOGLESQL_EXPECT_OK(stmt->resolved_statement()->Accept(&validator));
+}
+
+TEST_F(PgChangeStreamMutableKeyRangeQueryValidatorTest,
+       ValidateEndTimestampWithFutureStartTimestampValid) {
+  absl::Time query_start_time =
+      absl::FromUnixMicros(absl::ToUnixMicros(absl::Now()));
+  absl::Time start_time = query_start_time + absl::Minutes(5);
+  absl::Time end_time = start_time + absl::Minutes(30);
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      auto stmt, AnalyzePGQuery(absl::Substitute(
+                     "SELECT * FROM "
+                     "spanner.read_proto_bytes_change_stream_test_table ("
+                     "'$0'::timestamptz,"
+                     "'$1'::timestamptz, 'test_token', 1000 , null::text[] )",
+                     start_time, end_time)));
+  ChangeStreamQueryValidator validator{
+      schema_.get(),
+      query_start_time,
+      params_,
+  };
+  ASSERT_THAT(validator.IsChangeStreamQuery(stmt->resolved_statement()),
+              IsOkAndHolds(true));
+  GOOGLESQL_EXPECT_OK(stmt->resolved_statement()->Accept(&validator));
+}
+
+TEST_F(PgChangeStreamMutableKeyRangeQueryValidatorTest,
        ValidateEndTimestampTooFarInFutureNonValid) {
-  absl::Time query_start_time = absl::Now();
-  absl::Time start_time = query_start_time;
+  absl::Time start_time = absl::FromUnixMicros(absl::ToUnixMicros(absl::Now()));
+  absl::Time query_start_time = start_time + absl::Hours(1);
   absl::Time end_time = query_start_time + absl::Minutes(31);
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      auto stmt, AnalyzePGQuery(absl::Substitute(
+                     "SELECT * FROM "
+                     "spanner.read_proto_bytes_change_stream_test_table ("
+                     "'$0'::timestamptz,"
+                     "'$1'::timestamptz, 'test_token', 1000 , null::text[] )",
+                     start_time, end_time)));
+  ChangeStreamQueryValidator validator{
+      schema_.get(),
+      query_start_time,
+      params_,
+  };
+  ASSERT_THAT(validator.IsChangeStreamQuery(stmt->resolved_statement()),
+              IsOkAndHolds(true));
+  EXPECT_THAT(
+      stmt->resolved_statement()->Accept(&validator),
+      StatusIs(absl::StatusCode::kOutOfRange,
+               testing::HasSubstr(
+                   "Specified end_timestamp is too far in the future.")));
+}
+
+TEST_F(PgChangeStreamMutableKeyRangeQueryValidatorTest,
+       ValidateEndTimestampTooFarInFutureWithFutureStartTimestampNonValid) {
+  absl::Time query_start_time =
+      absl::FromUnixMicros(absl::ToUnixMicros(absl::Now()));
+  absl::Time start_time = query_start_time + absl::Minutes(5);
+  absl::Time end_time = start_time + absl::Minutes(31);
   GOOGLESQL_ASSERT_OK_AND_ASSIGN(
       auto stmt, AnalyzePGQuery(absl::Substitute(
                      "SELECT * FROM "

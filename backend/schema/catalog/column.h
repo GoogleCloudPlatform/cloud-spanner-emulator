@@ -49,6 +49,7 @@ namespace backend {
 
 class Table;
 class ChangeStream;
+class Queue;
 
 // Column represents a column in a Table.
 class Column : public SchemaNode {
@@ -112,6 +113,10 @@ class Column : public SchemaNode {
     return 0;
   }
 
+  // Returns the theoretical maximum size in bytes that can be stored in this
+  // column for non-key column size limit calculation.
+  int64_t GetScalarOrBlobColumnSizeBytes() const;
+
   // Returns whether the column is a generated column.
   bool is_generated() const {
     return expression_.has_value() && !has_default_value_;
@@ -136,6 +141,21 @@ class Column : public SchemaNode {
   }
   // Returns whether the column has an ON UPDATE expression.
   bool has_on_update() const { return has_on_update_; }
+
+  // Returns whether the column is an injected column for an expression index.
+  bool is_expression_index_injected_column() const {
+    return RE2::FullMatch(
+        name_, absl::StrCat(kExpressionIndexInjectedPrefix, "(.+)_\\d+"));
+  }
+
+  std::optional<std::string> GetExpressionIndexSourceName() const {
+    std::string source_name;
+    if (RE2::FullMatch(
+            name_, absl::StrCat(kExpressionIndexInjectedPrefix, "(.+)_\\d+"),
+            &source_name)) {
+      return source_name;
+    }
+  }
 
   // Returns the expression if the column is an evaluated column.
   const std::optional<std::string>& expression() const { return expression_; }
@@ -166,6 +186,9 @@ class Column : public SchemaNode {
 
   // Returns the table containing the column.
   const Table* table() const { return table_; }
+
+  // Returns the queue containing the column.
+  const Queue* queue() const { return queue_; }
 
   // Returns the list of all change streams on this column.
   absl::Span<const ChangeStream* const> change_streams() const {
@@ -303,6 +326,9 @@ class Column : public SchemaNode {
 
   // The table containing the column.
   const Table* table_ = nullptr;
+
+  // The queue containing the column.
+  const Queue* queue_ = nullptr;
 
   // List of change streams referring to this column. These are owned by the
   // Schema, not by the Column.

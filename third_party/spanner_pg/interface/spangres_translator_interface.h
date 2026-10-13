@@ -117,10 +117,6 @@ class TranslatorCommonParams {
     return engine_provided_catalog_;
   }
 
-  // Returns true if the SimpleCatalog created for column expression analysis
-  // adds tables in named schemas (as needed).
-  bool table_in_named_catalog() const { return table_in_named_catalog_; }
-
   // Gives ownership of this object's EngineBuiltinFunctionCatalog to the
   // caller. Required.
   std::unique_ptr<EngineBuiltinFunctionCatalog>
@@ -164,7 +160,6 @@ class TranslatorCommonParams {
   TranslationProgress* translation_progress_output_ = nullptr;
   std::unique_ptr<MemoryReservationManager> memory_reservation_manager_ =
       nullptr;
-  bool table_in_named_catalog_ = false;
 
   friend class TranslateQueryParamsBuilder;
   friend class TranslateParsedQueryParamsBuilder;
@@ -229,12 +224,6 @@ class TranslateParsedQueryParams {
   // Required.
   googlesql::EnumerableCatalog* engine_provided_catalog() const {
     return common_params_.engine_provided_catalog();
-  }
-
-  // Returns true if the SimpleCatalog created for column expression analysis
-  // adds tables in named schemas (as needed).
-  bool table_in_named_catalog() const {
-    return common_params_.table_in_named_catalog();
   }
 
   // Gives ownership of this object's EngineBuiltinFunctionCatalog to the
@@ -358,14 +347,6 @@ class TranslateParsedQueryParamsBuilder {
     return *this;
   }
 
-  // Set to true if the SimpleCatalog created for column expression analysis
-  // adds tables in named schemas (as needed).
-  TranslateParsedQueryParamsBuilder& SetTableInNamedCatalog(
-      bool table_in_named_catalog) {
-    params_.common_params_.table_in_named_catalog_ = table_in_named_catalog;
-    return *this;
-  }
-
   // If set to a callable target, the PostgreSQL analyzed Query object will be
   // passed to it before transformation to GoogleSQL AST. If a failed status is
   // returned, translation will stop and that failed status will be propagated
@@ -428,12 +409,6 @@ class TranslateQueryParams {
   // Required.
   googlesql::EnumerableCatalog* engine_provided_catalog() const {
     return common_params_.engine_provided_catalog();
-  }
-
-  // Returns true if the SimpleCatalog created for column expression analysis
-  // adds tables in named schemas (as needed).
-  bool table_in_named_catalog() const {
-    return common_params_.table_in_named_catalog();
   }
 
   // Gives ownership of this object's EngineBuiltinFunctionCatalog to the
@@ -554,14 +529,6 @@ class TranslateQueryParamsBuilder {
   TranslateQueryParamsBuilder& SetTypeFactory(
       googlesql::TypeFactory* type_factory) {
     params_.common_params_.type_factory_ = type_factory;
-    return *this;
-  }
-
-  // Set to true if the SimpleCatalog created for column expression analysis
-  // adds tables in named schemas (as needed).
-  TranslateQueryParamsBuilder& SetTableInNamedCatalog(
-      bool table_in_named_catalog) {
-    params_.common_params_.table_in_named_catalog_ = table_in_named_catalog;
     return *this;
   }
 

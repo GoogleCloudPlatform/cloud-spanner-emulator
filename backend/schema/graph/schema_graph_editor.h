@@ -64,6 +64,8 @@ class SchemaGraphEditor {
   SchemaGraphEditor(const SchemaGraph* original_graph,
                     SchemaValidationContext* context)
       : original_graph_(original_graph),
+        original_nodes_(original_graph->GetSchemaNodes().begin(),
+                        original_graph->GetSchemaNodes().end()),
         context_(context),
         cloned_pool_(std::make_unique<SchemaObjectsPool>()) {
     context_->set_added_nodes(&added_nodes_);
@@ -276,6 +278,9 @@ class SchemaGraphEditor {
 
   // The original graph.
   const SchemaGraph* original_graph_ = nullptr;
+
+  // Set of nodes in `original_graph_`.
+  absl::flat_hash_set<const SchemaNode*> original_nodes_;
 
   // Validation context passed to Validate() and ValidateUpdate() methods for
   // SchemaNode.

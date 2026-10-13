@@ -16,6 +16,8 @@
 
 #include "backend/datamodel/types.h"
 
+#include <cstdint>
+#include <optional>
 #include <string>
 
 #include "google/spanner/v1/type.pb.h"
@@ -23,6 +25,7 @@
 #include "googlesql/public/type.pb.h"
 #include "googlesql/public/types/type.h"
 #include "common/feature_flags.h"
+#include "common/limits.h"
 #include "third_party/spanner_pg/datatypes/extended/spanner_extended_type.h"
 
 namespace google {
@@ -117,6 +120,47 @@ const googlesql::Type* BaseType(const googlesql::Type* type) {
     return nullptr;
   }
   return type->IsArray() ? type->AsArray()->element_type() : type;
+}
+
+int64_t GetScalarOrBlobColumnSizeBytes(
+    const googlesql::Type* type, std::optional<int64_t> declared_max_length) {
+  if (type->IsArray()) {
+    return limits::kMaxBytesColumnLength;
+  }
+  switch (type->kind()) {
+    case googlesql::TypeKind::TYPE_INT64:
+    case googlesql::TypeKind::TYPE_BOOL:
+    case googlesql::TypeKind::TYPE_FLOAT:
+    case googlesql::TypeKind::TYPE_DOUBLE:
+    case googlesql::TypeKind::TYPE_TIMESTAMP:
+    case googlesql::TypeKind::TYPE_DATE:
+    case googlesql::TypeKind::TYPE_NUMERIC:
+    case googlesql::TypeKind::TYPE_ENUM:
+      return 0;
+    case googlesql::TypeKind::TYPE_UUID:
+      return limits::kUuidByteSize;
+    case googlesql::TypeKind::TYPE_JSON:
+      return limits::kMaxBytesColumnLength;
+    case googlesql::TypeKind::TYPE_STRING:
+      return 4 * declared_max_length.value_or(limits::kMaxStringColumnLength);
+    case googlesql::TypeKind::TYPE_BYTES:
+    case googlesql::TypeKind::TYPE_PROTO:
+    case googlesql::TypeKind::TYPE_TOKENLIST:
+      return declared_max_length.value_or(limits::kMaxBytesColumnLength);
+    case googlesql::TypeKind::TYPE_EXTENDED: {
+      auto type_code = static_cast<const SpannerExtendedType*>(type)->code();
+      switch (type_code) {
+        case TypeAnnotationCode::PG_JSONB:
+          return limits::kMaxBytesColumnLength;
+        case TypeAnnotationCode::PG_NUMERIC:
+          return 0;
+        default:
+          return 0;
+      }
+    }
+    default:
+      return 0;
+  }
 }
 
 }  // namespace backend

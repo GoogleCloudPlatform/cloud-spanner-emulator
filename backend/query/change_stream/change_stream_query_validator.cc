@@ -100,7 +100,8 @@ absl::Status ChangeStreamQueryValidator::ValidateTimeStamps(
     }
     absl::Time end_time = end_time_value.ToTime();
     absl::Time max_end_time =
-        start_time + absl::Minutes(limits::kChangeStreamsMaxEndTimestampDelay);
+        std::max(query_start_time_, start_time) +
+        absl::Minutes(limits::kChangeStreamsMaxEndTimestampDelay);
     if (end_time > max_end_time) {
       return error::InvalidChangeStreamTvfArgumentEndTimestampTooFarInFuture(
           absl::FormatTime(start_time), absl::FormatTime(max_end_time),

@@ -59,6 +59,8 @@ class DatabaseOptions : public SchemaNode {
     return version_retention_period_;
   }
 
+  std::optional<std::string> default_leader() const { return default_leader_; }
+
   std::optional<int64_t> score_version() const { return score_version_; }
 
   // SchemaNode interface implementation.
@@ -111,6 +113,8 @@ class DatabaseOptions : public SchemaNode {
   std::optional<std::string> columnar_policy_;
   // Version retention period for the database.
   std::optional<std::string> version_retention_period_;
+  // Default leader for the database.
+  std::optional<std::string> default_leader_;
   // Score version for the database.
   std::optional<int64_t> score_version_;
 };
