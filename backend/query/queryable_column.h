@@ -43,7 +43,7 @@ class QueryableColumn : public googlesql::Column {
       : wrapped_column_(column) {}
 
   QueryableColumn(const backend::Column* column,
-                  std::unique_ptr<const googlesql::AnalyzerOutput> output,
+                  std::shared_ptr<const googlesql::AnalyzerOutput> output,
                   std::optional<const googlesql::Column::ExpressionAttributes>
                       expression_attributes)
       : wrapped_column_(column),
@@ -77,8 +77,9 @@ class QueryableColumn : public googlesql::Column {
   // The underlying schema column.
   const backend::Column* wrapped_column_;
   // The AnalyzerOutput that holds the column's ResolvedExpr, representing
-  // default value expression.
-  const std::unique_ptr<const googlesql::AnalyzerOutput> output_ = nullptr;
+  // default value expression. Shared with every other catalog built over the
+  // same schema generation: the expression is analyzed once, not per statement.
+  const std::shared_ptr<const googlesql::AnalyzerOutput> output_ = nullptr;
   // Column Expression for generated or default columns.
   std::optional<const googlesql::Column::ExpressionAttributes>
       column_expression_;

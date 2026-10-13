@@ -258,18 +258,29 @@ Catalog::Catalog(
     }
   }
 
-  // Pass the reader to tables.
+  // Pass the reader to tables. One optional for all of them: the analyzer
+  // options are a deep copy each time they are passed by value, and a copy
+  // per table and per column was most of what a statement paid before it
+  // read a row.
+  const std::optional<const googlesql::AnalyzerOptions> table_options(
+      options);
+  ColumnExpressionAnalysisCache* analyses =
+      function_catalog == nullptr
+          ? nullptr
+          : function_catalog->column_expression_analyses();
   for (const auto* table : schema->tables()) {
     std::string name = table->Name();
     if (SDLObjectName::IsFullyQualifiedName(name)) {
       absl::Status status = AddObjectToNamedSchema(
           std::string(SDLObjectName::GetSchemaName(name)),
-          std::make_unique<QueryableTable>(table, reader, options, this,
-                                           type_factory));
+          std::make_unique<QueryableTable>(table, reader, table_options, this,
+                                           type_factory, /*is_synonym=*/false,
+                                           analyses));
       LOG_IF(ERROR, !status.ok()) << status.message();
     } else {
       tables_[table->Name()] = std::make_unique<QueryableTable>(
-          table, reader, options, this, type_factory);
+          table, reader, table_options, this, type_factory,
+          /*is_synonym=*/false, analyses);
     }
 
     std::string synonym_name = table->synonym();
@@ -277,13 +288,14 @@ Catalog::Catalog(
       if (SDLObjectName::IsFullyQualifiedName(synonym_name)) {
         absl::Status status = AddObjectToNamedSchema(
             std::string(SDLObjectName::GetSchemaName(synonym_name)),
-            std::make_unique<QueryableTable>(table, reader, options, this,
-                                             type_factory,
-                                             /*is_synonym=*/true));
+            std::make_unique<QueryableTable>(table, reader, table_options,
+                                             this, type_factory,
+                                             /*is_synonym=*/true, analyses));
         LOG_IF(ERROR, !status.ok()) << status.message();
       } else {
         tables_[synonym_name] = std::make_unique<QueryableTable>(
-            table, reader, options, this, type_factory, /*is_synonym=*/true);
+            table, reader, table_options, this, type_factory,
+            /*is_synonym=*/true, analyses);
       }
     }
   }
@@ -337,8 +349,9 @@ Catalog::Catalog(
                      << edge_table_name;
         }
       }
-      property_graphs_[graph->Name()] =
-          std::make_unique<QueryablePropertyGraph>(this, type_factory, graph);
+      // Wrapped on first use: wrapping analyzes every property definition,
+      // and almost no statement names a graph.
+      unwrapped_property_graphs_[graph->Name()] = graph;
     }
   }
 
@@ -469,6 +482,15 @@ absl::Status Catalog::GetPropertyGraph(std::string_view name,
   if (auto it = property_graphs_.find(std::string(name));
       it != property_graphs_.end()) {
     graph = it->second.get();
+    return absl::OkStatus();
+  }
+  if (auto it = unwrapped_property_graphs_.find(std::string(name));
+      it != unwrapped_property_graphs_.end()) {
+    auto wrapped = std::make_unique<QueryablePropertyGraph>(
+        this, type_factory_, it->second);
+    graph = wrapped.get();
+    property_graphs_[it->second->Name()] = std::move(wrapped);
+    unwrapped_property_graphs_.erase(it);
     return absl::OkStatus();
   }
   return error::PropertyGraphNotFound(name);

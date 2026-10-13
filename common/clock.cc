@@ -40,12 +40,14 @@ Clock::Clock()
 absl::Time Clock::Now() {
   absl::MutexLock lock(mu_);
 
+  // Follows the system clock, and steps one microsecond past the last value
+  // only while the system clock has not moved beyond it. Adding the elapsed
+  // system time to the last value instead keeps every such step for good, and
+  // a strong read waits for the system clock to reach its read timestamp.
   absl::Time now = NowMicros();
-  absl::Time next_dispensed_time =
-      last_dispensed_time_ +
-      std::max(absl::Microseconds(1), now - last_system_time_);
   last_system_time_ = now;
-  last_dispensed_time_ = next_dispensed_time;
+  last_dispensed_time_ =
+      std::max(now, last_dispensed_time_ + absl::Microseconds(1));
 
   return last_dispensed_time_;
 }

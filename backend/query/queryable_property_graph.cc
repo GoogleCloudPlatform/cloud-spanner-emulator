@@ -44,6 +44,20 @@ namespace spanner {
 namespace emulator {
 namespace backend {
 
+namespace {
+
+// Built once: a property graph is wrapped for every statement, and building
+// these options from scratch for each of its declarations and definitions was
+// a measurable part of every statement.
+const googlesql::AnalyzerOptions& DefaultGraphAnalyzerOptions() {
+  static const googlesql::AnalyzerOptions* const options =
+      new googlesql::AnalyzerOptions(
+          MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone));
+  return *options;
+}
+
+}  // namespace
+
 // Helper function to match up the column names in a GraphElementTable to the
 // columns in the underlying Table.
 absl::Status MatchGraphTableColumnHelper(
@@ -75,11 +89,9 @@ QueryableGraphPropertyDeclaration::QueryableGraphPropertyDeclaration(
     : property_graph_(property_graph),
       wrapped_property_declaration_(wrapped_property_declaration) {
   const googlesql::Type* type;
-  googlesql::AnalyzerOptions analyzer_options =
-      MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone);
-  absl::Status analyze_status =
-      googlesql::AnalyzeType(wrapped_property_declaration->type,
-                             analyzer_options, catalog, type_factory, &type);
+  absl::Status analyze_status = googlesql::AnalyzeType(
+      wrapped_property_declaration->type, DefaultGraphAnalyzerOptions(),
+      catalog, type_factory, &type);
   if (!analyze_status.ok()) {
     ABSL_LOG(FATAL) << "Failed to analyze property type: "
                << wrapped_property_declaration->type;
@@ -114,11 +126,9 @@ QueryableGraphPropertyDefinition::QueryableGraphPropertyDefinition(
         PropertyDefinition* wrapped_property_definition)
     : property_declaration_(property_declaration),
       wrapped_property_definition_(wrapped_property_definition) {
-  googlesql::AnalyzerOptions analyzer_options =
-      MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone);
   // Setup a callback for GoogleSQL's resolver to be able to map the property
   // definition expression back to existing columns in the catalog.
-  googlesql::AnalyzerOptions local_options = analyzer_options;
+  googlesql::AnalyzerOptions local_options = DefaultGraphAnalyzerOptions();
   std::unique_ptr<const googlesql::AnalyzerOutput> analyzer_output;
   ConfigureCatalogColumnCallBack(data_source_table, local_options);
 
@@ -288,11 +298,9 @@ QueryableGraphDynamicLabel::QueryableGraphDynamicLabel(
                << data_source_table_name;
   }
   label_expression_ = element_table->dynamic_label_expression();
-  googlesql::AnalyzerOptions analyzer_options =
-      MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone);
   // Setup a callback for GoogleSQL's resolver to be able to map the property
   // definition expression back to existing columns in the catalog.
-  googlesql::AnalyzerOptions local_options = analyzer_options;
+  googlesql::AnalyzerOptions local_options = DefaultGraphAnalyzerOptions();
   ConfigureCatalogColumnCallBack(data_source_table, local_options);
   absl::Status analyze_status =
       googlesql::AnalyzeExpression(label_expression_, local_options, catalog,
@@ -331,11 +339,9 @@ QueryableGraphDynamicProperties::QueryableGraphDynamicProperties(
                << data_source_table_name;
   }
   properties_expression_ = element_table->dynamic_properties_expression();
-  googlesql::AnalyzerOptions analyzer_options =
-      MakeGoogleSqlAnalyzerOptions(kDefaultTimeZone);
   // Setup a callback for GoogleSQL's resolver to be able to map the property
   // definition expression back to existing columns in the catalog.
-  googlesql::AnalyzerOptions local_options = analyzer_options;
+  googlesql::AnalyzerOptions local_options = DefaultGraphAnalyzerOptions();
   ConfigureCatalogColumnCallBack(data_source_table, local_options);
   absl::Status analyze_status =
       googlesql::AnalyzeExpression(properties_expression_, local_options,

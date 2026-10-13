@@ -16,6 +16,8 @@
 
 #include "common/clock.h"
 
+#include "absl/time/clock.h"
+#include "absl/time/time.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "googlesql/base/testing/status_matchers.h"
@@ -40,6 +42,18 @@ TEST(Clock, ClockReturnsValuesAtMicrosecondGranularity) {
   Clock clock;
   absl::Time t1 = clock.Now();
   EXPECT_EQ(t1, absl::FromUnixMicros(absl::ToUnixMicros(t1)));
+}
+
+TEST(Clock, ClockReturnsToTheSystemClockAfterABurst) {
+  Clock clock;
+  // Calls closer together than a microsecond each step the clock ahead of the
+  // system clock.
+  for (int i = 0; i < 20000; ++i) {
+    clock.Now();
+  }
+  absl::SleepFor(absl::Milliseconds(100));
+
+  EXPECT_LT(clock.Now() - absl::Now(), absl::Milliseconds(1));
 }
 
 }  // namespace

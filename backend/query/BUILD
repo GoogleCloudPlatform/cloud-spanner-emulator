@@ -655,13 +655,18 @@ cc_test(
         ":queryable_column",
         ":queryable_table",
         "//backend/access:read",
+        "//backend/datamodel:key",
+        "//backend/datamodel:key_range",
+        "//backend/datamodel:key_set",
         "//tests/common:proto_matchers",
         "//tests/common:test_row_cursor",
         "//tests/common:test_row_reader",
         "//tests/common:test_schema_constructor",
         "@com_github_google_benchmark//:benchmark",
         "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_googlesql//googlesql/base/testing:status_matchers",
+        "@com_google_googlesql//googlesql/public:evaluator_table_iterator",
         "@com_google_googlesql//googlesql/public:type",
         "@com_google_googlesql//googlesql/public:value",
         "@com_google_googletest//:gtest_main",
@@ -723,6 +728,24 @@ cc_library(
 )
 
 cc_library(
+    name = "column_expression_analysis_cache",
+    srcs = ["column_expression_analysis_cache.cc"],
+    hdrs = ["column_expression_analysis_cache.h"],
+    deps = [
+        "//backend/schema/catalog:schema",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
+        "@com_google_googlesql//googlesql/public:analyzer_options",
+        "@com_google_googlesql//googlesql/public:analyzer_output",
+        "@com_google_googlesql//googlesql/public:function",
+        "@com_google_googlesql//googlesql/resolved_ast",
+        "@com_google_googlesql//googlesql/resolved_ast:resolved_node_kind_cc_proto",
+    ],
+)
+
+cc_library(
     name = "queryable_table",
     srcs = [
         "queryable_table.cc",
@@ -731,12 +754,16 @@ cc_library(
         "queryable_table.h",
     ],
     deps = [
+        ":column_expression_analysis_cache",
         ":queryable_column",
         "//backend/access:read",
+        "//backend/datamodel:key",
+        "//backend/datamodel:key_range",
         "//backend/datamodel:key_set",
         "//backend/schema/catalog:schema",
         "//common:constants",
         "//common:feature_flags",
+        "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
@@ -814,6 +841,7 @@ cc_library(
         "function_catalog.h",
     ],
     deps = [
+        ":column_expression_analysis_cache",
         ":analyzer_options",
         "//backend/common:case",
         "//backend/query/graph:mock_graph_algo_table_valued_function",
