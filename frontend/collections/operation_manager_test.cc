@@ -16,13 +16,17 @@
 
 #include "frontend/collections/operation_manager.h"
 
+#include <memory>
 #include <string>
+#include <vector>
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "absl/status/status.h"
 #include "absl/strings/match.h"
+#include "absl/strings/str_cat.h"
 #include "frontend/entities/operation.h"
 
 namespace google {
@@ -98,6 +102,60 @@ TEST_F(OperationManagerTest, DeletesAnExistingOperation) {
 TEST_F(OperationManagerTest, DeletesANonExistingOperation) {
   GOOGLESQL_ASSERT_OK(
       manager()->DeleteOperation("projects/123/instances/456/operations/789"));
+}
+
+TEST_F(OperationManagerTest, DeletesAllOperationsOfAResource) {
+  const std::string kDatabaseURI =
+      "projects/test-project/instances/test-instance/databases/test-db";
+  GOOGLESQL_ASSERT_OK(manager()->CreateOperation(kDatabaseURI, "1"));
+  GOOGLESQL_ASSERT_OK(manager()->CreateOperation(kDatabaseURI, "2"));
+  GOOGLESQL_ASSERT_OK(manager()->CreateOperation(kDatabaseURI, ""));
+
+  GOOGLESQL_ASSERT_OK(manager()->DeleteOperations(kDatabaseURI));
+
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(std::vector<std::shared_ptr<Operation>> operations,
+                       manager()->ListOperations(kDatabaseURI));
+  EXPECT_TRUE(operations.empty());
+  EXPECT_THAT(
+      manager()->GetOperation(absl::StrCat(kDatabaseURI, "/operations/1")),
+      googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+}
+
+TEST_F(OperationManagerTest, DeletesOperationsOfOnlyTheSpecifiedResource) {
+  const std::string kInstanceURI =
+      "projects/test-project/instances/test-instance";
+  const std::string kDatabaseURI = absl::StrCat(kInstanceURI, "/databases/db");
+  // Shares a URI prefix with kDatabaseURI.
+  const std::string kOtherDatabaseURI =
+      absl::StrCat(kInstanceURI, "/databases/db2");
+  GOOGLESQL_ASSERT_OK(manager()->CreateOperation(kInstanceURI, "1"));
+  GOOGLESQL_ASSERT_OK(manager()->CreateOperation(kDatabaseURI, "1"));
+  GOOGLESQL_ASSERT_OK(manager()->CreateOperation(kOtherDatabaseURI, "1"));
+
+  // Deleting the operations of a database leaves the operations of the parent
+  // instance and of the other database untouched.
+  GOOGLESQL_ASSERT_OK(manager()->DeleteOperations(kDatabaseURI));
+  EXPECT_THAT(
+      manager()->GetOperation(absl::StrCat(kDatabaseURI, "/operations/1")),
+      googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+  GOOGLESQL_EXPECT_OK(
+      manager()->GetOperation(absl::StrCat(kInstanceURI, "/operations/1")));
+  GOOGLESQL_EXPECT_OK(manager()->GetOperation(
+      absl::StrCat(kOtherDatabaseURI, "/operations/1")));
+
+  // Deleting the operations of the instance leaves the operations of its
+  // child databases untouched.
+  GOOGLESQL_ASSERT_OK(manager()->DeleteOperations(kInstanceURI));
+  EXPECT_THAT(
+      manager()->GetOperation(absl::StrCat(kInstanceURI, "/operations/1")),
+      googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+  GOOGLESQL_EXPECT_OK(manager()->GetOperation(
+      absl::StrCat(kOtherDatabaseURI, "/operations/1")));
+}
+
+TEST_F(OperationManagerTest, DeletesOperationsOfANonExistingResource) {
+  GOOGLESQL_ASSERT_OK(manager()->DeleteOperations(
+      "projects/test-project/instances/test-instance/databases/test-db"));
 }
 
 TEST_F(OperationManagerTest, ListsOperations) {

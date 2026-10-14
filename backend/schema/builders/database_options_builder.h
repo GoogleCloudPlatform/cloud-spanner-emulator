@@ -77,6 +77,11 @@ class DatabaseOptions::Builder {
     return *this;
   }
 
+  Builder& set_default_leader(std::optional<std::string> default_leader) {
+    instance_->default_leader_ = default_leader;
+    return *this;
+  }
+
   Builder& set_score_version(std::optional<int64_t> score_version) {
     instance_->score_version_ = score_version;
     return *this;
@@ -117,6 +122,11 @@ class DatabaseOptions::Editor {
   Editor& set_version_retention_period(
       std::optional<std::string> version_retention_period) {
     instance_->version_retention_period_ = version_retention_period;
+    return *this;
+  }
+
+  Editor& set_default_leader(std::optional<std::string> default_leader) {
+    instance_->default_leader_ = default_leader;
     return *this;
   }
 

@@ -188,6 +188,8 @@ static const CaseInsensitiveStringSet* const pseudo_reserved_words =
     "POLICY",
     "PRIMARY",
     "PROPERTY",
+    "QUEUE",
+    "REBUILD",
     "REFERENCES",
     "REMOTE",
     "RENAME",

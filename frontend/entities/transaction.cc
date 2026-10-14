@@ -224,6 +224,7 @@ absl::StatusOr<backend::QueryResult> Transaction::ExecuteSql(
           query_mode);
     }
     case kReadWrite: {
+      GOOGLESQL_RETURN_IF_ERROR(read_write()->PrepareForQuery());
       return query_engine_->ExecuteSql(
           query,
           backend::QueryContext{.schema = schema(),
@@ -236,6 +237,7 @@ absl::StatusOr<backend::QueryResult> Transaction::ExecuteSql(
           query_mode);
     }
     case kPartitionedDml: {
+      GOOGLESQL_RETURN_IF_ERROR(read_write()->PrepareForQuery());
       auto context = backend::QueryContext{
           .schema = schema(),
           .reader = read_write(),

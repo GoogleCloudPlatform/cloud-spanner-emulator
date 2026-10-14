@@ -186,6 +186,7 @@ cc_library(
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
+        "@com_google_googlesql//googlesql/base:ret_check",
         "@com_google_googlesql//googlesql/base:status",
     ],
 )

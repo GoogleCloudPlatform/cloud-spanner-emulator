@@ -47,6 +47,7 @@
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/index.h"
 #include "backend/schema/catalog/placement.h"
+#include "backend/schema/catalog/queue.h"
 #include "backend/schema/catalog/schema.h"
 #include "common/errors.h"
 #include "googlesql/base/status_macros.h"
@@ -112,7 +113,7 @@ ActionRegistry::ActionRegistry(const Schema* schema,
 }
 
 void ActionRegistry::BuildActionRegistry() {
-  for (const Table* table : schema_->tables()) {
+  auto build_table_actions = [this](const Table* table) {
     // Column value checks for all tables.
     absl::flat_hash_set<std::string> placements;
     for (const Placement* placement : schema_->placements()) {
@@ -197,9 +198,7 @@ void ActionRegistry::BuildActionRegistry() {
     absl::flat_hash_set<std::string> evaluated_key_columns;
     // Effector for primary key evaluated columns.
     for (const Column* column : table->columns()) {
-      if ((column->has_default_value()
-           || column->is_generated()
-           ) &&
+      if ((column->has_default_value() || column->is_generated()) &&
           table->FindKeyColumn(column->Name()) != nullptr) {
         evaluated_key_columns.insert(column->Name());
         table_evaluated_key_effectors_[table->Name()] =
@@ -223,6 +222,15 @@ void ActionRegistry::BuildActionRegistry() {
                 &catalog_));
         break;
       }
+    }
+  };
+
+  for (const Table* table : schema_->tables()) {
+    build_table_actions(table);
+  }
+  for (const Queue* queue : schema_->queues()) {
+    if (queue->backing_table() != nullptr) {
+      build_table_actions(queue->backing_table());
     }
   }
 }

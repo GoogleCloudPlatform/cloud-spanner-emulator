@@ -114,11 +114,11 @@ InsertOp ConstructInsertOpWithDefaultValues(
 }
 
 // Converts each MutationOp row to a WriteOp based on the MutationOpType:
-// - MutatioOpTyp::kReplace: converts to DeleteOp followed by InsertOp.
+// - MutationOpType::kReplace: converts to DeleteOp followed by InsertOp.
 // - MutationOpType::kInsertOrUpdate: if the row already exists, converts
 //   to UpdateOp. Otherwise converts to InsertOp.
-// - MutationOpType::kInsert | kDelete | kUpdate: converts to
-//   corresponding WriteOp of the same type.
+// - MutationOpType::kInsert | kSend: converts to InsertOp.
+// - MutationOpType::kUpdate: converts to UpdateOp.
 absl::StatusOr<std::vector<WriteOp>> FlattenNonDeleteOpRow(
     MutationOpType type, const Table* table,
     const std::vector<const Column*>& columns, const Key& key,
@@ -127,7 +127,8 @@ absl::StatusOr<std::vector<WriteOp>> FlattenNonDeleteOpRow(
     const std::map<std::string, googlesql::Value>& fallback_defaults) {
   std::vector<WriteOp> write_ops;
   switch (type) {
-    case MutationOpType::kInsert: {
+    case MutationOpType::kInsert:
+    case MutationOpType::kSend: {
       auto new_cols = columns;
       auto new_row = row;
       InsertOp insert_op = ConstructInsertOpWithDefaultValues(
@@ -162,7 +163,8 @@ absl::StatusOr<std::vector<WriteOp>> FlattenNonDeleteOpRow(
       write_ops.push_back(InsertOp{table, key, columns, row, origin_is_dml});
       break;
     }
-    case MutationOpType::kDelete: {
+    case MutationOpType::kDelete:
+    case MutationOpType::kAck: {
       break;
     }
   }
@@ -219,6 +221,11 @@ absl::StatusOr<bool> IsMutationInvolvingForeignKeyAction(
   if (IsChangeStreamPartitionTable(mutation_op.table)) {
     GOOGLESQL_ASSIGN_OR_RETURN(table,
                      FindChangeStreamPartitionTable(schema, mutation_op.table));
+  }
+  if (table == nullptr) {
+    if (const Queue* queue = schema->FindQueue(mutation_op.table)) {
+      table = queue->backing_table();
+    }
   }
   if (table == nullptr) {
     return error::TableNotFound(mutation_op.table);
@@ -442,6 +449,13 @@ ReadWriteTransaction::ResolveNonDeleteMutationOp(const MutationOp& mutation_op,
     GOOGLESQL_ASSIGN_OR_RETURN(table,
                      FindChangeStreamPartitionTable(schema, mutation_op.table));
   }
+  if (table == nullptr && (mutation_op.type == MutationOpType::kSend ||
+                           (mutation_op.origin_is_dml &&
+                            mutation_op.type == MutationOpType::kInsert))) {
+    if (const Queue* queue = schema->FindQueue(mutation_op.table)) {
+      table = queue->backing_table();
+    }
+  }
 
   if (table == nullptr) {
     return error::TableNotFound(mutation_op.table);
@@ -461,12 +475,33 @@ ReadWriteTransaction::ResolveNonDeleteMutationOp(const MutationOp& mutation_op,
   GOOGLESQL_RETURN_IF_ERROR(action_registry_->ExecuteEvaluatedKeyEffectors(
       mutation_op, &evaluated_values, &columns_with_evaluated_values));
 
+  std::vector<std::string> resolved_column_names = mutation_op.columns;
+  if (table->owner_queue() != nullptr &&
+      schema->dialect() == database_api::DatabaseDialect::POSTGRESQL) {
+    for (std::string& col_name : resolved_column_names) {
+      if (absl::EqualsIgnoreCase(col_name, kQueuePgDeliverTime)) {
+        col_name = std::string(kQueueDeliverTime);
+      }
+    }
+  }
+
   GOOGLESQL_ASSIGN_OR_RETURN(std::vector<const Column*> columns,
-                   GetColumnsByName(table, mutation_op.columns));
+                   GetColumnsByName(table, resolved_column_names));
   // If we have key columns with evaluated values, append them here:
   if (!columns_with_evaluated_values.empty()) {
     columns.insert(columns.end(), columns_with_evaluated_values.begin(),
                    columns_with_evaluated_values.end());
+  }
+
+  bool append_default_deliver_time = false;
+  if (table->owner_queue() != nullptr) {
+    const Column* deliver_time_col = table->FindColumn(kQueueDeliverTime);
+    if (deliver_time_col != nullptr &&
+        std::find(columns.begin(), columns.end(), deliver_time_col) ==
+            columns.end()) {
+      columns.push_back(deliver_time_col);
+      append_default_deliver_time = true;
+    }
   }
 
   GOOGLESQL_ASSIGN_OR_RETURN(std::vector<std::optional<int>> key_indices,
@@ -478,6 +513,9 @@ ReadWriteTransaction::ResolveNonDeleteMutationOp(const MutationOp& mutation_op,
     // If we have key columns with evaluated values, append them here:
     new_row.insert(new_row.end(), evaluated_values[i].begin(),
                    evaluated_values[i].end());
+    if (append_default_deliver_time) {
+      new_row.push_back(googlesql::values::Timestamp(clock_->Now()));
+    }
 
     GOOGLESQL_RET_CHECK_EQ(new_row.size(), columns.size())
         << "MutationOp has difference in size of column and value vectors, "
@@ -514,8 +552,9 @@ absl::Status ReadWriteTransaction::Write(const Mutation& mutation) {
       GOOGLESQL_ASSIGN_OR_RETURN(
           bool has_delete_cascade_foreign_key,
           IsMutationInvolvingForeignKeyAction(mutation_op, schema_));
-      if (mutation_op.type == MutationOpType::kDelete) {
-        // Process Delete.
+      if (mutation_op.type == MutationOpType::kDelete ||
+          mutation_op.type == MutationOpType::kAck) {
+        // Process Delete and Ack.
         GOOGLESQL_ASSIGN_OR_RETURN(
             ResolvedMutationOp resolved_mutation_op,
             ResolveDeleteMutationOp(mutation_op, schema_, clock_->Now()));
@@ -526,15 +565,20 @@ absl::Status ReadWriteTransaction::Write(const Mutation& mutation) {
               table_name, resolved_mutation_op.key_ranges));
         }
 
+        GOOGLESQL_ASSIGN_OR_RETURN(std::vector<WriteOp> write_ops,
+                         FlattenDeleteOp(resolved_mutation_op.table,
+                                         resolved_mutation_op.key_ranges,
+                                         transaction_store_.get()));
+        if (mutation_op.type == MutationOpType::kAck &&
+            !mutation_op.ignore_not_found && write_ops.empty()) {
+          return error::QueueMessageNotFound(
+              table_name, mutation_op.key_set.keys()[0].DebugString());
+        }
         std::vector<KeyRange>& key_ranges =
             deleted_key_ranges_by_table_[table_name];
         key_ranges.insert(key_ranges.end(),
                           resolved_mutation_op.key_ranges.begin(),
                           resolved_mutation_op.key_ranges.end());
-        GOOGLESQL_ASSIGN_OR_RETURN(std::vector<WriteOp> write_ops,
-                         FlattenDeleteOp(resolved_mutation_op.table,
-                                         resolved_mutation_op.key_ranges,
-                                         transaction_store_.get()));
         GOOGLESQL_RETURN_IF_ERROR(ProcessWriteOps(write_ops));
       } else {
         // Process non-delete Mutation ops.
@@ -543,12 +587,13 @@ absl::Status ReadWriteTransaction::Write(const Mutation& mutation) {
                          ResolveNonDeleteMutationOp(mutation_op, schema_));
         const std::string& table_name = resolved_mutation_op.table->Name();
 
-        // Process Insert, Update, Replace and InsertOrUpdate.
+        // Process Insert, Send, Update, Replace and InsertOrUpdate.
         for (int i = 0; i < resolved_mutation_op.rows.size(); i++) {
           // Spanner allows deleted entries to be reinserted within the same
           // transaction, so we must update the deleted ranges list in this
           // case.
           if (resolved_mutation_op.type == MutationOpType::kInsert ||
+              resolved_mutation_op.type == MutationOpType::kSend ||
               resolved_mutation_op.type == MutationOpType::kInsertOrUpdate) {
             std::vector<KeyRange> split_key_ranges;
             auto& deleted_key_ranges = deleted_key_ranges_by_table_[table_name];
@@ -694,6 +739,10 @@ absl::Status ReadWriteTransaction::Invalidate() {
 
     return absl::OkStatus();
   });
+}
+
+absl::Status ReadWriteTransaction::PrepareForQuery() {
+  return GuardedCall(OpType::kRead, []() { return absl::OkStatus(); });
 }
 
 }  // namespace backend

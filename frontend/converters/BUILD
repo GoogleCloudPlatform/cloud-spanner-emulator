@@ -199,6 +199,7 @@ cc_library(
     hdrs = ["mutations.h"],
     deps = [
         ":keys",
+        ":time",
         ":types",
         ":values",
         "//backend/access:read",
@@ -212,6 +213,7 @@ cc_library(
         "//common:errors",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/time",
         "@com_google_googleapis//google/spanner/v1:spanner_cc_grpc",
         "@com_google_googlesql//googlesql/public:type",
         "@com_google_googlesql//googlesql/public:value",

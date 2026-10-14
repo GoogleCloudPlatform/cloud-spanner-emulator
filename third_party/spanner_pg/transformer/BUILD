@@ -79,6 +79,7 @@ cc_library(
         "@com_google_absl//absl/types:optional",
         "@com_google_absl//absl/types:span",
         "@com_google_googlesql//googlesql/base:logging",
+        "@com_google_googlesql//googlesql/base:ret_check",
         "@com_google_googlesql//googlesql/public:analyzer_options",
         "@com_google_googlesql//googlesql/public:catalog",
         "@com_google_googlesql//googlesql/public:language_options",

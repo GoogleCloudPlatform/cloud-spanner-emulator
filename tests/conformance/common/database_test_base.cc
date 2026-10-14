@@ -37,6 +37,8 @@
 #include "absl/time/time.h"
 #include "google/cloud/options.h"
 #include "google/cloud/spanner/admin/database_admin_client.h"
+#include "google/cloud/spanner/admin/database_admin_connection.h"
+#include "google/cloud/spanner/admin/database_admin_options.h"
 #include "google/cloud/spanner/backoff_policy.h"
 #include "google/cloud/spanner/batch_dml_result.h"
 #include "google/cloud/spanner/commit_result.h"
@@ -61,33 +63,51 @@ void DatabaseTest::SetUp() {
   // Get the global environment in which the test runs.
   const ConformanceTestGlobals& globals = GetConformanceTestGlobals();
 
-  // Specify custom retry, backoff, and polling policies. The default policies
-  // are on the order of 10's of seconds. We want the tests to complete much
-  // faster than that, so we set the policies on the order of milliseconds. By
-  // default TestEnv conformance tests wait quite a while for admin operations
-  // like create instance/database/schema.
-  auto retry_policy = std::make_unique<cloud::spanner::LimitedTimeRetryPolicy>(
+  // Specify custom retry, backoff, and polling policies for the database admin
+  // client. The default policies are on the order of 10's of seconds (polling
+  // backs off from 1s up to 5 minutes). We want the tests to complete much
+  // faster than that.
+
+  // RPC retry and backoff policies:
+  // These are transient errors, so we can retry quickly.
+  auto rpc_retry_policy = std::make_unique<
+      cloud::spanner_admin::DatabaseAdminLimitedTimeRetryPolicy>(
       std::chrono::seconds(300));
-  auto backoff_policy =
+  auto rpc_backoff_policy =
       std::make_unique<cloud::spanner::ExponentialBackoffPolicy>(
-          std::chrono::milliseconds(1), std::chrono::milliseconds(4), 1.01);
-  auto polling_policy =
-      std::make_unique<cloud::spanner::GenericPollingPolicy<>>(*retry_policy,
-                                                               *backoff_policy);
+          std::chrono::milliseconds(1), std::chrono::milliseconds(20), 2.0);
+
+  // LRO polling retry and backoff policies:
+  // LRO polling is used for asynchronous schema operations (CreateDatabase and
+  // UpdateDatabaseDdl), which usually take some time to complete. We set a
+  // longer timeout and a slower backoff to prevent flooding the server with
+  // polling requests.
+  auto polling_retry_policy = std::make_unique<
+      cloud::spanner_admin::DatabaseAdminLimitedTimeRetryPolicy>(
+      std::chrono::seconds(600));
+  auto polling_backoff_policy =
+      std::make_unique<cloud::spanner::ExponentialBackoffPolicy>(
+          std::chrono::milliseconds(100), std::chrono::seconds(1), 1.5);
+  auto polling_policy = std::make_unique<cloud::spanner::GenericPollingPolicy<
+      cloud::spanner_admin::DatabaseAdminLimitedTimeRetryPolicy>>(
+      *polling_retry_policy, *polling_backoff_policy);
 
   // Pick a unique database name for every test (reuse the instance).
   database_ = std::make_unique<google::cloud::spanner::Database>(
       google::cloud::spanner::Instance(globals.project_id, globals.instance_id),
       absl::StrCat("test-database-", absl::ToUnixMicros(absl::Now())));
 
-  // Setup the database client.
+  // Setup the database admin client. DatabaseAdminClient only reads
+  // DatabaseAdmin*PolicyOption options.
   auto connection_options = *globals.connection_options;
-  connection_options.set<cloud::spanner::SpannerRetryPolicyOption>(
-      retry_policy->clone());
-  connection_options.set<cloud::spanner::SpannerBackoffPolicyOption>(
-      backoff_policy->clone());
-  connection_options.set<cloud::spanner::SpannerPollingPolicyOption>(
-      polling_policy->clone());
+  connection_options.set<cloud::spanner_admin::DatabaseAdminRetryPolicyOption>(
+      std::move(rpc_retry_policy));
+  connection_options
+      .set<cloud::spanner_admin::DatabaseAdminBackoffPolicyOption>(
+          std::move(rpc_backoff_policy));
+  connection_options
+      .set<cloud::spanner_admin::DatabaseAdminPollingPolicyOption>(
+          std::move(polling_policy));
   database_client_ =
       std::make_unique<cloud::spanner_admin::DatabaseAdminClient>(
           cloud::spanner_admin::MakeDatabaseAdminConnection(

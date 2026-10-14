@@ -89,6 +89,8 @@ const char kModelEndpointsOptionName[] = "endpoints";
 const char kWitnessLocationOptionName[] = "witness_location";
 const char kDefaultLeaderOptionName[] = "default_leader";
 const char kReadLeaseRegionsOptionName[] = "read_lease_regions";
+const char kPerPlacementRoutingMetadataOptionName[] =
+    "per_placement_routing_metadata";
 const char kVersionRetentionPeriodOptionName[] = "version_retention_period";
 const char kDefaultSequenceKindOptionName[] = "default_sequence_kind";
 const char kDefaultTimeZoneOptionName[] = "default_time_zone";
@@ -109,6 +111,11 @@ const char kPlacementInstancePartitionOptionName[] = "instance_partition";
 const char kCassandraTypeOptionName[] = "cassandra_type";
 
 const char kLocalityGroupOptionName[] = "locality_group";
+const char kReceiveModeOptionName[] = "receive_mode";
+const char kQueueDisableDeliveryOptionName[] = "disable_delivery";
+const char kQueueDisableSendOptionName[] = "disable_send";
+const char kQueuePubsubTopicOptionName[] = "pubsub_topic";
+const char kPerPlacementTvfOptionName[] = "per_placement_tvf";
 const char kLocalityGroupStorageOptionName[] = "storage";
 const char kLocalityGroupStorageOptionSSDVal[] = "ssd";
 const char kLocalityGroupStorageOptionHDDVal[] = "hdd";
@@ -481,6 +488,42 @@ void VisitTableOptionListNode(const SimpleNode* node, int option_list_offset,
   }
 }
 
+void VisitQueueOptionKeyValNode(const SimpleNode* node, OptionList* options,
+                                std::vector<std::string>* errors) {
+  const std::string option_name = CheckOptionKeyValNodeAndGetName(node);
+
+  if (option_name == kReceiveModeOptionName ||
+      option_name == kQueuePubsubTopicOptionName) {
+    SetOption* option = options->Add();
+    option->set_option_name(option_name);
+    const SimpleNode* value_node = GetChildNode(node, 1);
+    VisitStringOrNullOptionValNode(value_node, option, errors);
+  } else if (option_name == kLocalityGroupOptionName) {
+    VisitLocalityGroupName(node, options, errors);
+  } else if (option_name == kQueueDisableDeliveryOptionName ||
+             option_name == kQueueDisableSendOptionName ||
+             option_name == kPerPlacementTvfOptionName) {
+    SetOption* option = options->Add();
+    option->set_option_name(option_name);
+    const SimpleNode* value_node = GetChildNode(node, 1);
+    VisitBoolOrNullOptionValNode(value_node, option, errors);
+  } else {
+    // If this is an invalid option, return error.
+    errors->push_back(
+        absl::StrCat("Option: ", option_name, " is unknown in Queue Options."));
+  }
+}
+void VisitQueueOptionListNode(const SimpleNode* node, int option_list_offset,
+                              OptionList* options,
+                              std::vector<std::string>* errors) {
+  CheckNode(node, JJTOPTIONS_CLAUSE);
+  // The children of this node are OPTION_KEY_VALs.
+  for (int i = option_list_offset; i < node->jjtGetNumChildren(); ++i) {
+    VisitQueueOptionKeyValNode(GetChildNode(node, i, JJTOPTION_KEY_VAL),
+                               options, errors);
+  }
+}
+
 void VisitIndexOptionKeyValNode(const SimpleNode* node, OptionList* options,
                                 std::vector<std::string>* errors) {
   const std::string option_name = CheckOptionKeyValNodeAndGetName(node);
@@ -718,6 +761,24 @@ void VisitIndexKeyNode(const SimpleNode* node,
       case JJTKEY_PART: {
         key_part->set_key_name(GetChildNode(child, 0, JJTPATH)->image());
         SetSortOrder(child, key_part, errors);
+        break;
+      }
+      case JJTEXPRESSION: {
+        std::string_view raw_expression = ExtractTextForNode(child, ddl_text);
+        std::string expression = absl::StrCat("(", raw_expression, ")");
+        key_part->set_key_name(expression);
+        key_part->mutable_expression_index()->set_expression(expression);
+        break;
+      }
+      case JJTFUNCTION_EXPRESSION: {
+        std::string expression = absl::StrCat(
+            ExtractTextForNode(GetChildNode(child, 0, JJTFUNCTION_NAME),
+                               ddl_text),
+            "(",
+            ExtractTextForNode(GetChildNode(child, 1, JJTEXPRESSION), ddl_text),
+            ")");
+        key_part->set_key_name(expression);
+        key_part->mutable_expression_index()->set_expression(expression);
         break;
       }
       default:
@@ -1532,6 +1593,50 @@ void VisitCreateTableNode(const SimpleNode* node, CreateTable* table,
   }
 }
 
+void VisitCreateQueueNode(const SimpleNode* node, CreateQueue* queue,
+                          absl::string_view ddl_text,
+                          std::vector<std::string>* errors) {
+  int offset = 0;
+  if (GetChildNode(node, offset)->getId() == JJTIF_NOT_EXISTS) {
+    queue->set_existence_modifier(IF_NOT_EXISTS);
+    offset++;
+  }
+
+  queue->set_queue_name(
+      GetQualifiedIdentifier(GetChildNode(node, offset, JJTNAME)));
+  offset++;
+
+  for (int i = offset; i < node->jjtGetNumChildren(); i++) {
+    SimpleNode* child = GetChildNode(node, i);
+    switch (child->getId()) {
+      case JJTCOLUMN_DEF:
+        VisitColumnNode(child, ddl_text, queue->add_column(), nullptr, errors);
+        break;
+      case JJTPRIMARY_KEY:
+        if (queue->primary_key().empty()) {
+          VisitKeyNode(child, queue->mutable_primary_key(), errors);
+        } else {
+          errors->push_back("Can only specify PRIMARY KEY once.");
+        }
+        break;
+      case JJTTABLE_INTERLEAVE_CLAUSE:
+        VisitTableInterleaveNode(child, queue->mutable_interleave_clause());
+        break;
+      case JJTROW_DELETION_POLICY_CLAUSE:
+        VisitTableRowDeletionPolicyNode(
+            child, queue->mutable_row_deletion_policy(), errors);
+        break;
+      case JJTOPTIONS_CLAUSE:
+        VisitQueueOptionListNode(child, 0 /* option_list_offset */,
+                                 queue->mutable_set_options(), errors);
+        break;
+      default:
+        ABSL_LOG(FATAL) << "Unexpected queue info: "
+                   << child->toString();  // Crash OK
+    }
+  }
+}
+
 void VisitFunctionOptionsNode(const SimpleNode* node,
                               CreateFunction* create_function,
                               absl::string_view ddl_text,
@@ -1883,14 +1988,9 @@ void VisitCreateVectorIndexNode(const SimpleNode* node,
       case JJTINDEX_BASE:
         index->set_index_base_name(GetQualifiedIdentifier(child));
         break;
-      case JJTINDEX_KEY: {
-        SimpleNode* key_part_node = GetChildNode(child, 0, JJTKEY_PART);
-        KeyPartClause* key_part = index->mutable_key();
-        key_part->set_key_name(
-            GetChildNode(key_part_node, 0, JJTPATH)->image());
-        SetSortOrder(key_part_node, key_part, errors);
+      case JJTINDEX_KEYS:
+        VisitKeyNode(child, index->mutable_key(), errors);
         break;
-      }
       case JJTSTORED_COLUMN_LIST:
         VisitStoredColumnListNode(
             child, index->mutable_stored_column_definition(), errors);
@@ -2151,6 +2251,24 @@ void VisitReadLeaseRegionsDatabaseOptionValNode(
   }
 }
 
+void VisitPerPlacementRoutingMetadataDatabaseOptionValNode(
+    const SimpleNode* value_node, SetOption* option,
+    std::vector<std::string>* errors) {
+  ABSL_DCHECK_EQ(option->option_name(), kPerPlacementRoutingMetadataOptionName);
+  if (value_node->getId() == JJTBOOL_TRUE_VAL) {
+    option->set_bool_value(true);
+  } else if (value_node->getId() == JJTBOOL_FALSE_VAL) {
+    option->set_bool_value(false);
+  } else if (value_node->getId() == JJTNULLL) {
+    option->set_null_value(true);
+  } else {
+    errors->push_back(absl::StrCat(
+        "Unexpected value for option: ", kPerPlacementRoutingMetadataOptionName,
+        ". Supported option values are bool."));
+    return;
+  }
+}
+
 void VisitDefaultSequenceKindDatabaseOptionValNode(
     const SimpleNode* value_node, SetOption* option,
     std::vector<std::string>* errors) {
@@ -2264,6 +2382,11 @@ void VisitDatabaseOptionKeyValNode(const SimpleNode* node, OptionList* options,
     SetOption* option = options->Add();
     option->set_option_name("read_lease_regions");
     VisitReadLeaseRegionsDatabaseOptionValNode(value_node, option, errors);
+  } else if (option_name == kPerPlacementRoutingMetadataOptionName) {
+    SetOption* option = options->Add();
+    option->set_option_name(kPerPlacementRoutingMetadataOptionName);
+    VisitPerPlacementRoutingMetadataDatabaseOptionValNode(value_node, option,
+                                                          errors);
   } else if (option_name == kDefaultSequenceKindOptionName &&
              EmulatorFeatureFlags::instance().flags().enable_identity_columns) {
     SetOption* option = options->Add();
@@ -2816,6 +2939,54 @@ void VisitAlterTableNode(const SimpleNode* node, absl::string_view ddl_text,
   }
 }
 
+void VisitAlterQueueNode(const SimpleNode* node, AlterQueue* alter_queue,
+                         std::vector<std::string>* errors) {
+  CheckNode(node, JJTALTER_QUEUE_STATEMENT);
+  alter_queue->set_queue_name(
+      GetQualifiedIdentifier(GetFirstChildNode(node, JJTQUEUE_NAME)));
+
+  const SimpleNode* child = GetChildNode(node, 1);
+  switch (child->getId()) {
+    case JJTOPTIONS_CLAUSE: {
+      VisitQueueOptionListNode(
+          child, 0 /* option_list_offset */,
+          alter_queue->mutable_set_options()->mutable_options(), errors);
+      break;
+    }
+    case JJTTABLE_INTERLEAVE_CLAUSE: {
+      VisitTableInterleaveNode(child,
+                               alter_queue->mutable_set_interleave_clause()
+                                   ->mutable_interleave_clause());
+      break;
+    }
+    case JJTSET_ON_DELETE: {
+      SimpleNode* on_delete_node = GetChildNode(node, 2, JJTON_DELETE_CLAUSE);
+      InterleaveClause::Action on_delete_action;
+      VisitOnDeleteClause(on_delete_node, &on_delete_action);
+      alter_queue->mutable_set_on_delete()->set_action(on_delete_action);
+      break;
+    }
+    case JJTADD_ROW_DELETION_POLICY: {
+      VisitTableRowDeletionPolicyNode(
+          GetChildNode(child, 0, JJTROW_DELETION_POLICY_CLAUSE),
+          alter_queue->mutable_add_row_deletion_policy(), errors);
+      break;
+    }
+    case JJTALTER_ROW_DELETION_POLICY: {
+      VisitTableRowDeletionPolicyNode(
+          GetChildNode(child, 0, JJTROW_DELETION_POLICY_CLAUSE),
+          alter_queue->mutable_alter_row_deletion_policy(), errors);
+      break;
+    }
+    case JJTDROP_ROW_DELETION_POLICY: {
+      alter_queue->mutable_drop_row_deletion_policy();
+      break;
+    }
+    default:
+      ABSL_LOG(FATAL) << "Unexpected alter queue type: " << child->toString();
+  }
+}
+
 void VisitAlterIndexNode(const SimpleNode* node, AlterIndex* alter_index,
                          std::vector<std::string>* errors) {
   CheckNode(node, JJTALTER_INDEX_STATEMENT);
@@ -2874,6 +3045,9 @@ void VisitAlterVectorIndexNode(const SimpleNode* node,
       break;
     case JJTDROP_STORED_COLUMN_NAME:
       alter_vector_index->set_drop_stored_column(child->image());
+      break;
+    case JJTREBUILD:
+      alter_vector_index->mutable_rebuild();
       break;
     default: {
       errors->push_back(LogicalError(
@@ -3486,6 +3660,10 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
       VisitCreateTableNode(stmt, statement->mutable_create_table(), ddl_text,
                            errors);
       break;
+    case JJTCREATE_QUEUE_STATEMENT:
+      VisitCreateQueueNode(stmt, statement->mutable_create_queue(), ddl_text,
+                           errors);
+      break;
     case JJTCREATE_INDEX_STATEMENT:
       VisitCreateIndexNode(stmt, statement->mutable_create_index(), ddl_text,
                            errors);
@@ -3577,6 +3755,12 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
             statement->mutable_drop_table()->set_existence_modifier(IF_EXISTS);
           }
           statement->mutable_drop_table()->set_table_name(name);
+          break;
+        case JJTQUEUE:
+          if (GetFirstChildNode(stmt, JJTIF_EXISTS) != nullptr) {
+            statement->mutable_drop_queue()->set_existence_modifier(IF_EXISTS);
+          }
+          statement->mutable_drop_queue()->set_queue_name(name);
           break;
         case JJTINDEX:
           if (GetFirstChildNode(stmt, JJTIF_EXISTS) != nullptr) {
@@ -3684,6 +3868,9 @@ void BuildCloudDDLStatement(const SimpleNode* root, absl::string_view ddl_text,
       break;
     case JJTALTER_TABLE_STATEMENT:
       VisitAlterTableNode(stmt, ddl_text, statement, errors);
+      break;
+    case JJTALTER_QUEUE_STATEMENT:
+      VisitAlterQueueNode(stmt, statement->mutable_alter_queue(), errors);
       break;
     case JJTALTER_MODEL_STATEMENT:
       VisitAlterModelNode(stmt, statement->mutable_alter_model(), errors);

@@ -233,6 +233,8 @@ absl::Status DeleteInstance(RequestContext* ctx,
     }
     GOOGLESQL_RETURN_IF_ERROR(ctx->env()->database_manager()->DeleteDatabase(
         database->database_uri()));
+    GOOGLESQL_RETURN_IF_ERROR(ctx->env()->operation_manager()->DeleteOperations(
+        database->database_uri()));
   }
 
   // Clean up instance partitions associated with the instance.
@@ -243,11 +245,13 @@ absl::Status DeleteInstance(RequestContext* ctx,
   for (const auto& partition : partitions) {
     ctx->env()->instance_partition_manager()->DeleteInstancePartition(
         partition->partition_uri());
+    GOOGLESQL_RETURN_IF_ERROR(ctx->env()->operation_manager()->DeleteOperations(
+        partition->partition_uri()));
   }
 
-  // Clean up the instance.
+  // Clean up the instance and the operations that tracked its creation.
   ctx->env()->instance_manager()->DeleteInstance(request->name());
-  return absl::OkStatus();
+  return ctx->env()->operation_manager()->DeleteOperations(request->name());
 }
 REGISTER_GRPC_HANDLER(InstanceAdmin, DeleteInstance);
 

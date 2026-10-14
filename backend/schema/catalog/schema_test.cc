@@ -43,6 +43,7 @@
 #include "backend/schema/builders/placement_builder.h"
 #include "backend/schema/builders/sequence_builder.h"
 #include "backend/schema/builders/table_builder.h"
+#include "backend/schema/builders/queue_builder.h"
 #include "backend/schema/builders/udf_builder.h"
 #include "backend/schema/builders/view_builder.h"
 #include "backend/schema/catalog/change_stream.h"
@@ -56,6 +57,7 @@
 #include "backend/schema/catalog/proto_bundle.h"
 #include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/table.h"
+#include "backend/schema/catalog/queue.h"
 #include "backend/schema/catalog/udf.h"
 #include "backend/schema/catalog/view.h"
 #include "backend/schema/graph/schema_graph.h"
@@ -515,6 +517,781 @@ TEST_F(SchemaTest, TableSynonymBuilder) {
   auto t2 = table_builder("T1", synonym).build();
   EXPECT_EQ(t2->Validate(&context_),
             error::InvalidSchemaName("Synonym", synonym));
+}
+
+TEST_F(SchemaTest, QueueBuilder) {
+  Queue::Builder qb;
+  qb.set_name("Q").set_id("Q");
+  const std::unique_ptr<const Column> c1 =
+      column_builder("C1", /*table=*/nullptr).set_queue(qb.get()).build();
+  const std::unique_ptr<const Column> payload =
+      column_builder("Payload", /*table=*/nullptr)
+          .set_queue(qb.get())
+          .set_type(type_factory_->get_bytes())
+          .set_nullable(false)
+          .build();
+  const std::unique_ptr<const KeyColumn> k1 =
+      KeyColumn::Builder().set_column(c1.get()).build();
+  const std::unique_ptr<const Queue> q1 = qb.add_column(c1.get())
+                                              .add_column(payload.get())
+                                              .add_key_column(k1.get())
+                                              .build();
+  GOOGLESQL_EXPECT_OK(q1->Validate(&context_));
+}
+
+TEST_F(SchemaTest, QueueBuilderAndEditor) {
+  Queue::Builder qb;
+  qb.set_name("Q").set_id("Q");
+  ddl::RowDeletionPolicy policy;
+  policy.set_column_name("C1");
+  qb.set_row_deletion_policy(policy);
+
+  const std::unique_ptr<const Column> c1 =
+      column_builder("C1", /*table=*/nullptr)
+          .set_queue(qb.get())
+          .set_type(type_factory_->get_timestamp())
+          .build();
+  const std::unique_ptr<const Column> payload =
+      column_builder("Payload", /*table=*/nullptr)
+          .set_queue(qb.get())
+          .set_type(type_factory_->get_bytes())
+          .set_nullable(false)
+          .build();
+  const std::unique_ptr<const KeyColumn> k1 =
+      KeyColumn::Builder().set_column(c1.get()).build();
+  const std::unique_ptr<const Queue> q1 = qb.add_column(c1.get())
+                                              .add_column(payload.get())
+                                              .add_key_column(k1.get())
+                                              .build();
+  GOOGLESQL_EXPECT_OK(q1->Validate(&context_));
+  EXPECT_EQ(q1->row_deletion_policy()->column_name(), "C1");
+
+  // Edit the queue using Queue::Editor.
+  Queue* mutable_q = const_cast<Queue*>(q1.get());
+  Queue::Editor editor(mutable_q);
+
+  editor.set_name("NewQ");
+  EXPECT_EQ(q1->Name(), "NewQ");
+
+  ddl::RowDeletionPolicy policy2;
+  policy2.set_column_name("C2");
+  editor.set_row_deletion_policy(policy2);
+  EXPECT_EQ(q1->row_deletion_policy()->column_name(), "C2");
+
+  const std::unique_ptr<const Column> c2 =
+      column_builder("C2", /*table=*/nullptr)
+          .set_queue(q1.get())
+          .set_type(type_factory_->get_timestamp())
+          .build();
+  editor.add_column(c2.get());
+  EXPECT_NE(q1->FindColumn("C2"), nullptr);
+
+  editor.set_on_delete(Table::OnDeleteAction::kCascade);
+  EXPECT_EQ(q1->on_delete_action(), Table::OnDeleteAction::kCascade);
+  editor.clear_on_delete();
+  EXPECT_EQ(q1->on_delete_action(), Table::OnDeleteAction::kNoAction);
+}
+
+TEST_F(SchemaTest, QueueBuilderMissingPayloadColumn) {
+  Queue::Builder qb;
+  qb.set_name("Q").set_id("Q");
+  const std::unique_ptr<const Column> c1 =
+      column_builder("C1", /*table=*/nullptr).set_queue(qb.get()).build();
+  const std::unique_ptr<const KeyColumn> k1 =
+      KeyColumn::Builder().set_column(c1.get()).build();
+  const std::unique_ptr<const Queue> q1 =
+      qb.add_column(c1.get()).add_key_column(k1.get()).build();
+  EXPECT_EQ(q1->Validate(&context_), error::QueueMissingPayloadColumn("Q"));
+}
+
+TEST_F(SchemaTest, QueueBuilderNullablePayloadColumn) {
+  Queue::Builder qb;
+  qb.set_name("Q").set_id("Q");
+  const std::unique_ptr<const Column> c1 =
+      column_builder("C1", /*table=*/nullptr).set_queue(qb.get()).build();
+  const std::unique_ptr<const Column> payload =
+      column_builder("Payload", /*table=*/nullptr)
+          .set_queue(qb.get())
+          .set_type(type_factory_->get_bytes())
+          .set_nullable(true)
+          .build();
+  const std::unique_ptr<const KeyColumn> k1 =
+      KeyColumn::Builder().set_column(c1.get()).build();
+  const std::unique_ptr<const Queue> q1 = qb.add_column(c1.get())
+                                              .add_column(payload.get())
+                                              .add_key_column(k1.get())
+                                              .build();
+  EXPECT_EQ(q1->Validate(&context_),
+            error::QueueWithNullablePayloadColumn("Q"));
+}
+
+TEST_F(SchemaTest, QueueBuilderPayloadWrongType) {
+  Queue::Builder qb;
+  qb.set_name("Q").set_id("Q");
+  const std::unique_ptr<const Column> c1 =
+      column_builder("C1", /*table=*/nullptr).set_queue(qb.get()).build();
+  const std::unique_ptr<const Column> payload =
+      column_builder("Payload", /*table=*/nullptr)
+          .set_queue(qb.get())
+          .set_type(type_factory_->get_int64())
+          .set_nullable(false)
+          .build();
+  const std::unique_ptr<const KeyColumn> k1 =
+      KeyColumn::Builder().set_column(c1.get()).build();
+  const std::unique_ptr<const Queue> q1 = qb.add_column(c1.get())
+                                              .add_column(payload.get())
+                                              .add_key_column(k1.get())
+                                              .build();
+  EXPECT_EQ(q1->Validate(&context_), error::QueuePayloadWithWrongType("Q"));
+}
+
+TEST_F(SchemaTest, QueueBuilderWithoutPrimaryKeys) {
+  Queue::Builder qb;
+  qb.set_name("Q").set_id("Q");
+  const std::unique_ptr<const Column> payload =
+      column_builder("Payload", /*table=*/nullptr)
+          .set_queue(qb.get())
+          .set_type(type_factory_->get_bytes())
+          .set_nullable(false)
+          .build();
+  const std::unique_ptr<const Queue> q1 = qb.add_column(payload.get()).build();
+  EXPECT_EQ(q1->Validate(&context_), error::QueueWithoutPrimaryKeys("Q"));
+}
+
+TEST_F(SchemaTest, QueueBuilderWithExtraColumns) {
+  Queue::Builder qb;
+  qb.set_name("Q").set_id("Q");
+  const std::unique_ptr<const Column> c1 =
+      column_builder("C1", /*table=*/nullptr).set_queue(qb.get()).build();
+  const std::unique_ptr<const Column> extra =
+      column_builder("Extra", /*table=*/nullptr)
+          .set_queue(qb.get())
+          .set_type(type_factory_->get_string())
+          .build();
+  const std::unique_ptr<const Column> payload =
+      column_builder("Payload", /*table=*/nullptr)
+          .set_queue(qb.get())
+          .set_type(type_factory_->get_bytes())
+          .set_nullable(false)
+          .build();
+  const std::unique_ptr<const KeyColumn> k1 =
+      KeyColumn::Builder().set_column(c1.get()).build();
+  const std::unique_ptr<const Queue> q1 = qb.add_column(c1.get())
+                                              .add_column(extra.get())
+                                              .add_column(payload.get())
+                                              .add_key_column(k1.get())
+                                              .build();
+  EXPECT_EQ(q1->Validate(&context_), error::QueueWithExtraColumns("Q"));
+}
+
+TEST_F(SchemaTest, QueueBuilderPayloadInPrimaryKey) {
+  Queue::Builder qb;
+  qb.set_name("Q").set_id("Q");
+  const std::unique_ptr<const Column> payload =
+      column_builder("Payload", /*table=*/nullptr)
+          .set_queue(qb.get())
+          .set_type(type_factory_->get_bytes())
+          .set_nullable(false)
+          .build();
+  const std::unique_ptr<const KeyColumn> k1 =
+      KeyColumn::Builder().set_column(payload.get()).build();
+  const std::unique_ptr<const Queue> q1 =
+      qb.add_column(payload.get()).add_key_column(k1.get()).build();
+  EXPECT_EQ(q1->Validate(&context_), error::QueueWithExtraColumns("Q"));
+}
+
+TEST_F(SchemaTest, QueueBuilderInvalidInterleavedKeyType) {
+  Table::Builder parent_tb = table_builder("Parent");
+  const std::unique_ptr<const Column> parent_c =
+      column_builder("C1", parent_tb.get())
+          .set_type(type_factory_->get_string())
+          .build();
+  const std::unique_ptr<const KeyColumn> parent_k =
+      KeyColumn::Builder().set_column(parent_c.get()).build();
+  const std::unique_ptr<const Table> parent =
+      parent_tb.add_column(parent_c.get())
+          .add_key_column(parent_k.get())
+          .build();
+  GOOGLESQL_EXPECT_OK(parent->Validate(&context_));
+
+  Queue::Builder qb;
+  qb.set_name("Q").set_id("Q").set_parent_table(parent.get());
+  const std::unique_ptr<const Column> child_c =
+      column_builder("C1", /*table=*/nullptr)
+          .set_queue(qb.get())
+          .set_type(type_factory_->get_int64())
+          .build();
+  const std::unique_ptr<const KeyColumn> child_k =
+      KeyColumn::Builder().set_column(child_c.get()).build();
+  const std::unique_ptr<const Queue> q =
+      qb.add_column(child_c.get()).add_key_column(child_k.get()).build();
+
+  EXPECT_EQ(q->Validate(&context_), error::IncorrectParentKeyType(
+                                        "Queue", "Q", "C1", "INT64", "STRING"));
+}
+
+TEST_F(SchemaTest, QueueBuilderInvalidInterleavedKeyOrder) {
+  Table::Builder parent_tb = table_builder("Parent");
+  const std::unique_ptr<const Column> parent_c =
+      column_builder("C1", parent_tb.get())
+          .set_type(type_factory_->get_int64())
+          .build();
+  const std::unique_ptr<const KeyColumn> parent_k =
+      KeyColumn::Builder()
+          .set_column(parent_c.get())
+          .set_descending(false)
+          .build();
+  const std::unique_ptr<const Table> parent =
+      parent_tb.add_column(parent_c.get())
+          .add_key_column(parent_k.get())
+          .build();
+  GOOGLESQL_EXPECT_OK(parent->Validate(&context_));
+
+  Queue::Builder qb;
+  qb.set_name("Q").set_id("Q").set_parent_table(parent.get());
+  const std::unique_ptr<const Column> child_c =
+      column_builder("C1", /*table=*/nullptr)
+          .set_queue(qb.get())
+          .set_type(type_factory_->get_int64())
+          .build();
+  const std::unique_ptr<const KeyColumn> child_k =
+      KeyColumn::Builder()
+          .set_column(child_c.get())
+          .set_descending(true)
+          .build();
+  const std::unique_ptr<const Queue> q =
+      qb.add_column(child_c.get()).add_key_column(child_k.get()).build();
+
+  EXPECT_EQ(q->Validate(&context_),
+            error::IncorrectParentKeyOrder("Queue", "Q", "C1", "ASC"));
+}
+
+TEST_F(SchemaTest, QueueBuilderInvalidInterleavedKeyLength) {
+  Table::Builder parent_tb = table_builder("Parent");
+  const std::unique_ptr<const Column> parent_c =
+      column_builder("C1", parent_tb.get())
+          .set_type(type_factory_->get_string())
+          .set_declared_max_length(10)
+          .build();
+  const std::unique_ptr<const KeyColumn> parent_k =
+      KeyColumn::Builder().set_column(parent_c.get()).build();
+  const std::unique_ptr<const Table> parent =
+      parent_tb.add_column(parent_c.get())
+          .add_key_column(parent_k.get())
+          .build();
+  GOOGLESQL_EXPECT_OK(parent->Validate(&context_));
+
+  Queue::Builder qb;
+  qb.set_name("Q").set_id("Q").set_parent_table(parent.get());
+  const std::unique_ptr<const Column> child_c =
+      column_builder("C1", /*table=*/nullptr)
+          .set_queue(qb.get())
+          .set_type(type_factory_->get_string())
+          .set_declared_max_length(20)
+          .build();
+  const std::unique_ptr<const KeyColumn> child_k =
+      KeyColumn::Builder().set_column(child_c.get()).build();
+  const std::unique_ptr<const Queue> q =
+      qb.add_column(child_c.get()).add_key_column(child_k.get()).build();
+
+  EXPECT_EQ(q->Validate(&context_),
+            error::IncorrectParentKeyLength("Queue", "Q", "C1", "20", "10"));
+}
+
+TEST_F(SchemaTest, QueueBuilderMissingParentKey) {
+  Table::Builder parent_tb = table_builder("Parent");
+  const std::unique_ptr<const Column> parent_c1 =
+      column_builder("C1", parent_tb.get())
+          .set_type(type_factory_->get_int64())
+          .build();
+  const std::unique_ptr<const Column> parent_c2 =
+      column_builder("C2", parent_tb.get())
+          .set_type(type_factory_->get_int64())
+          .build();
+  const std::unique_ptr<const KeyColumn> parent_k1 =
+      KeyColumn::Builder().set_column(parent_c1.get()).build();
+  const std::unique_ptr<const KeyColumn> parent_k2 =
+      KeyColumn::Builder().set_column(parent_c2.get()).build();
+  const std::unique_ptr<const Table> parent =
+      parent_tb.add_column(parent_c1.get())
+          .add_column(parent_c2.get())
+          .add_key_column(parent_k1.get())
+          .add_key_column(parent_k2.get())
+          .build();
+  GOOGLESQL_EXPECT_OK(parent->Validate(&context_));
+
+  Queue::Builder qb;
+  qb.set_name("Q").set_id("Q").set_parent_table(parent.get());
+  const std::unique_ptr<const Column> child_c1 =
+      column_builder("C1", /*table=*/nullptr)
+          .set_queue(qb.get())
+          .set_type(type_factory_->get_int64())
+          .build();
+  const std::unique_ptr<const KeyColumn> child_k1 =
+      KeyColumn::Builder().set_column(child_c1.get()).build();
+  const std::unique_ptr<const Queue> q =
+      qb.add_column(child_c1.get()).add_key_column(child_k1.get()).build();
+
+  EXPECT_EQ(q->Validate(&context_),
+            error::MustReferenceParentKeyColumn("Queue", "Q", "C2"));
+}
+
+TEST_F(SchemaTest, QueueValidateUpdateChangePrimaryKeyNullability) {
+  Queue::Builder qb1;
+  qb1.set_name("Q").set_id("Q");
+  const std::unique_ptr<const Column> c1 =
+      column_builder("C1", /*table=*/nullptr)
+          .set_queue(qb1.get())
+          .set_nullable(false)
+          .build();
+  const std::unique_ptr<const KeyColumn> k1 =
+      KeyColumn::Builder().set_column(c1.get()).build();
+  const std::unique_ptr<const Queue> q1 =
+      qb1.add_column(c1.get()).add_key_column(k1.get()).build();
+
+  Queue::Builder qb2;
+  qb2.set_name("Q").set_id("Q");
+  const std::unique_ptr<const Column> c2 =
+      column_builder("C1", /*table=*/nullptr)
+          .set_queue(qb2.get())
+          .set_nullable(true)
+          .build();
+  const std::unique_ptr<const KeyColumn> k2 =
+      KeyColumn::Builder().set_column(c2.get()).build();
+  const std::unique_ptr<const Queue> q2 =
+      qb2.add_column(c2.get()).add_key_column(k2.get()).build();
+
+  EXPECT_THAT(q2->ValidateUpdate(q1.get(), &context_),
+              StatusIs(StatusCode::kInvalidArgument,
+                       testing::HasSubstr("Cannot change key column Q.C1")));
+}
+
+TEST_F(SchemaTest, QueueFindColumnNotFound) {
+  Queue::Builder qb;
+  qb.set_name("Q").set_id("Q");
+  const std::unique_ptr<const Column> c1 =
+      column_builder("C1", /*table=*/nullptr).set_queue(qb.get()).build();
+  const std::unique_ptr<const KeyColumn> k1 =
+      KeyColumn::Builder().set_column(c1.get()).build();
+  const std::unique_ptr<const Queue> q1 =
+      qb.add_column(c1.get()).add_key_column(k1.get()).build();
+  EXPECT_EQ(q1->FindColumn("NonExistent"), nullptr);
+}
+
+TEST_F(SchemaTest, QueueBuilderDuplicateColumnName) {
+  Queue::Builder qb;
+  qb.set_name("Q").set_id("Q");
+  const std::unique_ptr<const Column> c1 =
+      column_builder("C1", /*table=*/nullptr).set_queue(qb.get()).build();
+  const std::unique_ptr<const Queue> q1 =
+      qb.add_column(c1.get()).add_column(c1.get()).build();
+  EXPECT_EQ(q1->Validate(&context_), error::DuplicateColumnName("Q.C1"));
+}
+
+TEST_F(SchemaTest, QueueBuilderInvalidReceiveMode) {
+  Queue::Builder qb;
+  qb.set_name("SimpleQueue").set_id("SimpleQueue");
+  const std::unique_ptr<const Column> c1 =
+      column_builder("C1", /*table=*/nullptr).set_queue(qb.get()).build();
+  const std::unique_ptr<const Column> payload =
+      column_builder("Payload", /*table=*/nullptr)
+          .set_queue(qb.get())
+          .set_type(type_factory_->get_bytes())
+          .set_nullable(false)
+          .build();
+  const std::unique_ptr<const KeyColumn> k1 =
+      KeyColumn::Builder().set_column(c1.get()).build();
+  ::google::protobuf::RepeatedPtrField<ddl::SetOption> options;
+  ddl::SetOption* opt = options.Add();
+  opt->set_option_name("receive_mode");
+  opt->set_string_value("PUSH");
+  const std::unique_ptr<const Queue> q1 = qb.add_column(c1.get())
+                                              .add_column(payload.get())
+                                              .add_key_column(k1.get())
+                                              .set_options(options)
+                                              .build();
+  EXPECT_EQ(q1->Validate(&context_),
+            error::InvalidQueueReceiveMode("SimpleQueue", "PUSH"));
+}
+
+TEST_F(SchemaTest, QueueBuilderValidReceiveMode) {
+  Queue::Builder qb;
+  qb.set_name("SimpleQueue").set_id("SimpleQueue");
+  const std::unique_ptr<const Column> c1 =
+      column_builder("C1", /*table=*/nullptr).set_queue(qb.get()).build();
+  const std::unique_ptr<const Column> payload =
+      column_builder("Payload", /*table=*/nullptr)
+          .set_queue(qb.get())
+          .set_type(type_factory_->get_bytes())
+          .set_nullable(false)
+          .build();
+  const std::unique_ptr<const KeyColumn> k1 =
+      KeyColumn::Builder().set_column(c1.get()).build();
+  ::google::protobuf::RepeatedPtrField<ddl::SetOption> options;
+  ddl::SetOption* opt = options.Add();
+  opt->set_option_name("receive_mode");
+  opt->set_string_value("PULL");
+  const std::unique_ptr<const Queue> q1 = qb.add_column(c1.get())
+                                              .add_column(payload.get())
+                                              .add_key_column(k1.get())
+                                              .set_options(options)
+                                              .build();
+  GOOGLESQL_EXPECT_OK(q1->Validate(&context_));
+}
+
+TEST_F(SchemaTest, ColumnFullNameWithNoTableOrQueue) {
+  const std::unique_ptr<const Column> c1 =
+      column_builder("C1", /*table=*/nullptr).build();
+  EXPECT_EQ(c1->FullName(), "C1");
+}
+
+TEST_F(SchemaTest, QueueSchemaLookupAndDump) {
+  Table::Builder parent_tb = table_builder("parent_table");
+  const std::unique_ptr<const Column> parent_c =
+      column_builder("parent_id", parent_tb.get())
+          .set_type(type_factory_->get_int64())
+          .build();
+  const std::unique_ptr<const KeyColumn> parent_k =
+      KeyColumn::Builder().set_column(parent_c.get()).build();
+  std::unique_ptr<const Table> parent = parent_tb.add_column(parent_c.get())
+                                            .add_key_column(parent_k.get())
+                                            .build();
+  GOOGLESQL_EXPECT_OK(parent->Validate(&context_));
+
+  Queue::Builder qb1;
+  qb1.set_name("myqueue1").set_id("myqueue1").set_parent_table(parent.get());
+  qb1.set_on_delete(Table::OnDeleteAction::kCascade);
+  const std::unique_ptr<const Column> child1_c =
+      column_builder("parent_id", /*table=*/nullptr)
+          .set_queue(qb1.get())
+          .set_type(type_factory_->get_int64())
+          .build();
+  const std::unique_ptr<const Column> child1_payload =
+      column_builder("Payload", /*table=*/nullptr)
+          .set_queue(qb1.get())
+          .set_type(type_factory_->get_bytes())
+          .set_nullable(false)
+          .build();
+  const std::unique_ptr<const KeyColumn> child1_k =
+      KeyColumn::Builder().set_column(child1_c.get()).build();
+  std::unique_ptr<const Queue> queue1 = qb1.add_column(child1_c.get())
+                                            .add_column(child1_payload.get())
+                                            .add_key_column(child1_k.get())
+                                            .build();
+  GOOGLESQL_EXPECT_OK(queue1->Validate(&context_));
+
+  Queue::Builder qb2;
+  qb2.set_name("myqueue2").set_id("myqueue2");
+  const std::unique_ptr<const Column> child2_c =
+      column_builder("id", /*table=*/nullptr)
+          .set_queue(qb2.get())
+          .set_type(type_factory_->get_int64())
+          .build();
+  const std::unique_ptr<const Column> child2_payload =
+      column_builder("Payload", /*table=*/nullptr)
+          .set_queue(qb2.get())
+          .set_type(type_factory_->get_bytes())
+          .set_nullable(false)
+          .build();
+  const std::unique_ptr<const KeyColumn> child2_k =
+      KeyColumn::Builder()
+          .set_column(child2_c.get())
+          .set_descending(true)
+          .build();
+  std::unique_ptr<const Queue> queue2 = qb2.add_column(child2_c.get())
+                                            .add_column(child2_payload.get())
+                                            .add_key_column(child2_k.get())
+                                            .build();
+  GOOGLESQL_EXPECT_OK(queue2->Validate(&context_));
+
+  auto graph = std::make_unique<SchemaGraph>();
+  graph->Add(std::move(parent));
+  graph->Add(std::move(queue1));
+  graph->Add(std::move(queue2));
+
+  Schema schema(graph.get(), ProtoBundle::CreateEmpty(),
+                admin::database::v1::GOOGLE_STANDARD_SQL, "");
+
+  EXPECT_EQ(schema.queues().size(), 2);
+  const Queue* found_queue1 = schema.FindQueue("myqueue1");
+  ASSERT_NE(found_queue1, nullptr);
+  EXPECT_EQ(found_queue1->Name(), "myqueue1");
+  EXPECT_EQ(schema.FindQueue("MYQUEUE1"), found_queue1);
+  EXPECT_EQ(schema.FindQueueCaseSensitive("myqueue1"), found_queue1);
+  EXPECT_EQ(schema.FindQueueCaseSensitive("MYQUEUE1"), nullptr);
+  EXPECT_EQ(schema.FindQueue("non_existent_queue"), nullptr);
+
+  ddl::DDLStatementList ddl_statements = schema.Dump();
+  ASSERT_EQ(ddl_statements.statement_size(), 3);
+  EXPECT_EQ(ddl_statements.statement(1).create_queue().queue_name(),
+            "myqueue1");
+  EXPECT_EQ(ddl_statements.statement(1).create_queue().column_size(), 2);
+  EXPECT_EQ(ddl_statements.statement(1).create_queue().column(0).column_name(),
+            "parent_id");
+  EXPECT_EQ(ddl_statements.statement(1).create_queue().column(1).column_name(),
+            "Payload");
+  EXPECT_TRUE(
+      ddl_statements.statement(1).create_queue().has_interleave_clause());
+  EXPECT_EQ(ddl_statements.statement(1)
+                .create_queue()
+                .interleave_clause()
+                .on_delete(),
+            ddl::InterleaveClause::CASCADE);
+  EXPECT_EQ(ddl_statements.statement(2).create_queue().queue_name(),
+            "myqueue2");
+  EXPECT_EQ(ddl_statements.statement(2).create_queue().column_size(), 2);
+  EXPECT_EQ(ddl_statements.statement(2).create_queue().column(0).column_name(),
+            "id");
+  EXPECT_EQ(ddl_statements.statement(2).create_queue().column(1).column_name(),
+            "Payload");
+  EXPECT_EQ(ddl_statements.statement(2).create_queue().primary_key(0).order(),
+            ddl::KeyPartClause::DESC);
+}
+
+TEST_F(SchemaTest, QueueFindColumnCaseSensitive) {
+  Queue::Builder qb;
+  qb.set_name("Q").set_id("Q");
+  const std::unique_ptr<const Column> c1 =
+      column_builder("C1", /*table=*/nullptr).set_queue(qb.get()).build();
+  const std::unique_ptr<const KeyColumn> k1 =
+      KeyColumn::Builder().set_column(c1.get()).build();
+  const std::unique_ptr<const Queue> q1 =
+      qb.add_column(c1.get()).add_key_column(k1.get()).build();
+  EXPECT_EQ(q1->FindColumnCaseSensitive("C1"), c1.get());
+  EXPECT_EQ(q1->FindColumnCaseSensitive("c1"), nullptr);
+  EXPECT_EQ(q1->FindColumnCaseSensitive("NonExistent"), nullptr);
+  EXPECT_EQ(q1->FindKeyColumn("C1"), k1.get());
+  EXPECT_EQ(q1->FindKeyColumn("NonExistent"), nullptr);
+}
+
+TEST_F(SchemaTest, QueueDeepClone) {
+  Queue::Builder qb;
+  qb.set_name("Q").set_id("Q");
+  const std::unique_ptr<const Column> c1 =
+      column_builder("C1", /*table=*/nullptr).set_queue(qb.get()).build();
+  const std::unique_ptr<const Column> payload =
+      column_builder("Payload", /*table=*/nullptr)
+          .set_queue(qb.get())
+          .set_type(type_factory_->get_bytes())
+          .set_nullable(false)
+          .build();
+  const std::unique_ptr<const KeyColumn> k1 =
+      KeyColumn::Builder().set_column(c1.get()).build();
+  const std::unique_ptr<const Queue> q1 = qb.add_column(c1.get())
+                                              .add_column(payload.get())
+                                              .add_key_column(k1.get())
+                                              .build();
+  GOOGLESQL_EXPECT_OK(q1->Validate(&context_));
+
+  SchemaGraph graph;
+  SchemaGraphEditor editor(&graph, &context_);
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(const SchemaNode* cloned_node, editor.Clone(q1.get()));
+  const Queue* cloned_queue = cloned_node->As<const Queue>();
+  ASSERT_NE(cloned_queue, nullptr);
+  EXPECT_EQ(cloned_queue->Name(), "Q");
+  const Column* cloned_c1 = cloned_queue->FindColumn("C1");
+  ASSERT_NE(cloned_c1, nullptr);
+  EXPECT_EQ(cloned_c1->Name(), "C1");
+  EXPECT_EQ(cloned_c1->queue(), cloned_queue);
+}
+
+TEST_F(SchemaTest, QueueGeneratedColumnInPrimaryKey) {
+  ScopedEmulatorFeatureFlagsSetter setter({.enable_generated_pk = false});
+  Queue::Builder qb;
+  qb.set_name("Q").set_id("Q");
+
+  const std::unique_ptr<const Column> dep_col =
+      column_builder("C1", /*table=*/nullptr)
+          .set_queue(qb.get())
+          .set_type(type_factory_->get_int64())
+          .build();
+  const std::unique_ptr<const Column> gen_col =
+      column_builder("C2", /*table=*/nullptr)
+          .set_queue(qb.get())
+          .set_type(type_factory_->get_int64())
+          .set_expression("C1 + 1")
+          .add_dependent_column_name("C1")
+          .build();
+  const std::unique_ptr<const KeyColumn> key_col =
+      KeyColumn::Builder().set_column(gen_col.get()).build();
+  const std::unique_ptr<const Queue> queue = qb.add_column(dep_col.get())
+                                                 .add_column(gen_col.get())
+                                                 .add_key_column(key_col.get())
+                                                 .build();
+  EXPECT_EQ(gen_col->Validate(&context_),
+            error::CannotUseGeneratedColumnInPrimaryKey("Q", "C2"));
+}
+
+TEST_F(SchemaTest, QueueGeneratedColumnValid) {
+  Queue::Builder qb;
+  qb.set_name("Q").set_id("Q");
+
+  const std::unique_ptr<const Column> dep_col =
+      column_builder("C1", /*table=*/nullptr)
+          .set_queue(qb.get())
+          .set_type(type_factory_->get_int64())
+          .build();
+  const std::unique_ptr<const Column> gen_col =
+      column_builder("C2", /*table=*/nullptr)
+          .set_queue(qb.get())
+          .set_type(type_factory_->get_int64())
+          .set_expression("C1 + 1")
+          .add_dependent_column_name("C1")
+          .build();
+  const std::unique_ptr<const KeyColumn> key_col =
+      KeyColumn::Builder().set_column(dep_col.get()).build();
+  const std::unique_ptr<const Queue> queue = qb.add_column(dep_col.get())
+                                                 .add_column(gen_col.get())
+                                                 .add_key_column(key_col.get())
+                                                 .build();
+  GOOGLESQL_EXPECT_OK(gen_col->Validate(&context_));
+}
+
+TEST_F(SchemaTest, QueueColumnValidateUpdate) {
+  Queue::Builder qb1;
+  qb1.set_name("Q").set_id("Q");
+
+  const std::unique_ptr<const Column> c1 =
+      column_builder("C1", /*table=*/nullptr)
+          .set_queue(qb1.get())
+          .set_type(type_factory_->get_int64())
+          .build();
+  const std::unique_ptr<const KeyColumn> k1 =
+      KeyColumn::Builder().set_column(c1.get()).build();
+  const std::unique_ptr<const Queue> q1 =
+      qb1.add_column(c1.get()).add_key_column(k1.get()).build();
+
+  Queue::Builder qb2;
+  qb2.set_name("Q").set_id("Q");
+
+  const std::unique_ptr<const Column> c2 =
+      column_builder("C1", /*table=*/nullptr)
+          .set_queue(qb2.get())
+          .set_type(type_factory_->get_string())
+          .build();
+  const std::unique_ptr<const KeyColumn> k2 =
+      KeyColumn::Builder().set_column(c2.get()).build();
+  const std::unique_ptr<const Queue> q2 =
+      qb2.add_column(c2.get()).add_key_column(k2.get()).build();
+
+  EXPECT_THAT(c2->ValidateUpdate(c1.get(), &context_),
+              StatusIs(StatusCode::kInvalidArgument,
+                       testing::HasSubstr("Cannot change type of column")));
+}
+
+TEST_F(SchemaTest, QueueBuilderInvalidInterleavedKeyNullability) {
+  Table::Builder parent_tb = table_builder("Parent");
+  const std::unique_ptr<const Column> parent_c =
+      column_builder("C1", parent_tb.get())
+          .set_type(type_factory_->get_int64())
+          .set_nullable(false)
+          .build();
+  const std::unique_ptr<const KeyColumn> parent_k =
+      KeyColumn::Builder().set_column(parent_c.get()).build();
+  const std::unique_ptr<const Table> parent =
+      parent_tb.add_column(parent_c.get())
+          .add_key_column(parent_k.get())
+          .build();
+  GOOGLESQL_EXPECT_OK(parent->Validate(&context_));
+
+  Queue::Builder qb;
+  qb.set_name("Q").set_id("Q").set_parent_table(parent.get());
+  const std::unique_ptr<const Column> child_c =
+      column_builder("C1", /*table=*/nullptr)
+          .set_queue(qb.get())
+          .set_type(type_factory_->get_int64())
+          .set_nullable(true)
+          .build();
+  const std::unique_ptr<const KeyColumn> child_k =
+      KeyColumn::Builder().set_column(child_c.get()).build();
+  const std::unique_ptr<const Queue> q =
+      qb.add_column(child_c.get()).add_key_column(child_k.get()).build();
+
+  EXPECT_EQ(q->Validate(&context_),
+            error::IncorrectParentKeyNullability("Queue", "Q", "C1", "not null",
+                                                 "nullable"));
+}
+
+TEST_F(SchemaTest, QueueTooManyKeys) {
+  Queue::Builder qb;
+  qb.set_name("Q").set_id("Q");
+  std::vector<std::unique_ptr<const Column>> columns;
+  std::vector<std::unique_ptr<const KeyColumn>> key_columns;
+  for (int i = 0; i <= limits::kMaxKeyColumns; ++i) {
+    std::string col_name = absl::StrCat("C", i);
+    columns.push_back(column_builder(col_name, /*table=*/nullptr)
+                          .set_queue(qb.get())
+                          .set_type(type_factory_->get_int64())
+                          .build());
+    key_columns.push_back(
+        KeyColumn::Builder().set_column(columns.back().get()).build());
+    qb.add_column(columns.back().get());
+    qb.add_key_column(key_columns.back().get());
+  }
+  const std::unique_ptr<const Queue> q = qb.build();
+  EXPECT_EQ(q->Validate(&context_),
+            error::TooManyKeys("Queue", "Q", limits::kMaxKeyColumns + 1,
+                               limits::kMaxKeyColumns));
+}
+
+TEST_F(SchemaTest, QueueMultipleRefsToKeyColumn) {
+  Queue::Builder qb;
+  qb.set_name("Q").set_id("Q");
+  const std::unique_ptr<const Column> c1 =
+      column_builder("C1", /*table=*/nullptr).set_queue(qb.get()).build();
+  const std::unique_ptr<const KeyColumn> k1 =
+      KeyColumn::Builder().set_column(c1.get()).build();
+  const std::unique_ptr<const KeyColumn> k2 =
+      KeyColumn::Builder().set_column(c1.get()).build();
+  const std::unique_ptr<const Queue> q1 = qb.add_column(c1.get())
+                                              .add_key_column(k1.get())
+                                              .add_key_column(k2.get())
+                                              .build();
+  EXPECT_EQ(q1->Validate(&context_),
+            error::MultipleRefsToKeyColumn("Queue", "Q", "C1"));
+}
+
+TEST_F(SchemaTest, TableValidateUpdateDropTableWithInterleavedQueue) {
+  Table::Builder parent_tb = table_builder("Parent");
+  std::unique_ptr<const Column> parent_c =
+      column_builder("C1", parent_tb.get())
+          .set_type(type_factory_->get_int64())
+          .build();
+  std::unique_ptr<const KeyColumn> parent_k =
+      KeyColumn::Builder().set_column(parent_c.get()).build();
+  std::unique_ptr<const Table> parent = parent_tb.add_column(parent_c.get())
+                                            .add_key_column(parent_k.get())
+                                            .build();
+  GOOGLESQL_EXPECT_OK(parent->Validate(&context_));
+
+  Queue::Builder qb;
+  qb.set_name("Q").set_id("Q").set_parent_table(parent.get());
+  std::unique_ptr<const Column> child_c =
+      column_builder("C1", /*table=*/nullptr)
+          .set_queue(qb.get())
+          .set_type(type_factory_->get_int64())
+          .build();
+  std::unique_ptr<const KeyColumn> child_k =
+      KeyColumn::Builder().set_column(child_c.get()).build();
+  std::unique_ptr<const Queue> queue =
+      qb.add_column(child_c.get()).add_key_column(child_k.get()).build();
+
+  Table::Editor editor(const_cast<Table*>(parent.get()));
+  editor.add_child_queue(queue.get());
+
+  SchemaGraph graph;
+  const SchemaNode* parent_node = parent.get();
+  graph.Add(std::move(parent_c));
+  graph.Add(std::move(parent_k));
+  graph.Add(std::move(parent));
+  graph.Add(std::move(child_c));
+  graph.Add(std::move(child_k));
+  graph.Add(std::move(queue));
+
+  SchemaGraphEditor graph_editor(&graph, &context_);
+  GOOGLESQL_EXPECT_OK(graph_editor.DeleteNode(parent_node));
+  EXPECT_EQ(graph_editor.CanonicalizeGraph().status(),
+            error::DropTableWithInterleavedQueues("Parent", "Q"));
 }
 
 TEST_F(SchemaTest, PlacementBuilder) {

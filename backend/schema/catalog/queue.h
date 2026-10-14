@@ -72,6 +72,9 @@ class Queue : public SchemaNode {
   // Returns the options set on this queue.
   absl::Span<const ddl::SetOption> options() const { return options_; }
 
+  // Returns the backing table of this queue.
+  const Table* backing_table() const { return backing_table_; }
+
   // Finds a column by its name. Returns a const pointer to the column, or
   // nullptr if the column is not found. Name comparison is case-insensitive.
   const Column* FindColumn(const std::string& column_name) const;
@@ -132,6 +135,7 @@ class Queue : public SchemaNode {
   CaseInsensitiveStringMap<const Column*> columns_map_;
   std::vector<const KeyColumn*> primary_key_;
   const Table* parent_table_ = nullptr;
+  const Table* backing_table_ = nullptr;
   std::optional<Table::OnDeleteAction> on_delete_action_ = std::nullopt;
   std::optional<ddl::RowDeletionPolicy> row_deletion_policy_ = std::nullopt;
   std::vector<ddl::SetOption> options_;

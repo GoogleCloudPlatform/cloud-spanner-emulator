@@ -108,6 +108,15 @@ struct PostgreSQLConstants {
       kSpangresDatabaseWitnessLocationOptionName = "spanner.witness_location";
   static constexpr absl::string_view
       kSpangresDatabaseReadLeaseLabelsOptionName = "spanner.read_lease_regions";
+  static constexpr absl::string_view
+      kSpangresDatabaseOptInDataplacementOptionName =
+          "spanner.opt_in_dataplacement_preview";
+  static constexpr absl::string_view
+      kSpangresDatabasePerPlacementRoutingMetadataOptionName =
+          "spanner.per_placement_routing_metadata";
+  static constexpr absl::string_view
+      kSpangresDatabaseAutoManagedRootPlacementTableOptionName =
+          "spanner.auto_managed_root_placement_table_name";
   static constexpr absl::string_view kSearchIndexDisableUidOptionName =
       "disable_automatic_uid_column";
   static constexpr absl::string_view kSearchIndexSortOrderOptionName =
@@ -149,10 +158,32 @@ struct PostgreSQLConstants {
       "partition_mode";
   static constexpr absl::string_view kChangeStreamPerPlacementTvfOptionName =
       "per_placement_tvf";
+  static constexpr absl::string_view kDataPlacementInstancePartitionOptionName =
+      "instance_partition";
+  static constexpr absl::string_view kDataPlacementDefaultLeaderOptionName =
+      "default_leader";
+  static constexpr absl::string_view kDataPlacementReadLeaseRegionsOptionName =
+      "read_lease_regions";
+  static constexpr absl::string_view
+      kInternalDatabaseOptInDataplacementOptionName =
+          "spanner.internal.cloud_opt_in_dataplacement_preview";
+  static constexpr absl::string_view
+      kDataPlacementPerPlacementRoutingMetadataOptionName =
+          "spanner.internal.cloud_autogenerate_partitions";
+  static constexpr absl::string_view
+      kInternalDatabaseAutoManagedRootPlacementTableOptionName =
+          "spanner.internal.cloud_root_placement_table_name";
   static constexpr char kInternalLocalityGroupStorageOptionName[] = "inflash";
   static constexpr char kInternalLocalityGroupSpillTimeSpanOptionName[] =
       "age_based_spill_policy";
-  // TODO: expose when queue is implemented.
+  static constexpr char kInternalQueueReceiveModeOptionName[] = "receive_mode";
+  static constexpr char kInternalQueuePerPlacementTvfOptionName[] =
+      "per_placement_tvf";
+  static constexpr char kInternalQueueDisableSendOptionName[] = "disable_send";
+  static constexpr char kInternalQueueDisableDeliveryOptionName[] =
+      "disable_delivery";
+  static constexpr char kInternalQueueLocalityGroupOptionName[] =
+      "locality_group";
   static constexpr absl::string_view kSpangresDefaultSequenceKindOptionName =
       "spanner.default_sequence_kind";
   static constexpr absl::string_view

@@ -164,8 +164,8 @@ void AddMathematicalFunctions(
       avg_function.add_signature(
           {{gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr}});
 
-      avg_function.add_signature(
-          {{gsql_double, {gsql_float}, /*context_ptr=*/nullptr}});
+    avg_function.add_signature(
+        {{gsql_double, {gsql_float}, /*context_ptr=*/nullptr}});
 
       avg_function.add_signature(
           {{gsql_interval, {gsql_interval}, /*context_ptr=*/nullptr},
@@ -238,10 +238,10 @@ void AddMathematicalFunctions(
       min_function.add_signature(
           {{gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr}});
 
-      min_function.add_signature(
-          {{gsql_float, {gsql_float}, /*context_ptr=*/nullptr},
-           /*has_mapped_function=*/true,
-           /*explicit_mapped_function_name=*/"pg.min"});
+    min_function.add_signature(
+        {{gsql_float, {gsql_float}, /*context_ptr=*/nullptr},
+         /*has_mapped_function=*/true,
+         /*explicit_mapped_function_name=*/"pg.min"});
 
       min_function.add_signature(
           {{gsql_interval, {gsql_interval}, /*context_ptr=*/nullptr}});
@@ -264,8 +264,8 @@ void AddMathematicalFunctions(
       max_function.add_signature(
           {{gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr}});
 
-      max_function.add_signature(
-          {{gsql_float, {gsql_float}, /*context_ptr=*/nullptr}});
+    max_function.add_signature(
+        {{gsql_float, {gsql_float}, /*context_ptr=*/nullptr}});
 
       max_function.add_signature(
           {{gsql_interval, {gsql_interval}, /*context_ptr=*/nullptr}});
@@ -285,8 +285,8 @@ void AddMathematicalFunctions(
       sum_function.add_signature(
           {{gsql_pg_numeric, {gsql_pg_numeric}, /*context_ptr=*/nullptr}});
 
-      sum_function.add_signature(
-          {{gsql_float, {gsql_float}, /*context_ptr=*/nullptr}});
+    sum_function.add_signature(
+        {{gsql_float, {gsql_float}, /*context_ptr=*/nullptr}});
 
       sum_function.add_signature(
           {{gsql_interval, {gsql_interval}, /*context_ptr=*/nullptr},

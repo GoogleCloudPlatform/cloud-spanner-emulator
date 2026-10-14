@@ -109,12 +109,16 @@ absl::StatusOr<RangeTblEntry*> AddRangeTableEntryCpp(ParseState* pstate,
         absl::StrCat("cross-database references are not implemented: \"",
                      table_name.ToString(), "\""));
   }
-  RangeTblEntry* rte;
-  GOOGLESQL_ASSIGN_OR_RETURN(Oid oid,
-                   catalog_adapter->GetOrGenerateOidFromTableName(table_name));
-  GOOGLESQL_ASSIGN_OR_RETURN(
-      rte, Transformer::BuildPgRangeTblEntry(*catalog_adapter, oid, alias,
-                                             inFromCl, ACL_SELECT));
+
+  // If the table's namespace is in the search path, the relation name may not
+  // include the namespace. Look up the table in the catalog to get the full
+  // name.
+  GOOGLESQL_ASSIGN_OR_RETURN(const googlesql::Table* table,
+                   catalog_adapter->FindTableInCatalog(table_name));
+  GOOGLESQL_ASSIGN_OR_RETURN(RangeTblEntry * rte,
+                   Transformer::BuildPgRangeTblEntry(
+                       *catalog_adapter, *table, alias, inFromCl, ACL_SELECT));
+
   // The Transformer defaults to inh==true (allow implicit inheritence)
   // because there's no GoogleSQL concept of inheritence to map on to it. If
   // someone actually specified it in SQL, preserve that choice here.
@@ -139,10 +143,16 @@ absl::StatusOr<RangeTblEntry*> AddRangeTableEntryByOidCpp(ParseState* pstate,
                                                           bool inFromCl) {
   CatalogAdapter* catalog_adapter;
   GOOGLESQL_ASSIGN_OR_RETURN(catalog_adapter, GetCatalogAdapter());
+
+  GOOGLESQL_ASSIGN_OR_RETURN(TableName qualified_table_name,
+                   catalog_adapter->GetTableNameFromOid(relation_oid));
+  GOOGLESQL_ASSIGN_OR_RETURN(const googlesql::Table* table,
+                   catalog_adapter->FindTableInCatalog(qualified_table_name));
+
   RangeTblEntry* rte;
-  GOOGLESQL_ASSIGN_OR_RETURN(
-      rte, Transformer::BuildPgRangeTblEntry(*catalog_adapter, relation_oid,
-                                             alias, inFromCl, ACL_SELECT));
+  GOOGLESQL_ASSIGN_OR_RETURN(rte, Transformer::BuildPgRangeTblEntry(
+                            *catalog_adapter, relation_oid, table, alias,
+                            inFromCl, ACL_SELECT));
   // Additionally add the new RTE to ParseState's range table list.
   pstate->p_rtable = lappend(pstate->p_rtable, rte);
   return rte;
@@ -1585,9 +1595,8 @@ extern "C" char** FindCandidateSchemasForUnqualifiedFunctionC(
   absl::flat_hash_set<const googlesql::Catalog*> subcatalogs;
   absl::Status catalogs_status = user_catalog->GetCatalogs(&subcatalogs);
   if (!catalogs_status.ok()) {
-    postgres_translator::ereport_helper(
-        catalogs_status, ERRCODE_INTERNAL_ERROR,
-        "Failed to retrieve subcatalogs for function suggestion");
+    // SdlSchemaSqlCatalog, which is used for DDL translation, does not
+    // support GetCatalogs. In this case, silently continue.
     return nullptr;
   }
   std::vector<std::string> matching_schemas;
@@ -1631,4 +1640,3 @@ extern "C" char** FindCandidateSchemasForUnqualifiedFunctionC(
 bool IsSearchPathFeatureEnabledC() {
   return false;
 }
-

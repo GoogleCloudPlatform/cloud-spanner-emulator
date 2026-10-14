@@ -50,6 +50,7 @@
 #include "backend/schema/catalog/placement.h"
 #include "backend/schema/catalog/property_graph.h"
 #include "backend/schema/catalog/proto_bundle.h"
+#include "backend/schema/catalog/queue.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/udf.h"
@@ -658,6 +659,44 @@ std::string PrintTable(const Table* table) {
   return table_string;
 }
 
+std::string PrintQueue(const Queue* queue) {
+  std::string queue_string =
+      absl::Substitute("CREATE QUEUE $0 (\n", PrintName(queue->Name()));
+  for (const Column* column : queue->columns()) {
+    absl::StrAppend(&queue_string, "  ", PrintColumn(column), ",\n");
+  }
+  absl::StrAppend(&queue_string, ") PRIMARY KEY(");
+
+  std::vector<std::string> pk_clause;
+  pk_clause.reserve(queue->primary_key().size());
+  for (int i = 0; i < queue->primary_key().size(); ++i) {
+    pk_clause.push_back(PrintKeyColumn(queue->primary_key()[i]));
+  }
+  absl::StrAppend(&queue_string, absl::StrJoin(pk_clause, ", "));
+
+  if (queue->parent() != nullptr) {
+    absl::StrAppend(&queue_string, "),\n");
+    absl::StrAppend(&queue_string, "  INTERLEAVE IN PARENT ",
+                    PrintName(queue->parent()->Name()), " ON DELETE ",
+                    OnDeleteActionToString(queue->on_delete_action()));
+  } else {
+    absl::StrAppend(&queue_string, ")");
+  }
+
+  if (queue->row_deletion_policy().has_value()) {
+    absl::StrAppend(&queue_string, ", ROW DELETION POLICY (");
+    absl::StrAppend(&queue_string, RowDeletionPolicyToString(
+                                       queue->row_deletion_policy().value()));
+    absl::StrAppend(&queue_string, ")");
+  }
+  if (!queue->options().empty()) {
+    ::google::protobuf::RepeatedPtrField<ddl::SetOption> options(queue->options().begin(),
+                                                       queue->options().end());
+    absl::StrAppend(&queue_string, ", OPTIONS ( ", PrintOptions(options), " )");
+  }
+  return queue_string;
+}
+
 // Moves the nodes with no dependencies to the front of the list.
 void TopologicalOrderSchemaNodes(
     const SchemaNode* node, absl::flat_hash_set<const SchemaNode*>* visited,
@@ -705,6 +744,13 @@ void TopologicalOrderSchemaNodes(
         statements->push_back(PrintIndex(index));
       }
     }
+  }
+
+  if (const Queue* queue = node->As<const Queue>(); queue != nullptr) {
+    if (queue->parent() != nullptr) {
+      TopologicalOrderSchemaNodes(queue->parent(), visited, statements);
+    }
+    statements->push_back(PrintQueue(queue));
   }
 
   if (const Udf* udf = node->As<const Udf>(); udf != nullptr) {
@@ -989,6 +1035,9 @@ absl::StatusOr<std::vector<std::string>> PrintDDLStatements(
   }
   for (const Table* table : schema->tables()) {
     TopologicalOrderSchemaNodes(table, &visited, &statements);
+  }
+  for (const Queue* queue : schema->queues()) {
+    TopologicalOrderSchemaNodes(queue, &visited, &statements);
   }
   for (const ChangeStream* change_stream : schema->change_streams()) {
     TopologicalOrderSchemaNodes(change_stream, &visited, &statements);

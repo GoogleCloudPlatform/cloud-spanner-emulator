@@ -34,18 +34,14 @@ absl::Time NowMicros() {
 
 }  // namespace
 
-Clock::Clock()
-    : last_system_time_(NowMicros()), last_dispensed_time_(last_system_time_) {}
+Clock::Clock() : last_dispensed_time_(NowMicros()) {}
 
 absl::Time Clock::Now() {
   absl::MutexLock lock(mu_);
 
   absl::Time now = NowMicros();
-  absl::Time next_dispensed_time =
-      last_dispensed_time_ +
-      std::max(absl::Microseconds(1), now - last_system_time_);
-  last_system_time_ = now;
-  last_dispensed_time_ = next_dispensed_time;
+  last_dispensed_time_ =
+      std::max(now, last_dispensed_time_ + absl::Microseconds(1));
 
   return last_dispensed_time_;
 }

@@ -48,6 +48,7 @@
 #include "absl/flags/flag.h"
 #include "absl/log/check.h"
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
@@ -62,6 +63,7 @@
 #include "third_party/spanner_pg/ddl/translation_utils.h"
 #include "third_party/spanner_pg/interface/parser_output.h"
 #include "third_party/spanner_pg/shims/error_shim.h"
+#include "third_party/spanner_pg/shims/timezone_helper.h"
 #include "third_party/spanner_pg/util/interval_helpers.h"
 #include "third_party/spanner_pg/util/pg_list_iterators.h"
 #include "third_party/spanner_pg/util/postgres.h"
@@ -69,6 +71,7 @@
 #include "third_party/spanner_pg/src/include/nodes/parsenodes.h"
 #include "third_party/spanner_pg/src/include/nodes/pg_list.h"
 #include "third_party/spanner_pg/src/include/nodes/value.h"
+#include "third_party/spanner_pg/src/include/pgtime.h"
 #include "google/protobuf/repeated_ptr_field.h"
 #include "re2/re2.h"
 #include "googlesql/base/ret_check.h"
@@ -139,7 +142,37 @@ absl::optional<ChangeStreamOption> GetChangeStreamOption(
   return std::nullopt;
 }
 
-// TODO: expose when queue is implemented.
+enum class QueueOption {
+  kReceiveMode,
+  kPerPlacementTvf,
+  kDisableSend,
+  kDisableDelivery,
+  kLocalityGroup,
+};
+
+absl::optional<QueueOption> GetQueueOption(absl::string_view option_name) {
+  if (option_name ==
+      internal::PostgreSQLConstants::kInternalQueueReceiveModeOptionName) {
+    return QueueOption::kReceiveMode;
+  }
+  if (option_name ==
+      internal::PostgreSQLConstants::kInternalQueuePerPlacementTvfOptionName) {
+    return QueueOption::kPerPlacementTvf;
+  }
+  if (option_name ==
+      internal::PostgreSQLConstants::kInternalQueueDisableSendOptionName) {
+    return QueueOption::kDisableSend;
+  }
+  if (option_name ==
+      internal::PostgreSQLConstants::kInternalQueueDisableDeliveryOptionName) {
+    return QueueOption::kDisableDelivery;
+  }
+  if (option_name ==
+      internal::PostgreSQLConstants::kInternalQueueLocalityGroupOptionName) {
+    return QueueOption::kLocalityGroup;
+  }
+  return std::nullopt;
+}
 }  // namespace
 
 namespace {
@@ -427,6 +460,9 @@ class PostgreSQLToSpannerDDLTranslatorImpl
       const TranslationOptions& options,
       google::spanner::emulator::backend::ddl::DropChangeStream& out) const;
 
+  absl::Status TranslateDropPlacement(const DropStmt& drop_placement_statement,
+                                      const TranslationOptions& options,
+                                      google::spanner::emulator::backend::ddl::DropPlacement& out) const;
   absl::Status TranslateDropSearchIndex(
       const DropStmt& drop_search_index_statement,
       const TranslationOptions& options,
@@ -487,6 +523,10 @@ class PostgreSQLToSpannerDDLTranslatorImpl
       const Constraint& vector_length, const TranslationOptions& options,
       google::spanner::emulator::backend::ddl::ColumnDefinition& out) const;
 
+  absl::Status TranslatePlacementColumn(
+      const Constraint& placement, const TranslationOptions& options,
+      google::spanner::emulator::backend::ddl::ColumnDefinition& out) const;
+
   // Translates PostgreSQL <column_definition> used with <CREATE TABLE> and
   // <ALTER TABLE> statements. Updates table translation state stored in
   // <context> with information about processed columns.
@@ -522,6 +562,8 @@ class PostgreSQLToSpannerDDLTranslatorImpl
   absl::StatusOr<std::string> GetChangeStreamTableName(
       const RangeVar& range_var, absl::string_view parent_statement_type) const;
 
+  absl::StatusOr<std::string> GetPlacementName(
+      const RangeVar& range_var, absl::string_view parent_statement_type) const;
   absl::StatusOr<std::string> GetSearchIndexName(
       const RangeVar& range_var, absl::string_view parent_statement_type) const;
 
@@ -532,7 +574,8 @@ class PostgreSQLToSpannerDDLTranslatorImpl
       const ObjectWithArgs& object_with_args, bool is_grant,
       absl::string_view parent_statement_type) const;
 
-  // TODO: expose when queue is implemented.
+  absl::StatusOr<std::string> GetQueueName(
+      const RangeVar& range_var, absl::string_view parent_statement_type) const;
 
   // Parses PG column type represented as a List into schema name and type name.
   absl::Status ParseColumnType(const TypeName& type, std::string& schema_name,
@@ -576,6 +619,24 @@ class PostgreSQLToSpannerDDLTranslatorImpl
       const TranslationOptions& options,
       google::spanner::emulator::backend::ddl::AlterChangeStream& out) const;
 
+  // Translate the CREATE PLACEMENT statement.
+  absl::Status TranslateCreatePlacement(
+      const CreatePlacementStmt& create_placement_stmt,
+      const TranslationOptions& options,
+      google::spanner::emulator::backend::ddl::CreatePlacement& out) const;
+
+  absl::Status PopulatePlacementOptions(List* param_defs,
+                                        absl::string_view parent_statement,
+                                        OptionList* param_defs_out,
+                                        const TranslationOptions& options,
+                                        bool is_create) const;
+
+  // Translate the ALTER PLACEMENT statement.
+  absl::Status TranslateAlterPlacement(
+      const AlterPlacementStmt& alter_placement_stmt,
+      const TranslationOptions& options,
+      google::spanner::emulator::backend::ddl::AlterPlacement& out) const;
+
   absl::Status TranslateCreateSearchIndex(
       const CreateSearchIndexStmt& create_search_index_stmt,
       const TranslationOptions& options,
@@ -614,7 +675,19 @@ class PostgreSQLToSpannerDDLTranslatorImpl
   absl::Status TranslateAlterSequence(const AlterSeqStmt& alter_statement,
                                       const TranslationOptions& options,
                                       google::spanner::emulator::backend::ddl::AlterSequence& out) const;
-  // TODO: expose when queue is implemented.
+  absl::Status TranslateCreateQueue(const CreateQueueStmt& create_statement,
+                                    const TranslationOptions& options,
+                                    google::spanner::emulator::backend::ddl::CreateQueue& out) const;
+  absl::Status TranslateDropQueue(const DropStmt& drop_statement,
+                                  const TranslationOptions& options,
+                                  google::spanner::emulator::backend::ddl::DropQueue& out) const;
+  absl::Status TranslateAlterQueue(const AlterQueueStmt& alter_statement,
+                                   const TranslationOptions& options,
+                                   google::spanner::emulator::backend::ddl::AlterQueue& out) const;
+  absl::Status PopulateQueueOptions(List* opt_options,
+                                    absl::string_view parent_statement,
+                                    OptionList* options_out,
+                                    const TranslationOptions& options) const;
 
   // Rename translation statement.
   absl::Status TranslateRenameStatement(const RenameStmt& rename_statement,
@@ -872,6 +945,8 @@ struct PostgreSQLToSpannerDDLTranslatorImpl::TableContext {
   // PostgreSQL parse tree and live in the memory arena, thus are guaranteed to
   // stay alive for the duration of the translation.
   absl::flat_hash_set<absl::string_view> nullable_columns;
+  // Name of the column that is set as placement key if any.
+  absl::string_view placement_key_column;
   std::vector<google::spanner::emulator::backend::ddl::ForeignKey> foreign_keys;
   std::vector<google::spanner::emulator::backend::ddl::KeyPartClause> primary_key_columns;
   std::vector<google::spanner::emulator::backend::ddl::CheckConstraint> check_constraints;
@@ -900,6 +975,26 @@ PostgreSQLToSpannerDDLTranslatorImpl::TranslateOption(
   absl::optional<internal::PGAlterOption> option =
       internal::GetOptionByInternalName(option_name);
   if (!option) {
+    return UnsupportedTranslationError(
+        absl::StrCat("Database option <", option_name, "> is not supported."));
+  }
+
+  if (option->PGName() ==
+          internal::PostgreSQLConstants::
+              kSpangresDatabaseOptInDataplacementOptionName &&
+      !options.enable_opt_in_dataplacement_preview) {
+    return UnsupportedTranslationError(
+        absl::StrCat("Database option <", option_name, "> is not supported."));
+  } else if (option->PGName() ==
+                 internal::PostgreSQLConstants::
+                     kSpangresDatabaseAutoManagedRootPlacementTableOptionName &&
+             !options.enable_auto_managed_root_placement_table_name) {
+    return UnsupportedTranslationError(
+        absl::StrCat("Database option <", option_name, "> is not supported."));
+  } else if (option->PGName() ==
+                 internal::PostgreSQLConstants::
+                     kSpangresDatabasePerPlacementRoutingMetadataOptionName &&
+             !options.enable_per_placement_routing_metadata) {
     return UnsupportedTranslationError(
         absl::StrCat("Database option <", option_name, "> is not supported."));
   }
@@ -1129,6 +1224,26 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::ProcessTableConstraint(
       return absl::OkStatus();
     }
 
+    case CONSTR_PLACEMENT_KEY: {
+      if (!options.enable_data_placement) {
+        return UnsupportedTranslationError(
+            "<PLACEMENT KEY> constraint type is not supported.");
+      }
+      if (!context.placement_key_column.empty()) {
+        return absl::InvalidArgumentError(
+            "Placement key can be only defined once in <CREATE TABLE> "
+            "statement.");
+      }
+      if (constraint.conname != nullptr) {
+        return UnsupportedTranslationError(
+            "Setting a name of a <PLACEMENT KEY> constraint is not supported.");
+      }
+      GOOGLESQL_RET_CHECK_NE(target_column, nullptr);
+      GOOGLESQL_RET_CHECK(target_column->has_column_name());
+      target_column->set_placement_key(true);
+      context.placement_key_column = target_column->column_name();
+      return absl::OkStatus();
+    }
     case CONSTR_HIDDEN: {
       if (!options.enable_hidden_column) {
         return UnsupportedTranslationError(
@@ -1214,6 +1329,19 @@ absl::StatusOr<std::string> PostgreSQLToSpannerDDLTranslatorImpl::
 }
 
 absl::StatusOr<std::string>
+PostgreSQLToSpannerDDLTranslatorImpl::GetPlacementName(
+    const RangeVar& range_var, absl::string_view parent_statement_type) const {
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(range_var, parent_statement_type));
+  if (range_var.schemaname != nullptr &&
+      strcmp(range_var.schemaname, "public") != 0) {
+    return absl::InvalidArgumentError(
+        absl::Substitute("Schema name can only be 'public' in <$0> statement.",
+                         parent_statement_type));
+  }
+  return range_var.relname;
+}
+
+absl::StatusOr<std::string>
 PostgreSQLToSpannerDDLTranslatorImpl::GetLocalityGroupName(
     const RangeVar& range_var, absl::string_view parent_statement_type) const {
   GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(range_var, parent_statement_type));
@@ -1250,7 +1378,18 @@ PostgreSQLToSpannerDDLTranslatorImpl::GetFunctionName(
   return function_name;
 }
 
-// TODO: expose when queue is implemented.
+absl::StatusOr<std::string>
+PostgreSQLToSpannerDDLTranslatorImpl::GetQueueName(
+    const RangeVar& range_var, absl::string_view parent_statement_type) const {
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(range_var, parent_statement_type));
+  if (range_var.schemaname != nullptr &&
+      strcmp(range_var.schemaname, "public") != 0) {
+    return absl::InvalidArgumentError(
+        absl::Substitute("Schema name can only be 'public' in <$0> statement.",
+                         parent_statement_type));
+  }
+  return range_var.relname;
+}
 
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateInterleaveIn(
     const InterleaveSpec* pg_interleave,
@@ -1514,6 +1653,14 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateVectorLength(
   return absl::OkStatus();
 }
 
+absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslatePlacementColumn(
+    const Constraint& placement, const TranslationOptions& options,
+    google::spanner::emulator::backend::ddl::ColumnDefinition& out) const {
+  GOOGLESQL_RET_CHECK_EQ(placement.contype, CONSTR_PLACEMENT_KEY);
+  out.set_placement_key(true);
+  return absl::OkStatus();
+}
+
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateForeignKey(
     const Constraint& constraint,
     const google::spanner::emulator::backend::ddl::ColumnDefinition* target_column,
@@ -1597,6 +1744,14 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateColumnDefinition(
       GOOGLESQL_RETURN_IF_ERROR(
           ProcessTableConstraint(*constraint, options, &out, context));
     }
+  }
+
+  bool is_text_or_unbounded_varchar =
+      out.has_type() && out.type() == google::spanner::emulator::backend::ddl::ColumnDefinition::STRING &&
+      !out.has_length();
+  if (out.has_placement_key() && !is_text_or_unbounded_varchar) {
+    return absl::InvalidArgumentError(
+        "Placement key column must be TEXT or unbounded VARCHAR.");
   }
 
   if (column_definition.locality_group_name != nullptr) {
@@ -2004,7 +2159,143 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropSequence(
   return absl::OkStatus();
 }
 
-// TODO: expose when queue is implemented.
+absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateQueue(
+    const CreateQueueStmt& create_statement, const TranslationOptions& options,
+    google::spanner::emulator::backend::ddl::CreateQueue& out) const {
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(create_statement, options));
+  if (!options.enable_queue) {
+    return UnsupportedTranslationError(
+        "<CREATE QUEUE> statement is not supported.");
+  }
+
+  absl::string_view queue_name;
+  GOOGLESQL_ASSIGN_OR_RETURN(queue_name,
+                   GetQueueName(*create_statement.queue, "CREATE QUEUE"));
+  if (internal::IsReservedName(queue_name)) {
+    return absl::InvalidArgumentError(
+        "'pg_' is not supported as a prefix for a queue name.");
+  }
+  *out.mutable_queue_name() = queue_name;
+
+  TableContext context;
+
+  for (const Node* node : StructList<Node*>(create_statement.tableElts)) {
+    GOOGLESQL_RET_CHECK_NE(node, nullptr);
+    switch (node->type) {
+      case T_ColumnDef: {
+        GOOGLESQL_ASSIGN_OR_RETURN(const ColumnDef* column,
+                         (DowncastNode<ColumnDef, T_ColumnDef>(node)));
+        GOOGLESQL_RETURN_IF_ERROR(TranslateColumnDefinition(*column, options, context,
+                                                  *out.add_column()));
+        break;
+      }
+      case T_Constraint: {
+        GOOGLESQL_ASSIGN_OR_RETURN(const Constraint* constraint,
+                         (DowncastNode<Constraint, T_Constraint>(node)));
+        GOOGLESQL_RETURN_IF_ERROR(
+            ProcessTableConstraint(*constraint, options, nullptr, context));
+        break;
+      }
+      default: {
+        return UnsupportedTranslationError(
+            "Unknown clause in <CREATE QUEUE> statement.");
+      }
+    }
+  }
+
+  if (create_statement.interleavespec != nullptr) {
+    GOOGLESQL_RETURN_IF_ERROR(TranslateInterleaveIn(create_statement.interleavespec,
+                                          out.mutable_interleave_clause(),
+                                          options));
+  }
+
+  if (create_statement.ttl != nullptr) {
+    GOOGLESQL_RETURN_IF_ERROR(TranslateRowDeletionPolicy(
+        *create_statement.ttl, *out.mutable_row_deletion_policy()));
+  }
+
+  if (create_statement.options != nullptr) {
+    GOOGLESQL_RETURN_IF_ERROR(PopulateQueueOptions(create_statement.options,
+                                         "CREATE QUEUE",
+                                         out.mutable_set_options(), options));
+  }
+
+  if (create_statement.if_not_exists) {
+    out.set_existence_modifier(google::spanner::emulator::backend::ddl::IF_NOT_EXISTS);
+  }
+
+  for (int i = 0; i < out.column_size(); i++) {
+    google::spanner::emulator::backend::ddl::ColumnDefinition* column = out.mutable_column(i);
+    const bool is_nullable =
+        context.nullable_columns.contains(column->column_name());
+    const bool is_not_null =
+        context.not_null_columns.contains(column->column_name());
+
+    if (is_nullable && is_not_null) {
+      return UnsupportedTranslationError(
+          "Nullable <PRIMARY KEY> columns are not supported.");
+    } else if (is_nullable) {
+      column->set_not_null(false);
+    } else if (is_not_null) {
+      column->set_not_null(true);
+    }
+  }
+
+  for (google::spanner::emulator::backend::ddl::KeyPartClause& primary_key_part :
+       context.primary_key_columns) {
+    *out.add_primary_key() = std::move(primary_key_part);
+  }
+
+  if (out.primary_key_size() == 0) {
+    return UnsupportedTranslationError(absl::StrCat(
+        "Primary key must be defined for queue \"", queue_name, "\"."));
+  }
+
+  return absl::OkStatus();
+}
+
+absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropQueue(
+    const DropStmt& drop_statement, const TranslationOptions& options,
+    google::spanner::emulator::backend::ddl::DropQueue& out) const {
+  if (!options.enable_queue) {
+    return UnsupportedTranslationError(
+        "<DROP QUEUE> statement is not supported.");
+  }
+  GOOGLESQL_RET_CHECK_EQ(drop_statement.removeType, OBJECT_QUEUE);
+  if (drop_statement.missing_ok) {
+    out.set_existence_modifier(google::spanner::emulator::backend::ddl::IF_EXISTS);
+  }
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      const RangeVar* queue_to_drop_node,
+      (SingleItemListAsNode<RangeVar, T_RangeVar>(drop_statement.objects)));
+  GOOGLESQL_ASSIGN_OR_RETURN(*out.mutable_queue_name(),
+                   GetQueueName(*queue_to_drop_node, "DROP QUEUE"));
+  out.set_queue_name(queue_to_drop_node->relname);
+  return absl::OkStatus();
+}
+
+absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterQueue(
+    const AlterQueueStmt& alter_statement, const TranslationOptions& options,
+    google::spanner::emulator::backend::ddl::AlterQueue& out) const {
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(alter_statement));
+  if (!options.enable_queue) {
+    return UnsupportedTranslationError(
+        "<ALTER QUEUE> statement is not supported.");
+  }
+
+  absl::string_view queue_name;
+  GOOGLESQL_ASSIGN_OR_RETURN(queue_name,
+                   GetQueueName(*alter_statement.queue, "ALTER QUEUE"));
+  *out.mutable_queue_name() = std::string(queue_name);
+
+  if (alter_statement.options != nullptr) {
+    GOOGLESQL_RETURN_IF_ERROR(PopulateQueueOptions(
+        alter_statement.options, "ALTER QUEUE",
+        out.mutable_set_options()->mutable_options(), options));
+  }
+
+  return absl::OkStatus();
+}
 
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateTable(
     const CreateStmt& create_statement, const TranslationOptions& options,
@@ -2136,6 +2427,33 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreateTable(
     }
     if (context.not_null_columns.contains(column->column_name())) {
       column->set_not_null(true);
+    }
+  }
+
+  if (!context.placement_key_column.empty()) {
+    if (!context.not_null_columns.contains(context.placement_key_column)) {
+      return absl::InvalidArgumentError(
+          "Placement key column must be NOT NULL and/or a PRIMARY KEY.");
+    }
+    if (context.primary_key_columns.size() > 1) {
+      bool placement_key_is_primary_key = false;
+      for (google::spanner::emulator::backend::ddl::KeyPartClause& primary_key_part :
+           context.primary_key_columns) {
+        if (primary_key_part.key_name() == context.placement_key_column) {
+          placement_key_is_primary_key = true;
+          break;
+        }
+      }
+      if (placement_key_is_primary_key) {
+        return absl::InvalidArgumentError(
+            "Placement key column must be the only primary key.");
+      }
+    }
+    // INTERLEAVE IN PARENT translation must be done before this.
+    if (out.has_interleave_clause()) {
+      return absl::InvalidArgumentError(
+          "PLACEMENT KEY column attribute cannot be defined on tables with an "
+          "INTERLEAVE IN PARENT clause.");
     }
   }
 
@@ -2664,6 +2982,9 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropStatement(
       return TranslateDropChangeStream(
           drop_statement, options, *out.mutable_drop_change_stream());
 
+    case OBJECT_DATA_PLACEMENT:
+      return TranslateDropPlacement(drop_statement, options,
+                                    *out.mutable_drop_placement());
     case OBJECT_SEARCH_INDEX:
       return TranslateDropSearchIndex(drop_statement, options,
                                       *out.mutable_drop_search_index());
@@ -2675,7 +2996,9 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropStatement(
     case OBJECT_SEQUENCE:
       return TranslateDropSequence(drop_statement, options,
                                    *out.mutable_drop_sequence());
-    // TODO: expose when queue is implemented.
+    case OBJECT_QUEUE:
+      return TranslateDropQueue(drop_statement, options,
+                                   *out.mutable_drop_queue());
     default:
       GOOGLESQL_RET_CHECK_FAIL()
           << "removeType should have been validated in ValidateTreeNode.";
@@ -2710,6 +3033,25 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropChangeStream(
   return absl::OkStatus();
 }
 
+absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropPlacement(
+    const DropStmt& drop_placement_statement, const TranslationOptions& options,
+    google::spanner::emulator::backend::ddl::DropPlacement& out) const {
+  if (!options.enable_data_placement) {
+    return UnsupportedTranslationError(
+        "<DROP PLACEMENT> statement is not supported.");
+  }
+  GOOGLESQL_RET_CHECK_EQ(drop_placement_statement.removeType, OBJECT_DATA_PLACEMENT);
+  if (drop_placement_statement.missing_ok) {
+    out.set_existence_modifier(google::spanner::emulator::backend::ddl::IF_EXISTS);
+  }
+  GOOGLESQL_ASSIGN_OR_RETURN(const RangeVar* placement_to_drop_node,
+                   (SingleItemListAsNode<RangeVar, T_RangeVar>(
+                       drop_placement_statement.objects)));
+  GOOGLESQL_ASSIGN_OR_RETURN(std::string placement_name,
+                   GetPlacementName(*placement_to_drop_node, "DROP PLACEMENT"));
+  out.set_placement_name(placement_name);
+  return absl::OkStatus();
+}
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateDropSearchIndex(
     const DropStmt& drop_search_index_statement,
     const TranslationOptions& options,
@@ -3031,6 +3373,22 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterDatabase(
           const A_Const* arg,
           (SingleItemListAsNode<A_Const, T_A_Const>)(set_statement->args));
 
+      // Special handling for bool options, such as
+      // `spanner.opt_in_dataplacement_preview`.
+      //
+      // These options have `option.PGType()` as `T_Boolean` but
+      // `arg->val.node.type` as `T_String`.
+      if (option.PGType() == T_Boolean) {
+        if (arg->val.sval.sval == PGConstants::kPgTrueLiteral) {
+          opt->set_bool_value(true);
+        } else if (arg->val.sval.sval == PGConstants::kPgFalseLiteral) {
+          opt->set_bool_value(false);
+        } else {
+          return UnsupportedTranslationError(
+              absl::StrCat("Unsupported option value for <", option.PGName(),
+                           "> in <ALTER DATABASE> statement."));
+        }
+      } else {
         if (arg->val.node.type != option.PGType()) {
             return UnsupportedTranslationError(
                 "Incorrect datatype specified for option.");
@@ -3043,6 +3401,18 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterDatabase(
           }
 
           case T_String: {
+            if (option.PGName() == internal::PostgreSQLConstants::
+                                       kSpangresDefaultTimeZoneOptionName) {
+              absl::StatusOr<pg_tz*> tz =
+                  (arg->val.sval.sval != nullptr &&
+                   arg->val.sval.sval[0] != '\0')
+                      ? CheckedPgTZSet(arg->val.sval.sval)
+                      : nullptr;
+              CleanupTimezone();
+              if (!tz.ok() || *tz == nullptr) {
+                return UnsupportedTranslationError("Invalid time zone name.");
+              }
+            }
               opt->set_string_value(arg->val.sval.sval);
             break;
           }
@@ -3052,6 +3422,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterDatabase(
                 "Option type is not supported by <ALTER DATABASE> statement.");
           }
         }
+      }
 
       break;
     }
@@ -3502,7 +3873,7 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterChangeStream(
           google::spanner::emulator::backend::ddl::SetOption* option_out =
               out.mutable_set_options()->mutable_options()->Add();
           option_out->set_option_name(option_string);
-          option_out->set_string_value("24h");
+          option_out->set_null_value(true);
           break;
         }
         case ChangeStreamOption::kExcludeInsert:
@@ -3687,6 +4058,97 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::PopulateChangeStreamOptions(
   return absl::OkStatus();
 }
 
+absl::Status PostgreSQLToSpannerDDLTranslatorImpl::PopulateQueueOptions(
+    List* opt_options, absl::string_view parent_statement,
+    OptionList* options_out, const TranslationOptions& options) const {
+  ABSL_DCHECK(opt_options != nullptr);
+  absl::flat_hash_set<std::string> seen_options;
+  for (DefElem* def_elem : StructList<DefElem*>(opt_options)) {
+    if (def_elem == nullptr || def_elem->arg == nullptr || !def_elem->defname ||
+        *def_elem->defname == '\0') {
+      return absl::InvalidArgumentError(absl::Substitute(
+          "Failed to parse queue option correctly in <$0> statement.",
+          parent_statement));
+    }
+    const absl::string_view defname = def_elem->defname;
+    if (seen_options.contains(defname)) {
+      return absl::InvalidArgumentError(absl::Substitute(
+          "Contains duplicate queue option '$0' in <$1> statement.", defname,
+          parent_statement));
+    }
+    seen_options.insert(std::string(defname));
+
+    absl::optional<QueueOption> option_kind = GetQueueOption(defname);
+    if (!option_kind.has_value()) {
+      return absl::InvalidArgumentError(
+          absl::Substitute("Invalid queue option '$0' in <$1> statement.",
+                           defname, parent_statement));
+    }
+
+    switch (option_kind.value()) {
+      // String-valued options.
+      case QueueOption::kReceiveMode:
+      case QueueOption::kLocalityGroup: {
+        if (def_elem->arg->type != T_String) {
+          return absl::InvalidArgumentError(absl::Substitute(
+              "Failed to provide valid option value for '$0' in <$1> "
+              "statement.",
+              defname, parent_statement));
+        }
+        GOOGLESQL_ASSIGN_OR_RETURN(const String* arg_value,
+                         (DowncastNode<String, T_String>(def_elem->arg)));
+        std::string value = arg_value->sval;
+        google::spanner::emulator::backend::ddl::SetOption* option_out = options_out->Add();
+        option_out->set_option_name(defname);
+        if (absl::AsciiStrToLower(value) == "null") {
+          option_out->set_null_value(true);
+        } else {
+          option_out->set_string_value(value);
+        }
+        break;
+      }
+      // Boolean-valued options.
+      case QueueOption::kPerPlacementTvf:
+      case QueueOption::kDisableSend:
+      case QueueOption::kDisableDelivery: {
+        bool is_supported =
+            (option_kind.value() == QueueOption::kPerPlacementTvf)
+                ? options.enable_queues_per_placement_tvf_option
+                : options.enable_queue_traffic_control_options;
+        if (!is_supported) {
+          return UnsupportedTranslationError(
+              absl::Substitute("Option $0 is not supported yet.", defname));
+        }
+        if (def_elem->arg->type != T_String) {
+          return absl::InvalidArgumentError(absl::Substitute(
+              "Failed to provide valid option value for '$0' in <$1> "
+              "statement.",
+              defname, parent_statement));
+        }
+        GOOGLESQL_ASSIGN_OR_RETURN(const String* arg_value,
+                         (DowncastNode<String, T_String>(def_elem->arg)));
+        std::string value = arg_value->sval;
+        google::spanner::emulator::backend::ddl::SetOption* option_out = options_out->Add();
+        option_out->set_option_name(defname);
+        if (absl::AsciiStrToLower(value) == "null") {
+          option_out->set_null_value(true);
+        } else if (value == PGConstants::kPgTrueLiteral) {
+          option_out->set_bool_value(true);
+        } else if (value == PGConstants::kPgFalseLiteral) {
+          option_out->set_bool_value(false);
+        } else {
+          return UnsupportedTranslationError(
+              absl::Substitute("Unsupported option value in queue option "
+                               "'$0' in <$1> statement.",
+                               defname, parent_statement));
+        }
+        break;
+      }
+    }
+  }
+  return absl::OkStatus();
+}
+
 absl::Status
 PostgreSQLToSpannerDDLTranslatorImpl::PopulateChangeStreamForClause(
     const List* opt_for_or_drop_for_tables, bool for_or_drop_for_all,
@@ -3725,6 +4187,129 @@ PostgreSQLToSpannerDDLTranslatorImpl::PopulateChangeStreamForClause(
   } else if (for_or_drop_for_all == true) {
     change_stream_for_clause->set_all(true);
   }
+  return absl::OkStatus();
+}
+
+absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateCreatePlacement(
+    const CreatePlacementStmt& create_placement_stmt,
+    const TranslationOptions& options,
+    google::spanner::emulator::backend::ddl::CreatePlacement& out) const {
+  if (!options.enable_data_placement) {
+    return UnsupportedTranslationError(
+        "<CREATE PLACEMENT> statement is not supported.");
+  }
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(create_placement_stmt));
+  if (create_placement_stmt.if_not_exists) {
+    out.set_existence_modifier(google::spanner::emulator::backend::ddl::IF_NOT_EXISTS);
+  }
+  GOOGLESQL_ASSIGN_OR_RETURN(std::string placement_name,
+                   GetPlacementName(*create_placement_stmt.placement_name,
+                                    "CREATE PLACEMENT"));
+  out.set_placement_name(placement_name);
+
+  // Populate the placement options.
+  if (create_placement_stmt.options != nullptr) {
+    GOOGLESQL_RETURN_IF_ERROR(PopulatePlacementOptions(
+        create_placement_stmt.options, "CREATE PLACEMENT",
+        out.mutable_set_options(), options, /*is_create=*/true));
+  }
+
+  return absl::OkStatus();
+}
+
+absl::Status PostgreSQLToSpannerDDLTranslatorImpl::TranslateAlterPlacement(
+    const AlterPlacementStmt& alter_placement_stmt,
+    const TranslationOptions& options,
+    google::spanner::emulator::backend::ddl::AlterPlacement& out) const {
+  if (!options.enable_data_placement) {
+    return UnsupportedTranslationError(
+        "<ALTER PLACEMENT> statement is not supported.");
+  }
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(alter_placement_stmt));
+  if (alter_placement_stmt.missing_ok) {
+    out.set_existence_modifier(google::spanner::emulator::backend::ddl::IF_EXISTS);
+  }
+  GOOGLESQL_ASSIGN_OR_RETURN(std::string placement_name,
+                   GetPlacementName(*alter_placement_stmt.placement_name,
+                                    "ALTER PLACEMENT"));
+  out.set_placement_name(placement_name);
+
+  // Populate the placement options.
+  if (alter_placement_stmt.options != nullptr) {
+    GOOGLESQL_RETURN_IF_ERROR(PopulatePlacementOptions(
+        alter_placement_stmt.options, "ALTER PLACEMENT",
+        out.mutable_set_options(), options, /*is_create=*/false));
+  }
+
+  return absl::OkStatus();
+}
+
+absl::Status PostgreSQLToSpannerDDLTranslatorImpl::PopulatePlacementOptions(
+    List* param_defs, absl::string_view parent_statement,
+    OptionList* param_defs_out, const TranslationOptions& options,
+    bool is_create) const {
+  ABSL_DCHECK(param_defs != nullptr);
+  absl::flat_hash_set<std::string> seen_options;
+  for (DefElem* def_elem : StructList<DefElem*>(param_defs)) {
+    if (def_elem == nullptr || def_elem->arg == nullptr || !def_elem->defname ||
+        *def_elem->defname == '\0') {
+      return absl::InvalidArgumentError(absl::Substitute(
+          "Failed to parse placement option correctly in <$0> statement.",
+          parent_statement));
+    }
+    if (seen_options.contains(def_elem->defname)) {
+      return absl::InvalidArgumentError(absl::Substitute(
+          "Contains duplicate placement option '$0' in <$1> statement.",
+          def_elem->defname, parent_statement));
+    }
+    seen_options.insert(def_elem->defname);
+    if (def_elem->defname == internal::PostgreSQLConstants::
+                                 kDataPlacementDefaultLeaderOptionName ||
+        def_elem->defname == internal::PostgreSQLConstants::
+                                 kDataPlacementInstancePartitionOptionName ||
+        def_elem->defname == internal::PostgreSQLConstants::
+                                 kDataPlacementReadLeaseRegionsOptionName) {
+      if (def_elem->arg->type != T_String) {
+        return absl::InvalidArgumentError(absl::Substitute(
+            "Failed to provide valid option value for '$0' in <$1> statement.",
+            def_elem->defname, parent_statement));
+      }
+      GOOGLESQL_ASSIGN_OR_RETURN(const String* arg_value,
+                       (DowncastNode<String, T_String>(def_elem->arg)));
+      std::string value = arg_value->sval;
+      google::spanner::emulator::backend::ddl::SetOption* option_out = param_defs_out->Add();
+      option_out->set_option_name(def_elem->defname);
+      if (absl::AsciiStrToLower(value) == "null") {
+        if (def_elem->defname ==
+            internal::PostgreSQLConstants::
+                kDataPlacementInstancePartitionOptionName) {
+          return absl::InvalidArgumentError(
+              "Placements must have a non-NULL instance_partition.");
+        }
+        option_out->set_null_value(true);
+      } else if (value.empty()) {
+        return absl::InvalidArgumentError(absl::Substitute(
+            "Empty string is an invalid value for $0. If you'd like to clear a "
+            "previously set value, use NULL.",
+            def_elem->defname));
+      } else {
+        option_out->set_string_value(value);
+      }
+    } else {
+      return absl::InvalidArgumentError(absl::Substitute(
+          "Invalid placement parameter '$0' in <$1> statement.",
+          def_elem->defname, parent_statement));
+    }
+  }
+
+  if (is_create &&
+      !seen_options.contains(internal::PostgreSQLConstants::
+                                 kDataPlacementInstancePartitionOptionName)) {
+    return absl::InvalidArgumentError(
+        "<CREATE PLACEMENT> statements require option `instance_partition` to "
+        "be set.");
+  }
+
   return absl::OkStatus();
 }
 
@@ -4287,6 +4872,26 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::Visitor::Visit(
       break;
     }
 
+    case T_CreatePlacementStmt: {
+      GOOGLESQL_ASSIGN_OR_RETURN(
+          const CreatePlacementStmt* statement,
+          (DowncastNode<CreatePlacementStmt, T_CreatePlacementStmt>(
+              raw_statement.stmt)));
+      GOOGLESQL_RETURN_IF_ERROR(ddl_translator_.TranslateCreatePlacement(
+          *statement, options_, *result_statement.mutable_create_placement()));
+
+      break;
+    }
+
+    case T_AlterPlacementStmt: {
+      GOOGLESQL_ASSIGN_OR_RETURN(const AlterPlacementStmt* statement,
+                       (DowncastNode<AlterPlacementStmt, T_AlterPlacementStmt>(
+                           raw_statement.stmt)));
+      GOOGLESQL_RETURN_IF_ERROR(ddl_translator_.TranslateAlterPlacement(
+          *statement, options_, *result_statement.mutable_alter_placement()));
+
+      break;
+    }
     case T_CreateSearchIndexStmt: {
       GOOGLESQL_ASSIGN_OR_RETURN(
           const CreateSearchIndexStmt* statement,
@@ -4340,7 +4945,23 @@ absl::Status PostgreSQLToSpannerDDLTranslatorImpl::Visitor::Visit(
       break;
     }
 
-    // TODO: expose when queue is implemented.
+    case T_CreateQueueStmt: {
+      GOOGLESQL_ASSIGN_OR_RETURN(
+          const CreateQueueStmt* statement,
+          (DowncastNode<CreateQueueStmt, T_CreateQueueStmt>(
+              raw_statement.stmt)));
+      GOOGLESQL_RETURN_IF_ERROR(ddl_translator_.TranslateCreateQueue(
+          *statement, options_, *result_statement.mutable_create_queue()));
+      break;
+    }
+    case T_AlterQueueStmt: {
+      GOOGLESQL_ASSIGN_OR_RETURN(
+          const AlterQueueStmt* statement,
+          (DowncastNode<AlterQueueStmt, T_AlterQueueStmt>(raw_statement.stmt)));
+      GOOGLESQL_RETURN_IF_ERROR(ddl_translator_.TranslateAlterQueue(
+          *statement, options_, *result_statement.mutable_alter_queue()));
+      break;
+    }
 
     case T_AlterSeqStmt: {
       GOOGLESQL_ASSIGN_OR_RETURN(
@@ -4579,6 +5200,15 @@ absl::Status ProcessColumnarPolicy(const IndexStmt& create_index_statement,
     key_part->set_key_name(key_name);
     key_part->set_order(ordering);
 
+    if (index_elem->expr != nullptr) {
+      google::spanner::emulator::backend::ddl::KeyPartClause::Expression* expression_index =
+          key_part->mutable_expression_index();
+
+      google::spanner::emulator::backend::ddl::SQLExpressionOrigin* expression_origin =
+          expression_index->mutable_expression_origin();
+      expression_origin->set_original_expression(index_elem->expr_string);
+    }
+
     // UNIQUE indexes should have all the keys as null filtered to account for
     // PG treating NULLs as not equal
     if (create_index_statement.unique) {
@@ -4692,7 +5322,8 @@ absl::StatusOr<absl::string_view> PostgreSQLToSpannerDDLTranslatorImpl::
       ordering,
       ProcessOrdering(index_elem.ordering, index_elem.nulls_ordering, options));
 
-  return index_elem.name;
+  return (index_elem.expr == nullptr) ? index_elem.name
+                                      : index_elem.expr_string;
 }
 
 absl::Status PostgreSQLToSpannerDDLTranslatorImpl::

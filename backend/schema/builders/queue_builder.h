@@ -98,6 +98,11 @@ class Queue::Builder {
     return *this;
   }
 
+  Builder& set_backing_table(const Table* table) {
+    instance_->backing_table_ = table;
+    return *this;
+  }
+
  private:
   std::unique_ptr<Queue> instance_;
 };
@@ -141,6 +146,11 @@ class Queue::Editor {
     for (const ddl::SetOption& option : options) {
       instance_->options_.push_back(option);
     }
+    return *this;
+  }
+
+  Editor& set_backing_table(const Table* table) {
+    instance_->backing_table_ = table;
     return *this;
   }
 

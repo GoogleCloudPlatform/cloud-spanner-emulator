@@ -274,7 +274,13 @@ absl::Status DropDatabase(RequestContext* ctx,
   }
 
   // Clean up the database.
-  return ctx->env()->database_manager()->DeleteDatabase(request->database());
+  GOOGLESQL_RETURN_IF_ERROR(
+      ctx->env()->database_manager()->DeleteDatabase(request->database()));
+
+  // Clean up the operations that tracked the creation and schema updates of
+  // the database, otherwise they would be retained for the lifetime of the
+  // emulator.
+  return ctx->env()->operation_manager()->DeleteOperations(request->database());
 }
 REGISTER_GRPC_HANDLER(DatabaseAdmin, DropDatabase);
 

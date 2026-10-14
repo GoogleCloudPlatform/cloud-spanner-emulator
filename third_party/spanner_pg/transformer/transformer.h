@@ -66,8 +66,8 @@ class Transformer {
       CatalogAdapter& adapter, const googlesql::Table& resolved_table,
       Alias* alias, bool inFromCl, AclMode acl_mode);
   static absl::StatusOr<RangeTblEntry*> BuildPgRangeTblEntry(
-      CatalogAdapter& adapter, Oid oid, Alias* alias, bool inFromCl,
-      AclMode acl_mode);
+      CatalogAdapter& adapter, Oid oid, const googlesql::Table* table,
+      Alias* alias, bool inFromCl, AclMode acl_mode);
 
   static absl::StatusOr<Oid> BuildPgTypeOid(CatalogAdapter& catalog_adapter,
                                             const googlesql::Type* gsql_type);

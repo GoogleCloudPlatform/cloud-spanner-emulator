@@ -83,6 +83,7 @@
 #include "backend/schema/builders/named_schema_builder.h"
 #include "backend/schema/builders/placement_builder.h"
 #include "backend/schema/builders/property_graph_builder.h"
+#include "backend/schema/builders/queue_builder.h"
 #include "backend/schema/builders/sequence_builder.h"
 #include "backend/schema/builders/table_builder.h"
 #include "backend/schema/builders/udf_builder.h"
@@ -99,6 +100,7 @@
 #include "backend/schema/catalog/placement.h"
 #include "backend/schema/catalog/property_graph.h"
 #include "backend/schema/catalog/proto_bundle.h"
+#include "backend/schema/catalog/queue.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/sequence.h"
 #include "backend/schema/catalog/table.h"
@@ -219,10 +221,12 @@ class SchemaUpdaterImpl {
   absl::StatusOr<SchemaUpdaterImpl> static Build(
       googlesql::TypeFactory* type_factory,
       TableIDGenerator* table_id_generator,
+      QueueIDGenerator* queue_id_generator,
       ColumnIDGenerator* column_id_generator, Storage* storage,
       absl::Time schema_change_ts, PgOidAssigner* pg_oid_assigner,
       const Schema* existing_schema, std::string_view database_id) {
     SchemaUpdaterImpl impl(type_factory, table_id_generator,
+                           queue_id_generator,
                            column_id_generator, storage, schema_change_ts,
                            pg_oid_assigner, existing_schema, database_id);
     GOOGLESQL_RETURN_IF_ERROR(impl.Init());
@@ -243,11 +247,13 @@ class SchemaUpdaterImpl {
  private:
   SchemaUpdaterImpl(googlesql::TypeFactory* type_factory,
                     TableIDGenerator* table_id_generator,
+                    QueueIDGenerator* queue_id_generator,
                     ColumnIDGenerator* column_id_generator, Storage* storage,
                     absl::Time schema_change_ts, PgOidAssigner* pg_oid_assigner,
                     const Schema* existing_schema, std::string_view database_id)
       : type_factory_(type_factory),
         table_id_generator_(table_id_generator),
+        queue_id_generator_(queue_id_generator),
         column_id_generator_(column_id_generator),
         storage_(storage),
         schema_change_timestamp_(schema_change_ts),
@@ -274,6 +280,14 @@ class SchemaUpdaterImpl {
   absl::Status InitColumnNameAndTypesFromTable(
       const Table* table, const ddl::CreateTable* ddl_create_table,
       std::vector<googlesql::SimpleTable::NameAndType>* name_and_types);
+
+  absl::Status AddGeneratedColumnsForExpressionIndex(
+      const std::string& index_base_name,
+      const std::vector<ddl::KeyPartClause>& index_pk,
+      const database_api::DatabaseDialect& dialect, const Table* indexed_table);
+
+  absl::StatusOr<const googlesql::Type*> GetExpressionIndexColumnType(
+      absl::string_view expression, const Table* table);
 
   absl::Status AnalyzeGeneratedColumn(
       absl::string_view expression, const std::string& column_name,
@@ -349,8 +363,21 @@ class SchemaUpdaterImpl {
       const ddl::CreateTable* ddl_table,
       const database_api::DatabaseDialect& dialect);
 
+  absl::StatusOr<const Column*> CreateQueueColumn(
+      const ddl::ColumnDefinition& ddl_column, const Queue* queue,
+      const ddl::CreateQueue& ddl_queue,
+      const database_api::DatabaseDialect& dialect);
+
+  absl::StatusOr<const Column*> CreateQueueBackingTableColumn(
+      const ddl::ColumnDefinition& ddl_column, const Table* table,
+      const database_api::DatabaseDialect& dialect);
+
   absl::StatusOr<const KeyColumn*> CreatePrimaryKeyColumn(
       const ddl::KeyPartClause& ddl_key_part, const Table* table,
+      KeyColumn::Builder* builder);
+
+  absl::StatusOr<const KeyColumn*> CreateQueuePrimaryKeyColumn(
+      const ddl::KeyPartClause& ddl_key_part, const Queue* queue,
       KeyColumn::Builder* builder);
 
   absl::Status CreatePrimaryKeyConstraint(
@@ -359,6 +386,8 @@ class SchemaUpdaterImpl {
 
   absl::Status CreateInterleaveConstraintForTable(
       const ddl::InterleaveClause& interleave, Table::Builder* builder);
+  absl::Status CreateInterleaveConstraintForQueue(
+      const ddl::InterleaveClause& interleave, Queue::Builder* builder);
   absl::Status CreateInterleaveConstraint(
       const Table* parent, std::optional<Table::OnDeleteAction> on_delete,
       Table::InterleaveType interleave_type, Table::Builder* builder);
@@ -456,6 +485,12 @@ class SchemaUpdaterImpl {
       absl::string_view proto_descriptor_bytes);
   absl::Status CreateTable(const ddl::CreateTable& ddl_table,
                            const database_api::DatabaseDialect& dialect);
+  absl::Status CreateQueue(const ddl::CreateQueue& ddl_queue,
+                           const database_api::DatabaseDialect& dialect);
+
+  absl::StatusOr<std::unique_ptr<const Table>> CreateQueueBackingTable(
+      const Queue* queue, const ddl::CreateQueue& ddl_queue,
+      const database_api::DatabaseDialect& dialect);
 
   absl::StatusOr<const Column*> CreateIndexDataTableColumn(
       const Table* indexed_table, const std::string& source_column_name,
@@ -627,6 +662,21 @@ class SchemaUpdaterImpl {
                            const Table* table);
 
   absl::Status DropTable(const ddl::DropTable& drop_table);
+  absl::Status AlterQueue(const ddl::AlterQueue& alter_queue);
+  absl::Status AlterQueueSetInterleave(
+      const ddl::AlterQueue::SetInterleaveClause& set_interleave_clause,
+      const Queue* queue);
+  absl::Status AlterQueueInterleaveAction(
+      const ddl::InterleaveClause::Action& ddl_interleave_action,
+      const Queue* queue);
+  absl::Status AlterQueueRowDeletionPolicy(
+      std::optional<ddl::RowDeletionPolicy> row_deletion_policy,
+      const Queue* queue);
+  template <typename QueueModifier>
+  absl::Status SetQueueOptions(
+      const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& set_options,
+      QueueModifier* modifier);
+  absl::Status DropQueue(const ddl::DropQueue& drop_queue);
 
   absl::Status DropIndex(const ddl::DropIndex& drop_index);
 
@@ -719,6 +769,9 @@ class SchemaUpdaterImpl {
 
   // Unique table ID generator for the database. Not owned.
   TableIDGenerator* const table_id_generator_;
+
+  // Unique queue ID generator for the database. Not owned.
+  QueueIDGenerator* const queue_id_generator_;
 
   // Unique column ID generator for the database. Not owned.
   ColumnIDGenerator* const column_id_generator_;
@@ -875,6 +928,10 @@ SchemaUpdaterImpl::ApplyDDLStatement(
       GOOGLESQL_RETURN_IF_ERROR(CreateTable(ddl_statement->create_table(), dialect));
       break;
     }
+    case ddl::DDLStatement::kCreateQueue: {
+      GOOGLESQL_RETURN_IF_ERROR(CreateQueue(ddl_statement->create_queue(), dialect));
+      break;
+    }
     case ddl::DDLStatement::kCreateChangeStream: {
       const ddl::CreateChangeStream& create_cs =
           ddl_statement->create_change_stream();
@@ -994,6 +1051,10 @@ SchemaUpdaterImpl::ApplyDDLStatement(
       GOOGLESQL_RETURN_IF_ERROR(AlterTable(ddl_statement->alter_table(), dialect));
       break;
     }
+    case ddl::DDLStatement::kAlterQueue: {
+      GOOGLESQL_RETURN_IF_ERROR(AlterQueue(ddl_statement->alter_queue()));
+      break;
+    }
     case ddl::DDLStatement::kAlterChangeStream: {
       GOOGLESQL_RETURN_IF_ERROR(AlterChangeStream(ddl_statement->alter_change_stream()));
       break;
@@ -1040,6 +1101,10 @@ SchemaUpdaterImpl::ApplyDDLStatement(
     }
     case ddl::DDLStatement::kDropTable: {
       GOOGLESQL_RETURN_IF_ERROR(DropTable(ddl_statement->drop_table()));
+      break;
+    }
+    case ddl::DDLStatement::kDropQueue: {
+      GOOGLESQL_RETURN_IF_ERROR(DropQueue(ddl_statement->drop_queue()));
       break;
     }
     case ddl::DDLStatement::kDropIndex: {
@@ -1409,6 +1474,15 @@ absl::Status SchemaUpdaterImpl::SetDatabaseOptions(
         modifier->set_version_retention_period(std::nullopt);
       }
     }
+    if (absl::StripPrefix(option.option_name(), "spanner.internal.cloud_") ==
+        ddl::kDefaultLeaderOptionName) {
+      if (option.has_string_value()) {
+        std::optional<std::string> default_leader = option.string_value();
+        modifier->set_default_leader(default_leader);
+      } else if (option.has_null_value()) {
+        modifier->set_default_leader(std::nullopt);
+      }
+    }
   }
   return absl::OkStatus();
 }
@@ -1754,6 +1828,90 @@ absl::Status SchemaUpdaterImpl::InitColumnNameAndTypesFromTable(
     }
   }
   return absl::OkStatus();
+}
+
+std::string CreateExpressionIndexInjectedColumnName(
+    std::string_view index_name, int expression_index_count) {
+  return absl::StrCat(kExpressionIndexInjectedPrefix,
+                      SDLObjectName::GetInSchemaName(index_name), "_",
+                      expression_index_count);
+}
+
+absl::Status SchemaUpdaterImpl::AddGeneratedColumnsForExpressionIndex(
+    const std::string& index_base_name,
+    const std::vector<ddl::KeyPartClause>& index_pk,
+    const database_api::DatabaseDialect& dialect, const Table* indexed_table) {
+  if (indexed_table == nullptr) {
+    indexed_table = latest_schema_->FindTableCaseSensitive(index_base_name);
+    if (indexed_table == nullptr) {
+      return error::TableNotFound(index_base_name);
+    }
+  }
+
+  for (const ddl::KeyPartClause& ddl_key_part : index_pk) {
+    if (!ddl_key_part.has_expression_index()) {
+      continue;
+    }
+
+    // Create an ALTER TABLE ... ADD COLUMN statement that adds a hidden
+    // generated column with the same expression to the base table.
+    ddl::AlterTable alter_table;
+    alter_table.set_table_name(indexed_table->Name());
+    auto* add_column = alter_table.mutable_add_column();
+    auto* column_def = add_column->mutable_column();
+    std::string key_name = ddl_key_part.key_name();
+
+    std::string expression = ddl_key_part.expression_index().expression();
+    column_def->set_column_name(key_name);
+    column_def->mutable_generated_column()->set_expression(expression);
+    column_def->mutable_generated_column()->set_stored(false);
+    column_def->set_hidden(true);
+
+    if (dialect == database_api::DatabaseDialect::POSTGRESQL) {
+      GOOGLESQL_RET_CHECK(ddl_key_part.expression_index().has_expression_origin());
+      GOOGLESQL_ASSIGN_OR_RETURN(
+          auto translate_result,
+          TranslatePostgreSqlExpression(indexed_table,
+                                        /*ddl_create_table=*/nullptr,
+                                        ddl_key_part.expression_index()
+                                            .expression_origin()
+                                            .original_expression()));
+      expression = translate_result.translated_googlesql_expression;
+      column_def->mutable_generated_column()
+          ->mutable_expression_origin()
+          ->set_original_expression(ddl_key_part.expression_index()
+                                        .expression_origin()
+                                        .original_expression());
+    }
+
+    GOOGLESQL_ASSIGN_OR_RETURN(const googlesql::Type* column_type,
+                     GetExpressionIndexColumnType(expression, indexed_table));
+    ddl::ColumnDefinition ddl_column_type =
+        GoogleSqlTypeToDDLColumnType(column_type);
+    column_def->set_type(ddl_column_type.type());
+
+    GOOGLESQL_RETURN_IF_ERROR(AlterTable(alter_table, dialect));
+  }
+  return absl::OkStatus();
+}
+
+absl::StatusOr<const googlesql::Type*>
+SchemaUpdaterImpl::GetExpressionIndexColumnType(absl::string_view expression,
+                                                const Table* table) {
+  std::vector<googlesql::SimpleTable::NameAndType> name_and_types;
+  GOOGLESQL_RETURN_IF_ERROR(InitColumnNameAndTypesFromTable(
+      table, /*ddl_create_table=*/nullptr, &name_and_types));
+
+  const googlesql::Type* column_type = nullptr;
+  absl::flat_hash_set<std::string> dependent_column_names;
+  absl::flat_hash_set<const SchemaNode*> udf_dependencies;
+  GOOGLESQL_RETURN_IF_ERROR(AnalyzeColumnExpression(
+      expression, /*target_type=*/nullptr, table, latest_schema_, type_factory_,
+      name_and_types, "expression index columns", &dependent_column_names,
+      /*dependent_sequences=*/nullptr,
+      /*allow_volatile_expression=*/false, &udf_dependencies,
+      /*is_pending_commit_timestamp=*/nullptr, &column_type));
+  return column_type;
 }
 
 absl::Status SchemaUpdaterImpl::AnalyzeGeneratedColumn(
@@ -2169,6 +2327,81 @@ absl::StatusOr<const Column*> SchemaUpdaterImpl::CreateColumn(
   return column;
 }
 
+absl::StatusOr<const Column*> SchemaUpdaterImpl::CreateQueueColumn(
+    const ddl::ColumnDefinition& ddl_column, const Queue* queue,
+    const ddl::CreateQueue& ddl_queue,
+    const database_api::DatabaseDialect& dialect) {
+  const std::string& column_name = ddl_column.column_name();
+  Column::Builder builder;
+  builder
+      .set_id(column_id_generator_->NextId(
+          absl::StrCat(queue->Name(), ".", column_name)))
+      .set_name(column_name);
+
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      const googlesql::Type* column_type,
+      DDLColumnTypeToGoogleSqlType(ddl_column, type_factory_,
+                                   latest_schema_->proto_bundle().get()));
+  builder.set_type(column_type);
+
+  if (ddl_column.has_column_default() || ddl_column.has_identity_column() ||
+      ddl_column.has_generated_column()) {
+    return error::DdlInvalidArgumentError(
+        "Queue columns do not support DEFAULT, IDENTITY, or GENERATED "
+        "attributes.");
+  }
+  if (column_type->IsTokenList()) {
+    return error::DdlInvalidArgumentError(
+        "Queue columns do not support TOKENLIST type.");
+  }
+
+  builder.set_nullable(!ddl_column.not_null());
+
+  if (ddl_column.has_length()) {
+    builder.set_declared_max_length(ddl_column.length());
+  }
+  if (!ddl_column.set_options().empty()) {
+    GOOGLESQL_RETURN_IF_ERROR(
+        SetColumnOptions(ddl_column.set_options(), dialect, &builder));
+  }
+
+  builder.set_queue(queue);
+  const Column* column = builder.get();
+  GOOGLESQL_RETURN_IF_ERROR(AddNode(builder.build()));
+  return column;
+}
+
+absl::StatusOr<const Column*> SchemaUpdaterImpl::CreateQueueBackingTableColumn(
+    const ddl::ColumnDefinition& ddl_column, const Table* table,
+    const database_api::DatabaseDialect& dialect) {
+  const std::string& column_name = ddl_column.column_name();
+  Column::Builder builder;
+  builder
+      .set_id(column_id_generator_->NextId(
+          absl::StrCat(table->Name(), ".", column_name)))
+      .set_name(column_name);
+
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      const googlesql::Type* column_type,
+      DDLColumnTypeToGoogleSqlType(ddl_column, type_factory_,
+                                   latest_schema_->proto_bundle().get()));
+  builder.set_type(column_type);
+  builder.set_nullable(!ddl_column.not_null());
+
+  if (ddl_column.has_length()) {
+    builder.set_declared_max_length(ddl_column.length());
+  }
+  if (!ddl_column.set_options().empty()) {
+    GOOGLESQL_RETURN_IF_ERROR(
+        SetColumnOptions(ddl_column.set_options(), dialect, &builder));
+  }
+
+  builder.set_table(table);
+  const Column* column = builder.get();
+  GOOGLESQL_RETURN_IF_ERROR(AddNode(builder.build()));
+  return column;
+}
+
 // Check the number of change streams tracking an object and return error if the
 // number exceed the limit.
 absl::Status SchemaUpdaterImpl::ValidateChangeStreamLimits(
@@ -2521,6 +2754,38 @@ absl::Status SchemaUpdaterImpl::CreateInterleaveConstraintForTable(
                                     builder);
 }
 
+static absl::Status IsOnDeleteValid(const std::string& name,
+                                    const Table* parent,
+                                    ddl::InterleaveClause interleave_clause);
+
+absl::Status SchemaUpdaterImpl::CreateInterleaveConstraintForQueue(
+    const ddl::InterleaveClause& interleave, Queue::Builder* builder) {
+  const Table* parent =
+      latest_schema_->FindTableCaseSensitive(interleave.table_name());
+  if (parent == nullptr) {
+    return error::TableNotFound(interleave.table_name());
+  }
+  std::optional<Table::OnDeleteAction> on_delete =
+      GetInterleaveConstraintOnDelete(interleave);
+  Table::InterleaveType interleave_type = GetInterleaveType(interleave);
+  if (interleave_type == Table::InterleaveType::kIn) {
+    return error::Internal("Queues do not support INTERLEAVE IN.");
+  }
+  GOOGLESQL_RETURN_IF_ERROR(IsOnDeleteValid(builder->get()->Name(), parent, interleave));
+
+  GOOGLESQL_RETURN_IF_ERROR(AlterNode<Table>(
+      parent,
+      [builder, on_delete](Table::Editor* parent_editor) -> absl::Status {
+        parent_editor->add_child_queue(builder->get());
+        builder->set_parent_table(parent_editor->get());
+        if (on_delete.has_value()) {
+          builder->set_on_delete(on_delete.value());
+        }
+        return absl::OkStatus();
+      }));
+  return absl::OkStatus();
+}
+
 absl::Status SchemaUpdaterImpl::CreateInterleaveConstraint(
     const Table* parent, std::optional<Table::OnDeleteAction> on_delete,
     Table::InterleaveType interleave_type, Table::Builder* builder) {
@@ -2634,6 +2899,24 @@ absl::StatusOr<const KeyColumn*> SchemaUpdaterImpl::CreatePrimaryKeyColumn(
     // with NULLs sorted last.
     builder->set_nulls_last(is_descending);
   }
+  const KeyColumn* key_col = builder->get();
+  GOOGLESQL_RETURN_IF_ERROR(AddNode(builder->build()));
+  return key_col;
+}
+
+absl::StatusOr<const KeyColumn*> SchemaUpdaterImpl::CreateQueuePrimaryKeyColumn(
+    const ddl::KeyPartClause& ddl_key_part, const Queue* queue,
+    KeyColumn::Builder* builder) {
+  const std::string& key_column_name = ddl_key_part.key_name();
+
+  const Column* column = queue->FindColumnCaseSensitive(key_column_name);
+  if (column == nullptr) {
+    return error::NonExistentKeyColumn("Queue", queue->Name(), key_column_name);
+  }
+  builder->set_column(column);
+  bool is_descending = (ddl_key_part.order() == ddl::KeyPartClause::DESC);
+  builder->set_descending(is_descending);
+  builder->set_nulls_last(is_descending);
   const KeyColumn* key_col = builder->get();
   GOOGLESQL_RETURN_IF_ERROR(AddNode(builder->build()));
   return key_col;
@@ -3020,10 +3303,21 @@ SchemaUpdaterImpl::TranslatePostgreSqlExpression(
   std::vector<googlesql::SimpleTable::NameAndType> name_and_types;
   GOOGLESQL_RETURN_IF_ERROR(InitColumnNameAndTypesFromTable(table, ddl_create_table,
                                                   &name_and_types));
-  googlesql::SimpleTable simple_table(table->Name(), name_and_types);
   // Setup a catalog for PostgreSQL analyzer needed to resolve provided AST.
   googlesql::SimpleCatalog catalog("pg simple catalog");
-  catalog.AddTable(&simple_table);
+  const std::string full_table_name = table->Name();
+  const auto& [schema_part, name_part] =
+      SDLObjectName::SplitSchemaName(full_table_name);
+  googlesql::SimpleTable simple_table(name_part, name_and_types);
+  GOOGLESQL_RETURN_IF_ERROR(simple_table.set_full_name(full_table_name));
+  if (schema_part.empty()) {
+    catalog.AddTable(&simple_table);
+  } else {
+    auto named_schema_catalog =
+        std::make_unique<googlesql::SimpleCatalog>(schema_part);
+    named_schema_catalog->AddTable(&simple_table);
+    catalog.AddOwnedCatalog(std::move(named_schema_catalog));
+  }
 
   // Setup googlesql::AnalyzerOptions needed for translation from PostgreSQL to
   // GoogleSQL.
@@ -3037,12 +3331,12 @@ SchemaUpdaterImpl::TranslatePostgreSqlExpression(
   GOOGLESQL_ASSIGN_OR_RETURN(
       ExpressionTranslateResult result,
       postgres_translator::spangres::TranslateTableLevelExpression(
-          expression, simple_table.Name(), catalog, analyzer_options,
-          type_factory_,
+          expression, full_table_name, catalog, analyzer_options, type_factory_,
           std::make_unique<FunctionCatalog>(
               type_factory_,
               /*catalog_name=*/kCloudSpannerEmulatorFunctionCatalogName,
-              /*schema=*/latest_schema_)),
+              /*schema=*/latest_schema_),
+          /*table_in_named_catalog=*/true),
       _.With(MapSpangresDDLErrorToSpannerError));
   return result;
 }
@@ -3356,6 +3650,108 @@ absl::Status SchemaUpdaterImpl::CreateTable(
   return absl::OkStatus();
 }
 
+absl::Status SchemaUpdaterImpl::CreateQueue(
+    const ddl::CreateQueue& ddl_queue,
+    const database_api::DatabaseDialect& dialect) {
+  if (global_names_.HasName(ddl_queue.queue_name()) &&
+      ddl_queue.existence_modifier() == ddl::IF_NOT_EXISTS) {
+    return absl::OkStatus();
+  }
+
+  GOOGLESQL_RETURN_IF_ERROR(global_names_.AddName("Queue", ddl_queue.queue_name()));
+
+  Queue::Builder builder;
+  builder.set_id(queue_id_generator_->NextId(ddl_queue.queue_name()))
+      .set_name(ddl_queue.queue_name());
+
+  for (const ddl::ColumnDefinition& ddl_column : ddl_queue.column()) {
+    if (builder.get()->FindColumn(ddl_column.column_name()) != nullptr) {
+      return error::DuplicateColumnName(
+          absl::StrCat(ddl_queue.queue_name(), ".", ddl_column.column_name()));
+    }
+    GOOGLESQL_ASSIGN_OR_RETURN(
+        const Column* column,
+        CreateQueueColumn(ddl_column, builder.get(), ddl_queue, dialect));
+    builder.add_column(column);
+  }
+
+  for (const ddl::KeyPartClause& ddl_key_part : ddl_queue.primary_key()) {
+    KeyColumn::Builder key_col_builder;
+    GOOGLESQL_ASSIGN_OR_RETURN(const KeyColumn* key_col,
+                     CreateQueuePrimaryKeyColumn(ddl_key_part, builder.get(),
+                                                 &key_col_builder));
+    builder.add_key_column(key_col);
+  }
+
+  if (ddl_queue.has_interleave_clause()) {
+    GOOGLESQL_RETURN_IF_ERROR(CreateInterleaveConstraintForQueue(
+        ddl_queue.interleave_clause(), &builder));
+  }
+
+  if (ddl_queue.has_row_deletion_policy()) {
+    builder.set_row_deletion_policy(ddl_queue.row_deletion_policy());
+  }
+
+  if (!ddl_queue.set_options().empty()) {
+    GOOGLESQL_RETURN_IF_ERROR(SetQueueOptions(ddl_queue.set_options(), &builder));
+  }
+
+  const Queue* queue = builder.get();
+  GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<const Table> backing_table,
+                   CreateQueueBackingTable(queue, ddl_queue, dialect));
+  builder.set_backing_table(backing_table.get());
+
+  GOOGLESQL_RETURN_IF_ERROR(AddNode(builder.build()));
+  GOOGLESQL_RETURN_IF_ERROR(AddNode(std::move(backing_table)));
+  return absl::OkStatus();
+}
+
+absl::StatusOr<std::unique_ptr<const Table>>
+SchemaUpdaterImpl::CreateQueueBackingTable(
+    const Queue* queue, const ddl::CreateQueue& ddl_queue,
+    const database_api::DatabaseDialect& dialect) {
+  Table::Builder builder;
+  builder.set_name(queue->Name())
+      .set_id(table_id_generator_->NextId(queue->Name()))
+      .set_owner_queue(queue);
+
+  for (const ddl::ColumnDefinition& ddl_column : ddl_queue.column()) {
+    GOOGLESQL_ASSIGN_OR_RETURN(
+        const Column* column,
+        CreateQueueBackingTableColumn(ddl_column, builder.get(), dialect));
+    builder.add_column(column);
+  }
+
+  if (builder.get()->FindColumn(kQueueDeliverTime) == nullptr) {
+    Column::Builder deliver_time_col_builder;
+    deliver_time_col_builder.set_name(std::string(kQueueDeliverTime))
+        .set_id(column_id_generator_->NextId(
+            absl::StrCat(queue->Name(), ".", kQueueDeliverTime)))
+        .set_type(type_factory_->get_timestamp())
+        .set_nullable(false)
+        .set_hidden(false)
+        .set_table(builder.get());
+    const Column* deliver_time_col = deliver_time_col_builder.get();
+    GOOGLESQL_RETURN_IF_ERROR(AddNode(deliver_time_col_builder.build()));
+    builder.add_column(deliver_time_col);
+  }
+
+  for (const ddl::KeyPartClause& ddl_key_part : ddl_queue.primary_key()) {
+    KeyColumn::Builder key_col_builder;
+    GOOGLESQL_ASSIGN_OR_RETURN(
+        const KeyColumn* key_col,
+        CreatePrimaryKeyColumn(ddl_key_part, builder.get(), &key_col_builder));
+    builder.add_key_column(key_col);
+  }
+
+  if (ddl_queue.has_interleave_clause()) {
+    GOOGLESQL_RETURN_IF_ERROR(CreateInterleaveConstraintForTable(
+        ddl_queue.interleave_clause(), &builder));
+  }
+
+  return builder.build();
+}
+
 absl::StatusOr<const Column*> SchemaUpdaterImpl::CreateIndexDataTableColumn(
     const Table* indexed_table, const std::string& source_column_name,
     const Table* index_data_table, bool is_null_filtered) {
@@ -3659,6 +4055,13 @@ SchemaUpdaterImpl::CreateIndexDataTable(
 
     int num_declared_keys = 0;
     for (const ddl::KeyPartClause& ddl_key_part : index_pk) {
+      if (ddl_key_part.has_expression_index()) {
+        // Expression indexes do not need to have their expression columns in
+        // the index because a hidden generated column has been injected into
+        // the base table for each expression column and the emulator will use
+        // use the base table at query time.
+        continue;
+      }
       ++num_declared_keys;
       data_table_pk.push_back(ddl_key_part);
 
@@ -3841,6 +4244,24 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateIndex(
                                                   ddl_index.key().end());
   bool is_unique = ddl_index.unique();
   bool is_null_filtered = ddl_index.null_filtered();
+
+  // Set the column name to an expression index injected column name. The naming
+  // convention for the column is based on the assumption that an index and its
+  // base table must be in the same named schema. Otherwise, this naming
+  // convention could cause naming conflicts.
+  int k = 0;
+  for (ddl::KeyPartClause& ddl_key_part : index_pk) {
+    if (ddl_key_part.has_expression_index()) {
+      std::string key_name =
+          CreateExpressionIndexInjectedColumnName(ddl_index.index_name(), k);
+      ddl_key_part.set_key_name(key_name);
+      ++k;
+    }
+  }
+  if (k > 0) {
+    GOOGLESQL_RETURN_IF_ERROR(AddGeneratedColumnsForExpressionIndex(
+        ddl_index.index_base_name(), index_pk, dialect, indexed_table));
+  }
 
   const Index* index =
       latest_schema_->FindIndexCaseSensitive(ddl_index.index_name());
@@ -4035,8 +4456,8 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateVectorIndex(
   if (ddl_index.partition_by_size() > 0) {
     return error::VectorIndexPartitionByUnsupported(ddl_index.index_name());
   }
-  std::vector<ddl::KeyPartClause> index_pk;
-  index_pk.push_back(ddl_index.key());
+  std::vector<ddl::KeyPartClause> index_pk(ddl_index.key().begin(),
+                                           ddl_index.key().end());
 
   const Index* index =
       latest_schema_->FindIndexCaseSensitive(ddl_index.index_name());
@@ -4323,6 +4744,14 @@ absl::StatusOr<const Index*> SchemaUpdaterImpl::CreateIndexHelper(
                            stored_columns, partition_by, order_by,
                            null_filtered_columns, builder.get(), indexed_table,
                            &columns_used_by_index));
+
+  for (const ddl::KeyPartClause& ddl_key_part : table_pk) {
+    if (ddl_key_part.has_expression_index()) {
+      builder.set_expression_index_type(true);
+      break;
+    }
+  }
+
   builder.set_index_data_table(data_table.get());
 
   for (const KeyColumn* key_col : columns_used_by_index.index_key_columns) {
@@ -4470,13 +4899,18 @@ absl::Status SchemaUpdaterImpl::AnalyzeFunctionDefinition(
     std::optional<int64_t>* max_batching_rows) {
   std::string param_list = "";
   for (int i = 0; i < ddl_function.param_size(); i++) {
-    param_list += ddl_function.param(i).name() + " " +
-                  ddl_function.param(i).param_typename();
+    absl::StrAppend(&param_list, ddl_function.param(i).name(), " ",
+                    ddl_function.param(i).param_typename());
     if (ddl_function.param(i).has_default_value()) {
-      param_list += " DEFAULT " + ddl_function.param(i).default_value();
+      absl::StrAppend(&param_list, " DEFAULT ",
+                      ddl_function.param(i).default_value());
+    } else if (ddl_function.param(i).has_default_value_origin()) {
+      absl::StrAppend(
+          &param_list, " DEFAULT ",
+          ddl_function.param(i).default_value_origin().original_expression());
     }
     if (i < ddl_function.param_size() - 1) {
-      param_list += ", ";
+      absl::StrAppend(&param_list, ", ");
     }
   }
 
@@ -5127,6 +5561,18 @@ absl::Status SchemaUpdaterImpl::ValidateAlterDatabaseOptions(
                option_name == "read_lease_labels") {
       if (option.has_string_value()) {
         continue;
+      }
+    } else if (option_name == ddl::kPerPlacementRoutingMetadataOptionName ||
+               option_name == "autogenerate_partitions") {
+      // autogenerate_partitions is a legacy name for
+      // per_placement_routing_metadata in postgres translation.
+      if (!latest_schema_->placements().empty()) {
+        return error::CannotTogglePerPlacementRoutingMetadataWithPlacements();
+      }
+      if (option.has_bool_value() || option.has_null_value()) {
+        continue;
+      } else {
+        return error::UnsupportedPerPlacementRoutingMetadataOptionValues();
       }
     } else if (option_name == ddl::kDefaultSequenceKindOptionName) {
       if (option.has_string_value() || option.has_null_value()) {
@@ -5882,6 +6328,9 @@ absl::Status SchemaUpdaterImpl::AlterVectorIndex(
     case ddl::AlterVectorIndex::kAlterStoredColumn: {
       return error::AlterVectorIndexStoredColumnUnsupported();
     }
+    case ddl::AlterVectorIndex::kRebuild: {
+      break;
+    }
     default:
       GOOGLESQL_RET_CHECK_FAIL() << "Invalid alter index type: "
                        << absl::StrCat(alter_index);
@@ -6228,6 +6677,199 @@ absl::Status SchemaUpdaterImpl::DropTable(const ddl::DropTable& drop_table) {
       }
     }
     dropped_tables_.push_back(table->id());
+  }
+  return status;
+}
+
+absl::Status SchemaUpdaterImpl::AlterQueue(const ddl::AlterQueue& alter_queue) {
+  const Queue* queue =
+      latest_schema_->FindQueueCaseSensitive(alter_queue.queue_name());
+  if (queue == nullptr) {
+    return error::QueueNotFound(alter_queue.queue_name());
+  }
+
+  switch (alter_queue.alter_type_case()) {
+    case ddl::AlterQueue::kSetOptions: {
+      const auto& set_options = alter_queue.set_options().options();
+      return AlterNode<Queue>(
+          queue, [this, &set_options](Queue::Editor* editor) -> absl::Status {
+            return SetQueueOptions(set_options, editor);
+          });
+    }
+    case ddl::AlterQueue::kAddRowDeletionPolicy: {
+      const auto& policy = alter_queue.add_row_deletion_policy();
+      if (!queue->row_deletion_policy().has_value()) {
+        return AlterQueueRowDeletionPolicy(policy, queue);
+      } else {
+        return error::RowDeletionPolicyAlreadyExists(policy.column_name(),
+                                                     queue->Name());
+      }
+    }
+    case ddl::AlterQueue::kAlterRowDeletionPolicy: {
+      const auto& policy = alter_queue.alter_row_deletion_policy();
+      if (queue->row_deletion_policy().has_value()) {
+        return AlterQueueRowDeletionPolicy(policy, queue);
+      } else {
+        return error::RowDeletionPolicyDoesNotExist(queue->Name());
+      }
+    }
+    case ddl::AlterQueue::kDropRowDeletionPolicy: {
+      if (queue->row_deletion_policy().has_value()) {
+        return AlterQueueRowDeletionPolicy(std::nullopt, queue);
+      } else {
+        return error::RowDeletionPolicyDoesNotExist(queue->Name());
+      }
+    }
+    case ddl::AlterQueue::kSetInterleaveClause: {
+      return AlterQueueSetInterleave(alter_queue.set_interleave_clause(),
+                                     queue);
+    }
+    case ddl::AlterQueue::kSetOnDelete: {
+      return AlterQueueInterleaveAction(alter_queue.set_on_delete().action(),
+                                        queue);
+    }
+    case ddl::AlterQueue::ALTER_TYPE_NOT_SET:
+      return absl::OkStatus();
+  }
+  return absl::OkStatus();
+}
+
+template <typename QueueModifier>
+absl::Status SchemaUpdaterImpl::SetQueueOptions(
+    const ::google::protobuf::RepeatedPtrField<ddl::SetOption>& set_options,
+    QueueModifier* modifier) {
+  std::vector<ddl::SetOption> updated_options(
+      modifier->get()->options().begin(), modifier->get()->options().end());
+  for (const ddl::SetOption& new_opt : set_options) {
+    auto it = std::find_if(updated_options.begin(), updated_options.end(),
+                           [&new_opt](const ddl::SetOption& opt) {
+                             return opt.option_name() == new_opt.option_name();
+                           });
+    if (new_opt.has_null_value() && new_opt.null_value()) {
+      if (it != updated_options.end()) {
+        updated_options.erase(it);
+      }
+    } else {
+      if (it != updated_options.end()) {
+        *it = new_opt;
+      } else {
+        updated_options.push_back(new_opt);
+      }
+    }
+  }
+  ::google::protobuf::RepeatedPtrField<ddl::SetOption> final_options;
+  for (const auto& opt : updated_options) {
+    *final_options.Add() = opt;
+  }
+  modifier->set_options(final_options);
+  return absl::OkStatus();
+}
+
+absl::Status SchemaUpdaterImpl::AlterQueueRowDeletionPolicy(
+    std::optional<ddl::RowDeletionPolicy> row_deletion_policy,
+    const Queue* queue) {
+  return AlterNode<Queue>(queue, [&](Queue::Editor* editor) {
+    editor->set_row_deletion_policy(row_deletion_policy);
+    return absl::OkStatus();
+  });
+}
+
+absl::Status SchemaUpdaterImpl::AlterQueueSetInterleave(
+    const ddl::AlterQueue::SetInterleaveClause& set_interleave_clause,
+    const Queue* queue) {
+  if (queue->parent() == nullptr ||
+      !set_interleave_clause.has_interleave_clause()) {
+    return error::ChangeInterleavingNotAllowed(queue->Name());
+  }
+
+  const ddl::InterleaveClause& new_interleave_clause =
+      set_interleave_clause.interleave_clause();
+
+  if (new_interleave_clause.type() == ddl::InterleaveClause::IN) {
+    return error::Internal("Queues do not support INTERLEAVE IN.");
+  }
+  if (!absl::EqualsIgnoreCase(queue->parent()->Name(),
+                              new_interleave_clause.table_name())) {
+    return error::ChangeInterleavingTableNotAllowed(queue->Name());
+  }
+  GOOGLESQL_RETURN_IF_ERROR(
+      IsOnDeleteValid(queue->Name(), queue->parent(), new_interleave_clause));
+
+  if (queue->backing_table() != nullptr) {
+    GOOGLESQL_RETURN_IF_ERROR(
+        AlterNode<Table>(queue->backing_table(), [&](Table::Editor* editor) {
+          if (new_interleave_clause.has_on_delete()) {
+            if (new_interleave_clause.on_delete() ==
+                ddl::InterleaveClause::CASCADE) {
+              editor->set_on_delete(Table::OnDeleteAction::kCascade);
+            } else {
+              editor->set_on_delete(Table::OnDeleteAction::kNoAction);
+            }
+          } else {
+            editor->clear_on_delete();
+          }
+          return absl::OkStatus();
+        }));
+  }
+
+  return AlterNode<Queue>(queue, [&](Queue::Editor* editor) {
+    if (new_interleave_clause.has_on_delete()) {
+      if (new_interleave_clause.on_delete() == ddl::InterleaveClause::CASCADE) {
+        editor->set_on_delete(Table::OnDeleteAction::kCascade);
+      } else {
+        editor->set_on_delete(Table::OnDeleteAction::kNoAction);
+      }
+    } else {
+      editor->clear_on_delete();
+    }
+    return absl::OkStatus();
+  });
+}
+
+absl::Status SchemaUpdaterImpl::AlterQueueInterleaveAction(
+    const ddl::InterleaveClause::Action& ddl_interleave_action,
+    const Queue* queue) {
+  if (queue->parent() == nullptr) {
+    return error::SetOnDeleteWithoutInterleaving(queue->Name());
+  }
+  ddl::InterleaveClause interleave_clause;
+  interleave_clause.set_on_delete(ddl_interleave_action);
+  GOOGLESQL_RETURN_IF_ERROR(
+      IsOnDeleteValid(queue->Name(), queue->parent(), interleave_clause));
+  if (queue->backing_table() != nullptr) {
+    GOOGLESQL_RETURN_IF_ERROR(
+        AlterNode<Table>(queue->backing_table(), [&](Table::Editor* editor) {
+          if (ddl_interleave_action == ddl::InterleaveClause::CASCADE) {
+            editor->set_on_delete(Table::OnDeleteAction::kCascade);
+          } else {
+            editor->set_on_delete(Table::OnDeleteAction::kNoAction);
+          }
+          return absl::OkStatus();
+        }));
+  }
+  return AlterNode<Queue>(queue, [&](Queue::Editor* editor) {
+    if (ddl_interleave_action == ddl::InterleaveClause::CASCADE) {
+      editor->set_on_delete(Table::OnDeleteAction::kCascade);
+    } else {
+      editor->set_on_delete(Table::OnDeleteAction::kNoAction);
+    }
+    return absl::OkStatus();
+  });
+}
+
+absl::Status SchemaUpdaterImpl::DropQueue(const ddl::DropQueue& drop_queue) {
+  const Queue* queue =
+      latest_schema_->FindQueueCaseSensitive(drop_queue.queue_name());
+  if (queue == nullptr) {
+    if (drop_queue.existence_modifier() == ddl::IF_EXISTS) {
+      return absl::OkStatus();
+    }
+    return error::QueueNotFound(drop_queue.queue_name());
+  }
+
+  absl::Status status = DropNode(queue);
+  if (status.ok() && queue->backing_table() != nullptr) {
+    dropped_tables_.push_back(queue->backing_table()->id());
   }
   return status;
 }
@@ -6944,6 +7586,7 @@ SchemaUpdater::ValidateSchemaFromDDL(
   GOOGLESQL_ASSIGN_OR_RETURN(SchemaUpdaterImpl updater,
                    SchemaUpdaterImpl::Build(
                        context.type_factory, context.table_id_generator,
+                       context.queue_id_generator,
                        context.column_id_generator, context.storage,
                        context.schema_change_timestamp, context.pg_oid_assigner,
                        existing_schema, context.database_id));
@@ -6979,6 +7622,7 @@ absl::StatusOr<SchemaChangeResult> SchemaUpdater::UpdateSchemaFromDDL(
   GOOGLESQL_ASSIGN_OR_RETURN(SchemaUpdaterImpl updater,
                    SchemaUpdaterImpl::Build(
                        context.type_factory, context.table_id_generator,
+                       context.queue_id_generator,
                        context.column_id_generator, context.storage,
                        context.schema_change_timestamp, context.pg_oid_assigner,
                        existing_schema, context.database_id));
@@ -7062,8 +7706,13 @@ absl::StatusOr<std::unique_ptr<ddl::DDLStatement>> ParseDDLByDialect(
         .enable_change_streams_allow_txn_exclusion_option = true,
         .enable_change_streams_if_not_exists = true,
         .enable_change_streams_partition_mode_option = true,
+        .enable_data_placement = true,
+        .enable_per_placement_routing_metadata = true,
         .enable_search_index =
             EmulatorFeatureFlags::instance().flags().enable_search_index,
+        .enable_queue = true,
+        .enable_queues_per_placement_tvf_option = true,
+        .enable_queue_traffic_control_options = true,
         .enable_columnar_policy = true,
         .enable_sequence = true,
         .enable_virtual_generated_column = true,

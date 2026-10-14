@@ -14,6 +14,8 @@
 // limitations under the License.
 //
 
+#include <algorithm>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -31,11 +33,14 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/cord.h"
+#include "absl/time/clock.h"
+#include "absl/time/time.h"
 #include "absl/types/optional.h"
 #include "absl/types/variant.h"
 #include "backend/access/read.h"
 #include "backend/query/change_stream/change_stream_query_validator.h"
 #include "backend/query/query_engine.h"
+#include "backend/query/queue/queryable_queue_tvfs.h"
 #include "common/constants.h"
 #include "common/errors.h"
 #include "frontend/common/protos.h"
@@ -214,6 +219,93 @@ int64_t HashRequest(const spanner_api::ExecuteBatchDmlRequest* request) {
   // statement.
   copy.set_seqno(0);
   return SerializeAndHashRequest(copy);
+}
+
+struct QueueReceiveStreamState {
+  backend::QueueReceiveMetadata metadata;
+  backend::Query query;
+  absl::Time stream_start_time = absl::Now();
+  int64_t total_output_rows = 0;
+  bool sent_metadata = false;
+  spanner_api::PartialResultSet empty_metadata_response;
+};
+
+absl::Status ExecuteQueueReceivePolling(
+    RequestContext* ctx, const spanner_api::ExecuteSqlRequest* request,
+    std::shared_ptr<Session> session, QueueReceiveStreamState* state,
+    ServerStream<spanner_api::PartialResultSet>* stream) {
+  const absl::Time deadline =
+      state->stream_start_time + state->metadata.max_duration;
+  spanner_api::TransactionOptions poll_txn_options;
+  poll_txn_options.mutable_read_only()->set_strong(true);
+
+  while (absl::Now() < deadline) {
+    if (ctx->grpc() != nullptr && ctx->grpc()->IsCancelled()) {
+      return absl::CancelledError();
+    }
+    absl::Duration remaining = deadline - absl::Now();
+    if (remaining <= absl::ZeroDuration()) {
+      break;
+    }
+    absl::SleepFor(std::min(absl::Milliseconds(50), remaining));
+    if (ctx->grpc() != nullptr && ctx->grpc()->IsCancelled()) {
+      return absl::CancelledError();
+    }
+    GOOGLESQL_ASSIGN_OR_RETURN(std::shared_ptr<Transaction> poll_txn,
+                     session->CreateSingleUseTransaction(poll_txn_options));
+    GOOGLESQL_RETURN_IF_ERROR(
+        poll_txn->GuardedCall(Transaction::OpType::kSql, [&]() -> absl::Status {
+          GOOGLESQL_ASSIGN_OR_RETURN(
+              backend::QueryResult poll_result,
+              poll_txn->ExecuteSql(state->query, request->query_mode()));
+          if (poll_result.num_output_rows == 0) {
+            return absl::OkStatus();
+          }
+          state->total_output_rows += poll_result.num_output_rows;
+          GOOGLESQL_ASSIGN_OR_RETURN(
+              std::vector<spanner_api::PartialResultSet> poll_responses,
+              RowCursorToPartialResultSetProtos(poll_result.rows.get(),
+                                                /*limit=*/0));
+          if (state->sent_metadata) {
+            poll_responses.front().clear_metadata();
+          } else {
+            if (ShouldReturnTransaction(request->transaction())) {
+              GOOGLESQL_ASSIGN_OR_RETURN(*poll_responses.front()
+                                    .mutable_metadata()
+                                    ->mutable_transaction(),
+                               poll_txn->ToProto());
+            }
+            GOOGLESQL_RETURN_IF_ERROR(AddUndeclaredParametersFromQueryResult(
+                &poll_result.parameter_types,
+                poll_responses.front().mutable_metadata()));
+            state->sent_metadata = true;
+          }
+          for (const auto& response : poll_responses) {
+            stream->Send(response);
+          }
+          return absl::OkStatus();
+        }));
+  }
+  if (!state->sent_metadata) {
+    if (request->query_mode() == spanner_api::ExecuteSqlRequest::PROFILE) {
+      backend::QueryResult total_result;
+      total_result.num_output_rows = state->total_output_rows;
+      total_result.elapsed_time = absl::Now() - state->stream_start_time;
+      AddQueryStatsFromQueryResult(
+          total_result, state->empty_metadata_response.mutable_stats()
+                            ->mutable_query_stats());
+    }
+    stream->Send(state->empty_metadata_response);
+  } else if (request->query_mode() == spanner_api::ExecuteSqlRequest::PROFILE) {
+    spanner_api::PartialResultSet stats_response;
+    backend::QueryResult total_result;
+    total_result.num_output_rows = state->total_output_rows;
+    total_result.elapsed_time = absl::Now() - state->stream_start_time;
+    AddQueryStatsFromQueryResult(
+        total_result, stats_response.mutable_stats()->mutable_query_stats());
+    stream->Send(stats_response);
+  }
+  return absl::OkStatus();
 }
 
 }  //  namespace
@@ -397,6 +489,7 @@ absl::Status ExecuteStreamingSql(
 
   backend::ChangeStreamQueryValidator::ChangeStreamMetadata
       change_stream_metadata;
+  QueueReceiveStreamState queue_receive_state;
 
   // Get underlying transaction.
   bool is_dml_query = backend::IsDMLQuery(request->sql());
@@ -468,12 +561,13 @@ absl::Status ExecuteStreamingSql(
         }
         // Convert and execute provided SQL statement.
         GOOGLESQL_ASSIGN_OR_RETURN(
-            const backend::Query query,
+            backend::Query query,
             QueryFromProto(
                 request->sql(), request->params(), request->param_types(),
                 txn->query_engine()->type_factory(),
                 txn->schema()->proto_bundle(),
                 request->request_options().client_context().secure_context()));
+        query.queue_receive_metadata = &queue_receive_state.metadata;
         bool in_read_write_txn = txn->IsReadWrite() || txn->IsPartitionedDml();
         GOOGLESQL_ASSIGN_OR_RETURN(change_stream_metadata,
                          backend::QueryEngine::TryGetChangeStreamMetadata(
@@ -555,6 +649,20 @@ absl::Status ExecuteStreamingSql(
         GOOGLESQL_RETURN_IF_ERROR(AddUndeclaredParametersFromQueryResult(
             &result.parameter_types, responses.front().mutable_metadata()));
 
+        if (queue_receive_state.metadata.is_queue_receive_query) {
+          queue_receive_state.query = query;
+          queue_receive_state.total_output_rows = result.num_output_rows;
+          if (result.num_output_rows > 0) {
+            for (const auto& response : responses) {
+              stream->Send(response);
+            }
+            queue_receive_state.sent_metadata = true;
+          } else {
+            queue_receive_state.empty_metadata_response = responses.front();
+          }
+          return absl::OkStatus();
+        }
+
         // Add basic stats for PROFILE mode. We do this to interoperate with
         // REPL applications written for Cloud Spanner. The profile will not
         // contain statistics for plan nodes.
@@ -580,6 +688,10 @@ absl::Status ExecuteStreamingSql(
     ChangeStreamsHandler change_streams_handler{change_stream_metadata};
     return change_streams_handler.ExecuteChangeStreamQuery(request, stream,
                                                            session);
+  }
+  if (status.ok() && queue_receive_state.metadata.is_queue_receive_query) {
+    return ExecuteQueueReceivePolling(ctx, request, session,
+                                      &queue_receive_state, stream);
   }
   return status;
 }

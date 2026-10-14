@@ -70,6 +70,13 @@ using ChangeStreamID = std::string;
 // ChangeStreamIDGenerator.
 using ChangeStreamIDGenerator = UniqueIdGenerator<ChangeStreamID>;
 
+// Unique identifier associated with a queue. QueueID is guaranteed to be unique
+// within a single database.
+using QueueID = std::string;
+
+// A QueueID generator. Each database has a single QueueIDGenerator.
+using QueueIDGenerator = UniqueIdGenerator<QueueID>;
+
 // Unique identifier associated with a column. ColumnID is guaranteed to be
 // unique within a single table.
 using ColumnID = std::string;

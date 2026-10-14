@@ -31,12 +31,16 @@
 
 #include "third_party/spanner_pg/catalog/catalog_adapter.h"
 
+#include <algorithm>
 #include <memory>
+#include <string>
 
 #include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/catalog.h"
 #include "googlesql/public/function.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"
+#include "absl/strings/ascii.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "third_party/spanner_pg/bootstrap_catalog/bootstrap_catalog.h"
@@ -94,6 +98,53 @@ absl::StatusOr<int> CatalogAdapter::AllocateColumnId() {
   return max_column_id_;
 }
 
+// Returns true if all alphabetic characters in `qualified_table_name` are
+// lower-case.
+static bool IsLowerCaseReference(const TableName& qualified_table_name) {
+  return std::all_of(
+      qualified_table_name.AsSpan().begin(),
+      qualified_table_name.AsSpan().end(), [](const std::string& str) {
+        return !std::any_of(str.begin(), str.end(), absl::ascii_isupper);
+      });
+}
+
+absl::StatusOr<const googlesql::Table*> CatalogAdapter::FindTableInCatalog(
+    const TableName& table_name) const {
+  const googlesql::Table* table;
+  GOOGLESQL_RETURN_IF_ERROR(engine_user_catalog_->FindTable(table_name.AsSpan(), &table));
+  GOOGLESQL_RET_CHECK_NE(table, nullptr);
+
+  // Checks whether table/view is part of a system catalog that is included in
+  // the supplied schema list. Catalogs included in the list have all object
+  // names in upper-case. If we keep such names as is, the only way for users to
+  // access these objects from Spangres will be through quoted identifiers: e.g.
+  // SELECT *FROM "SPANNER_SYS"."QUERY_STATS_TOP_MINUTE". To allow users to
+  // access such objects without quotes, we will convert their names to
+  // lower-case. Note: to match PostgreSQL semantic for unquoted identifiers we
+  // disallow access to these objects using upper-case quoted identifiers, like
+  // in the example above.
+
+  GOOGLESQL_ASSIGN_OR_RETURN(const bool in_uppercase_catalog_path,
+                   engine_user_catalog_->InUppercaseCatalogPath(table));
+
+  // GoogleSQL's catalogs are not case-sensitive, but PostgreSQL's analyzer
+  // is. Verify we adhere to the stricter rules because PostgreSQL may do
+  // case-sensitive comparisons against the RTE's fields during analysis.
+  // For system tables that use upper-case for their names, we will translate
+  // these names to lower-case and thus have to check that references to these
+  // names are in lower-case (note: PG automatically lower-cases all unquoted
+  // identifiers).
+  const bool case_mismatch_error =
+      in_uppercase_catalog_path ? !IsLowerCaseReference(table_name)
+                                : table_name.UnqualifiedName() != table->Name();
+  if (case_mismatch_error) {
+    return googlesql_base::NotFoundErrorBuilder()
+           << "Table not found: `" << table_name << "` not found in catalog "
+           << engine_user_catalog_->FullName() << " (case mismatch?)";
+  }
+  return table;
+}
+
 absl::StatusOr<TableName> CatalogAdapter::GetTableNameFromOid(Oid oid) const {
   if (oid <= kOidCounterEnd || oid >= kOidCounterStart) {
     return absl::InternalError(absl::StrFormat(
@@ -116,14 +167,6 @@ absl::StatusOr<Oid> CatalogAdapter::GetOrGenerateOidFromTableName(
   Oid schema_oid;
   const std::string* namespace_name_ptr = table_name.NamespaceName();
   if (namespace_name_ptr == nullptr) {
-    // NOTE: Currently, we map a name to (synthesized) OID first,
-    // then look it up in the catalog. To correctly handle search paths, we
-    // would instead have to find the table first (with multiple search prefixes
-    // if necessary), and then use the found table and add the name mapping
-    // based on the table. In that case, if we get an unqualified name in this
-    // method we really are dealing with a table in "public". Without proper
-    // search path behavior, we behave as if "public" is the sole search path,
-    // and pretend all unqualified names are within that namespace.
     GOOGLESQL_ASSIGN_OR_RETURN(schema_oid, PgBootstrapCatalog::Default()->GetNamespaceOid(
                                      EngineUserCatalog::kPublicSchema));
   } else {

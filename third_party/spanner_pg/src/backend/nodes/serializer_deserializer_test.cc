@@ -479,21 +479,6 @@ TEST_F(SerializationDeserializationTest, IndexElem) {
   EXPECT_THAT(index_elem, CanSerializeAndDeserialize());
 }
 
-  EXPECT_THAT(delete_stmt, CanSerializeAndDeserialize());
-}
-
-TEST_F(SerializationDeserializationTest, IndexStmt) {
-  IndexStmt* index_stmt = makeNode(IndexStmt);
-
-  index_stmt->idxname = pstrdup("index_name");
-  index_stmt->relation = makeNode(RangeVar);
-  index_stmt->accessMethod = pstrdup("btree");
-  index_stmt->tableSpace = pstrdup("placeholder_tablespace");
-  index_stmt->locality_group_name = makeNode(LocalityGroupOption);
-  index_stmt->columnar_policy_name = makeNode(ColumnarPolicyOption);
-
-  IndexElem* index_elem = makeNode(IndexElem);
-  index_elem->name = pstrdup("index_elem_name");
   index_stmt->indexParams = list_make1(index_elem);
 
   index_stmt->indexIncludingParams = list_make1(PlaceHolderNode());
@@ -732,6 +717,15 @@ TEST_F(SerializationDeserializationTest, Query) {
   EXPECT_THAT(query, CanSerializeAndDeserialize());
 }
 
+// SPANGRES BEGIN
+TEST_F(SerializationDeserializationTest, DeleteQuery) {
+  Query* query = makeNode(Query);
+  query->commandType = CMD_DELETE;
+  query->assertRowsModified = PlaceHolderNode();
+  EXPECT_THAT(query, CanSerializeAndDeserialize());
+}
+// SPANGRES END
+
 // We added hints to SubLink, so test it.
 TEST_F(SerializationDeserializationTest, SubLink) {
   GOOGLESQL_ASSERT_OK_AND_ASSIGN(
@@ -884,6 +878,36 @@ TEST_F(SerializationDeserializationTest, ChangeStreamTrackedTable) {
   EXPECT_THAT(change_stream_tracked_table, CanSerializeAndDeserialize());
 }
 
+TEST_F(SerializationDeserializationTest, CreatePlacementStmt) {
+  RangeVar* range_var = makeRangeVar(pstrdup("schema_name"),
+                                     pstrdup("placement_name"), /*location=*/1);
+  CreatePlacementStmt* create_placement_stmt = makeNode(CreatePlacementStmt);
+  create_placement_stmt->placement_name = range_var;
+  create_placement_stmt->options = list_make1(PlaceHolderNode());
+  EXPECT_THAT(create_placement_stmt, CanSerializeAndDeserialize());
+}
+
+TEST_F(SerializationDeserializationTest, DropPlacementStmt) {
+  RangeVar* range_var = makeRangeVar(pstrdup("schema_name"),
+                                     pstrdup("placement_name"), /*location=*/1);
+  DropStmt* drop_placement_stmt = makeNode(DropStmt);
+  drop_placement_stmt->behavior = DROP_CASCADE;
+  drop_placement_stmt->concurrent = true;
+  drop_placement_stmt->missing_ok = true;
+  drop_placement_stmt->objects = list_make1(range_var);
+  drop_placement_stmt->removeType = OBJECT_DATA_PLACEMENT;
+  EXPECT_THAT(drop_placement_stmt, CanSerializeAndDeserialize());
+}
+
+TEST_F(SerializationDeserializationTest, AlterPlacementStmt) {
+  RangeVar* range_var = makeRangeVar(pstrdup("schema_name"),
+                                     pstrdup("placement_name"), /*location=*/1);
+  AlterPlacementStmt* alter_placement_stmt = makeNode(AlterPlacementStmt);
+  alter_placement_stmt->placement_name = range_var;
+  alter_placement_stmt->options = list_make1(PlaceHolderNode());
+  EXPECT_THAT(alter_placement_stmt, CanSerializeAndDeserialize());
+}
+
 TEST_F(SerializationDeserializationTest, CreateSearchIndexStmt) {
   CreateSearchIndexStmt* create_search_index_stmt =
       makeNode(CreateSearchIndexStmt);
@@ -955,7 +979,20 @@ TEST_F(SerializationDeserializationTest, AlterColumnLocalityGroupStmt) {
 }
 
 // SPANGRES BEGIN
-// TODO: expose when queue is implemented.
+TEST_F(SerializationDeserializationTest, CreateQueueStmt) {
+  CreateQueueStmt* create_queue_stmt = makeNode(CreateQueueStmt);
+  create_queue_stmt->queue = makeRangeVar(
+      pstrdup("schema_name"), pstrdup("queue_name"), /*location=*/1);
+  create_queue_stmt->tableElts = list_make1(PlaceHolderNode());
+  create_queue_stmt->options = list_make1(makeDefElem(
+      pstrdup("receive_mode"), (Node*)makeString(pstrdup("PULL")), -1));
+  create_queue_stmt->interleavespec = makeNode(InterleaveSpec);
+  create_queue_stmt->if_not_exists = true;
+  create_queue_stmt->ttl = makeNode(Ttl);
+  create_queue_stmt->ttl->name = pstrdup("some_column");
+
+  EXPECT_THAT(create_queue_stmt, CanSerializeAndDeserialize());
+}
 // SPANGRES END
 
 TEST_F(SerializationDeserializationTest, CreateRoleStmt) {

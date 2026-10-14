@@ -68,7 +68,7 @@ absl::StatusOr<std::shared_ptr<Instance>> InstanceManager::GetInstance(
 absl::StatusOr<std::shared_ptr<Instance>> InstanceManager::CreateInstance(
     const std::string& instance_uri,
     const instance_api::Instance& instance_proto) {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   if (instance_proto.node_count() > 0 &&
       instance_proto.processing_units() > 0) {
     return error::InvalidCreateInstanceRequestUnitsNotBoth();
@@ -101,7 +101,7 @@ absl::StatusOr<std::shared_ptr<Instance>> InstanceManager::CreateInstance(
 }
 
 void InstanceManager::DeleteInstance(const std::string& instance_uri) {
-  absl::MutexLock lock(&mu_);
+  absl::MutexLock lock(mu_);
   instances_.erase(instance_uri);
 }
 

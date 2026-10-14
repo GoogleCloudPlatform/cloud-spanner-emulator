@@ -607,6 +607,7 @@ absl::Status ValidateParseTreeNode(const Constraint& node, bool add_in_alter,
       case CONSTR_ATTR_NOT_DEFERRABLE:
       case CONSTR_GENERATED:
       case CONSTR_DEFAULT:
+      case CONSTR_PLACEMENT_KEY:
       case CONSTR_HIDDEN:
       case CONSTR_IDENTITY:
       case CONSTR_ON_UPDATE:
@@ -664,6 +665,8 @@ absl::Status ValidateParseTreeNode(const Constraint& node, bool add_in_alter,
   // Spangres or PostgreSQL.
 
   // `generated_when` is checked based on constraint type.
+
+  // `placement_key` is validated in TranslatePlacementColumn.
 
   // `keys` defines key columns, used in PRIMARY KEY constraints (also in
   // UNIQUE, but they're not supported). It might be either required or not
@@ -960,17 +963,19 @@ absl::Status ValidateParseTreeNode(const DropStmt& node,
       node.removeType != OBJECT_CHANGE_STREAM &&
       node.removeType != OBJECT_SEQUENCE &&
       node.removeType != OBJECT_FUNCTION
+      && node.removeType != OBJECT_DATA_PLACEMENT
       && node.removeType != OBJECT_SEARCH_INDEX &&
       node.removeType != OBJECT_LOCALITY_GROUP
-      // TODO: expose when queue is implemented.
+      && node.removeType != OBJECT_QUEUE
   ) {
     auto object_type = internal::ObjectTypeToString(node.removeType);
     const std::string error_message =
         "Only <DROP TABLE>, <DROP INDEX>, <DROP SCHEMA>, <DROP VIEW>, "
         "<DROP SEQUENCE>, <DROP FUNCTION>, "
+        "<DROP PLACEMENT>, "
         "<DROP SEARCH INDEX>, "
         "<DROP LOCALITY GROUP>, "
-        // TODO: expose when queue is implemented.
+        "<DROP QUEUE>, "
         "and <DROP CHANGE STREAM> statements are supported.";
     if (!object_type.ok()) {
       return UnsupportedTranslationError(error_message);
@@ -987,6 +992,13 @@ absl::Status ValidateParseTreeNode(const DropStmt& node,
         (SingleItemListAsNode<RangeVar, T_RangeVar>(node.objects)));
     GOOGLESQL_RET_CHECK(changestream_to_drop_node->relname &&
               *changestream_to_drop_node->relname != '\0');
+  } else if (node.removeType == OBJECT_DATA_PLACEMENT) {
+    GOOGLESQL_RET_CHECK_EQ(1, node.objects->length);
+    GOOGLESQL_ASSIGN_OR_RETURN(
+        const RangeVar* placement_to_drop_node,
+        (SingleItemListAsNode<RangeVar, T_RangeVar>(node.objects)));
+    GOOGLESQL_RET_CHECK(placement_to_drop_node->relname &&
+              *placement_to_drop_node->relname != '\0');
   } else if (node.removeType == OBJECT_SEARCH_INDEX) {
     GOOGLESQL_ASSIGN_OR_RETURN(const List* search_index_to_drop_list,
                      (SingleItemListAsNode<List, T_List>(node.objects)));
@@ -1013,7 +1025,13 @@ absl::Status ValidateParseTreeNode(const DropStmt& node,
         (SingleItemListAsNode<RangeVar, T_RangeVar>(node.objects)));
     GOOGLESQL_RET_CHECK(locality_group_to_drop_node->relname &&
               *locality_group_to_drop_node->relname != '\0');
-  // TODO: expose when queue is implemented.
+  } else if (node.removeType == OBJECT_QUEUE) {
+    GOOGLESQL_RET_CHECK_EQ(1, node.objects->length);
+    GOOGLESQL_ASSIGN_OR_RETURN(
+        const RangeVar* queue_to_drop_node,
+        (SingleItemListAsNode<RangeVar, T_RangeVar>(node.objects)));
+    GOOGLESQL_RET_CHECK(queue_to_drop_node->relname &&
+              *queue_to_drop_node->relname != '\0');
   } else if (node.removeType != OBJECT_SCHEMA) {
     const List* object_to_drop_list;
     if (node.removeType == OBJECT_FUNCTION) {
@@ -1089,9 +1107,10 @@ absl::Status ValidateParseTreeNode(const DropStmt& node,
           node.removeType == OBJECT_FUNCTION ||
           node.removeType == OBJECT_VIEW || node.removeType == OBJECT_SCHEMA ||
           node.removeType == OBJECT_CHANGE_STREAM
+          || node.removeType == OBJECT_DATA_PLACEMENT
           || node.removeType == OBJECT_SEARCH_INDEX ||
           node.removeType == OBJECT_LOCALITY_GROUP
-          // TODO: expose when queue is implemented.
+          || node.removeType == OBJECT_QUEUE
           )) {
       return UnsupportedTranslationError(
           "<IF EXISTS> is not supported by <DROP> statement.");
@@ -1823,8 +1842,248 @@ absl::Status ValidateParseTreeNode(const CreateChangeStreamStmt& node,
   return absl::OkStatus();
 }
 
-// TODO: expose when queue is implemented.
+absl::Status ValidateParseTreeNode(const CreateQueueStmt& node,
+                                   const TranslationOptions& options) {
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_CreateQueueStmt);
 
+  // Make sure that if CreateQueueStmt structure changes we update the
+  // translator.
+  AssertPGNodeConsistsOf(node, FieldTypeChecker<RangeVar*>(node.queue),
+                         FieldTypeChecker<List*>(node.tableElts),
+                         FieldTypeChecker<List*>(node.options),
+                         FieldTypeChecker<bool>(node.if_not_exists),
+                         FieldTypeChecker<InterleaveSpec*>(node.interleavespec),
+                         FieldTypeChecker<Ttl*>(node.ttl));
+
+  // `queue` defines the name of the new queue.
+  GOOGLESQL_RET_CHECK_NE(node.queue, nullptr);
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(*node.queue, "CREATE QUEUE"));
+
+  // `tableElts` contains column definitions for the new queue.
+  if (IsListEmpty(node.tableElts)) {
+    return UnsupportedTranslationError(
+        "<CREATE QUEUE> statement must have at least one column defined.");
+  }
+
+  // `interleavespec` defines queue placement/interleave information.
+  if (node.interleavespec != nullptr) {
+    GOOGLESQL_RETURN_IF_ERROR(
+        ValidateParseTreeNode(*node.interleavespec, "CREATE QUEUE"));
+  }
+
+  // If there's a TTL here make sure it's correct.
+  if (node.ttl != nullptr) {
+    GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(*node.ttl));
+  }
+
+  // `options` defines parameters provided via WITH clause.
+  // Only receive_mode='PULL' is supported for now.
+  if (!IsListEmpty(node.options)) {
+    for (const DefElem* option : StructList<DefElem*>(node.options)) {
+      if (absl::EqualsIgnoreCase(option->defname,
+                                 internal::PostgreSQLConstants::
+                                     kInternalQueueReceiveModeOptionName)) {
+        if (option->arg == nullptr || option->arg->type != T_String ||
+            !absl::EqualsIgnoreCase(((const String*)option->arg)->sval,
+                                  "PULL")) {
+          return UnsupportedTranslationError(
+              "Unsupported value for receive_mode option in CREATE QUEUE. "
+              "Only 'PULL' is supported.");
+        }
+      } else if (absl::EqualsIgnoreCase(
+                     option->defname,
+                     internal::PostgreSQLConstants::
+                         kInternalQueuePerPlacementTvfOptionName)) {
+        // per_placement_tvf is a boolean option, validated later during
+        // translation.
+      } else if (absl::EqualsIgnoreCase(
+                     option->defname,
+                     internal::PostgreSQLConstants::
+                         kInternalQueueDisableSendOptionName) ||
+                 absl::EqualsIgnoreCase(
+                     option->defname,
+                     internal::PostgreSQLConstants::
+                         kInternalQueueDisableDeliveryOptionName) ||
+                 absl::EqualsIgnoreCase(
+                     option->defname,
+                     internal::PostgreSQLConstants::
+                         kInternalQueueLocalityGroupOptionName)) {
+        // disable_send, disable_delivery, and locality_group are validated
+        // later during translation.
+      } else {
+        return UnsupportedTranslationError(
+            absl::StrCat("Unsupported option in WITH clause for CREATE QUEUE: ",
+                         option->defname));
+      }
+    }
+  }
+
+  int payload_column_count = 0;
+  std::set<std::string> pk_columns_set;
+  bool has_pk = false;
+
+  for (const Node* table_elt : StructList<Node*>(node.tableElts)) {
+    if (table_elt->type == T_Constraint) {
+      GOOGLESQL_ASSIGN_OR_RETURN(const Constraint* constraint,
+                       (DowncastNode<Constraint, T_Constraint>(table_elt)));
+      if (constraint->contype == CONSTR_PRIMARY) {
+        has_pk = true;
+        for (const String* key : StructList<String*>(constraint->keys)) {
+          pk_columns_set.insert(key->sval);
+        }
+      }
+    } else if (table_elt->type == T_ColumnDef) {
+      GOOGLESQL_ASSIGN_OR_RETURN(const ColumnDef* col_def,
+                       (DowncastNode<ColumnDef, T_ColumnDef>(table_elt)));
+      for (const Constraint* constraint :
+           StructList<Constraint*>(col_def->constraints)) {
+        if (constraint->contype == CONSTR_PRIMARY) {
+          has_pk = true;
+          pk_columns_set.insert(col_def->colname);
+        }
+      }
+    }
+  }
+
+  if (!has_pk) {
+    return UnsupportedTranslationError(
+        "Queue must have a PRIMARY KEY constraint.");
+  }
+
+  for (const Node* table_elt : StructList<Node*>(node.tableElts)) {
+    if (table_elt->type == T_ColumnDef) {
+      GOOGLESQL_ASSIGN_OR_RETURN(const ColumnDef* col_def,
+                       (DowncastNode<ColumnDef, T_ColumnDef>(table_elt)));
+      // TODO: Add validation for Spanner reserved column names.
+      if (pk_columns_set.count(col_def->colname)) continue;
+
+      if (strcmp(col_def->colname, "Payload") == 0 ||
+          strcmp(col_def->colname, "payload") == 0) {
+        GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(*col_def->typeName));
+        char* payload_type_name =
+            ((const String*)list_nth(col_def->typeName->names,
+                                     list_length(col_def->typeName->names) - 1))
+                ->sval;
+        const bool is_valid_payload_type =
+            absl::EqualsIgnoreCase(payload_type_name, "bytea") ||
+            absl::EqualsIgnoreCase(payload_type_name, "varchar") ||
+            absl::EqualsIgnoreCase(payload_type_name, "text") ||
+            absl::EqualsIgnoreCase(payload_type_name, "jsonb");
+
+        bool is_not_null = false;
+        for (const Constraint* constraint :
+             StructList<Constraint*>(col_def->constraints)) {
+          if (constraint->contype == CONSTR_NOTNULL) {
+            is_not_null = true;
+            break;
+          }
+        }
+        if (!is_valid_payload_type || !is_not_null) {
+          return UnsupportedTranslationError(
+              "Queue PAYLOAD column must be of type BYTEA NOT NULL, TEXT NOT "
+              "NULL, VARCHAR NOT NULL, or JSONB NOT NULL.");
+        }
+        payload_column_count++;
+      } else {
+        if (absl::EqualsIgnoreCase(col_def->colname, "Payload")) {
+          return UnsupportedTranslationError(
+              "Queue PAYLOAD column must be \"Payload\" or \"payload\".");
+        }
+        return UnsupportedTranslationError(
+            "Queues only support PRIMARY KEY columns and a PAYLOAD column that "
+            "is exactly \"Payload\" or \"payload\".");
+      }
+    }
+  }
+
+  if (payload_column_count != 1) {
+    return UnsupportedTranslationError(
+        "Queue must have exactly one PAYLOAD column.");
+  }
+
+  // `if_not_exists` is set if IF NOT EXISTS clause is present. May not be
+  // supported.
+  if (node.if_not_exists && !options.enable_if_not_exists) {
+    return UnsupportedTranslationError(
+        "<IF NOT EXISTS> clause is not supported in <CREATE QUEUE> statement.");
+  }
+
+  return absl::OkStatus();
+}
+
+absl::Status ValidateParseTreeNode(const AlterQueueStmt& node) {
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_AlterQueueStmt);
+
+  AssertPGNodeConsistsOf(node, FieldTypeChecker<RangeVar*>(node.queue),
+                         FieldTypeChecker<List*>(node.options),
+                         FieldTypeChecker<bool>(node.missing_ok));
+
+  // `queue` defines the name of the queue to alter.
+  GOOGLESQL_RET_CHECK_NE(node.queue, nullptr);
+  GOOGLESQL_RETURN_IF_ERROR(ValidateParseTreeNode(*node.queue, "ALTER QUEUE"));
+
+  if (node.missing_ok) {
+    return UnsupportedTranslationError(
+        "<ALTER QUEUE IF EXISTS> is not supported.");
+  }
+
+  for (const DefElem* option : StructList<DefElem*>(node.options)) {
+    if (!absl::EqualsIgnoreCase(option->defname,
+                                internal::PostgreSQLConstants::
+                                    kInternalQueuePerPlacementTvfOptionName) &&
+        !absl::EqualsIgnoreCase(option->defname,
+                                internal::PostgreSQLConstants::
+                                    kInternalQueueDisableSendOptionName) &&
+        !absl::EqualsIgnoreCase(option->defname,
+                                internal::PostgreSQLConstants::
+                                    kInternalQueueDisableDeliveryOptionName) &&
+        !absl::EqualsIgnoreCase(option->defname,
+                                internal::PostgreSQLConstants::
+                                    kInternalQueueLocalityGroupOptionName)) {
+      return UnsupportedTranslationError(
+          absl::Substitute("Queue option '$0' cannot be altered.",
+                           option->defname));
+    }
+  }
+
+  return absl::OkStatus();
+}
+
+
+absl::Status ValidateParseTreeNode(const CreatePlacementStmt& node) {
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_CreatePlacementStmt);
+
+  // Make sure that if CreatePlacementStmt structure changes we update the
+  // translator.
+  AssertPGNodeConsistsOf(node, FieldTypeChecker<RangeVar*>(node.placement_name),
+                         FieldTypeChecker<List*>(node.options),
+                         FieldTypeChecker<bool>(node.if_not_exists));
+
+  GOOGLESQL_RET_CHECK_NE(node.placement_name, nullptr);
+
+  // `options` defines the user-configured options applied to the placement.
+  // `options` is mandatory because `instance_partition` must be defined for a
+  // placement. This will be validated during translation.
+  GOOGLESQL_RET_CHECK_NE(node.options, nullptr);
+  GOOGLESQL_RET_CHECK_GE(node.options->length, 1);
+
+  return absl::OkStatus();
+}
+
+absl::Status ValidateParseTreeNode(const AlterPlacementStmt& node) {
+  GOOGLESQL_RET_CHECK_EQ(node.type, T_AlterPlacementStmt);
+
+  // Make sure that if AlterPlacementStmt structure changes we update the
+  // translator.
+  AssertPGNodeConsistsOf(node, FieldTypeChecker<RangeVar*>(node.placement_name),
+                         FieldTypeChecker<List*>(node.options),
+                         FieldTypeChecker<bool>(node.missing_ok));
+
+  GOOGLESQL_RET_CHECK_NE(node.placement_name, nullptr);
+  GOOGLESQL_RET_CHECK_NE(node.options, nullptr);
+
+  return absl::OkStatus();
+}
 absl::Status ValidateParseTreeNode(const CreateSearchIndexStmt& node) {
   GOOGLESQL_RET_CHECK_EQ(node.type, T_CreateSearchIndexStmt);
   // Make sure that if CreateSearchIndexStmt structure changes we update the
@@ -2446,13 +2705,6 @@ absl::Status ValidateParseTreeNode(const IndexElem& node) {
   if (node.expr == nullptr && (node.name == nullptr || *node.name == '\0')) {
     return UnsupportedTranslationError(
         "Column name is mandatory in <CREATE INDEX> statement.");
-  }
-
-  // `expr` defines the expressions applied to the column. e.g.
-  // CREATE INDEX ON films ((lower(title))); This is not supported.
-  if (node.expr != nullptr) {
-   return UnsupportedTranslationError(
-       "Expressions are not supported in <CREATE INDEX> statement.");
   }
 
   // `indexcolname` defines the name of the index when the index is created

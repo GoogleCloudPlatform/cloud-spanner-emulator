@@ -97,6 +97,11 @@ std::unique_ptr<const backend::Schema> CreateSchemaWithDynamicPropertyGraph(
     database_api::DatabaseDialect dialect =
         database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
 
+std::unique_ptr<const backend::Schema> CreateSchemaWithOneQueue(
+    googlesql::TypeFactory* type_factory,
+    database_api::DatabaseDialect dialect =
+        database_api::DatabaseDialect::GOOGLE_STANDARD_SQL);
+
 std::unique_ptr<const backend::Schema> CreateSimpleDefaultValuesSchema(
     googlesql::TypeFactory* type_factory);
 

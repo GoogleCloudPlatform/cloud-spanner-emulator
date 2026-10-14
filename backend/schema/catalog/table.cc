@@ -17,6 +17,7 @@
 #include "backend/schema/catalog/table.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <iterator>
 #include <string>
 
@@ -159,6 +160,19 @@ std::string Table::PrimaryKeyDebugString() const {
   return result;
 }
 
+int64_t Table::GetTotalNonKeyColumnSizeBytes() const {
+  int64_t total_size = 0;
+  for (const Column* column : columns_) {
+    if (column->is_deleted()) {
+      continue;
+    }
+    if (FindKeyColumn(column->Name()) == nullptr) {
+      total_size += column->GetScalarOrBlobColumnSizeBytes();
+    }
+  }
+  return total_size;
+}
+
 std::string OwningObjectName(const Table* table) {
   return table->owner_index() ? table->owner_index()->Name() : table->Name();
 }
@@ -202,6 +216,7 @@ absl::Status Table::DeepClone(SchemaGraphEditor* editor,
   }
 
   GOOGLESQL_RETURN_IF_ERROR(editor->CloneVector(&child_tables_));
+  GOOGLESQL_RETURN_IF_ERROR(editor->CloneVector(&child_queues_));
   GOOGLESQL_RETURN_IF_ERROR(editor->CloneVector(&indexes_));
   GOOGLESQL_RETURN_IF_ERROR(editor->CloneVector(&check_constraints_));
   GOOGLESQL_RETURN_IF_ERROR(editor->CloneVector(&foreign_keys_));
@@ -223,6 +238,14 @@ absl::Status Table::DeepClone(SchemaGraphEditor* editor,
                      editor->Clone(owner_change_stream_));
     owner_change_stream_ = schema_node->As<const ChangeStream>();
     if (owner_change_stream_->is_deleted()) {
+      MarkDeleted();
+    }
+  }
+
+  if (owner_queue_) {
+    GOOGLESQL_ASSIGN_OR_RETURN(const auto* schema_node, editor->Clone(owner_queue_));
+    owner_queue_ = schema_node->As<const Queue>();
+    if (owner_queue_->is_deleted()) {
       MarkDeleted();
     }
   }

@@ -17,6 +17,7 @@
 #include "frontend/converters/mutations.h"
 
 #include <algorithm>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -27,6 +28,7 @@
 #include "googlesql/public/type.h"
 #include "googlesql/public/value.h"
 #include "absl/strings/str_cat.h"
+#include "absl/time/time.h"
 #include "backend/access/write.h"
 #include "backend/datamodel/key.h"
 #include "backend/datamodel/key_range.h"
@@ -37,6 +39,7 @@
 #include "backend/schema/catalog/table.h"
 #include "common/errors.h"
 #include "frontend/converters/keys.h"
+#include "frontend/converters/time.h"
 #include "frontend/converters/types.h"
 #include "frontend/converters/values.h"
 #include "absl/status/status.h"
@@ -59,6 +62,9 @@ absl::Status WriteFromProto(const backend::Schema& schema,
   }
   const backend::Table* table = schema.FindTable(write_pb.table());
   if (table == nullptr) {
+    return error::TableNotFound(write_pb.table());
+  }
+  if (table->owner_queue() != nullptr) {
     return error::TableNotFound(write_pb.table());
   }
 
@@ -138,6 +144,9 @@ absl::Status DeleteFromProto(const backend::Schema& schema,
   if (table == nullptr) {
     return error::TableNotFound(delete_pb.table());
   }
+  if (table->owner_queue() != nullptr) {
+    return error::TableNotFound(delete_pb.table());
+  }
 
   // Parse the delete key set from the request proto.
   GOOGLESQL_ASSIGN_OR_RETURN(backend::KeySet key_set,
@@ -149,6 +158,77 @@ absl::Status DeleteFromProto(const backend::Schema& schema,
   }
 
   mutation->AddDeleteOp(table->Name(), key_set);
+  return absl::OkStatus();
+}
+
+absl::Status SendFromProto(const backend::Schema& schema,
+                           const spanner_api::Mutation::Send& send_pb,
+                           backend::Mutation* mutation) {
+  if (send_pb.queue().empty()) {
+    return error::MutationQueueRequired();
+  }
+  const backend::Queue* queue = schema.FindQueue(send_pb.queue());
+  if (queue == nullptr) {
+    return error::QueueNotFound(send_pb.queue());
+  }
+  const backend::Table* table = queue->backing_table();
+  GOOGLESQL_ASSIGN_OR_RETURN(backend::Key key, KeyFromProto(send_pb.key(), *table));
+
+  std::optional<absl::Time> deliver_time;
+  if (send_pb.has_deliver_time()) {
+    GOOGLESQL_ASSIGN_OR_RETURN(deliver_time, TimestampFromProto(send_pb.deliver_time()));
+  }
+
+  const backend::Column* payload_column = table->FindColumn("Payload");
+  if (payload_column == nullptr) {
+    return error::QueueMissingPayloadColumn(queue->Name());
+  }
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      googlesql::Value payload,
+      ValueFromProto(send_pb.payload(), payload_column->GetType()));
+
+  std::vector<std::string> column_names;
+  backend::ValueList row_values;
+  column_names.reserve(table->primary_key().size() + 2);
+  row_values.reserve(table->primary_key().size() + 2);
+  for (int i = 0; i < table->primary_key().size(); ++i) {
+    column_names.push_back(table->primary_key()[i]->column()->Name());
+    row_values.push_back(key.ColumnValue(i));
+  }
+  column_names.push_back(payload_column->Name());
+  row_values.push_back(std::move(payload));
+  if (deliver_time.has_value()) {
+    // If the backing table defines a DeliverTime column, populate it;
+    // otherwise, only timestamp format validation is performed as delayed
+    // delivery is not simulated in the backing table.
+    if (const backend::Column* deliver_time_column =
+            table->FindColumn("DeliverTime");
+        deliver_time_column != nullptr) {
+      column_names.push_back(deliver_time_column->Name());
+      row_values.push_back(googlesql::values::Timestamp(*deliver_time));
+    }
+  }
+
+  mutation->AddSendOp(table->Name(), std::move(column_names),
+                      {std::move(row_values)});
+  return absl::OkStatus();
+}
+
+absl::Status AckFromProto(const backend::Schema& schema,
+                          const spanner_api::Mutation::Ack& ack_pb,
+                          backend::Mutation* mutation) {
+  if (ack_pb.queue().empty()) {
+    return error::MutationQueueRequired();
+  }
+  const backend::Queue* queue = schema.FindQueue(ack_pb.queue());
+  if (queue == nullptr) {
+    return error::QueueNotFound(ack_pb.queue());
+  }
+  const backend::Table* table = queue->backing_table();
+  GOOGLESQL_ASSIGN_OR_RETURN(backend::Key key, KeyFromProto(ack_pb.key(), *table));
+
+  backend::KeySet key_set(key);
+  mutation->AddAckOp(table->Name(), key_set, ack_pb.ignore_not_found());
   return absl::OkStatus();
 }
 
@@ -183,6 +263,12 @@ absl::Status MutationFromProto(
       case spanner_api::Mutation::kDelete:
         GOOGLESQL_RETURN_IF_ERROR(
             DeleteFromProto(schema, mutation_pb.delete_(), mutation));
+        break;
+      case spanner_api::Mutation::kSend:
+        GOOGLESQL_RETURN_IF_ERROR(SendFromProto(schema, mutation_pb.send(), mutation));
+        break;
+      case spanner_api::Mutation::kAck:
+        GOOGLESQL_RETURN_IF_ERROR(AckFromProto(schema, mutation_pb.ack(), mutation));
         break;
       default:
         return error::MissingRequiredFieldError("Mutation.operation");

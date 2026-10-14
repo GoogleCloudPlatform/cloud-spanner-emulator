@@ -74,6 +74,11 @@ class CatalogAdapter {
       const googlesql::AnalyzerOptions& analyzer_options,
       absl::flat_hash_map<int, int> token_locations = {});
 
+  // Look up the table in the catalog while validating PostgreSQL
+  // case-sensitivity rules on table_name.
+  absl::StatusOr<const googlesql::Table*> FindTableInCatalog(
+      const TableName& table_name) const;
+
   // Retrieves table name from a given oid. Returns error if the oid is not
   // already tracked by the adapter.
   absl::StatusOr<TableName> GetTableNameFromOid(Oid oid) const;

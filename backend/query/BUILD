@@ -134,6 +134,7 @@ cc_library(
         "//backend/datamodel:value",
         "//backend/query/change_stream:change_stream_query_validator",
         "//backend/query/feature_filter:query_size_limits_checker",
+        "//backend/query/queue:queryable_queue_tvfs",
         "//backend/schema/catalog:schema",
         "//backend/transaction:commit_timestamp",
         "//common:config",
@@ -241,6 +242,22 @@ cc_library(
     ],
 )
 
+cc_test(
+    name = "analyzer_options_test",
+    srcs = ["analyzer_options_test.cc"],
+    deps = [
+        ":analyzer_options",
+        "//tests/common:proto_matchers",
+        "@com_github_google_benchmark//:benchmark",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_googlesql//googlesql/base/testing:status_matchers",
+        "@com_google_googlesql//googlesql/public:analyzer_options",
+        "@com_google_googlesql//googlesql/public:language_options",
+        "@com_google_googlesql//googlesql/public:options_cc_proto",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
 cc_library(
     name = "query_validator",
     srcs = ["query_validator.cc"],
@@ -253,6 +270,7 @@ cc_library(
         "//backend/query/feature_filter:gsql_supported_functions",
         "//backend/query/feature_filter:sql_feature_filter",
         "//backend/query/feature_filter:sql_features_view",
+        "//backend/query/queue:queryable_queue_tvfs",
         "//backend/schema/catalog:schema",
         "//backend/transaction:read_write_transaction",
         "//common:constants",
@@ -494,6 +512,7 @@ cc_library(
         "//backend/schema/parser:ddl_parser",
         "//backend/schema/printer:print_ddl",
         "//backend/schema/updater:ddl_type_conversion",
+        "//common:constants",
         "//third_party/spanner_pg/catalog:spangres_type",
         "//third_party/spanner_pg/ddl:spangres_direct_schema_printer_impl",
         "//third_party/spanner_pg/ddl:spangres_schema_printer",
@@ -581,6 +600,7 @@ cc_library(
         "//backend/access:read",
         "//backend/common:case",
         "//backend/query/change_stream:queryable_change_stream_tvf",
+        "//backend/query/queue:queryable_queue_tvfs",
         "//backend/schema/catalog:schema",
         "//common:constants",
         "//common:errors",

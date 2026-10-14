@@ -36,6 +36,7 @@
 #include "common/change_stream.h"
 #include "common/constants.h"
 #include "common/errors.h"
+#include "googlesql/base/ret_check.h"
 #include "googlesql/base/status_macros.h"
 #include "absl/status/status.h"
 
@@ -107,6 +108,10 @@ absl::Status ValidateNotNullColumnsPresent(
     }
   }
   for (const auto column : table->columns()) {
+    if (table->owner_queue() != nullptr &&
+        column->Name() == kQueueDeliverTime) {
+      continue;
+    }
     // Writing null to non-nullable generated and default columns is temporarily
     // fine, since the violation may be fixed later by a generated operation to
     // update the column.
@@ -279,6 +284,11 @@ absl::StatusOr<ResolvedReadArg> ResolveReadArg(const ReadArg& read_arg,
     // Find the table to read from schema.
     read_table = schema->FindTable(read_arg.table);
     if (read_table == nullptr) {
+      if (const Queue* queue = schema->FindQueue(read_arg.table)) {
+        read_table = queue->backing_table();
+      }
+    }
+    if (read_table == nullptr) {
       return error::TableNotFound(read_arg.table);
     }
   }
@@ -300,7 +310,13 @@ absl::StatusOr<ResolvedReadArg> ResolveReadArg(const ReadArg& read_arg,
   // Find the columns to read from schema.
   std::vector<const Column*> columns;
   for (const auto& column_name : read_arg.columns) {
-    const Column* column = read_table->FindColumn(column_name);
+    std::string resolved_column_name = column_name;
+    if (read_table->owner_queue() != nullptr &&
+        schema->dialect() == database_api::DatabaseDialect::POSTGRESQL &&
+        absl::EqualsIgnoreCase(column_name, kQueuePgDeliverTime)) {
+      resolved_column_name = std::string(kQueueDeliverTime);
+    }
+    const Column* column = read_table->FindColumn(resolved_column_name);
     if (column == nullptr) {
       if (index == nullptr) {
         return error::ColumnNotFound(read_table->Name(), column_name);
@@ -343,13 +359,21 @@ absl::StatusOr<const Table*> FindChangeStreamPartitionTable(
 
 absl::Status ValidateNonDeleteMutationOp(const MutationOp& mutation_op,
                                          const Schema* schema) {
-  GOOGLESQL_RET_CHECK(mutation_op.type != MutationOpType::kDelete);
+  GOOGLESQL_RET_CHECK(mutation_op.type != MutationOpType::kDelete &&
+            mutation_op.type != MutationOpType::kAck);
 
   const Table* table = schema->FindTable(mutation_op.table);
 
   if (IsChangeStreamPartitionTable(mutation_op.table)) {
     GOOGLESQL_ASSIGN_OR_RETURN(table,
                      FindChangeStreamPartitionTable(schema, mutation_op.table));
+  }
+  if (table == nullptr && (mutation_op.type == MutationOpType::kSend ||
+                           (mutation_op.origin_is_dml &&
+                            mutation_op.type == MutationOpType::kInsert))) {
+    if (const Queue* queue = schema->FindQueue(mutation_op.table)) {
+      table = queue->backing_table();
+    }
   }
 
   if (table == nullptr) {
@@ -358,8 +382,19 @@ absl::Status ValidateNonDeleteMutationOp(const MutationOp& mutation_op,
 
   GOOGLESQL_RETURN_IF_ERROR(ValidateColumnsAreNotDuplicate(mutation_op.columns));
 
+  std::vector<std::string> resolved_column_names = mutation_op.columns;
+  if (table->owner_queue() != nullptr &&
+      schema->dialect() == database_api::DatabaseDialect::POSTGRESQL) {
+    for (std::string& col_name : resolved_column_names) {
+      if (absl::EqualsIgnoreCase(col_name, kQueuePgDeliverTime)) {
+        col_name = std::string(kQueueDeliverTime);
+      }
+    }
+    GOOGLESQL_RETURN_IF_ERROR(ValidateColumnsAreNotDuplicate(resolved_column_names));
+  }
+
   GOOGLESQL_ASSIGN_OR_RETURN(std::vector<const Column*> columns,
-                   GetColumnsByName(table, mutation_op.columns));
+                   GetColumnsByName(table, resolved_column_names));
 
   GOOGLESQL_RETURN_IF_ERROR(
       ValidateDefaultAndGeneratedKeys(table, columns, mutation_op.type));
@@ -378,8 +413,16 @@ absl::Status ValidateNonDeleteMutationOp(const MutationOp& mutation_op,
 
 absl::StatusOr<ResolvedMutationOp> ResolveDeleteMutationOp(
     const MutationOp& mutation_op, const Schema* schema, absl::Time now) {
-  GOOGLESQL_RET_CHECK(mutation_op.type == MutationOpType::kDelete);
+  GOOGLESQL_RET_CHECK(mutation_op.type == MutationOpType::kDelete ||
+            mutation_op.type == MutationOpType::kAck);
   const Table* table = schema->FindTable(mutation_op.table);
+  if (table == nullptr && (mutation_op.type == MutationOpType::kAck ||
+                           (mutation_op.origin_is_dml &&
+                            mutation_op.type == MutationOpType::kDelete))) {
+    if (const Queue* queue = schema->FindQueue(mutation_op.table)) {
+      table = queue->backing_table();
+    }
+  }
   if (table == nullptr) {
     return error::TableNotFound(mutation_op.table);
   }

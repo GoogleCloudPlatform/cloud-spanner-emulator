@@ -87,6 +87,7 @@
 #include "backend/query/queryable_column.h"
 #include "backend/query/queryable_table.h"
 #include "backend/query/queryable_view.h"
+#include "backend/query/queue/queryable_queue_tvfs.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/table.h"
 #include "backend/transaction/commit_timestamp.h"
@@ -508,7 +509,7 @@ std::pair<Mutation, int64_t> BuildDelete(
   }
 
   Mutation mutation;
-  mutation.AddDeleteOp(table->FullName(), key_set);
+  mutation.AddDeleteOp(table->FullName(), key_set, /*origin_is_dml=*/true);
   return std::make_pair(mutation, key_set.keys().size());
 }
 
@@ -860,6 +861,20 @@ absl::StatusOr<std::unique_ptr<RowCursor>> ResolveNoopStatement() {
   return std::make_unique<VectorsRowCursor>(names, types, values);
 }
 
+const QueryableQueueReceiveTvf* FindQueueReceiveTvf(
+    const googlesql::ResolvedStatement* resolved_statement) {
+  std::vector<const googlesql::ResolvedNode*> tvf_scans;
+  resolved_statement->GetDescendantsWithKinds({googlesql::RESOLVED_TVFSCAN},
+                                              &tvf_scans);
+  for (const auto* node : tvf_scans) {
+    const auto* tvf = node->GetAs<googlesql::ResolvedTVFScan>()->tvf();
+    if (tvf->Is<QueryableQueueReceiveTvf>()) {
+      return tvf->GetAs<QueryableQueueReceiveTvf>();
+    }
+  }
+  return nullptr;
+}
+
 // Uses googlesql/public/evaluator to evaluate a query statement represented by
 // a resolved AST and returns a row cursor.
 absl::StatusOr<std::unique_ptr<RowCursor>> EvaluateQuery(
@@ -878,9 +893,22 @@ absl::StatusOr<std::unique_ptr<RowCursor>> EvaluateQuery(
   GOOGLESQL_RET_CHECK_EQ(resolved_statement->node_kind(), googlesql::RESOLVED_QUERY_STMT)
       << "input is not a query statement";
 
+  googlesql::EvaluatorOptions evaluator_options =
+      CommonEvaluatorOptions(type_factory, time_zone);
+  std::vector<const googlesql::ResolvedNode*> tvf_scans;
+  resolved_statement->GetDescendantsWithKinds({googlesql::RESOLVED_TVFSCAN},
+                                              &tvf_scans);
+  for (const auto* node : tvf_scans) {
+    const auto* tvf = node->GetAs<googlesql::ResolvedTVFScan>()->tvf();
+    if (tvf->Is<QueryableQueueReceiveTvf>() ||
+        tvf->Is<QueryableQueueRenewLeaseTvf>()) {
+      evaluator_options.scramble_undefined_orderings = false;
+      break;
+    }
+  }
   auto prepared_query = std::make_unique<googlesql::PreparedQuery>(
       resolved_statement->GetAs<googlesql::ResolvedQueryStmt>(),
-      CommonEvaluatorOptions(type_factory, time_zone));
+      evaluator_options);
   // Call PrepareQuery to set the AnalyzerOptions that we used to Analyze the
   // statement.
   GOOGLESQL_ASSIGN_OR_RETURN(auto analyzer_options,
@@ -1427,6 +1455,11 @@ absl::StatusOr<QueryResult> QueryEngine::ExecuteSql(
 
   QueryResult result;
   if (!IsDMLStmt(analyzer_output->resolved_statement()->node_kind())) {
+    if (const QueryableQueueReceiveTvf* queue_receive_tvf =
+            FindQueueReceiveTvf(resolved_statement.get());
+        queue_receive_tvf != nullptr) {
+      queue_receive_tvf->set_metadata(normalized_query.queue_receive_metadata);
+    }
     GOOGLESQL_ASSIGN_OR_RETURN(
         auto cursor,
         EvaluateQuery(resolved_statement.get(), params, type_factory_,

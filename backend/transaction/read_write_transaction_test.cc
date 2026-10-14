@@ -57,6 +57,7 @@ namespace emulator {
 namespace backend {
 namespace {
 
+using googlesql::values::Bytes;
 using googlesql::values::Int64;
 using googlesql::values::String;
 using googlesql_base::testing::StatusIs;
@@ -1363,6 +1364,125 @@ TEST_F(GeneratedPrimaryKeyTransactionTest,
   EXPECT_THAT(ReadAll(CreateReadWriteTransaction().get(),
                       {"id", "gen_id", "value"}, "new_table"),
               IsOkAndHoldsRows({{Int64(1), Int64(2), Int64(1)}}));
+}
+
+class QueueReadWriteTransactionTest : public ReadWriteTransactionTest {
+ public:
+  absl::StatusOr<std::unique_ptr<const backend::Schema>> GetSchema() override {
+    return test::CreateSchemaFromDDL(
+        {
+            R"sql(
+              CREATE QUEUE test_queue (
+                id INT64 NOT NULL,
+                Payload BYTES(MAX) NOT NULL
+              ) PRIMARY KEY (id)
+            )sql",
+        },
+        type_factory_.get());
+  }
+};
+
+TEST_F(QueueReadWriteTransactionTest,
+       DuplicateSendInSeparateTransactionsFails) {
+  Mutation m1;
+  m1.AddSendOp("test_queue", {"id", "Payload"},
+               {{Int64(101), Bytes("message1")}});
+  auto txn1 = CreateReadWriteTransaction();
+  GOOGLESQL_EXPECT_OK(txn1->Write(m1));
+  GOOGLESQL_EXPECT_OK(txn1->Commit());
+
+  Mutation m2;
+  m2.AddSendOp("test_queue", {"id", "Payload"},
+               {{Int64(101), Bytes("message2")}});
+  auto txn2 = CreateReadWriteTransaction();
+  EXPECT_THAT(txn2->Write(m2), StatusIs(absl::StatusCode::kAlreadyExists));
+}
+
+TEST_F(QueueReadWriteTransactionTest, DuplicateSendInSameTransactionFails) {
+  Mutation m;
+  m.AddSendOp("test_queue", {"id", "Payload"},
+              {{Int64(101), Bytes("message1")}});
+  m.AddSendOp("test_queue", {"id", "Payload"},
+              {{Int64(101), Bytes("message2")}});
+  auto txn = CreateReadWriteTransaction();
+  EXPECT_THAT(txn->Write(m), StatusIs(absl::StatusCode::kAlreadyExists));
+}
+
+TEST_F(QueueReadWriteTransactionTest, AckNonExistentMessageFails) {
+  Mutation m;
+  m.AddAckOp("test_queue", KeySet(Key({Int64(99999)})));
+  auto txn = CreateReadWriteTransaction();
+  EXPECT_THAT(txn->Write(m), StatusIs(absl::StatusCode::kNotFound));
+}
+
+TEST_F(QueueReadWriteTransactionTest,
+       AckNonExistentMessageWithIgnoreNotFoundSucceeds) {
+  Mutation m;
+  m.AddAckOp("test_queue", KeySet(Key({Int64(99999)})),
+             /*ignore_not_found=*/true);
+  auto txn = CreateReadWriteTransaction();
+  GOOGLESQL_EXPECT_OK(txn->Write(m));
+  GOOGLESQL_EXPECT_OK(txn->Commit());
+}
+
+TEST_F(QueueReadWriteTransactionTest, UnsupportedMutationsOnQueueFail) {
+  Mutation m_insert;
+  m_insert.AddWriteOp(MutationOpType::kInsert, "test_queue", {"id", "Payload"},
+                      {{Int64(101), Bytes("message1")}});
+  auto txn_insert = CreateReadWriteTransaction();
+  EXPECT_THAT(txn_insert->Write(m_insert),
+              StatusIs(absl::StatusCode::kNotFound));
+
+  Mutation m_update;
+  m_update.AddWriteOp(MutationOpType::kUpdate, "test_queue", {"id", "Payload"},
+                      {{Int64(101), Bytes("message1")}});
+  auto txn_update = CreateReadWriteTransaction();
+  EXPECT_THAT(txn_update->Write(m_update),
+              StatusIs(absl::StatusCode::kNotFound));
+
+  Mutation m_insert_or_update;
+  m_insert_or_update.AddWriteOp(MutationOpType::kInsertOrUpdate, "test_queue",
+                                {"id", "Payload"},
+                                {{Int64(101), Bytes("message1")}});
+  auto txn_insert_or_update = CreateReadWriteTransaction();
+  EXPECT_THAT(txn_insert_or_update->Write(m_insert_or_update),
+              StatusIs(absl::StatusCode::kNotFound));
+
+  Mutation m_replace;
+  m_replace.AddWriteOp(MutationOpType::kReplace, "test_queue",
+                       {"id", "Payload"}, {{Int64(101), Bytes("message1")}});
+  auto txn_replace = CreateReadWriteTransaction();
+  EXPECT_THAT(txn_replace->Write(m_replace),
+              StatusIs(absl::StatusCode::kNotFound));
+
+  Mutation m_delete;
+  m_delete.AddDeleteOp("test_queue", KeySet(Key({Int64(101)})));
+  auto txn_delete = CreateReadWriteTransaction();
+  EXPECT_THAT(txn_delete->Write(m_delete),
+              StatusIs(absl::StatusCode::kNotFound));
+}
+
+TEST_F(QueueReadWriteTransactionTest,
+       AckExistingMessageSucceedsAndAllowsResend) {
+  Mutation m1;
+  m1.AddSendOp("test_queue", {"id", "Payload"},
+               {{Int64(101), Bytes("message1")}});
+  auto txn1 = CreateReadWriteTransaction();
+  GOOGLESQL_EXPECT_OK(txn1->Write(m1));
+  GOOGLESQL_EXPECT_OK(txn1->Commit());
+
+  Mutation ack_m;
+  ack_m.AddAckOp("test_queue", KeySet(Key({Int64(101)})));
+  auto txn2 = CreateReadWriteTransaction();
+  GOOGLESQL_EXPECT_OK(txn2->Write(ack_m));
+  GOOGLESQL_EXPECT_OK(txn2->Commit());
+
+  Mutation m3;
+  m3.AddSendOp("test_queue", {"id", "Payload"},
+               {{Int64(101), Bytes("message3")}});
+  auto txn3 = CreateReadWriteTransaction();
+  GOOGLESQL_EXPECT_OK(txn3->Write(m3));
+  GOOGLESQL_EXPECT_OK(txn3->Commit());
 }
 
 }  // namespace

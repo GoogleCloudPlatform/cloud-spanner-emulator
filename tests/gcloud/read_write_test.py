@@ -305,6 +305,17 @@ class GCloudReadWriteTest(emulator.TestCase):
         'test-database',
         '--instance=test-instance',
         '--ddl=ALTER DATABASE `test-database` SET OPTIONS ('
+        ' per_placement_routing_metadata = true )',
+    )
+    # Perform an update to set options.
+    self.RunGCloud(
+        'spanner',
+        'databases',
+        'ddl',
+        'update',
+        'test-database',
+        '--instance=test-instance',
+        '--ddl=ALTER DATABASE `test-database` SET OPTIONS ('
         " version_retention_period = '7d' )",
     )
 

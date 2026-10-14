@@ -197,6 +197,7 @@ class SchemaUpdaterTest
   std::unique_ptr<SpangresSchemaPrinter> pg_schema_printer_;
   googlesql::TypeFactory type_factory_;
   TableIDGenerator table_id_generator_;
+  QueueIDGenerator queue_id_generator_;
   ColumnIDGenerator column_id_generator_;
   std::unique_ptr<PgOidAssigner> pg_oid_assigner_;
   ScopedEmulatorFeatureFlagsSetter feature_flags_;

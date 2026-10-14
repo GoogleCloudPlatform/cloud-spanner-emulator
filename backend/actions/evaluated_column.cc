@@ -209,7 +209,8 @@ absl::Status EvaluatedColumnEffector::Effect(
       }
       if (IsKeyColumn(evaluated_column) &&
           (op.type == MutationOpType::kUpdate ||
-           op.type == MutationOpType::kDelete)) {
+           op.type == MutationOpType::kDelete ||
+           op.type == MutationOpType::kAck)) {
         return error::DefaultPKNeedsExplicitValue(evaluated_column->FullName(),
                                                   "Update/Delete");
       }

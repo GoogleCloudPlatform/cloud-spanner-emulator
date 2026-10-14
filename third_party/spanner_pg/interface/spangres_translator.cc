@@ -574,8 +574,7 @@ SpangresTranslator::TranslateExpression(
   std::string wrapped_expression;
   // Wrap the expression in SELECT <expression> FROM <table_name>.
   GOOGLESQL_ASSIGN_OR_RETURN(wrapped_expression,
-                   WrapExpressionInSelect(params.sql_expression(), table_name,
-                                          params.table_in_named_catalog()));
+                   WrapExpressionInSelect(params.sql_expression(), table_name));
 
   // Get the parser to construct a new instance of TranslateQueryParams.
   GOOGLESQL_ASSIGN_OR_RETURN(interfaces::ParserInterface * parser, params.parser());
@@ -755,8 +754,7 @@ SpangresTranslator::GetParserExpressionOutput(
                    DeserializeParseExpression(*params.serialized_parse_tree()));
 
   GOOGLESQL_ASSIGN_OR_RETURN(List * parse_tree,
-                   WrapExpressionInSelect(expression, table_name,
-                                          params.table_in_named_catalog()));
+                   WrapExpressionInSelect(expression, table_name));
   return interfaces::ParserOutput(
       parse_tree,
       {.token_locations = {},
@@ -764,8 +762,7 @@ SpangresTranslator::GetParserExpressionOutput(
 }
 
 absl::StatusOr<std::string> SpangresTranslator::WrapExpressionInSelect(
-    absl::string_view expression, std::optional<std::string_view> table_name,
-    bool table_in_named_catalog) {
+    absl::string_view expression, std::optional<std::string_view> table_name) {
   // Always quote the table name: $1, otherwise it cause issues, for example:
   // table_name lost the case sensitivity which can cause "table not found".
   static constexpr char select_template_with_table[] = R"(SELECT ($0) from $1)";
@@ -776,24 +773,18 @@ absl::StatusOr<std::string> SpangresTranslator::WrapExpressionInSelect(
   }
 
   std::string quoted_table_name;
-  if (!table_in_named_catalog) {
-    quoted_table_name = absl::Substitute("\"$0\"", table_name.value());
-  } else {
-    for (absl::string_view name_part :
-         absl::StrSplit(table_name.value(), '.')) {
-      if (!quoted_table_name.empty()) {
-        quoted_table_name += '.';
-      }
-      quoted_table_name += absl::Substitute("\"$0\"", name_part);
+  for (absl::string_view name_part : absl::StrSplit(table_name.value(), '.')) {
+    if (!quoted_table_name.empty()) {
+      quoted_table_name += '.';
     }
+    quoted_table_name += absl::Substitute("\"$0\"", name_part);
   }
   return absl::Substitute(select_template_with_table, expression,
                           quoted_table_name);
 }
 
 absl::StatusOr<List*> SpangresTranslator::WrapExpressionInSelect(
-    Node* expression, std::optional<absl::string_view> table_name,
-    bool table_in_named_catalog) {
+    Node* expression, std::optional<absl::string_view> table_name) {
   GOOGLESQL_RET_CHECK_NE(expression, nullptr) << "Expression can not be null";
 
   // List of statements
@@ -814,21 +805,16 @@ absl::StatusOr<List*> SpangresTranslator::WrapExpressionInSelect(
   if (table_name.has_value()) {
     // Set table name in SELECT's FROM clause
     GOOGLESQL_ASSIGN_OR_RETURN(RangeVar * relation, CheckedPgMakeNode(RangeVar));
-    if (!table_in_named_catalog) {
+    std::vector<absl::string_view> split_name =
+        absl::StrSplit(table_name.value(), '.');
+    GOOGLESQL_RET_CHECK(split_name.size() <= 2);
+    if (split_name.size() == 1) {
       GOOGLESQL_ASSIGN_OR_RETURN(relation->relname, CheckedPgPstrdup(table_name->data()));
     } else {
-      std::vector<absl::string_view> split_name =
-          absl::StrSplit(table_name.value(), '.');
-      GOOGLESQL_RET_CHECK(split_name.size() <= 2);
-      if (split_name.size() == 1) {
-        GOOGLESQL_ASSIGN_OR_RETURN(relation->relname,
-                         CheckedPgPstrdup(table_name->data()));
-      } else {
-        GOOGLESQL_ASSIGN_OR_RETURN(relation->schemaname,
-                         CheckedPgPstrdup(split_name[0].data()));
-        GOOGLESQL_ASSIGN_OR_RETURN(relation->relname,
-                         CheckedPgPstrdup(split_name[1].data()));
-      }
+      GOOGLESQL_ASSIGN_OR_RETURN(relation->schemaname,
+                       CheckedPgPstrdup(split_name[0].data()));
+      GOOGLESQL_ASSIGN_OR_RETURN(relation->relname,
+                       CheckedPgPstrdup(split_name[1].data()));
     }
     GOOGLESQL_ASSIGN_OR_RETURN(List * from_clause, CheckedPgLappend(nullptr, relation));
     RawStmt* raw_stmt =

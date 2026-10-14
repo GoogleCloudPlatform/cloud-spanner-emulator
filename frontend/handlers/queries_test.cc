@@ -25,12 +25,14 @@
 #include "gtest/gtest.h"
 #include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "absl/cleanup/cleanup.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_replace.h"
 #include "absl/strings/string_view.h"
 #include "backend/datamodel/types.h"
+#include "common/config.h"
 #include "common/errors.h"
 #include "frontend/converters/partition.h"
 #include "frontend/converters/types.h"
@@ -1349,6 +1351,41 @@ TEST_P(QueryApiTest, DirectedReadsWithRWTxnFails) {
     EXPECT_THAT(ExecuteStreamingSql(request, &unused_response),
                 StatusIs(absl::StatusCode::kFailedPrecondition));
   }
+}
+
+TEST_P(QueryApiTest, QueryInTransactionAbortedBySchemaChangeFails) {
+  // Make the schema change abort the transaction holding the lock instead of
+  // being rejected.
+  const int probability = config::abort_current_transaction_probability();
+  config::set_abort_current_transaction_probability(100);
+  absl::Cleanup restore_probability = [probability] {
+    config::set_abort_current_transaction_probability(probability);
+  };
+
+  // Read from a table in a read-write transaction so that it holds a lock.
+  spanner_api::ExecuteSqlRequest request = PARSE_TEXT_PROTO(R"pb(
+    transaction { begin { read_write {} } }
+    sql: "SELECT int64_col FROM test_table"
+  )pb");
+  request.set_session(
+      GetSessionUri(GetSessionType() == SessionType::kMultiplexedSession));
+  spanner_api::ResultSet response;
+  GOOGLESQL_ASSERT_OK(ExecuteSql(request, &response));
+  const std::string transaction_id = response.metadata().transaction().id();
+
+  // The schema change aborts the transaction.
+  GOOGLESQL_ASSERT_OK(UpdateDatabaseDdl(test_database_uri_,
+                              {"CREATE TABLE new_table (int64_col INT64 NOT "
+                               "NULL) PRIMARY KEY (int64_col)"}));
+
+  // Queries in the aborted transaction fail instead of being answered from the
+  // transaction's stale schema.
+  request.mutable_transaction()->set_id(transaction_id);
+  request.set_sql(
+      "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES "
+      "WHERE TABLE_NAME = 'new_table'");
+  EXPECT_THAT(ExecuteSql(request, &response),
+              StatusIs(absl::StatusCode::kAborted));
 }
 
 }  // namespace

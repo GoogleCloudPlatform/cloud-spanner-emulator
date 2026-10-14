@@ -162,7 +162,29 @@ static constexpr char kSequenceStartWithCounterOptionName[] =
 // have a user-set start_with.
 constexpr int64_t kSequenceDefaultStartWith = 1;
 
+// Prefix for generated columns injected for expression indexes.
+const char kExpressionIndexInjectedPrefix[] = "_ExpressionIndex_";
 // Quotes used by different dialects of Spanner in DDL statements.
 static constexpr char kGSQLQuote[] = "`";
 static constexpr char kPGQuote[] = "\"";
+
+// Queue TVF Constants
+constexpr char kQueueReceiverTvfPrefix[] = "RECEIVE_";
+constexpr char kQueueDeliverTime[] = "DeliverTime";
+constexpr char kQueuePgDeliverTime[] = "deliver_time";
+constexpr char kQueueLeaseExpirationTimestamp[] =
+    "SpannerLeaseExpirationTimestamp";
+constexpr char kQueuePgLeaseExpirationTimestamp[] =
+    "spanner_lease_expiration_timestamp";
+constexpr char kQueueReceiverLeaseToken[] = "SpannerLeaseToken";
+constexpr char kQueuePgReceiverLeaseToken[] = "spanner_lease_token";
+constexpr char kQueueLastBatchMessage[] = "SpannerLastBatchMessage";
+constexpr char kQueuePgLastBatchMessage[] = "spanner_last_batch_message";
+constexpr char kQueueRenewLeaseTvfPrefix[] = "RENEWLEASE_";
+constexpr char kQueueRenewLeaseTokens[] = "lease_tokens";
+constexpr char kQueueRenewLeaseOldLeaseToken[] = "SpannerOldLeaseToken";
+constexpr char kQueuePgRenewLeaseOldLeaseToken[] = "spanner_old_lease_token";
+constexpr char kQueueRenewLeaseNewLeaseToken[] = "SpannerNewLeaseToken";
+constexpr char kQueuePgRenewLeaseNewLeaseToken[] = "spanner_new_lease_token";
+constexpr char kPerPlacementTvfPlacementNamePrefix[] = "PLACEMENT_";
 #endif  // THIRD_PARTY_CLOUD_SPANNER_EMULATOR_COMMON_CONSTANTS_H_

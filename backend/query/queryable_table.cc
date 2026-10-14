@@ -142,7 +142,7 @@ QueryableTable::QueryableTable(
     const backend::Table* table, RowReader* reader,
     std::optional<const googlesql::AnalyzerOptions> opt_options,
     googlesql::Catalog* catalog, googlesql::TypeFactory* type_factory,
-    bool is_synonym)
+    bool is_synonym, bool is_pg)
     : is_synonym_(is_synonym), wrapped_table_(table), reader_(reader) {
   bool enable_generated_pk =
       EmulatorFeatureFlags::instance().flags().enable_generated_pk;
@@ -154,6 +154,18 @@ QueryableTable::QueryableTable(
     std::unique_ptr<const googlesql::AnalyzerOutput> output =
         std::move(analyzer_output.value());
     bool is_generated_column = enable_generated_pk && column->is_generated();
+    if (is_pg && table->owner_queue() != nullptr &&
+        column->Name() == kQueueDeliverTime) {
+      // In PostgreSQL dialect, expose snake_case `deliver_time` in `SELECT *`
+      // and also register PascalCase `"DeliverTime"` as a pseudo-column.
+      columns_.push_back(std::make_unique<const QueryableColumn>(
+          column, /*output=*/nullptr, std::nullopt,
+          std::string(kQueuePgDeliverTime), /*is_pseudo_column=*/false));
+      columns_.push_back(std::make_unique<const QueryableColumn>(
+          column, /*output=*/nullptr, std::nullopt,
+          std::string(kQueueDeliverTime), /*is_pseudo_column=*/true));
+      continue;
+    }
     if (column->has_default_value() || (is_generated_column)) {
       googlesql::Column::ExpressionAttributes::ExpressionKind expression_kind =
           googlesql::Column::ExpressionAttributes::ExpressionKind::DEFAULT;
@@ -192,7 +204,7 @@ QueryableTable::CreateEvaluatorTableIterator(
 
   std::vector<std::string> column_names;
   for (int idx : column_idxs) {
-    column_names.push_back(GetColumn(idx)->Name());
+    column_names.push_back(columns_[idx]->wrapped_column()->Name());
   }
 
   ReadArg read_arg;
@@ -225,15 +237,15 @@ QueryableTable::CreateEvaluatorTableIterator(
 
 const googlesql::Column* QueryableTable::FindColumnByName(
     const std::string& name) const {
-  const auto* to_find = wrapped_table_->FindColumn(name);
-  auto it = std::find_if(columns_.begin(), columns_.end(),
-                         [to_find](const auto& column) {
-                           return column->wrapped_column() == to_find;
-                         });
-  if (it == columns_.end()) {
+  if (name.empty()) {
     return nullptr;
   }
-  return it->get();
+  for (const auto& column : columns_) {
+    if (absl::EqualsIgnoreCase(column->Name(), name)) {
+      return column.get();
+    }
+  }
+  return nullptr;
 }
 
 }  // namespace backend

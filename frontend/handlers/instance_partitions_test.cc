@@ -285,6 +285,22 @@ TEST_F(InstancePartitionsApiTest, ListInstancePartitionOperations) {
                                   "/operations/"));
 }
 
+TEST_F(InstancePartitionsApiTest, DeleteInstancePartitionDeletesOperations) {
+  GOOGLESQL_EXPECT_OK(CreateInstancePartition("test-partition"));
+  GOOGLESQL_EXPECT_OK(CreateInstancePartition("other-partition"));
+
+  GOOGLESQL_EXPECT_OK(DeleteInstancePartition("test-partition"));
+
+  // Only the operation of the other partition remains.
+  instance_api::ListInstancePartitionOperationsResponse response;
+  GOOGLESQL_EXPECT_OK(ListInstancePartitionOperations(0, "", &response));
+  ASSERT_EQ(response.operations_size(), 1);
+  EXPECT_THAT(response.operations(0).name(),
+              testing::StartsWith(MakeInstancePartitionUri(test_instance_uri_,
+                                                           "other-partition") +
+                                  "/operations/"));
+}
+
 TEST_F(InstancePartitionsApiTest, CreateInstancePartitionInvalidUnits) {
   instance_api::CreateInstancePartitionRequest request;
   request.set_parent(test_instance_uri_);

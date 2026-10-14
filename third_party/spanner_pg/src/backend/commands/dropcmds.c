@@ -516,6 +516,8 @@ does_not_exist_skipping(ObjectType objtype, Node *object)
 		// SPANGRES BEGIN
 		case OBJECT_CHANGE_STREAM:
 		case OBJECT_LOCALITY_GROUP:
+		case OBJECT_QUEUE:
+		case OBJECT_DATA_PLACEMENT:
 		case OBJECT_SEARCH_INDEX:
 		// SPANGRES END
 			/* These are currently not used or needed. */

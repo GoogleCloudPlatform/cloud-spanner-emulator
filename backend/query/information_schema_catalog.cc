@@ -51,13 +51,16 @@
 #include "backend/schema/catalog/foreign_key.h"
 #include "backend/schema/catalog/locality_group.h"
 #include "backend/schema/catalog/model.h"
+#include "backend/schema/catalog/placement.h"
 #include "backend/schema/catalog/property_graph.h"
+#include "backend/schema/catalog/queue.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/sequence.h"
 #include "backend/schema/ddl/operations.pb.h"
 #include "backend/schema/parser/ddl_parser.h"
 #include "backend/schema/printer/print_ddl.h"
 #include "backend/schema/updater/ddl_type_conversion.h"
+#include "common/constants.h"
 #include "third_party/spanner_pg/catalog/spangres_type.h"
 #include "third_party/spanner_pg/ddl/spangres_direct_schema_printer_impl.h"
 #include "third_party/spanner_pg/ddl/spangres_schema_printer.h"
@@ -132,9 +135,11 @@ static constexpr char kTables[] = "TABLES";
 static constexpr char kDatabaseDialect[] = "database_dialect";
 static constexpr char kString[] = "STRING";
 static constexpr char kStringList[] = "STRING_LIST";
+static constexpr char kStringMax[] = "STRING(MAX)";
 static constexpr char kCharacterVarying[] = "character varying";
 static constexpr char kPublic[] = "public";
 static constexpr char kBaseTable[] = "BASE TABLE";
+static constexpr char kQueue[] = "QUEUE";
 static constexpr char kCommitted[] = "COMMITTED";
 static constexpr char kInterleaveType[] = "INTERLEAVE_TYPE";
 static constexpr char kInParent[] = "IN PARENT";
@@ -224,6 +229,9 @@ static constexpr char kModelColumnOptions[] = "MODEL_COLUMN_OPTIONS";
 static constexpr char kLocalityGroupOptions[] = "LOCALITY_GROUP_OPTIONS";
 static constexpr char kLocalityGroup[] = "locality_group";
 static constexpr char kPropertyGraphs[] = "PROPERTY_GRAPHS";
+static constexpr char kPlacements[] = "PLACEMENTS";
+static constexpr char kPlacementOptions[] = "PLACEMENT_OPTIONS";
+static constexpr char kDefaultPlacementName[] = "default";
 
 static int kFloatNumericPrecision = 24;
 static int kDoubleNumericPrecision = 53;
@@ -257,6 +265,8 @@ static const absl::NoDestructor<absl::flat_hash_set<std::string>>
         kModelOptions,
         kModelColumns,
         kModelColumnOptions,
+        kPlacements,
+        kPlacementOptions,
         kReferentialConstraints,
         kSchemata,
         kSequences,
@@ -287,6 +297,8 @@ static const absl::NoDestructor<absl::flat_hash_set<std::string>>
         absl::AsciiStrToLower(kIndexes),
         absl::AsciiStrToLower(kIndexColumns),
         absl::AsciiStrToLower(kKeyColumnUsage),
+        absl::AsciiStrToLower(kPlacements),
+        absl::AsciiStrToLower(kPlacementOptions),
         absl::AsciiStrToLower(kReferentialConstraints),
         absl::AsciiStrToLower(kLocalityGroupOptions),
         absl::AsciiStrToLower(kSchemata),
@@ -623,6 +635,8 @@ InformationSchemaCatalog::InformationSchemaCatalog(
   FillModelColumnsTable();
   FillModelColumnOptionsTable();
   FillPropertyGraphsTable();
+  FillPlacementsTable();
+  FillPlacementOptionsTable();
 }
 
 inline std::string InformationSchemaCatalog::GetNameForDialect(
@@ -796,6 +810,18 @@ void InformationSchemaCatalog::FillDatabaseOptionsTable() {
   }
 
   if (default_schema_->options() != nullptr &&
+      default_schema_->options()->default_leader().has_value()) {
+    specific_kvs.clear();
+    specific_kvs[kSchemaName] = DialectDefaultSchema();
+    specific_kvs[kOptionType] = String(
+        dialect_ == DatabaseDialect::POSTGRESQL ? kCharacterVarying : kString);
+    specific_kvs[kOptionName] = String(ddl::kDefaultLeaderOptionName);
+    specific_kvs[kOptionValue] =
+        String(default_schema_->options()->default_leader().value());
+    rows.push_back(GetRowFromRowKVs(table, specific_kvs));
+  }
+
+  if (default_schema_->options() != nullptr &&
       default_schema_->options()->columnar_policy().has_value()) {
     specific_kvs.clear();
     specific_kvs[kSchemaName] = DialectDefaultSchema();
@@ -874,6 +900,49 @@ void InformationSchemaCatalog::FillTablesTable() {
     }
     specific_kvs[kInterleaveType] =
         interleave_type.empty() ? NullString() : String(interleave_type);
+
+    rows.push_back(GetRowFromRowKVs(tables, specific_kvs));
+  }
+
+  for (const Queue* queue : default_schema_->queues()) {
+    absl::flat_hash_map<std::string, googlesql::Value> specific_kvs;
+    if (dialect_ == DatabaseDialect::POSTGRESQL) {
+      googlesql::Value row_deletion_policy_value = NullString();
+      if (queue->row_deletion_policy().has_value()) {
+        absl::StatusOr<std::string> row_deletion_policy =
+            pg_schema_printer_->PrintRowDeletionPolicyForEmulator(
+                queue->row_deletion_policy().value());
+        ABSL_CHECK_OK(row_deletion_policy.status());  // crash ok
+        row_deletion_policy_value = String(*row_deletion_policy);
+      }
+      specific_kvs[kRowDeletionPolicyExpression] = row_deletion_policy_value;
+    } else {
+      specific_kvs[kRowDeletionPolicyExpression] =
+          queue->row_deletion_policy().has_value()
+              ? String(RowDeletionPolicyToString(
+                    queue->row_deletion_policy().value()))
+              : NullString();
+    }
+
+    const auto& [queue_schema_part, queue_name_part] =
+        GetSchemaAndNameForInformationSchema(queue->Name());
+    specific_kvs[kTableCatalog] = DialectTableCatalog();
+    specific_kvs[kTableSchema] = String(queue_schema_part);
+    specific_kvs[kTableName] = String(queue_name_part);
+    specific_kvs[kTableType] = String(kQueue);
+    specific_kvs[kParentTableName] =
+        queue->parent()
+            ? String(SDLObjectName::GetInSchemaName(queue->parent()->Name()))
+            : NullString();
+
+    bool is_interleaved = queue->parent() != nullptr;
+    specific_kvs[kOnDeleteAction] =
+        is_interleaved
+            ? String(OnDeleteActionToString(queue->on_delete_action()))
+            : NullString();
+    specific_kvs[kSpannerState] = NullString();
+    specific_kvs[kInterleaveType] =
+        is_interleaved ? String(kInParent) : NullString();
 
     rows.push_back(GetRowFromRowKVs(tables, specific_kvs));
   }
@@ -1114,6 +1183,73 @@ void InformationSchemaCatalog::FillColumnsTable() {
 
       rows.push_back(GetRowFromRowKVs(columns, specific_kvs));
       specific_kvs.clear();
+    }
+  }
+  for (const Queue* queue : default_schema_->queues()) {
+    int pos = 1;
+    const auto& [queue_schema_part, queue_name_part] =
+        GetSchemaAndNameForInformationSchema(queue->Name());
+    auto add_queue_column = [&](const Column* column,
+                                absl::string_view column_name) {
+      if (dialect_ == DatabaseDialect::POSTGRESQL) {
+        const googlesql::Type* type = column->GetType();
+        if (column->has_allows_commit_timestamp()) {
+          specific_kvs[kDataType] = String(kSpannerCommitTimestamp);
+          specific_kvs[kSpannerType] = String(kSpannerCommitTimestamp);
+        } else {
+          specific_kvs[kDataType] = PGDataType(type);
+          specific_kvs[kSpannerType] = GetSpannerType(column);
+        }
+        specific_kvs[kCharacterMaximumLength] =
+            (!type->IsArray() && column->declared_max_length() != std::nullopt)
+                ? Int64(column->declared_max_length().value())
+                : NullInt64();
+        specific_kvs[kNumericPrecision] = GetPGNumericPrecision(type);
+        specific_kvs[kNumericPrecisionRadix] = GetPGNumericPrecisionRadix(type);
+        specific_kvs[kNumericScale] = type->IsInt64() ? Int64(0) : NullInt64();
+      } else {
+        specific_kvs[kDataType] = NullString();
+        specific_kvs[kSpannerType] = GetSpannerType(column);
+      }
+
+      specific_kvs[kTableCatalog] = DialectTableCatalog();
+      specific_kvs[kTableSchema] = String(queue_schema_part);
+      specific_kvs[kTableName] = String(queue_name_part);
+      specific_kvs[kColumnName] = String(column_name);
+      specific_kvs[kOrdinalPosition] = Int64(pos++);
+      specific_kvs[kColumnDefault] = NullString();
+      specific_kvs[kIsNullable] = String(column->is_nullable() ? kYes : kNo);
+      specific_kvs[kIsHidden] = DialectBoolValue(column->hidden());
+      specific_kvs[kIsGenerated] = String(kNever);
+      specific_kvs[kGenerationExpression] = NullString();
+      specific_kvs[kIsStored] = NullString();
+      specific_kvs[kSpannerState] = String(kCommitted);
+      specific_kvs[kIsIdentity] = String(kNo);
+      specific_kvs[kIdentityGeneration] = NullString();
+      specific_kvs[kIdentityKind] = NullString();
+      specific_kvs[kIdentityStartWithCounter] = NullString();
+      specific_kvs[kIdentitySkipRangeMin] = NullString();
+      specific_kvs[kIdentitySkipRangeMax] = NullString();
+      specific_kvs[kOnUpdateExpression] = NullString();
+
+      rows.push_back(GetRowFromRowKVs(columns, specific_kvs));
+      specific_kvs.clear();
+    };
+
+    const Column* deliver_time_col =
+        queue->backing_table() != nullptr
+            ? queue->backing_table()->FindColumn(kQueueDeliverTime)
+            : nullptr;
+    if (dialect_ == DatabaseDialect::POSTGRESQL &&
+        deliver_time_col != nullptr) {
+      add_queue_column(deliver_time_col, kQueuePgDeliverTime);
+    }
+    for (const Column* column : queue->columns()) {
+      add_queue_column(column, column->Name());
+    }
+    if (dialect_ != DatabaseDialect::POSTGRESQL &&
+        deliver_time_col != nullptr) {
+      add_queue_column(deliver_time_col, kQueueDeliverTime);
     }
   }
 
@@ -1379,6 +1515,43 @@ void InformationSchemaCatalog::FillIndexesTable() {
     }
   }
 
+  for (const Queue* queue : default_schema_->queues()) {
+    const auto& [table_schema_part, table_name_part] =
+        GetSchemaAndNameForInformationSchema(queue->Name());
+    rows.push_back({
+        // table_catalog
+        DialectTableCatalog(),
+        // table_schema
+        String(table_schema_part),
+        // table_name
+        String(table_name_part),
+        // index_name
+        String(kPrimary_Key),
+        // index_type
+        String(kPrimary_Key),
+        // parent_table_name
+        String(""),
+        // is_unique
+        DialectBoolValue(true),
+        // is_null_filtered
+        DialectBoolValue(false),
+        // index_state
+        NullString(),
+        // filter
+        NullString(),
+        // spanner_is_managed
+        DialectBoolValue(false),
+        // search_partition_by
+        googlesql::Value::Null(googlesql::types::StringArrayType()),
+        // search_order_by
+        googlesql::Value::Null(googlesql::types::StringArrayType()),
+    });
+    if (dialect_ == DatabaseDialect::POSTGRESQL) {
+      // Swap option_type and option_value as the order is different.
+      std::swap(rows.back()[9], rows.back()[10]);
+    }
+  }
+
   // The primary key index for tables in the INFORMATION_SCHEMA are not added in
   // the PG dialect in production so we also don't add it in the emulator.
   if (dialect_ != DatabaseDialect::POSTGRESQL) {
@@ -1580,6 +1753,36 @@ void InformationSchemaCatalog::FillIndexColumnsTable() {
     }
   }
 
+  for (const Queue* queue : default_schema_->queues()) {
+    const auto& [table_schema_part, table_name_part] =
+        GetSchemaAndNameForInformationSchema(queue->Name());
+    int pos = 1;
+    for (const KeyColumn* key_column : queue->primary_key()) {
+      rows.push_back({
+          // table_catalog
+          DialectTableCatalog(),
+          // table_schema
+          String(table_schema_part),
+          // table_name
+          String(table_name_part),
+          // index_name
+          String(kPrimary_Key),
+          // index_type
+          String(kPrimary_Key),
+          // column_name
+          String(key_column->column()->Name()),
+          // ordinal_position
+          Int64(pos++),
+          // column_ordering
+          DialectColumnOrdering(key_column),
+          // is_nullable
+          String(key_column->column()->is_nullable() ? kYes : kNo),
+          // spanner_type
+          GetSpannerType(key_column->column()),
+      });
+    }
+  }
+
   // The primary key columns for tables in the INFORMATION_SCHEMA are not added
   // in the PG dialect in production so we also don't add it in the emulator.
   if (dialect_ != DatabaseDialect::POSTGRESQL) {
@@ -1682,6 +1885,35 @@ void InformationSchemaCatalog::FillColumnOptionsTable() {
                 : String(kString),
             // option_value
             String(column->locality_group()->Name())};
+        if (dialect_ == DatabaseDialect::POSTGRESQL) {
+          // Swap option_type and option_value as the order is different.
+          std::swap(row[5], row[6]);
+        }
+        rows.push_back(std::move(row));
+      }
+    }
+  }
+  for (const Queue* queue : default_schema_->queues()) {
+    const auto& [schema_part, queue_name_part] =
+        GetSchemaAndNameForInformationSchema(queue->Name());
+    for (const Column* column : queue->columns()) {
+      if (column->allows_commit_timestamp()) {
+        std::vector<googlesql::Value> row = {
+            // table_catalog
+            DialectTableCatalog(),
+            // table_schema
+            String(schema_part),
+            // table_name
+            String(queue_name_part),
+            // column_name
+            String(column->Name()),
+            // option_name
+            String(kAllowCommitTimestamp),
+            // option_type
+            (dialect_ == DatabaseDialect::POSTGRESQL) ? String(kBoolean)
+                                                      : String(kBool),
+            // option_value
+            String(kTrue)};
         if (dialect_ == DatabaseDialect::POSTGRESQL) {
           // Swap option_type and option_value as the order is different.
           std::swap(row[5], row[6]);
@@ -3178,6 +3410,64 @@ void InformationSchemaCatalog::FillPropertyGraphsTable() {
     });
   }
   tables_by_name_.at(GetNameForDialect(kPropertyGraphs))->SetContents(rows);
+}
+
+void InformationSchemaCatalog::FillPlacementsTable() {
+  std::vector<std::vector<googlesql::Value>> rows;
+  rows.reserve(default_schema_->placements().size() + 1);
+  rows.push_back({
+      String(kDefaultPlacementName),
+      DialectBoolValue(true),
+  });
+  for (const Placement* placement : default_schema_->placements()) {
+    rows.push_back({
+        String(placement->PlacementName()),
+        DialectBoolValue(false),
+    });
+  }
+  tables_by_name_.at(GetNameForDialect(kPlacements))->SetContents(rows);
+}
+
+void InformationSchemaCatalog::FillPlacementOptionsTable() {
+  const googlesql::Value option_type = String(
+      dialect_ == DatabaseDialect::POSTGRESQL ? kCharacterVarying : kStringMax);
+  std::vector<std::vector<googlesql::Value>> rows;
+
+  rows.push_back({
+      String(kDefaultPlacementName),
+      String(ddl::kPlacementInstancePartitionOptionName),
+      option_type,
+      String(kDefaultPlacementName),
+  });
+  if (default_schema_->options() != nullptr &&
+      default_schema_->options()->default_leader().has_value()) {
+    rows.push_back({
+        String(kDefaultPlacementName),
+        String(ddl::kPlacementDefaultLeaderOptionName),
+        option_type,
+        String(default_schema_->options()->default_leader().value()),
+    });
+  }
+
+  for (const Placement* placement : default_schema_->placements()) {
+    if (placement->InstancePartition().has_value()) {
+      rows.push_back({
+          String(placement->PlacementName()),
+          String(ddl::kPlacementInstancePartitionOptionName),
+          option_type,
+          String(placement->InstancePartition().value()),
+      });
+    }
+    if (placement->DefaultLeader().has_value()) {
+      rows.push_back({
+          String(placement->PlacementName()),
+          String(ddl::kPlacementDefaultLeaderOptionName),
+          option_type,
+          String(placement->DefaultLeader().value()),
+      });
+    }
+  }
+  tables_by_name_.at(GetNameForDialect(kPlacementOptions))->SetContents(rows);
 }
 
 }  // namespace backend

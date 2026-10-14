@@ -2330,13 +2330,15 @@ pg_get_object_address(PG_FUNCTION_ARGS)
 		case OBJECT_OPCLASS:
 		case OBJECT_OPFAMILY:
     case OBJECT_CHANGE_STREAM:
+		// SPANGRES BEGIN
+		case OBJECT_DATA_PLACEMENT:
 		case OBJECT_SEARCH_INDEX:
 		// SPANGRES END
 		case OBJECT_LOCALITY_GROUP:
 			objnode = (Node *) name;
 			break;
 		// SPANGRES BEGIN
-		// TODO: expose when queue is implemented.
+		case OBJECT_QUEUE:
 		// SPANGRES END
 		case OBJECT_ACCESS_METHOD:
 		case OBJECT_DATABASE:

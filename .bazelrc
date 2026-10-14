@@ -78,3 +78,12 @@ test --test_env=GCLOUD_DIR
 # Inform GoogleTest and gMock that Abseil libraries are available
 build --define=absl=1
 build --cxxopt=-DGTEST_HAS_ABSL=1
+
+# =============================================================================
+# 6. MEMORY ALLOCATOR
+# =============================================================================
+# glibc malloc caches freed memory in per-thread arenas and rarely returns it
+# to the OS, so an emulator that repeatedly creates and drops databases keeps
+# growing. Link all binaries against tcmalloc, the allocator used by the
+# internal build, instead.
+build --custom_malloc=@tcmalloc//tcmalloc

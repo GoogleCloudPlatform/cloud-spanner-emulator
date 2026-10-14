@@ -877,22 +877,22 @@ ForwardTransformer::BuildGsqlResolvedSubqueryExpr(
         const FormData_pg_operator* op,
         PgBootstrapCatalog::Default()->GetOperator(in_opexpr->opno));
     bool needs_comparison_handling =
-        catalog_adapter_->GetEngineSystemCatalog()
-            ->GetMappedOidForComparisonFuncid(op->oprcode)
-            .has_value();
+        GetMappedOidForComparisonFuncid(op->oprcode).has_value();
 
     if (needs_comparison_handling) {
-      // Handle the in_expr.
-      GOOGLESQL_ASSIGN_OR_RETURN(
-          resolved_in_expr,
-          catalog_adapter_->GetEngineSystemCatalog()
-              ->GetResolvedExprForComparison(
-                  std::move(resolved_in_expr),
-                  catalog_adapter_->analyzer_options().language()));
+      // Handle the in_expr. When `use_googlesql_double_comparison_` is enabled,
+      // `needs_comparison_handling` is only true for cross-type float4/float8
+      // comparisons, so a float4 `in_expr` must be cast to float8.
+      GOOGLESQL_ASSIGN_OR_RETURN(resolved_in_expr, GetResolvedExprForComparison(
+                                             std::move(resolved_in_expr),
+                                             /*cast_float_to_double=*/true));
 
       // Handle the IN subquery.
-      GOOGLESQL_ASSIGN_OR_RETURN(subquery,
-                       AddGsqlProjectScanForInSubqueries(std::move(subquery)));
+      if (!use_googlesql_double_comparison_ ||
+          subquery->column_list(0).type()->IsFloat()) {
+        GOOGLESQL_ASSIGN_OR_RETURN(
+            subquery, AddGsqlProjectScanForInSubqueries(std::move(subquery)));
+      }
     }
   }
 

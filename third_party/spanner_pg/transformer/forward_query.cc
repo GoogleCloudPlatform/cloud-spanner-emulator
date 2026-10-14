@@ -34,6 +34,7 @@
 #include <climits>
 #include <memory>
 #include <numeric>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -148,6 +149,26 @@ absl::Status CheckTypeSupportsOrdering(
   return absl::OkStatus();
 }
 
+bool ShouldUseGoogleSqlDoubleComparison(const List* statement_hints) {
+  if (statement_hints == nullptr) {
+    return false;
+  }
+  for (DefElem* hint : StructList<DefElem*>(statement_hints)) {
+    if (hint != nullptr && hint->defname != nullptr &&
+        (hint->defnamespace == nullptr ||
+         absl::EqualsIgnoreCase(hint->defnamespace, kSpannerHintQualifier)) &&
+        absl::EqualsIgnoreCase(hint->defname,
+                               kHintUseGoogleSqlDoubleComparison) &&
+        hint->arg != nullptr && IsA(hint->arg, Const)) {
+      const Const* const_arg = PostgresConstCastNode(Const, hint->arg);
+      if (const_arg->consttype == BOOLOID && !const_arg->constisnull) {
+        return DatumGetBool(const_arg->constvalue);
+      }
+    }
+  }
+
+  return false;
+}
 }  // namespace
 
 absl::StatusOr<googlesql::ResolvedColumn> ForwardTransformer::GetResolvedColumn(
@@ -1460,11 +1481,14 @@ ForwardTransformer::AddGsqlProjectScanForInSubqueries(
   // Finally, combine the expression and column in a ResolvedComputedColumn.
   GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<googlesql::ResolvedColumnRef> column_ref,
                    BuildGsqlResolvedColumnRef(subquery_column));
-  GOOGLESQL_ASSIGN_OR_RETURN(
-      std::unique_ptr<googlesql::ResolvedExpr> comparison_expr,
-      catalog_adapter_->GetEngineSystemCatalog()->GetResolvedExprForComparison(
-          std::move(column_ref),
-          catalog_adapter_->analyzer_options().language()));
+  // `AddGsqlProjectScanForInSubqueries` is only called when
+  // `GetMappedOidForComparisonFuncid` returned a value. When
+  // `use_googlesql_double_comparison_` is enabled, that only happens for
+  // cross-type float4/float8 IN subqueries, so a float4 subquery column must
+  // be cast to float8.
+  GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<googlesql::ResolvedExpr> comparison_expr,
+                   GetResolvedExprForComparison(std::move(column_ref),
+                                                /*cast_float_to_double=*/true));
 
   GOOGLESQL_ASSIGN_OR_RETURN(
       googlesql::ResolvedColumn column,
@@ -1993,12 +2017,20 @@ ForwardTransformer::BuildGsqlResolvedScanForSelect(
     const TargetEntry* entry = select_column_state->target_entry;
     if (IsA(entry->expr, Var)) {
       Var* var = PostgresCastNode(Var, entry->expr);
-      VarIndex var_index = {.varno = var->varno, .varattno = var->varattno};
-      having_and_order_by_override.insert(
-          {var_index, select_column_state->resolved_select_column});
-      select_list_and_from_scan_override.insert(
-          {var_index,
-           select_column_state->resolved_pre_group_by_select_column});
+      if (var->varlevelsup == 0) {
+        VarIndex var_index = {.varno = var->varno, .varattno = var->varattno};
+        having_and_order_by_override.insert(
+            {var_index, select_column_state->resolved_select_column});
+        // When aggregation is HAVING/ORDER-BY-only, no distinct pre-grouping
+        // version exists, so fallback to resolved_select_column.
+        const googlesql::ResolvedColumn& pre_group_by_column =
+            select_column_state->resolved_pre_group_by_select_column
+                    .IsInitialized()
+                ? select_column_state->resolved_pre_group_by_select_column
+                : select_column_state->resolved_select_column;
+        select_list_and_from_scan_override.insert(
+            {var_index, pre_group_by_column});
+      }
     }
   }
   std::unique_ptr<VarIndexScope> having_and_order_by_scope =
@@ -3010,14 +3042,105 @@ ForwardTransformer::RewriteResolvedOrderByScanIfNeeded(
   return transformed_order_by_scan;
 }
 
+bool ForwardTransformer::IsTransformationRequiredForComparison(
+    const googlesql::ResolvedExpr& gsql_expr) const {
+  // If the query hint use_googlesql_double_comparison is set to true, we do not
+  // want to transform float8/float4 expressions.
+  if (use_googlesql_double_comparison_ &&
+      (gsql_expr.type()->IsDouble() || gsql_expr.type()->IsFloat())) {
+    return false;
+  }
+  return catalog_adapter_->GetEngineSystemCatalog()
+      ->IsTransformationRequiredForComparison(gsql_expr);
+}
+
+absl::StatusOr<std::unique_ptr<googlesql::ResolvedExpr>>
+ForwardTransformer::GetResolvedExprForComparison(
+    std::unique_ptr<googlesql::ResolvedExpr> gsql_expr,
+    bool cast_float_to_double) {
+  if (use_googlesql_double_comparison_ && gsql_expr != nullptr &&
+      (gsql_expr->type()->IsDouble() || gsql_expr->type()->IsFloat())) {
+    if (cast_float_to_double && gsql_expr->type()->IsFloat()) {
+      return googlesql::MakeResolvedCast(googlesql::types::DoubleType(),
+                                         std::move(gsql_expr),
+                                         /*return_null_on_error=*/false);
+    }
+    return gsql_expr;
+  }
+  return catalog_adapter_->GetEngineSystemCatalog()
+      ->GetResolvedExprForComparison(
+          std::move(gsql_expr),
+          catalog_adapter_->analyzer_options().language());
+}
+
+// This function indicates if there is an override registered in the engine
+// system catalog for the given function id.
+//
+// Originally we overrode float8s / float4s using int8_t comparison
+// as we wrap the floating-point values with pg.map_double_to_int /
+// pg.map_float_to_int functions. This was the same for cross-type comparisons
+// (float8 vs float4 and vice-versa).
+//
+// Now, if the query hint use_googlesql_double_comparison is set to true, we
+// would like for the caller to NOT use int8_t comparison, but use the native
+// float8 / float4 comparisons. Because of this, we return std::nullopt
+// when the same types are compared as they map neatly to comparison functions
+// in the function registry. When we do cross type comparison we need to lift
+// them to the same type (float8) so that we match against functions in the
+// registry.
+std::optional<Oid> ForwardTransformer::GetMappedOidForComparisonFuncid(
+    Oid funcid) const {
+  if (use_googlesql_double_comparison_) {
+    switch (funcid) {
+      // No remapping is done.
+      case F_FLOAT8LT:
+      case F_FLOAT8GT:
+      case F_FLOAT8EQ:
+      case F_FLOAT8LE:
+      case F_FLOAT8GE:
+      case F_FLOAT8NE:
+      case F_FLOAT4LT:
+      case F_FLOAT4GT:
+      case F_FLOAT4EQ:
+      case F_FLOAT4LE:
+      case F_FLOAT4GE:
+      case F_FLOAT4NE:
+        return std::nullopt;
+      // Lift comparisons to same type (float8).
+      case F_FLOAT48LT:
+      case F_FLOAT84LT:
+        return F_FLOAT8LT;
+      case F_FLOAT48GT:
+      case F_FLOAT84GT:
+        return F_FLOAT8GT;
+      case F_FLOAT48EQ:
+      case F_FLOAT84EQ:
+        return F_FLOAT8EQ;
+      case F_FLOAT48LE:
+      case F_FLOAT84LE:
+        return F_FLOAT8LE;
+      case F_FLOAT48GE:
+      case F_FLOAT84GE:
+        return F_FLOAT8GE;
+      case F_FLOAT48NE:
+      case F_FLOAT84NE:
+        return F_FLOAT8NE;
+      default:
+        // Consult the engine system catalog for Oid remappings.
+        break;
+    }
+  }
+  return catalog_adapter_->GetEngineSystemCatalog()
+      ->GetMappedOidForComparisonFuncid(funcid);
+}
+
 bool ForwardTransformer::IsTransformationRequiredForOrderByScan(
     const googlesql::ResolvedOrderByScan& order_by_scan) {
   for (const std::unique_ptr<const googlesql::ResolvedOrderByItem>&
            order_by_item : order_by_scan.order_by_item_list()) {
     const googlesql::ResolvedColumnRef& column_ref =
         *(order_by_item->column_ref());
-    if (catalog_adapter_->GetEngineSystemCatalog()
-            ->IsTransformationRequiredForComparison(column_ref)) {
+    if (IsTransformationRequiredForComparison(column_ref)) {
       return true;
     }
   }
@@ -3045,9 +3168,7 @@ ForwardTransformer::BuildGsqlResolvedOrderByScanWithTransformations(
         std::move(order_by_items[idx]);
     std::unique_ptr<const googlesql::ResolvedOrderByItem>
         transformed_order_by_item;
-    if (catalog_adapter_->GetEngineSystemCatalog()
-            ->IsTransformationRequiredForComparison(
-                *order_by_item->column_ref())) {
+    if (IsTransformationRequiredForComparison(*order_by_item->column_ref())) {
       // Column requires transformation, get computed column and build
       // a column reference using it. Also add computed column to list of
       // computed columns.
@@ -3096,11 +3217,12 @@ ForwardTransformer::BuildGsqlResolvedComputedColumnForOrderByClause(
       std::unique_ptr<googlesql::ResolvedColumnRef> resolved_column_ref,
       BuildGsqlResolvedColumnRef(order_by_column));
 
+  // ORDER BY sorts a single expression rather than comparing two operands, so
+  // cross-type float4/float8 coercion never applies.
   GOOGLESQL_ASSIGN_OR_RETURN(
       std::unique_ptr<googlesql::ResolvedExpr> expr,
-      catalog_adapter_->GetEngineSystemCatalog()->GetResolvedExprForComparison(
-          std::move(resolved_column_ref),
-          catalog_adapter_->analyzer_options().language()));
+      GetResolvedExprForComparison(std::move(resolved_column_ref),
+                                   /*cast_float_to_double=*/false));
 
   // Assign a table name and column name that match GoogleSQL behavior.
   std::string order_by_column_name = absl::StrCat(kOrderByColumn, column_index);
@@ -3754,6 +3876,9 @@ ForwardTransformer::BuildGsqlResolvedStatement(const Query& query) {
       CheckForUnsupportedFeatures(query, /*is_top_level_query=*/true));
   GOOGLESQL_RET_CHECK(query.isReturn == is_create_function_stmt_);
 
+  use_googlesql_double_comparison_ =
+      ShouldUseGoogleSqlDoubleComparison(query.statementHints);
+
   std::unique_ptr<googlesql::ResolvedStatement> statement;
   switch (query.commandType) {
     // Query types
@@ -3805,10 +3930,12 @@ ForwardTransformer::BuildGsqlResolvedStatement(const Query& query) {
         case T_AlterOwnerStmt:
         case T_AlterStatsStmt:
         case T_AlterObjectSchemaStmt:
+        case T_CreatePlacementStmt:
+        case T_AlterPlacementStmt:
         case T_CreateSearchIndexStmt:
         case T_AlterSearchIndexStmt:
         case T_CreateLocalityGroupStmt:
-        // TODO: expose when queue is implemented.
+        case T_CreateQueueStmt:
         case T_AlterLocalityGroupStmt:
         case T_AlterColumnLocalityGroupStmt:
         case T_ReindexStmt:

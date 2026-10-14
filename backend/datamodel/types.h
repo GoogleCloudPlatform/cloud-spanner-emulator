@@ -38,6 +38,13 @@ std::string ToString(const googlesql::Type* type);
 // element type if type is an array type. Returns nullptr otherwise.
 const googlesql::Type* BaseType(const googlesql::Type* type);
 
+// Returns the theoretical maximum size in bytes that can be stored in a column
+// of the given type and declared max length for non-key column size limit
+// calculation.
+int64_t GetScalarOrBlobColumnSizeBytes(
+    const googlesql::Type* type,
+    std::optional<int64_t> declared_max_length = std::nullopt);
+
 }  // namespace backend
 }  // namespace emulator
 }  // namespace spanner

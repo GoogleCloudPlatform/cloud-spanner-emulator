@@ -103,7 +103,7 @@ bazel_dep(name = "gazelle", version = "0.45.0", repo_name = "bazel_gazelle")
 go_sdk = use_extension("@io_bazel_rules_go//go:extensions.bzl", "go_sdk")
 go_sdk.download(
     name = "go_sdk",
-    version = "1.25.13",
+    version = "1.26.9",
 )
 use_repo(go_sdk, "go_sdk")
 
@@ -228,6 +228,9 @@ http_archive(
 )
 
 bazel_dep(name = "google_benchmark", version = "1.8.3", repo_name = "com_github_google_benchmark")
+
+# Memory allocator linked into all binaries, see --custom_malloc in .bazelrc.
+bazel_dep(name = "tcmalloc", version = "0.0.0-20250927-12f2552")
 bazel_dep(name = "googlesql", version = "2026.7.2", repo_name = "com_google_googlesql")
 archive_override(
     module_name = "googlesql",

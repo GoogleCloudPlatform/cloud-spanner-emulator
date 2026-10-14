@@ -294,25 +294,22 @@ ForwardTransformer::CollectSubscriptUpdates(
     const std::vector<TargetEntry*>& entries,
     const VarIndexScope& update_value_scope, const std::string& clause_name) {
   SubscriptUpdates updates;
-  bool has_full_update = false;
   for (TargetEntry* entry : entries) {
     if (nodeTag(entry->expr) == T_SubscriptingRef) {
       const SubscriptingRef* ref =
           internal::PostgresCastNode(SubscriptingRef, entry->expr);
-      GOOGLESQL_RET_CHECK_NE(ref->refassgnexpr, nullptr);
-      GOOGLESQL_ASSIGN_OR_RETURN(
-          std::unique_ptr<googlesql::ResolvedExpr> resolved_expr,
-          BuildGsqlResolvedScalarExpr(*ref->refassgnexpr, &update_value_scope,
-                                      clause_name.c_str()));
-      updates.emplace_back(ref, std::move(resolved_expr));
-    } else {
-      // Not a subscript update so it must be a full column update.
-      has_full_update = true;
+      if (ref->refassgnexpr != nullptr) {
+        GOOGLESQL_ASSIGN_OR_RETURN(
+            std::unique_ptr<googlesql::ResolvedExpr> resolved_expr,
+            BuildGsqlResolvedScalarExpr(*ref->refassgnexpr, &update_value_scope,
+                                        clause_name.c_str()));
+        updates.emplace_back(ref, std::move(resolved_expr));
+      }
     }
   }
 
   // We do not allow full column updates in combination with subscript update.
-  if (has_full_update && !updates.empty()) {
+  if (!updates.empty() && updates.size() < entries.size()) {
     return absl::InvalidArgumentError(absl::StrFormat(
         "multiple assignments to same column \"%s\"", entries[0]->resname));
   }
@@ -1009,6 +1006,26 @@ ForwardTransformer::BuildGsqlWhereClauseExprForDML(
   }
 }
 
+absl::StatusOr<std::unique_ptr<const googlesql::ResolvedAssertRowsModified>>
+ForwardTransformer::BuildGsqlAssertRowsModifiedExprForDML(
+    Node* pg_assert_rows_modified, const VarIndexScope* var_index_scope) {
+  if (pg_assert_rows_modified == nullptr) {
+    return nullptr;
+  }
+  if (internal::IsExpr(*pg_assert_rows_modified)) {
+    std::unique_ptr<const googlesql::ResolvedExpr> resolved_expr;
+    GOOGLESQL_ASSIGN_OR_RETURN(resolved_expr,
+                     BuildGsqlResolvedScalarExpr(
+                         *PostgresCastToExpr(pg_assert_rows_modified),
+                         var_index_scope, "ASSERT_ROWS_MODIFIED"));
+    return googlesql::MakeResolvedAssertRowsModified(std::move(resolved_expr));
+  } else {
+    return absl::UnimplementedError(absl::StrCat(
+        "Node type ", NodeTagToNodeString(nodeTag(pg_assert_rows_modified)),
+        " is unsupported in ASSERT_ROWS_MODIFIED."));
+  }
+}
+
 absl::StatusOr<std::unique_ptr<const googlesql::ResolvedDMLValue>>
 ForwardTransformer::BuildGsqlResolvedDMLValue(
     Expr& expr, const VarIndexScope* var_index_scope, const char* clause_name) {
@@ -1087,10 +1104,16 @@ ForwardTransformer::BuildPartialGsqlResolvedDeleteStmt(const Query& query) {
                    BuildGsqlReturningClauseForDML(
                        query.returningList, table_alias, &target_table_scope));
 
+  // Build a ResolvedAssertRowsModified.
+  GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<const googlesql::ResolvedAssertRowsModified>
+                       assert_rows_modified,
+                   BuildGsqlAssertRowsModifiedExprForDML(
+                       query.assertRowsModified, &target_table_scope));
+
   // Construct a ResolvedDeleteStmt.
   return googlesql::MakeResolvedDeleteStmt(
       std::move(table_scan),
-      nullptr,
+      std::move(assert_rows_modified),
       std::move(returning_clause), /*array_offset_column=*/nullptr,
       std::move(where_expr));
 }

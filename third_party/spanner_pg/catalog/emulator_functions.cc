@@ -68,6 +68,7 @@
 #include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/ascii.h"
 #include "absl/strings/cord.h"
 #include "absl/strings/escaping.h"
 #include "absl/strings/str_cat.h"
@@ -2630,6 +2631,159 @@ absl::StatusOr<googlesql::Value> EvalJsonbSetLax(
   }
 }
 
+absl::StatusOr<googlesql::Value> EvalSpanJsonbSet(
+    absl::Span<const googlesql::Value> args) {
+  GOOGLESQL_RET_CHECK_GE(args.size(), 4);
+  std::vector<std::unique_ptr<TreeNode>> tree_nodes;
+
+  struct PathValue {
+    std::vector<std::string> path;
+    googlesql::TypeKind first_index_type;
+    PgJsonbValue value;
+  };
+  std::vector<PathValue> path_values;
+
+  int i = 1;
+  while (i < args.size()) {
+    GOOGLESQL_RET_CHECK(!args[i].is_null());
+    GOOGLESQL_RET_CHECK_EQ(args[i].type_kind(), googlesql::TYPE_INT64);
+    int64_t path_len = args[i++].int64_value();
+    GOOGLESQL_RET_CHECK_GE(path_len, 1);
+    GOOGLESQL_RET_CHECK_LT(path_len, args.size() - i);
+
+    std::vector<std::string> frozen_path;
+    googlesql::TypeKind first_index_type = args[i].type_kind();
+    for (int j = 0; j < path_len; ++j) {
+      const googlesql::Value& path_element = args[i++];
+      if (path_element.is_null()) {
+        return absl::InvalidArgumentError(
+            "jsonb subscript in assignment must not be null");
+      }
+      if (path_element.type_kind() == googlesql::TYPE_STRING) {
+        frozen_path.push_back(path_element.string_value());
+      } else {
+        GOOGLESQL_RET_CHECK_EQ(path_element.type_kind(), googlesql::TYPE_INT64);
+        frozen_path.push_back(absl::StrCat(path_element.int64_value()));
+      }
+    }
+
+    const googlesql::Value& new_value_arg = args[i++];
+    PgJsonbValue new_value = PgJsonbValue::CreateNull(&tree_nodes);
+    if (!new_value_arg.is_null()) {
+      GOOGLESQL_ASSIGN_OR_RETURN(std::string new_value_str,
+                       GetStringRepresentation(new_value_arg));
+      GOOGLESQL_ASSIGN_OR_RETURN(new_value,
+                       PgJsonbValue::Parse(new_value_str, &tree_nodes));
+    }
+
+    path_values.push_back(PathValue{
+        .path = std::move(frozen_path),
+        .first_index_type = first_index_type,
+        .value = std::move(new_value),
+    });
+  }
+
+  PgJsonbValue input = PgJsonbValue::CreateNull(&tree_nodes);
+  if (args[0].is_null()) {
+    if (path_values[0].first_index_type == googlesql::TYPE_INT64) {
+      input = PgJsonbValue::CreateEmptyArray(&tree_nodes);
+    } else {
+      input = PgJsonbValue::CreateEmptyObject(&tree_nodes);
+    }
+  } else {
+    GOOGLESQL_ASSIGN_OR_RETURN(std::string jsonb, GetStringRepresentation(args[0]));
+    GOOGLESQL_ASSIGN_OR_RETURN(input, PgJsonbValue::Parse(jsonb, &tree_nodes));
+  }
+
+  bool is_new_node = false;
+  PgJsonbValue out = input;
+
+  auto strtoint = [](absl::string_view s, int64_t* index) -> bool {
+    return absl::StripTrailingAsciiWhitespace(s) == s &&
+           absl::SimpleAtoi(s, index);
+  };
+
+  for (const auto& path_value : path_values) {
+    PgJsonbValue node = out;
+    for (int j = 0; j < path_value.path.size(); ++j) {
+      const std::string& key = path_value.path[j];
+      bool created_new_array = false;
+
+      if (is_new_node) {
+        if (int64_t unused; strtoint(key, &unused)) {
+          node.SetValue(PgJsonbValue::CreateEmptyArray(&tree_nodes));
+          created_new_array = true;
+        } else {
+          node.SetValue(PgJsonbValue::CreateEmptyObject(&tree_nodes));
+        }
+        is_new_node = false;
+      }
+
+      if (node.IsObject()) {
+        if (!node.HasMember(key)) {
+          GOOGLESQL_RETURN_IF_ERROR(node.CreateMemberIfNotExists(key));
+          is_new_node = true;
+        }
+        node = node.GetMemberIfExists(key).value();
+      } else if (node.IsArray()) {
+        int64_t index;
+        if (!strtoint(key, &index)) {
+          return absl::InvalidArgumentError(absl::StrFormat(
+              "path element at position %d is not an integer: \"%s\"", j + 1,
+              key));
+        }
+        if (index < 0) {
+          if (created_new_array) {
+            index = 0;
+          } else {
+            if (index < -node.GetArraySize()) {
+              return absl::InvalidArgumentError(absl::StrFormat(
+                  "path element at position %d is out of range: %d", j + 1,
+                  index));
+            }
+            index = node.GetArraySize() + index;
+          }
+        }
+        while (index >= node.GetArraySize()) {
+          GOOGLESQL_RETURN_IF_ERROR(node.InsertArrayElement(
+              PgJsonbValue::CreateNull(&tree_nodes), index));
+          is_new_node = true;
+        }
+        node = node.GetArrayElementIfExists(index).value();
+      } else {
+        return absl::InvalidArgumentError("cannot replace existing key");
+      }
+    }
+    node.SetValue(path_value.value);
+    is_new_node = false;
+  }
+
+  return CreatePgJsonbValueFromNormalized(out.Serialize());
+}
+
+std::unique_ptr<googlesql::Function> SpanJsonbSetFunction(
+    absl::string_view catalog_name) {
+  const googlesql::Type* gsql_pg_jsonb =
+      postgres_translator::spangres::datatypes::GetPgJsonbType();
+  googlesql::FunctionOptions function_options;
+  function_options.set_supports_safe_error_mode(false);
+  function_options.set_arguments_are_coercible(false);
+  function_options.set_evaluator(PGFunctionEvaluator(EvalSpanJsonbSet));
+
+  return std::make_unique<googlesql::Function>(
+      kSpanJsonbSetFunctionName, catalog_name, googlesql::Function::SCALAR,
+      std::vector<googlesql::FunctionSignature>{googlesql::FunctionSignature{
+          gsql_pg_jsonb,
+          {
+              {gsql_pg_jsonb},
+              {googlesql::ARG_KIND_EXPR_ARBITRARY,
+               googlesql::FunctionArgumentTypeOptions().set_cardinality(
+                   googlesql::FunctionArgumentType::REPEATED)},
+          },
+          /*context_ptr=*/nullptr}},
+      function_options);
+}
+
 std::unique_ptr<googlesql::Function> JsonbSetLaxFunction(
     absl::string_view catalog_name) {
   const googlesql::Type* gsql_pg_jsonb =
@@ -4972,6 +5126,8 @@ SpannerPGFunctions GetSpannerPGFunctions(const std::string& catalog_name) {
   functions.push_back(std::move(jsonb_set_func));
   auto jsonb_set_lax_func = JsonbSetLaxFunction(catalog_name);
   functions.push_back(std::move(jsonb_set_lax_func));
+  auto span_jsonb_set_func = SpanJsonbSetFunction(catalog_name);
+  functions.push_back(std::move(span_jsonb_set_func));
   auto jsonb_contains_func = JsonbContainsFunction(catalog_name);
   functions.push_back(std::move(jsonb_contains_func));
   auto jsonb_contained_func = JsonbContainedFunction(catalog_name);

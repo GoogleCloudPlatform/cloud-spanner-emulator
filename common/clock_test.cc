@@ -20,6 +20,8 @@
 #include "gtest/gtest.h"
 #include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "absl/time/clock.h"
+#include "absl/time/time.h"
 
 namespace google {
 namespace spanner {
@@ -40,6 +42,18 @@ TEST(Clock, ClockReturnsValuesAtMicrosecondGranularity) {
   Clock clock;
   absl::Time t1 = clock.Now();
   EXPECT_EQ(t1, absl::FromUnixMicros(absl::ToUnixMicros(t1)));
+}
+
+TEST(Clock, ClockReturnsToTheSystemClockAfterABurst) {
+  Clock clock;
+  for (int i = 0; i < 20000; ++i) {
+    clock.Now();
+  }
+  absl::SleepFor(absl::Milliseconds(100));
+
+  absl::Time clock_now = clock.Now();
+  absl::Time sys_now = absl::Now();
+  EXPECT_LE(clock_now, sys_now);
 }
 
 }  // namespace

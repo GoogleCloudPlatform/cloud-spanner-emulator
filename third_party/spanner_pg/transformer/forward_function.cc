@@ -422,20 +422,19 @@ ForwardTransformer::BuildGsqlResolvedFunctionCall(
 
   // Lookup if the input funcid is a comparison (=, <=, <, etc). If so, handle
   // by transforming the input argument with GetResolvedExpForComparison.
-  std::optional<Oid> mapped_funcid =
-      catalog_adapter_->GetEngineSystemCatalog()
-          ->GetMappedOidForComparisonFuncid(funcid);
+  std::optional<Oid> mapped_funcid = GetMappedOidForComparisonFuncid(funcid);
   if (mapped_funcid.has_value()) {
     funcid = mapped_funcid.value();
     GOOGLESQL_ASSIGN_OR_RETURN(
         argument_list,
         BuildGsqlFunctionArgumentList(args, expr_transformer_info));
+    // When `use_googlesql_double_comparison_` is enabled, `mapped_funcid` only
+    // has a value for cross-type float4/float8 comparisons (which are remapped
+    // to `F_FLOAT8*`), so any float4 operand must be cast to float8.
     for (std::unique_ptr<googlesql::ResolvedExpr>& arg : argument_list) {
       GOOGLESQL_ASSIGN_OR_RETURN(
-          arg, catalog_adapter_->GetEngineSystemCatalog()
-                  ->GetResolvedExprForComparison(
-                      std::move(arg),
-                      catalog_adapter_->analyzer_options().language()));
+          arg, GetResolvedExprForComparison(std::move(arg),
+                                            /*cast_float_to_double=*/true));
     }
   } else {
     // Build argument list with named and default argument support.
@@ -761,11 +760,13 @@ ForwardTransformer::BuildGsqlResolvedCaseWithValueFunctionCall(
       std::unique_ptr<googlesql::ResolvedExpr> arg_expr,
       BuildGsqlResolvedExpr(*case_expr.arg, expr_transformer_info));
   const googlesql::Type* value_type = arg_expr->type();
+  // PostgreSQL already coerces the CASE expression and WHEN clauses to a
+  // common type (verified by `expr_arg->type() != value_type` below), so
+  // cross-type float4/float8 comparisons cannot occur here.
   GOOGLESQL_ASSIGN_OR_RETURN(
       std::unique_ptr<googlesql::ResolvedExpr> mapped_arg_expr,
-      catalog_adapter_->GetEngineSystemCatalog()->GetResolvedExprForComparison(
-          std::move(arg_expr),
-          catalog_adapter_->analyzer_options().language()));
+      GetResolvedExprForComparison(std::move(arg_expr),
+                                   /*cast_float_to_double=*/false));
   argument_list.push_back(std::move(mapped_arg_expr));
   // The following arguments are pairs of (WHEN ... THEN) values
   for (CaseWhen* case_when : StructList<CaseWhen*>(case_expr.args)) {
@@ -785,11 +786,11 @@ ForwardTransformer::BuildGsqlResolvedCaseWithValueFunctionCall(
       return absl::InvalidArgumentError(
           "CASE expression and WHEN clauses must have the same type");
     }
+    // `expr_arg` and `arg_expr` are guaranteed to have the same type, so
+    // cross-type float4/float8 coercion is not needed.
     GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<googlesql::ResolvedExpr> mapped_expr_arg,
-                     catalog_adapter_->GetEngineSystemCatalog()
-                         ->GetResolvedExprForComparison(
-                             std::move(expr_arg),
-                             catalog_adapter_->analyzer_options().language()));
+                     GetResolvedExprForComparison(
+                         std::move(expr_arg), /*cast_float_to_double=*/false));
     argument_list.push_back(std::move(mapped_expr_arg));
 
     // Transform the THEN value and add it to the argument list.
@@ -1111,16 +1112,24 @@ ForwardTransformer::BuildGsqlInFunctionCall(
   Expr* scalar_node = PostgresCastToExpr(linitial(scalar_array.args));
   GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<googlesql::ResolvedExpr> scalar_arg,
                    BuildGsqlResolvedExpr(*scalar_node, expr_transformer_info));
-  GOOGLESQL_ASSIGN_OR_RETURN(
-      std::unique_ptr<googlesql::ResolvedExpr> mapped_scalar_arg,
-      catalog_adapter_->GetEngineSystemCatalog()->GetResolvedExprForComparison(
-          std::move(scalar_arg),
-          catalog_adapter_->analyzer_options().language()));
+  // Unlike OpExpr, ScalarArrayOpExpr unconditionally passes its operands
+  // through `GetResolvedExprForComparison` for both same-type and cross-type
+  // comparisons before resolving `$in` by `PostgresExprIdentifier`. When
+  // `use_googlesql_double_comparison_` is enabled,
+  // `GetMappedOidForComparisonFuncid` only returns a value for cross-type
+  // float4/float8 comparisons, indicating that float4 operands must be cast to
+  // float8 to match the `$in` signature.
+  bool cast_float_to_double =
+      GetMappedOidForComparisonFuncid(scalar_array.opfuncid).has_value();
+  GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<googlesql::ResolvedExpr> mapped_scalar_arg,
+                   GetResolvedExprForComparison(std::move(scalar_arg),
+                                                cast_float_to_double));
   argument_list.push_back(std::move(mapped_scalar_arg));
 
-  GOOGLESQL_ASSIGN_OR_RETURN(bool array_op_arg_is_array,
-                   AppendGsqlInFunctionCallArrayArg(
-                       array_argument, expr_transformer_info, argument_list));
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      bool array_op_arg_is_array,
+      AppendGsqlInFunctionCallArrayArg(array_argument, expr_transformer_info,
+                                       cast_float_to_double, argument_list));
   GOOGLESQL_RET_CHECK(argument_list.size() > 1);
 
   // TODO: b/322384712 - Remove the following two if statements after
@@ -1203,11 +1212,16 @@ ForwardTransformer::BuildGsqlAllFunctionCall(
   Expr* scalar_node = PostgresCastToExpr(linitial(scalar_array.args));
   GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<googlesql::ResolvedExpr> scalar_arg,
                    BuildGsqlResolvedExpr(*scalar_node, expr_transformer_info));
-  GOOGLESQL_ASSIGN_OR_RETURN(
-      std::unique_ptr<googlesql::ResolvedExpr> mapped_scalar_arg,
-      catalog_adapter_->GetEngineSystemCatalog()->GetResolvedExprForComparison(
-          std::move(scalar_arg),
-          catalog_adapter_->analyzer_options().language()));
+  // Both same-type and cross-type ALL expressions unconditionally call
+  // `GetResolvedExprForComparison`. When `use_googlesql_double_comparison_` is
+  // enabled, `GetMappedOidForComparisonFuncid` only returns a value for
+  // cross-type float4/float8 comparisons, indicating that float4 operands must
+  // be cast to float8.
+  bool cast_float_to_double =
+      GetMappedOidForComparisonFuncid(scalar_array.opfuncid).has_value();
+  GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<googlesql::ResolvedExpr> mapped_scalar_arg,
+                   GetResolvedExprForComparison(std::move(scalar_arg),
+                                                cast_float_to_double));
   argument_list.push_back(std::move(mapped_scalar_arg));
 
   GOOGLESQL_RETURN_IF_ERROR(AppendGsqlAllFunctionCallArrayArg(
@@ -1273,19 +1287,6 @@ absl::Status ForwardTransformer::AppendGsqlAllFunctionCallArrayArg(
       return absl::InvalidArgumentError(
           "Multi-dimensional arrays are not supported.");
     }
-    std::vector<std::unique_ptr<googlesql::ResolvedExpr>> array_elements;
-    for (Expr* array_element : StructList<Expr*>(array_node->elements)) {
-      GOOGLESQL_ASSIGN_OR_RETURN(
-          std::unique_ptr<googlesql::ResolvedExpr> expr_arg,
-          BuildGsqlResolvedExpr(*array_element, expr_transformer_info));
-      GOOGLESQL_ASSIGN_OR_RETURN(
-          std::unique_ptr<googlesql::ResolvedExpr> mapped_expr_arg,
-          catalog_adapter_->GetEngineSystemCatalog()
-              ->GetResolvedExprForComparison(
-                  std::move(expr_arg),
-                  catalog_adapter_->analyzer_options().language()));
-      array_elements.push_back(std::move(mapped_expr_arg));
-    }
     GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<googlesql::ResolvedExpr> array_arg,
                      BuildGsqlResolvedExpr(*array_node, expr_transformer_info));
     argument_list.push_back(std::move(array_arg));
@@ -1295,6 +1296,7 @@ absl::Status ForwardTransformer::AppendGsqlAllFunctionCallArrayArg(
 
 absl::StatusOr<bool> ForwardTransformer::AppendGsqlInFunctionCallArrayArg(
     void* array_argument, ExprTransformerInfo* expr_transformer_info,
+    bool cast_float_to_double,
     std::vector<std::unique_ptr<googlesql::ResolvedExpr>>& argument_list) {
   GOOGLESQL_RET_CHECK_EQ(argument_list.size(), 1)
       << "The scalar argument should be added to argument_list before the "
@@ -1330,12 +1332,9 @@ absl::StatusOr<bool> ForwardTransformer::AppendGsqlInFunctionCallArrayArg(
       GOOGLESQL_ASSIGN_OR_RETURN(
           std::unique_ptr<googlesql::ResolvedExpr> expr_arg,
           BuildGsqlResolvedExpr(*array_element, expr_transformer_info));
-      GOOGLESQL_ASSIGN_OR_RETURN(
-          std::unique_ptr<googlesql::ResolvedExpr> mapped_expr_arg,
-          catalog_adapter_->GetEngineSystemCatalog()
-              ->GetResolvedExprForComparison(
-                  std::move(expr_arg),
-                  catalog_adapter_->analyzer_options().language()));
+      GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<googlesql::ResolvedExpr> mapped_expr_arg,
+                       GetResolvedExprForComparison(std::move(expr_arg),
+                                                    cast_float_to_double));
       argument_list.push_back(std::move(mapped_expr_arg));
     }
     // Handle empty array e.g., value =ANY(array[])
@@ -1509,14 +1508,21 @@ ForwardTransformer::BuildGsqlSpanJsonbSetFunctionCall(
   GOOGLESQL_ASSIGN_OR_RETURN(const googlesql::Function* jsonb_set_fn,
                    catalog_adapter_->GetEngineSystemCatalog()
                        ->builtin_function_catalog()
-                       ->GetFunction("spanner.span_jsonb_set"));
+                       ->GetFunction("span_jsonb_set"));
   if (jsonb_set_fn == nullptr) {
     return absl::UnimplementedError(
         "UPDATEs with jsonb subfields are not supported.");
   }
   GOOGLESQL_RET_CHECK_EQ(jsonb_set_fn->NumSignatures(), 1);
+  std::vector<googlesql::InputArgumentType> input_argument_types =
+      GetInputArgumentTypes(argument_list);
+  std::unique_ptr<googlesql::FunctionSignature> result_signature;
+  GOOGLESQL_RET_CHECK(catalog_adapter_->GetEngineSystemCatalog()->SignatureMatches(
+      input_argument_types, *jsonb_set_fn->GetSignature(0), &result_signature,
+      catalog_adapter_->analyzer_options().language()));
+  GOOGLESQL_RET_CHECK(result_signature->IsConcrete());
   return MakeResolvedFunctionCall(
-      FunctionAndSignature(jsonb_set_fn, *jsonb_set_fn->GetSignature(0)),
+      FunctionAndSignature(jsonb_set_fn, *result_signature),
       std::move(argument_list));
 }
 
@@ -1701,12 +1707,17 @@ ForwardTransformer::BuildGsqlIsDistinctFromFunctionCall(
   GOOGLESQL_ASSIGN_OR_RETURN(argument_list,
                    BuildGsqlFunctionArgumentList(
                        *proc_proto, distinct_expr.args, expr_transformer_info));
+  // Both same-type and cross-type IS DISTINCT FROM expressions unconditionally
+  // call `GetResolvedExprForComparison` before resolving `$is_distinct_from`
+  // by `PostgresExprIdentifier`. When `use_googlesql_double_comparison_` is
+  // enabled, `GetMappedOidForComparisonFuncid` only returns a value for
+  // cross-type float4/float8 comparisons, indicating that the float4 operand
+  // must be cast to float8 so both arguments have the same type.
+  const bool cast_float_to_double =
+      GetMappedOidForComparisonFuncid(distinct_expr.opfuncid).has_value();
   for (std::unique_ptr<googlesql::ResolvedExpr>& arg : argument_list) {
-    GOOGLESQL_ASSIGN_OR_RETURN(arg,
-                     catalog_adapter_->GetEngineSystemCatalog()
-                         ->GetResolvedExprForComparison(
-                             std::move(arg),
-                             catalog_adapter_->analyzer_options().language()));
+    GOOGLESQL_ASSIGN_OR_RETURN(arg, GetResolvedExprForComparison(std::move(arg),
+                                                       cast_float_to_double));
   }
 
   std::vector<googlesql::InputArgumentType> input_argument_types =

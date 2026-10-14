@@ -199,6 +199,12 @@ parameters,scope_name,YES,character varying
 parameters,maximum_cardinality,YES,bigint
 parameters,dtd_identifier,YES,character varying
 parameters,parameter_default,YES,character varying
+placement_options,placement_name,YES,character varying
+placement_options,option_name,YES,character varying
+placement_options,option_type,YES,character varying
+placement_options,option_value,YES,character varying
+placements,placement_name,YES,character varying
+placements,is_default,YES,character varying
 referential_constraints,constraint_catalog,YES,character varying
 referential_constraints,constraint_schema,YES,character varying
 referential_constraints,constraint_name,YES,character varying

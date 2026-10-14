@@ -123,11 +123,30 @@ struct TranslationOptions {
   // enable_change_streams_per_placement_tvf_option allows the
   // per_placement_tvf option for CREATE CHANGE STREAM.
   bool enable_change_streams_per_placement_tvf_option = false;
+  // enable_data_placement allows creating/updating/deleting placement.
+  bool enable_data_placement = false;
+  // enable_opt_in_dataplacement_preview allows database option
+  // opt_in_dataplacement_preview.
+  bool enable_opt_in_dataplacement_preview = false;
+  // enable_per_placement_routing_metadata allows each PLACEMENT to have its
+  // own per-placement routing metadata, such as _rangemap(x) and
+  // _queryrootV2(x).
+  bool enable_per_placement_routing_metadata = false;
+  // enable_auto_managed_root_placement_table_name allows database option
+  // auto_managed_root_placement_table_name.
+  bool enable_auto_managed_root_placement_table_name = false;
   // This enables support for search index in Spangres.
   bool enable_search_index = true;
   // enable_locality_groups allows create/drop/alter locality groups.
   bool enable_locality_groups = true;
-  // TODO: expose when queue is implemented.
+  // If true, CREATE QUEUE statement is supported.
+  bool enable_queue = false;
+  // enable_queues_per_placement_tvf_option allows the per_placement_tvf
+  // option for CREATE QUEUE.
+  bool enable_queues_per_placement_tvf_option = false;
+  // enable_queue_traffic_control_options allows the `disable_send` and
+  // `disable_delivery` options for CREATE QUEUE.
+  bool enable_queue_traffic_control_options = false;
   bool enable_columnar_policy = false;
   // enable_alter_index allows translation of <ALTER INDEX>.
   bool enable_alter_index = true;

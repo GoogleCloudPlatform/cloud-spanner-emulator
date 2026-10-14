@@ -103,6 +103,10 @@ class ReadWriteTransaction : public RowReader, public RowWriter {
 
   absl::Status Invalidate() ABSL_LOCKS_EXCLUDED(mu_);
 
+  // Applies the GuardedCall() state checks before a query is executed in this
+  // transaction. The query itself cannot run inside GuardedCall().
+  absl::Status PrepareForQuery() ABSL_LOCKS_EXCLUDED(mu_);
+
   absl::StatusOr<absl::Time> GetCommitTimestamp() ABSL_LOCKS_EXCLUDED(mu_);
 
   const State state() const ABSL_LOCKS_EXCLUDED(mu_) {

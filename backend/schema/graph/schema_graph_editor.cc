@@ -86,14 +86,16 @@ absl::StatusOr<const SchemaNode*> SchemaGraphEditor::Clone(
     return node;
   }
 
-  const SchemaNode* ret = nullptr;
-  NodeKind kind = GetNodeKind(node);
   const SchemaNode* clone = FindClone(node);
   if (clone != nullptr) {
     GOOGLESQL_VLOG(5) << std::string(depth_, ' ') << "Found already visited "
             << NodeKindString(clone) << " node :" << clone->DebugString();
-    ret = clone;
-  } else if (kind == kAdded || kind == kEdited || kind == kCloned) {
+    return clone;
+  }
+
+  const SchemaNode* ret = nullptr;
+  NodeKind kind = GetNodeKind(node);
+  if (kind == kAdded || kind == kEdited || kind == kCloned) {
     SchemaNode* mutable_node = const_cast<SchemaNode*>(node);
     // When called with non-original nodes, clone_map_ acts as a 'visited' set.
     clone_map_[node] = node;
@@ -133,12 +135,7 @@ absl::Status SchemaGraphEditor::AddNode(
 }
 
 bool SchemaGraphEditor::IsOriginalNode(const SchemaNode* node) const {
-  for (const auto* schema_node : original_graph_->GetSchemaNodes()) {
-    if (schema_node == node) {
-      return true;
-    }
-  }
-  return false;
+  return original_nodes_.contains(node);
 }
 
 absl::StatusOr<std::unique_ptr<SchemaGraph>>

@@ -49,9 +49,6 @@ class Clock {
   // Mutex to guard state below.
   absl::Mutex mu_;
 
-  // The last value we got from the system clock.
-  absl::Time last_system_time_ ABSL_GUARDED_BY(mu_);
-
   // The last value we handed out in a call to Clock::Now().
   absl::Time last_dispensed_time_ ABSL_GUARDED_BY(mu_);
 };

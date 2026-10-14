@@ -144,6 +144,7 @@ SchemaChangeContext Database::GetSchemaChangeContext() {
   return SchemaChangeContext{
       .type_factory = type_factory_.get(),
       .table_id_generator = &table_id_generator_,
+      .queue_id_generator = &queue_id_generator_,
       .column_id_generator = &column_id_generator_,
       .storage = storage_.get(),
       .pg_oid_assigner = pg_oid_assigner_.get(),

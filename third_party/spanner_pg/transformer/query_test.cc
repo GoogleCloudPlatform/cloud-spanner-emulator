@@ -647,6 +647,17 @@ INSTANTIATE_TEST_SUITE_P(
         TransformTestCase(
             "DeleteFromTableWithValue",
             "DELETE from keyvalue AS keyvalue where value = 'abc'"),
+        TransformTestCase(
+            "DeleteFromTableWithAssertRowsModified",
+            "DELETE FROM keyvalue WHERE key = 1 ASSERT_ROWS_MODIFIED 1")
+            .SetPhases(PlanningPhase::kTransform),
+        TransformTestCase(
+            "DeleteFromTableWithAssertRowsModifiedParameter",
+            "DELETE FROM keyvalue WHERE key = 1 ASSERT_ROWS_MODIFIED $1")
+            .SetGsqlQuery(
+                "DELETE FROM keyvalue WHERE key = 1 ASSERT_ROWS_MODIFIED @p1")
+            .SetParameterTypes({{"p1", googlesql::types::Int64Type()}})
+            .SetPhases(PlanningPhase::kTransform),
         TransformTestCase("SelectFromATableRoundTrip",
                           "select key as k, value as v from keyvalue"),
         TransformTestCase("SelectTableAlias", "select key from keyvalue kv"),
@@ -1772,6 +1783,44 @@ TEST_F(QueryTransformerTest, UnsupportedQueryFields) {
                HasSubstr("WITH CHECK options are not supported")));
   query->withCheckOptions = nullptr;
 }
+
+TEST_F(QueryTransformerTest, CorrelatedSubqueryWithHavingAggregate) {
+  const std::vector<std::string> queries = {
+      // Correlated Var in SELECT list, HAVING with aggregate on local Var.
+      "SELECT count(*) FROM keyvalue v WHERE EXISTS "
+      "(SELECT v.key FROM \"KeyValue2\" u HAVING count(u.key) > 1)",
+      // Correlated Var in SELECT list, GROUP BY and HAVING aggregate on local
+      // Var with same (varno, varattno).
+      "SELECT count(*) FROM keyvalue v WHERE EXISTS "
+      "(SELECT v.key FROM \"KeyValue2\" u GROUP BY u.key "
+      "HAVING count(u.key) > 1)",
+      // Correlated Var in SELECT list, GROUP BY and HAVING non-aggregate on
+      // local Var with same (varno, varattno).
+      "SELECT count(*) FROM keyvalue v WHERE EXISTS "
+      "(SELECT v.key FROM \"KeyValue2\" u GROUP BY u.key HAVING u.key > 1)",
+      // Correlated Var in SELECT list, ORDER BY aggregate on local Var.
+      "SELECT count(*) FROM keyvalue v WHERE EXISTS "
+      "(SELECT v.key FROM \"KeyValue2\" u ORDER BY count(u.key))",
+      // Correlated Var in SELECT list, GROUP BY and ORDER BY local Var.
+      "SELECT count(*) FROM keyvalue v WHERE EXISTS "
+      "(SELECT v.key FROM \"KeyValue2\" u GROUP BY u.key ORDER BY u.key)",
+      // Multi-level correlated Var (varlevelsup == 2) in SELECT list with
+      // HAVING aggregate on local Var.
+      "SELECT count(*) FROM keyvalue v WHERE EXISTS "
+      "(SELECT 1 FROM \"KeyValue2\" w WHERE EXISTS "
+      "(SELECT v.key FROM keyvalue u HAVING count(u.key) > 1))",
+  };
+
+  for (const std::string& sql : queries) {
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+        std::unique_ptr<const ResolvedStatement> transformed_statement,
+        ForwardTransformQuery(sql, analyzer_options_));
+    googlesql::Validator validator(analyzer_options_.language());
+    GOOGLESQL_ASSERT_OK(validator.ValidateResolvedStatement(transformed_statement.get()))
+        << "Failed for SQL: " << sql;
+  }
+}
+
 }  // namespace
 }  // namespace postgres_translator::spangres::test
 

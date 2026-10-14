@@ -96,6 +96,105 @@ TEST_P(DatabaseOptionTest, ValidReadLeaseRegionsOptionName) {
   }
 }
 
+TEST_P(DatabaseOptionTest, ValidPerPlacementRoutingMetadataOption) {
+  std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
+                         CreateSchema({R"(
+      ALTER DATABASE db SET spanner.per_placement_routing_metadata = TRUE
+                                      )"},
+                                      /*proto_descriptor_bytes=*/"",
+                                      /*dialect=*/POSTGRESQL,
+                                      /*use_gsql_to_pg_translation=*/false));
+  } else {
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(
+      ALTER DATABASE db SET OPTIONS (per_placement_routing_metadata = TRUE)
+        )"}));
+  }
+}
+
+TEST_P(DatabaseOptionTest,
+       CannotModifyPerPlacementRoutingMetadataWithExistingPlacements) {
+  if (GetParam() == POSTGRESQL) {
+    EXPECT_THAT(
+        CreateSchema(
+            {R"(CREATE PLACEMENT p1 WITH (instance_partition = 'us-central1'))",
+             R"(ALTER DATABASE db SET spanner.per_placement_routing_metadata = FALSE)"},
+            /*proto_descriptor_bytes=*/"",
+            /*dialect=*/POSTGRESQL,
+            /*use_gsql_to_pg_translation=*/false),
+        StatusIs(absl::StatusCode::kFailedPrecondition,
+                 HasSubstr("Cloud Placements still present")));
+  } else {
+    EXPECT_THAT(
+        CreateSchema(
+            {R"(CREATE PLACEMENT p1 OPTIONS (instance_partition = 'us-central1'))",
+             R"(ALTER DATABASE db SET OPTIONS (per_placement_routing_metadata = FALSE))"}),
+        StatusIs(
+            absl::StatusCode::kFailedPrecondition,
+            "The per_placement_routing_metadata database option cannot be "
+            "toggled while there are Cloud Placements still present. Please "
+            "run DROP PLACEMENT on all Cloud Placements before changing the "
+            "value of this option."));
+  }
+}
+
+TEST_P(DatabaseOptionTest,
+       CanModifyPerPlacementRoutingMetadataAfterDroppingPlacements) {
+  std::unique_ptr<const Schema> schema;
+  if (GetParam() == POSTGRESQL) {
+    // 1. Create a schema with a placement.
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(CREATE PLACEMENT p1 WITH
+                                      (instance_partition = 'us-central1'))"},
+                                              "", POSTGRESQL, false));
+
+    // 2. Try to change the option, which should fail because a placement
+    // exists.
+    EXPECT_THAT(
+        UpdateSchema(
+            schema.get(),
+            {R"(ALTER DATABASE db SET spanner.per_placement_routing_metadata = TRUE)"},
+            "", POSTGRESQL, false),
+        StatusIs(absl::StatusCode::kFailedPrecondition,
+                 HasSubstr("Cloud Placements still present")));
+
+    // 3. Drop the placement.
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+        schema, UpdateSchema(schema.get(), {R"(DROP PLACEMENT p1)"}, "",
+                             POSTGRESQL, false));
+
+    // 4. Change the option, which should now succeed because no placements
+    // exist.
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+        schema,
+        UpdateSchema(
+            schema.get(),
+            {R"(ALTER DATABASE db SET spanner.per_placement_routing_metadata = TRUE)"},
+            "", POSTGRESQL, false));
+  } else {
+    // 1. Create a schema with a placement.
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema, CreateSchema({R"(CREATE PLACEMENT p1 OPTIONS
+                                      (instance_partition = 'us-central1'))"}));
+
+    // 2. Try to change the option, which should fail because a placement
+    // exists.
+    EXPECT_THAT(UpdateSchema(schema.get(), {R"(ALTER DATABASE db SET OPTIONS
+                          (per_placement_routing_metadata = TRUE))"}),
+                StatusIs(absl::StatusCode::kFailedPrecondition,
+                         HasSubstr("Cloud Placements still present")));
+
+    // 3. Drop the placement.
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(schema,
+                         UpdateSchema(schema.get(), {R"(DROP PLACEMENT p1)"}));
+
+    // 4. Change the option, which should now succeed because no placements
+    // exist.
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+        schema, UpdateSchema(schema.get(), {R"(ALTER DATABASE db SET OPTIONS
+                          (per_placement_routing_metadata = TRUE))"}));
+  }
+}
+
 TEST_P(DatabaseOptionTest, ValidDefaultSequenceKindOptionName) {
   std::unique_ptr<const Schema> schema;
   if (GetParam() == POSTGRESQL) {

@@ -41,6 +41,8 @@ enum class MutationOpType {
   kInsertOrUpdate,
   kReplace,
   kDelete,
+  kSend,
+  kAck,
 };
 
 // MutationOp represents an operation within a mutation.
@@ -57,8 +59,11 @@ struct MutationOp {
         origin_is_dml(origin_is_dml) {}
 
   MutationOp(MutationOpType type, const std::string& table,
-             const KeySet& key_set)
-      : type(type), table(table), key_set(key_set) {}
+             const KeySet& key_set, bool origin_is_dml = false)
+      : type(type),
+        table(table),
+        key_set(key_set),
+        origin_is_dml(origin_is_dml) {}
 
   std::string DebugString() const;
 
@@ -68,18 +73,21 @@ struct MutationOp {
   // The table on which the mutation operation operates.
   std::string table;
 
-  // Mutation data for kInsert, kUpdate, kInsertOrUpdate, and kReplace.
+  // Mutation data for kInsert, kUpdate, kInsertOrUpdate, kReplace, and kSend.
   std::vector<std::string> columns;
   std::vector<ValueList> rows;
 
   // Map tracking fallback values evaluated by GoogleSQL
   std::map<std::string, googlesql::Value> fallback_default_values;
 
-  // Mutation data for kDelete.
+  // Mutation data for kDelete and kAck.
   KeySet key_set;
 
   // Whether the mutation was built from a DML statement or not.
   bool origin_is_dml = false;
+
+  // Whether to ignore NOT_FOUND error for Ack mutation op.
+  bool ignore_not_found = false;
 };
 
 // Streams a debug string representation of MutationOp to out.
@@ -99,7 +107,16 @@ class Mutation {
                   std::vector<ValueList> values, bool origin_is_dml = false);
 
   // Adds a Delete MutationOp to this Mutation.
-  void AddDeleteOp(const std::string& table, const KeySet& key_set);
+  void AddDeleteOp(const std::string& table, const KeySet& key_set,
+                   bool origin_is_dml = false);
+
+  // Adds a Send MutationOp to this Mutation.
+  void AddSendOp(const std::string& table, std::vector<std::string> columns,
+                 std::vector<ValueList> values);
+
+  // Adds an Ack MutationOp to this Mutation.
+  void AddAckOp(const std::string& table, const KeySet& key_set,
+                bool ignore_not_found = false);
 
   // Sets fallback default values on the most recently added op.
   void SetLastOpFallbackDefaultValues(

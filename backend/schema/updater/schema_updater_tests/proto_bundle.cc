@@ -27,6 +27,7 @@
 #include "absl/status/statusor.h"
 #include "absl/types/span.h"
 #include "backend/schema/updater/schema_updater_tests/base.h"
+#include "common/errors.h"
 #include "tests/common/test.pb.h"
 #include "tests/common/test_2.pb.h"
 #include "googlesql/base/status_macros.h"
@@ -501,6 +502,37 @@ TEST_P(SchemaUpdaterTest,
   )sql"}),
               StatusIs(absl::StatusCode::kInternal,
                        HasSubstr("Unrecognized ddl::ColumnDefinition:")));
+}
+
+TEST_P(SchemaUpdaterTest,
+       CreateVectorIndexMultipleKeyColumnsNonLeadingProtoError) {
+  if (GetParam() == POSTGRESQL) GTEST_SKIP();
+  EXPECT_THAT(CreateSchema(
+                  {
+                      R"sql(
+                CREATE PROTO BUNDLE (
+                  emulator.tests.common.Simple,
+                )
+              )sql",
+                      R"sql(
+                CREATE TABLE Products(
+                  id STRING(64) NOT NULL,
+                  embedding ARRAY<FLOAT32>(vector_length=>128),
+                  proto_col emulator.tests.common.Simple,
+                ) PRIMARY KEY(id)
+              )sql",
+                      R"sql(
+                CREATE VECTOR INDEX ProductsVectorAndProtoIndex
+                ON Products(embedding, proto_col)
+                WHERE embedding IS NOT NULL
+                OPTIONS(distance_type='COSINE', tree_depth=2, num_leaves=1000)
+              )sql"},
+                  read_descriptors()),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr(error::VectorIndexKeyRefsUnsupportedColumn(
+                                     "ProductsVectorAndProtoIndex", "proto_col",
+                                     "emulator.tests.common.Simple")
+                                     .message())));
 }
 
 }  // namespace

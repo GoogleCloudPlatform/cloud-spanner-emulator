@@ -319,22 +319,22 @@ date2j(int year, int month, int day)
 	int			julian;
 	int			century;
 
+	// SPANGRES BEGIN
+	// By using the pg_*_s32_overflow functions, if there is an overflow the
+	// result becomes negative, which indicates to PostgreSQL that the date is
+	// out-of-range.
 	if (month > 2)
 	{
 		month += 1;
-		year += 4800;
+		PG_ADD_S32_RETURN_IF_OVERFLOW(year, 4800, year);
 	}
 	else
 	{
 		month += 13;
-		year += 4799;
+		PG_ADD_S32_RETURN_IF_OVERFLOW(year, 4799, year);
 	}
 
 	century = year / 100;
-	// SPANGRES BEGIN
-	// By using the pg_*_s32_overflow functions, if there is an overflow the 
-	// result becomes negative, which indicates to PostgreSQL that the date is 
-	// out-of-range.
 
 	// Could not find a test case that overflows these yet, so leaving the
 	// calculation as is for now.

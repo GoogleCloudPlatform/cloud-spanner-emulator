@@ -48,7 +48,8 @@ class QueryableTable : public googlesql::Table {
       const backend::Table* table, RowReader* reader,
       std::optional<const googlesql::AnalyzerOptions> options = std::nullopt,
       googlesql::Catalog* catalog = nullptr,
-      googlesql::TypeFactory* type_factory = nullptr, bool is_synonym = false);
+      googlesql::TypeFactory* type_factory = nullptr, bool is_synonym = false,
+      bool is_pg = false);
 
   std::string Name() const override {
     return std::string(SDLObjectName::GetInSchemaName(SynonymOrName()));

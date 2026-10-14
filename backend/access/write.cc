@@ -39,8 +39,24 @@ void Mutation::AddWriteOp(MutationOpType type, const std::string& table,
                                std::move(values), origin_is_dml));
 }
 
-void Mutation::AddDeleteOp(const std::string& table, const KeySet& key_set) {
-  ops_.emplace_back(MutationOp(MutationOpType::kDelete, table, key_set));
+void Mutation::AddDeleteOp(const std::string& table, const KeySet& key_set,
+                           bool origin_is_dml) {
+  ops_.emplace_back(
+      MutationOp(MutationOpType::kDelete, table, key_set, origin_is_dml));
+}
+
+void Mutation::AddSendOp(const std::string& table,
+                         std::vector<std::string> columns,
+                         std::vector<ValueList> values) {
+  ops_.emplace_back(MutationOp(MutationOpType::kSend, table, std::move(columns),
+                               std::move(values), /*origin_is_dml=*/false));
+}
+
+void Mutation::AddAckOp(const std::string& table, const KeySet& key_set,
+                        bool ignore_not_found) {
+  MutationOp op(MutationOpType::kAck, table, key_set);
+  op.ignore_not_found = ignore_not_found;
+  ops_.emplace_back(std::move(op));
 }
 
 void Mutation::SetLastOpFallbackDefaultValues(
@@ -73,12 +89,18 @@ std::ostream& operator<<(std::ostream& out, const MutationOp& op) {
     case MutationOpType::kDelete:
       out << "Type   : kDelete";
       break;
+    case MutationOpType::kSend:
+      out << "Type   : kSend";
+      break;
+    case MutationOpType::kAck:
+      out << "Type   : kAck";
+      break;
   }
 
   out << "\n";
   out << "Table  : '" << op.table << "'\n";
 
-  if (op.type == MutationOpType::kDelete) {
+  if (op.type == MutationOpType::kDelete || op.type == MutationOpType::kAck) {
     out << "KeySet : " << op.key_set << "\n";
     return out;
   }

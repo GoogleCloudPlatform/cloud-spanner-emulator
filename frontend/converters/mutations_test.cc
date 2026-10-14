@@ -35,6 +35,7 @@
 #include "tests/common/proto_matchers.h"
 #include "tests/common/row_cursor.h"
 #include "tests/common/schema_constructor.h"
+#include "google/protobuf/repeated_ptr_field.h"
 #include "absl/status/status.h"
 
 namespace google {
@@ -171,6 +172,79 @@ TEST_F(AccessProtosTest, CannotCreateMutationFromInvalidProto) {
   *mutation_pb.Add()->mutable_insert() = invalid_column;
 
   EXPECT_THAT(MutationFromProto(*schema_.get(), mutation_pb, &mutation),
+              StatusIs(absl::StatusCode::kNotFound));
+}
+
+TEST_F(AccessProtosTest, QueueMutationFromProto) {
+  std::unique_ptr<const backend::Schema> queue_schema =
+      test::CreateSchemaWithOneQueue(type_factory_.get());
+
+  google::protobuf::RepeatedPtrField<google::spanner::v1::Mutation> mutation_pb;
+  *mutation_pb.Add()->mutable_send() = PARSE_TEXT_PROTO(R"pb(
+    queue: "myqueue"
+    key { values { string_value: "123" } }
+    payload { string_value: "b25l" }
+    deliver_time { seconds: 1700000000 }
+  )pb");
+  *mutation_pb.Add()->mutable_ack() = PARSE_TEXT_PROTO(R"pb(
+    queue: "myqueue"
+    key { values { string_value: "123" } }
+  )pb");
+  *mutation_pb.Add()->mutable_ack() = PARSE_TEXT_PROTO(R"pb(
+    queue: "myqueue"
+    key { values { string_value: "456" } }
+    ignore_not_found: true
+  )pb");
+
+  backend::Mutation mutation;
+  GOOGLESQL_EXPECT_OK(MutationFromProto(*queue_schema, mutation_pb, &mutation));
+  ASSERT_EQ(mutation.ops().size(), 3);
+  EXPECT_EQ(mutation.ops()[0].type, backend::MutationOpType::kSend);
+  EXPECT_EQ(mutation.ops()[0].table, "myqueue");
+  EXPECT_EQ(mutation.ops()[1].type, backend::MutationOpType::kAck);
+  EXPECT_EQ(mutation.ops()[1].table, "myqueue");
+  EXPECT_FALSE(mutation.ops()[1].ignore_not_found);
+  EXPECT_EQ(mutation.ops()[2].type, backend::MutationOpType::kAck);
+  EXPECT_EQ(mutation.ops()[2].table, "myqueue");
+  EXPECT_TRUE(mutation.ops()[2].ignore_not_found);
+
+  // Insert, Update, and Delete mutations are not supported on queues and must
+  // return TableNotFound (kNotFound).
+  google::protobuf::RepeatedPtrField<google::spanner::v1::Mutation> insert_pb;
+  *insert_pb.Add()->mutable_insert() = PARSE_TEXT_PROTO(R"pb(
+    table: "myqueue"
+    columns: "id"
+    columns: "Payload"
+    values {
+      values { string_value: "123" }
+      values { string_value: "b25l" }
+    }
+  )pb");
+  backend::Mutation insert_mutation;
+  EXPECT_THAT(MutationFromProto(*queue_schema, insert_pb, &insert_mutation),
+              StatusIs(absl::StatusCode::kNotFound));
+
+  google::protobuf::RepeatedPtrField<google::spanner::v1::Mutation> update_pb;
+  *update_pb.Add()->mutable_update() = PARSE_TEXT_PROTO(R"pb(
+    table: "myqueue"
+    columns: "id"
+    columns: "Payload"
+    values {
+      values { string_value: "123" }
+      values { string_value: "dXBkYXRlZA==" }
+    }
+  )pb");
+  backend::Mutation update_mutation;
+  EXPECT_THAT(MutationFromProto(*queue_schema, update_pb, &update_mutation),
+              StatusIs(absl::StatusCode::kNotFound));
+
+  google::protobuf::RepeatedPtrField<google::spanner::v1::Mutation> delete_pb;
+  *delete_pb.Add()->mutable_delete_() = PARSE_TEXT_PROTO(R"pb(
+    table: "myqueue"
+    key_set { keys { values { string_value: "123" } } }
+  )pb");
+  backend::Mutation delete_mutation;
+  EXPECT_THAT(MutationFromProto(*queue_schema, delete_pb, &delete_mutation),
               StatusIs(absl::StatusCode::kNotFound));
 }
 

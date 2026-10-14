@@ -47,6 +47,7 @@ namespace backend {
 class ForeignKey;
 class Index;
 class ChangeStream;
+class Queue;
 
 // Table represents a table in a database.
 class Table : public SchemaNode {
@@ -72,6 +73,9 @@ class Table : public SchemaNode {
   // Returns the child tables of this table.
   absl::Span<const Table* const> children() const { return child_tables_; }
 
+  // Returns the child queues of this table.
+  absl::Span<const Queue* const> child_queues() const { return child_queues_; }
+
   // Returns the parent table of this table, or nullptr if this table does not
   // have a parent table.
   const Table* parent() const { return parent_table_; }
@@ -84,6 +88,9 @@ class Table : public SchemaNode {
   const ChangeStream* owner_change_stream() const {
     return owner_change_stream_;
   }
+
+  // Returns the Queue that owns this table if one exists.
+  const Queue* owner_queue() const { return owner_queue_; }
 
   // Returns the locality group this column belongs to.
   const LocalityGroup* locality_group() const { return locality_group_; }
@@ -163,7 +170,8 @@ class Table : public SchemaNode {
   // Returns true if the Table is publicly visible, i.e. can be accessed
   // directly by a user request.
   bool is_public() const {
-    return owner_change_stream_ == nullptr && owner_index_ == nullptr;
+    return (owner_change_stream_ == nullptr && owner_index_ == nullptr &&
+            owner_queue_ == nullptr);
   }
 
   std::optional<uint32_t> interleave_in_parent_postgresql_oid() const {
@@ -227,11 +235,16 @@ class Table : public SchemaNode {
   // <key_col1>, <key_col2>, ..., <key_coln>
   std::string PrimaryKeyDebugString() const;
 
+  // Returns the theoretical maximum total amount of data in bytes that can be
+  // stored in all non-key columns of this table.
+  int64_t GetTotalNonKeyColumnSizeBytes() const;
+
   // SchemaNode interface implementation.
   // ------------------------------------
 
   std::optional<SchemaNameInfo> GetSchemaNameInfo() const override {
-    return SchemaNameInfo{.name = name_, .kind = "Table", .global = true};
+    return SchemaNameInfo{
+        .name = name_, .kind = "Table", .global = is_public()};
   }
 
   absl::Status Validate(SchemaValidationContext* context) const override;
@@ -309,6 +322,9 @@ class Table : public SchemaNode {
   // The Change Stream that owns this table if one exists.
   const ChangeStream* owner_change_stream_ = nullptr;
 
+  // The Queue that owns this table if one exists.
+  const Queue* owner_queue_ = nullptr;
+
   // The Index that owns this table if one exists. This attribute is null for
   // all but index data tables.
   const Index* owner_index_ = nullptr;
@@ -328,6 +344,9 @@ class Table : public SchemaNode {
 
   // Child tables that are interleaved in this table.
   std::vector<const Table*> child_tables_;
+
+  // Child queues that are interleaved in this table.
+  std::vector<const Queue*> child_queues_;
 
   // Parent table of this table. If null, this table is a top level table.
   const Table* parent_table_ = nullptr;

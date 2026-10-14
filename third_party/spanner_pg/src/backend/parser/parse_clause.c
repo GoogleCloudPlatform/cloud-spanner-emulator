@@ -1005,10 +1005,10 @@ transformRangeTableSample(ParseState *pstate, RangeTableSample *rts)
 		assign_expr_collations(pstate, arg);
 		bool is_nested_cast_added = IsA(transformed_arg, FuncExpr) &&
 					IsA(arg, FuncExpr) &&
-					(Node *) linitial(((FuncExpr *)arg)->args) == transformed_arg;
+					arg != transformed_arg;
 		bool is_param_cast_added = IsA(transformed_arg, Param) &&
 					IsA(arg, FuncExpr) &&
-					(Node *) linitial(((FuncExpr *)arg)->args) == transformed_arg;
+					arg != transformed_arg;
 		if (is_nested_cast_added || is_param_cast_added) {
 			fargs = lappend(fargs, transformed_arg);
 		} else {

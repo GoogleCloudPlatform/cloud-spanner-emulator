@@ -216,6 +216,20 @@ absl::Status QueueValidator::Validate(const Queue* queue,
     }
   }
 
+  // Check row deletion policy.
+  if (queue->row_deletion_policy().has_value()) {
+    const std::string column_name = queue->row_deletion_policy()->column_name();
+    const Column* column = queue->FindColumn(column_name);
+    if (column == nullptr) {
+      return error::RowDeletionPolicyOnColumnDoesNotExist(column_name,
+                                                          queue->Name());
+    }
+    if (!column->GetType()->IsTimestamp()) {
+      return error::RowDeletionPolicyOnNonTimestampColumn(column_name,
+                                                          queue->Name());
+    }
+  }
+
   return absl::OkStatus();
 }
 

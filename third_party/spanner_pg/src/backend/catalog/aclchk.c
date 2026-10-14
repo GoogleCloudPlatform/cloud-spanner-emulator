@@ -2807,10 +2807,12 @@ aclcheck_error(AclResult aclerr, ObjectType objtype,
 					case OBJECT_TSTEMPLATE:
 					case OBJECT_USER_MAPPING:
           case OBJECT_CHANGE_STREAM:
+					// SPANGRES BEGIN
+          case OBJECT_DATA_PLACEMENT:
 					case OBJECT_SEARCH_INDEX:
 					// SPANGRES END
 					// SPANGRES BEGIN
-					// TODO: expose when queue is implemented.
+					case OBJECT_QUEUE:
 					// SPANGRES END
 					case OBJECT_LOCALITY_GROUP:
             elog(ERROR, "unsupported object type: %d", objtype);
@@ -2952,10 +2954,12 @@ aclcheck_error(AclResult aclerr, ObjectType objtype,
 					case OBJECT_TSTEMPLATE:
 					case OBJECT_USER_MAPPING:
           case OBJECT_CHANGE_STREAM:
+					// SPANGRES BEGIN
+          case OBJECT_DATA_PLACEMENT:
 					case OBJECT_SEARCH_INDEX:
 					// SPANGRES END
 					// SPANGRES BEGIN
-					// TODO: expose when queue is implemented.
+					case OBJECT_QUEUE:
 					// SPANGRES END
 					case OBJECT_LOCALITY_GROUP:
             elog(ERROR, "unsupported object type: %d", objtype);

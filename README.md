@@ -173,6 +173,8 @@ Notable supported features:
 
 - Check constraint
 
+- Queues
+
 - Dataflow templates
 
 - The [Cloud Spanner PostgreSQL interface](
@@ -255,6 +257,19 @@ Notable limitations:
   - `CREATE SEARCH INDEX` accepts `OPTIONS` clause but takes no action on it.
   - `ALTER DATABASE` accepts `score_version` option (and `spanner.score_version`
     in PostgreSQL dialect) but takes no action on it.
+
+- The emulator does not implement full message leasing or batching semantics
+  for Cloud Spanner Queues.
+  - `RECEIVE_<queue>` returns mock lease tokens and expiration timestamps
+    without locking messages across queries; messages remain visible to other
+    `RECEIVE_<queue>` calls until explicitly acknowledged. Within a single
+    streaming `RECEIVE_<queue>` call, delivered messages are deduplicated and
+    redelivered after the mock lease duration (10s) expires.
+  - `RENEWLEASE_<queue>` returns renewed mock lease tokens and updated
+    expiration timestamps without validating or extending server-side leases.
+  - `RECEIVE_<queue>` enforces `max_batch_size` as a row limit per scan rather
+    than server-side batching, and takes the `priority` parameter and
+    per-placement TVFs (`RECEIVE_<queue>_PLACEMENT_<placement>`) as no-ops.
 
 ## Frequently Asked Questions (FAQ)
 

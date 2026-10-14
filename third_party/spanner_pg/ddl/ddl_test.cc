@@ -687,6 +687,174 @@ TEST_F(DdlTest, DisableDropFunction) {
                        "<DROP FUNCTION> statement is not supported."));
 }
 
+TEST_F(DdlTest, DisableCreatePlacement) {
+  const std::string input =
+      "CREATE PLACEMENT placement WITH (instance_partition = "
+      "'instance_partition')";
+
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(parsed_statements,
+                                           {.enable_data_placement = false});
+
+  EXPECT_THAT(statements,
+              StatusIs(absl::StatusCode::kFailedPrecondition,
+                       "<CREATE PLACEMENT> statement is not supported."));
+}
+
+TEST_F(DdlTest, DisableAlterPlacement) {
+  const std::string input =
+      "ALTER PLACEMENT placement SET (instance_partition = "
+      "'instance_partition', default_leader = 'default_leader')";
+
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(parsed_statements,
+                                           {.enable_data_placement = false});
+
+  EXPECT_THAT(statements,
+              StatusIs(absl::StatusCode::kFailedPrecondition,
+                       "<ALTER PLACEMENT> statement is not supported."));
+}
+
+TEST_F(DdlTest, DisableDropPlacement) {
+  const std::string input = "DROP PLACEMENT placement";
+
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(parsed_statements,
+                                           {.enable_data_placement = false});
+
+  EXPECT_THAT(statements,
+              StatusIs(absl::StatusCode::kFailedPrecondition,
+                       "<DROP PLACEMENT> statement is not supported."));
+}
+
+TEST_F(DdlTest, DisablePlacementKeyConstraint) {
+  const std::string input =
+      "CREATE TABLE Users ("
+      "  UserId BIGINT NOT NULL,"
+      "  Location TEXT NOT NULL PLACEMENT KEY,"
+      "  PRIMARY KEY (UserId))";
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(parsed_statements,
+                                           {.enable_data_placement = false});
+
+  EXPECT_THAT(statements,
+              StatusIs(absl::StatusCode::kFailedPrecondition,
+                       "<PLACEMENT KEY> constraint type is not supported."));
+}
+
+TEST_F(DdlTest, DisableHiddenColumnConstraint) {
+  const std::string input =
+      "CREATE TABLE Users ("
+      "  UserId BIGINT NOT NULL,"
+      "  Secret TEXT NOT NULL HIDDEN,"
+      "  PRIMARY KEY (UserId))";
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(parsed_statements,
+                                           {.enable_hidden_column = false});
+
+  EXPECT_THAT(statements,
+              StatusIs(absl::StatusCode::kFailedPrecondition,
+                       "<HIDDEN> constraint type is not supported."));
+}
+
+TEST_F(DdlTest, DisableDatabaseOptionCloudOptInDataplacementPreview) {
+  const std::string input =
+      "ALTER DATABASE TestDatabase "
+      "  SET spanner.opt_in_dataplacement_preview = TRUE";
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(
+          parsed_statements, {.enable_opt_in_dataplacement_preview = false});
+
+  EXPECT_THAT(
+      statements,
+      StatusIs(absl::StatusCode::kFailedPrecondition,
+               "Database option <spanner.opt_in_dataplacement_preview> "
+               "is not supported."));
+}
+
+TEST_F(DdlTest, DisableDatabaseOptionAutoManagedRootPlacementTableName) {
+  const std::string input =
+      "ALTER DATABASE TestDatabase "
+      "  SET spanner.auto_managed_root_placement_table_name = "
+      "'SPANNER_PLACEMENT'";
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(
+          parsed_statements,
+          {.enable_auto_managed_root_placement_table_name = false});
+
+  EXPECT_THAT(
+      statements,
+      StatusIs(
+          absl::StatusCode::kFailedPrecondition,
+          "Database option <spanner.auto_managed_root_placement_table_name> "
+          "is not supported."));
+}
+
+TEST_F(DdlTest, DisableDatabaseOptionPerPlacementRoutingMetadata) {
+  const std::string input =
+      "ALTER DATABASE TestDatabase "
+      "  SET spanner.per_placement_routing_metadata = TRUE";
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(
+          parsed_statements,
+          {.enable_per_placement_routing_metadata = false});
+
+  EXPECT_THAT(
+      statements,
+      StatusIs(
+          absl::StatusCode::kFailedPrecondition,
+          "Database option <spanner.per_placement_routing_metadata> "
+          "is not supported."));
+}
+
 TEST_F(DdlTest, DisableCreateSearchIndex) {
   const std::string input =
       "CREATE SEARCH INDEX index_name ON table_name (token_columns)";
@@ -724,7 +892,138 @@ TEST_F(DdlTest, DisableDropSearchIndex) {
                        "<DROP SEARCH INDEX> statement is not supported."));
 }
 
-// TODO: expose when queue is implemented.
+TEST_F(DdlTest, DisableCreateQueue) {
+  const std::string input =
+      "CREATE QUEUE q1 (id bigint PRIMARY KEY, \"Payload\" bytea NOT NULL)";
+
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(parsed_statements,
+                                           {.enable_queue = false});
+
+  EXPECT_THAT(statements,
+              StatusIs(absl::StatusCode::kFailedPrecondition,
+                       "<CREATE QUEUE> statement is not supported."));
+}
+
+TEST_F(DdlTest, DisableDropQueue) {
+  const std::string input = "DROP QUEUE q1";
+
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(parsed_statements,
+                                           {.enable_queue = false});
+
+  EXPECT_THAT(statements,
+              StatusIs(absl::StatusCode::kFailedPrecondition,
+                       "<DROP QUEUE> statement is not supported."));
+}
+
+TEST_F(DdlTest, DisableQueuePerPlacementTvfOption) {
+  const std::string input =
+      "CREATE QUEUE q1 (id bigint PRIMARY KEY, \"Payload\" bytea NOT NULL) "
+      "WITH (per_placement_tvf = true)";
+
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(
+          parsed_statements, {.enable_queue = true,
+                              .enable_queues_per_placement_tvf_option = false});
+  EXPECT_THAT(statements,
+              StatusIs(absl::StatusCode::kFailedPrecondition,
+                       "Option per_placement_tvf is not supported yet."));
+}
+
+TEST_F(DdlTest, DisableAlterQueuePerPlacementTvfOption) {
+  const std::string input =
+      "ALTER QUEUE q1 SET OPTIONS (per_placement_tvf = true)";
+
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(
+          parsed_statements, {.enable_queue = true,
+                              .enable_queues_per_placement_tvf_option = false});
+  EXPECT_THAT(statements,
+              StatusIs(absl::StatusCode::kFailedPrecondition,
+                       "Option per_placement_tvf is not supported yet."));
+}
+
+TEST_F(DdlTest, DisableQueueTrafficControlOptions) {
+  const std::string input =
+      "CREATE QUEUE q1 (id bigint PRIMARY KEY, \"Payload\" bytea NOT NULL) "
+      "WITH (disable_send = true)";
+
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(
+          parsed_statements, {.enable_queue = true,
+                              .enable_queue_traffic_control_options = false});
+  EXPECT_THAT(statements,
+              StatusIs(absl::StatusCode::kFailedPrecondition,
+                       "Option disable_send is not supported yet."));
+}
+
+TEST_F(DdlTest, DisableAlterQueueTrafficControlOptions) {
+  const std::string input =
+      "ALTER QUEUE q1 SET OPTIONS (disable_delivery = true)";
+
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+  ABSL_CHECK_OK(parsed_statements.global_status());
+  ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(
+          parsed_statements, {.enable_queue = true,
+                              .enable_queue_traffic_control_options = false});
+  EXPECT_THAT(statements,
+              StatusIs(absl::StatusCode::kFailedPrecondition,
+                       "Option disable_delivery is not supported yet."));
+}
+
+TEST_F(DdlTest, RejectAlterQueueIfExist) {
+  const std::string input =
+      "ALTER QUEUE IF EXISTS q1 SET OPTIONS (per_placement_tvf = true)";
+
+  interfaces::ParserBatchOutput parsed_statements =
+      base_helper_.Parser()->ParseBatch(
+          interfaces::ParserParamsBuilder(input).Build());
+
+  // Since IF EXISTS was removed from gram.y, this should be a syntax error
+  // (INVALID_ARGUMENT).
+  absl::StatusOr<google::spanner::emulator::backend::ddl::DDLStatementList> statements =
+      base_helper_.Translator()->Translate(parsed_statements,
+                                           {.enable_queue = true});
+  EXPECT_THAT(statements,
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       testing::HasSubstr("syntax error at or near \"EXISTS\"")));
+}
 
 TEST_F(DdlTest, DisableCreateLocalityGroup) {
   const std::string input =
@@ -1033,6 +1332,32 @@ TEST_F(DdlTest, EnableDefaultTimeZone) {
                 .options(0)
                 .string_value(),
             "UTC");
+}
+
+TEST_F(DdlTest, InvalidDefaultTimeZone) {
+  for (const std::string& input : {
+           "ALTER DATABASE TestDatabase SET spanner.default_time_zone = "
+           "'invalid_name'",
+           "ALTER DATABASE TestDatabase SET spanner.default_time_zone = ''",
+           "ALTER DATABASE TestDatabase SET spanner.default_time_zone = "
+           "'file:America/Los_Angeles'",
+           "ALTER DATABASE TestDatabase SET spanner.default_time_zone = "
+           "'America/./Los_Angeles'",
+           "ALTER DATABASE TestDatabase SET spanner.default_time_zone = "
+           "'/usr/share/zoneinfo/UTC'",
+       }) {
+    interfaces::ParserBatchOutput parsed_statements =
+        base_helper_.Parser()->ParseBatch(
+            interfaces::ParserParamsBuilder(input).Build());
+    ABSL_CHECK_OK(parsed_statements.global_status());
+    ABSL_CHECK_EQ(parsed_statements.output().size(), 1);
+
+    EXPECT_THAT(base_helper_.Translator()->Translate(
+                    parsed_statements, {.enable_default_time_zone = true}),
+                StatusIs(absl::StatusCode::kFailedPrecondition,
+                         "Invalid time zone name."))
+        << "input: " << input;
+  }
 }
 
 TEST_F(DdlTest, AlterTableIfExists) {
