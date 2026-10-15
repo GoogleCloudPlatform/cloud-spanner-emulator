@@ -1,4 +1,6 @@
 # Taken from https://github.com/googleapis/google-cloud-cpp/blob/5c397c5f351b91c40dd85d5c8c009596538bfe66/bazel/googleapis.BUILD
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
 package(default_visibility = ["//visibility:public"])
 
 licenses(["notice"])

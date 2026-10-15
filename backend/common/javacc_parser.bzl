@@ -61,11 +61,12 @@ def generate_javacc_parser(name, srcs, parser_class_name, extra_deps, extra_head
         srcs = schema_merged_tree,
         outs = schema_ast_genfiles + [schema_grammar_file],
         cmd = (
-            "$(location @local_jdk//:bin/java) -cp $(location @maven//:net_java_dev_javacc_javacc) jjtree  " +
+            "$(JAVABASE)/bin/java -cp $(location @maven//:net_java_dev_javacc_javacc) jjtree  " +
             "-OUTPUT_DIRECTORY=$(@D) " +
             "-OUTPUT_FILE=" + schema_grammar_file + " $(SRCS) "
         ),
-        tools = ["@maven//:net_java_dev_javacc_javacc", "@local_jdk//:bin/jar", "@local_jdk//:bin/java"],
+        toolchains = ["@rules_java//toolchains:remotejdk_21"],
+        tools = ["@maven//:net_java_dev_javacc_javacc", "@rules_java//toolchains:remotejdk_21"],
     )
 
     # Generate the lexer and parser files from the grammar file in .jj
@@ -93,10 +94,11 @@ def generate_javacc_parser(name, srcs, parser_class_name, extra_deps, extra_head
         srcs = [schema_grammar_file],
         outs = schema_parser_genfiles,
         cmd = (
-            "$(location @local_jdk//:bin/java) -cp $(location @maven//:net_java_dev_javacc_javacc) javacc  " +
+            "$(JAVABASE)/bin/java -cp $(location @maven//:net_java_dev_javacc_javacc) javacc  " +
             "-OUTPUT_DIRECTORY=$(@D) $(SRCS) "
         ),
-        tools = ["@maven//:net_java_dev_javacc_javacc", "@local_jdk//:bin/jar", "@local_jdk//:bin/java"],
+        toolchains = ["@rules_java//toolchains:remotejdk_21"],
+        tools = ["@maven//:net_java_dev_javacc_javacc", "@rules_java//toolchains:remotejdk_21"],
     )
 
     # Finally use generated AST and Parser files to produce c++ parser.
