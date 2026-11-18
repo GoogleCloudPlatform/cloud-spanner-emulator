@@ -281,7 +281,10 @@ cc_test(
     ],
     deps = [
         ":read_only_transaction",
+        "//backend/access:read",
         "//backend/common:ids",
+        "//backend/datamodel:key",
+        "//backend/datamodel:key_set",
         "//backend/schema/catalog:schema",
         "//backend/schema/catalog:versioned_catalog",
         "//backend/storage:in_memory_storage",
@@ -294,6 +297,7 @@ cc_test(
         "@com_google_absl//absl/time",
         "@com_google_googlesql//googlesql/base/testing:status_matchers",
         "@com_google_googlesql//googlesql/public:type",
+        "@com_google_googlesql//googlesql/public:value",
         "@com_google_googletest//:gtest_main",
     ],
 )

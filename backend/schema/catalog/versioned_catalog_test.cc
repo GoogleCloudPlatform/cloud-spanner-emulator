@@ -17,6 +17,7 @@
 #include "backend/schema/catalog/versioned_catalog.h"
 
 #include <memory>
+#include <optional>
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -126,6 +127,37 @@ TEST(VersionedCatalogTest, ExpiredSchemasThatCoverRetentionPeriodAreKept) {
   // Verify that the schema created at t0 is removed as it is no longer required
   // to cover the retention period.
   EXPECT_EQ(catalog.GetSchema(t0), catalog.GetSchema(absl::InfinitePast()));
+}
+
+TEST(VersionedCatalogTest, VersionRetentionOverrideFromEnvValue) {
+  EXPECT_EQ(VersionRetentionOverrideFromEnvValue(nullptr), std::nullopt);
+  EXPECT_EQ(VersionRetentionOverrideFromEnvValue(""), std::nullopt);
+  EXPECT_EQ(VersionRetentionOverrideFromEnvValue("0"), std::nullopt);
+  EXPECT_EQ(VersionRetentionOverrideFromEnvValue("-5"), std::nullopt);
+  EXPECT_EQ(VersionRetentionOverrideFromEnvValue("5s"), std::nullopt);
+  EXPECT_EQ(VersionRetentionOverrideFromEnvValue("1.5"), std::nullopt);
+  EXPECT_EQ(VersionRetentionOverrideFromEnvValue("5"), absl::Seconds(5));
+}
+
+TEST(VersionedCatalogTest, RetentionOverrideShortensButNeverLengthens) {
+  VersionedCatalog catalog;
+  EXPECT_EQ(catalog.version_retention_period(), absl::Hours(1));
+
+  VersionedCatalog::SetVersionRetentionOverrideForTesting(absl::Seconds(5));
+  EXPECT_EQ(catalog.version_retention_period(), absl::Seconds(5));
+
+  // Schemas older than the override are removed as the database's own period
+  // would remove them.
+  absl::Time t0 = absl::Now();
+  GOOGLESQL_EXPECT_OK(catalog.AddSchema(t0, std::make_unique<const Schema>()));
+  GOOGLESQL_EXPECT_OK(catalog.AddSchema(t0 + absl::Seconds(1),
+                              std::make_unique<const Schema>()));
+  catalog.RemoveExpiredSchemas(t0 + absl::Seconds(7));
+  EXPECT_EQ(catalog.GetSchema(t0), catalog.GetSchema(absl::InfinitePast()));
+
+  VersionedCatalog::SetVersionRetentionOverrideForTesting(absl::Hours(2));
+  EXPECT_EQ(catalog.version_retention_period(), absl::Hours(1));
+  VersionedCatalog::SetVersionRetentionOverrideForTesting(std::nullopt);
 }
 
 }  // namespace

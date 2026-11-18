@@ -16,6 +16,8 @@
 
 #include "backend/storage/in_memory_storage.h"
 
+#include <algorithm>
+#include <iterator>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -38,18 +40,73 @@ static constexpr char kExistsColumn[] = "_exists";
 
 }  // namespace
 
-void InMemoryStorage::RemoveExpiredVersions(Cell& cell, absl::Time timestamp) {
-  absl::MutexLock lock(version_retention_period_mu_);
-  auto it = cell.begin();
-  auto upper_bound = cell.upper_bound(timestamp - version_retention_period_);
-  while (it != upper_bound) {
-    auto next = it;
-    if (++next == upper_bound) {
-      // The current value needs to be kept to cover the retention period.
-      break;
+// The fewest due rows a write or delete collects. A call that queues more
+// collects twice what it queued, so the queue drains at least as fast as it
+// fills, while no call holds the lock for long on its account.
+constexpr size_t kMinRowsCollectedPerCall = 256;
+
+bool InMemoryStorage::CollectRow(Row& row, absl::Time horizon) {
+  for (auto cell_itr = row.begin(); cell_itr != row.end();) {
+    Cell& cell = cell_itr->second;
+    // The newest version at or before the horizon is what a read at the horizon
+    // sees; every version before it is seen by no read at or after it.
+    auto first_after = cell.upper_bound(horizon);
+    if (first_after != cell.begin()) {
+      cell.erase(cell.begin(), std::prev(first_after));
     }
-    it = cell.erase(it);
+    // A cell left with only a delete marker reads as a cell never written.
+    if (cell_itr->first != kExistsColumn && cell.size() == 1 &&
+        cell.begin()->first <= horizon && !cell.begin()->second.is_valid()) {
+      row.erase(cell_itr++);
+    } else {
+      ++cell_itr;
+    }
   }
+  auto exists_itr = row.find(kExistsColumn);
+  if (exists_itr == row.end()) {
+    return row.empty();
+  }
+  const Cell& exists = exists_itr->second;
+  return exists.size() == 1 && exists.begin()->first <= horizon &&
+         !exists.begin()->second.bool_value();
+}
+
+void InMemoryStorage::CollectDueRows(absl::Time now, size_t budget) {
+  const absl::Time horizon = now - version_retention_period_;
+  bool collected = false;
+  while (budget > 0 && !garbage_rows_.empty() &&
+         garbage_rows_.front().timestamp <= horizon) {
+    const GarbageRow& due = garbage_rows_.front();
+    auto table_itr = tables_.find(due.table_id);
+    if (table_itr != tables_.end()) {
+      Table& table = table_itr->second;
+      auto row_itr = table.find(due.key);
+      if (row_itr != table.end() && CollectRow(row_itr->second, horizon)) {
+        table.erase(row_itr);
+      }
+    }
+    garbage_rows_.pop_front();
+    collected = true;
+    --budget;
+  }
+  if (collected && horizon > earliest_version_time_) {
+    earliest_version_time_ = horizon;
+  }
+}
+
+void InMemoryStorage::CollectGarbage(absl::Time now) {
+  absl::MutexLock lock(mu_);
+  CollectDueRows(now, garbage_rows_.size());
+}
+
+size_t InMemoryStorage::PendingGarbageRows() const {
+  absl::MutexLock lock(mu_);
+  return garbage_rows_.size();
+}
+
+absl::Time InMemoryStorage::EarliestVersionTime() const {
+  absl::MutexLock lock(mu_);
+  return earliest_version_time_;
 }
 
 googlesql::Value InMemoryStorage::GetCellValueAtTimestamp(
@@ -197,19 +254,28 @@ absl::Status InMemoryStorage::Write(
 
   // Add the row with _exists system column if it does not exist.
   Row& row = table[key];
+  // Whether this write gives a cell a second version, the first of which a
+  // later collection can remove.
+  bool supersedes = false;
   if (!Exists(row, timestamp)) {
     Cell& cell = row[kExistsColumn];
+    supersedes |= !cell.empty();
     cell[timestamp] = googlesql::values::Bool(true);
-    RemoveExpiredVersions(cell, timestamp);
   }
 
   // Add the values for the given columns.
   for (int i = 0; i < column_ids.size(); ++i) {
     Cell& cell = row[column_ids[i]];
+    supersedes |= !cell.empty();
     cell[timestamp] = values[i];
-    RemoveExpiredVersions(cell, timestamp);
   }
 
+  size_t queued = 0;
+  if (supersedes) {
+    garbage_rows_.push_back(GarbageRow{timestamp, table_id, key});
+    queued = 1;
+  }
+  CollectDueRows(timestamp, std::max(kMinRowsCollectedPerCall, 2 * queued));
   return absl::OkStatus();
 }
 
@@ -243,38 +309,42 @@ absl::Status InMemoryStorage::Delete(absl::Time timestamp,
   auto row_end_itr = table.lower_bound(key_range.limit_key());
 
   // Mark the keys as deleted.
+  size_t queued = 0;
   for (auto itr = row_start_itr; itr != row_end_itr; ++itr) {
     if (!Exists(itr->second, timestamp)) {
       continue;
     }
 
-    for (const auto& columns : itr->second) {
-      if (columns.first == kExistsColumn) {
-        Cell& cell = itr->second[kExistsColumn];
+    for (auto& [column_id, cell] : itr->second) {
+      if (column_id == kExistsColumn) {
         cell[timestamp] = googlesql::values::Bool(false);
-        RemoveExpiredVersions(cell, timestamp);
       } else {
         // Column values are marked invalid googlesql::Value to avoid reading
         // the value of the cell before the delete.
-        Cell& cell = itr->second[columns.first];
         cell[timestamp] = googlesql::Value();
-        RemoveExpiredVersions(cell, timestamp);
       }
     }
+    // Once the delete is older than the retention period, the row is removed.
+    garbage_rows_.push_back(GarbageRow{timestamp, table_id, itr->first});
+    ++queued;
   }
+  CollectDueRows(timestamp, std::max(kMinRowsCollectedPerCall, 2 * queued));
   return absl::OkStatus();
 }
 
 void InMemoryStorage::SetVersionRetentionPeriod(
     const absl::Duration version_retention_period) {
-  absl::MutexLock lock(version_retention_period_mu_);
+  absl::MutexLock lock(mu_);
   version_retention_period_ = version_retention_period;
 }
 
 void InMemoryStorage::CleanUpDeletedTables(absl::Time timestamp) {
   absl::MutexLock lock(mu_);
-  absl::MutexLock version_retention_period_lock(version_retention_period_mu_);
   absl::Time expiration_time = timestamp - version_retention_period_;
+
+  // Every read-only read calls this, which keeps collecting versions while a
+  // database is only read.
+  CollectDueRows(timestamp, kMinRowsCollectedPerCall);
 
   // Remove expired dropped tables.
   for (auto it = dropped_tables_.begin();
@@ -286,7 +356,6 @@ void InMemoryStorage::CleanUpDeletedTables(absl::Time timestamp) {
 
 void InMemoryStorage::CleanUpDeletedColumns(absl::Time timestamp) {
   absl::MutexLock lock(mu_);
-  absl::MutexLock version_retention_period_lock(version_retention_period_mu_);
   absl::Time expiration_time = timestamp - version_retention_period_;
 
   // Remove expired dropped columns.

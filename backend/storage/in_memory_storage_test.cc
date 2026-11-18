@@ -23,6 +23,7 @@
 #include "gtest/gtest.h"
 #include "googlesql/base/testing/status_matchers.h"
 #include "tests/common/proto_matchers.h"
+#include "absl/strings/str_cat.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "backend/datamodel/key_range.h"
@@ -824,6 +825,168 @@ TEST_F(InMemoryStorageTest, RemoveExpiredVersionsFromCellOnDelete) {
   GOOGLESQL_EXPECT_OK(
       storage_.Lookup(t0, kTableId0, Key({Int64(1)}), {kColumnID}, &values));
   EXPECT_THAT(values, testing::ElementsAre(googlesql::Value()));
+}
+
+TEST_F(InMemoryStorageTest, DeletedRowIsRemovedOnceTheDeleteLeavesRetention) {
+  absl::Time t0 = absl::Now();
+  absl::Time t1 = t0 + absl::Seconds(1);
+  GOOGLESQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
+                           {String("value-0")}));
+  GOOGLESQL_EXPECT_OK(storage_.Delete(t1, kTableId0, KeyRange::Point(Key({Int64(1)}))));
+  EXPECT_EQ(storage_.PendingGarbageRows(), 1);
+
+  // A read just inside the retention period still sees the row before it was
+  // deleted.
+  storage_.CollectGarbage(t1 + absl::Hours(1) - absl::Microseconds(1));
+  std::vector<googlesql::Value> values;
+  GOOGLESQL_EXPECT_OK(
+      storage_.Lookup(t0, kTableId0, Key({Int64(1)}), {kColumnID}, &values));
+  EXPECT_THAT(values, testing::ElementsAre(String("value-0")));
+  EXPECT_EQ(storage_.PendingGarbageRows(), 1);
+
+  // Once the delete is as old as the retention period, the row is gone at every
+  // timestamp, even at those no read is allowed at any more.
+  storage_.CollectGarbage(t1 + absl::Hours(1));
+  EXPECT_EQ(storage_.PendingGarbageRows(), 0);
+  EXPECT_THAT(
+      storage_.Lookup(t0, kTableId0, Key({Int64(1)}), {kColumnID}, &values),
+      googlesql_base::testing::StatusIs(absl::StatusCode::kNotFound));
+  GOOGLESQL_EXPECT_OK(storage_.Read(t0, kTableId0, kKeyRange0To5, {kColumnID}, &itr_));
+  EXPECT_FALSE(itr_->Next());
+}
+
+TEST_F(InMemoryStorageTest, CollectionChangesNoReadWithinRetention) {
+  const ColumnID kColumnID1 = "test_column:1";
+  absl::Time t0 = absl::Now();
+  auto at = [t0](int second) { return t0 + absl::Seconds(second); };
+
+  // Rows written, rewritten, deleted and written again, one column at a time,
+  // into a storage that collects at a 10 s horizon and one that keeps all.
+  InMemoryStorage keeps_all;
+  keeps_all.SetVersionRetentionPeriod(absl::Hours(1000));
+  storage_.SetVersionRetentionPeriod(absl::Seconds(10));
+  for (InMemoryStorage* storage : {&storage_, &keeps_all}) {
+    for (int second = 0; second < 40; ++second) {
+      for (int key = 0; key < 5; ++key) {
+        Key k({Int64(key)});
+        if ((second + key) % 7 == 3) {
+          GOOGLESQL_EXPECT_OK(storage->Delete(at(second), kTableId0, KeyRange::Point(k)));
+        } else if ((second * key) % 3 == 0) {
+          GOOGLESQL_EXPECT_OK(storage->Write(at(second), kTableId0, k, {kColumnID},
+                                   {Int64(second)}));
+        } else if ((second + key) % 5 == 0) {
+          GOOGLESQL_EXPECT_OK(storage->Write(at(second), kTableId0, k, {kColumnID1},
+                                   {String(absl::StrCat(second))}));
+        }
+      }
+    }
+  }
+  storage_.CollectGarbage(at(40));
+  EXPECT_LT(storage_.PendingGarbageRows(), keeps_all.PendingGarbageRows());
+  EXPECT_LE(storage_.EarliestVersionTime(), at(30));
+  EXPECT_GT(storage_.EarliestVersionTime(), at(20));
+
+  auto read_all = [this, &kColumnID1](const InMemoryStorage& storage,
+                                       absl::Time timestamp) {
+    std::vector<std::string> rows;
+    GOOGLESQL_EXPECT_OK(storage.Read(timestamp, kTableId0, kKeyRange0To5,
+                           {kColumnID, kColumnID1}, &itr_));
+    while (itr_->Next()) {
+      rows.push_back(absl::StrCat(itr_->Key().DebugString(), "=",
+                                  itr_->ColumnValue(0).DebugString(), ",",
+                                  itr_->ColumnValue(1).DebugString()));
+    }
+    return rows;
+  };
+  // Every read at or after the horizon, second 30, sees what it would have
+  // seen with nothing collected.
+  for (int ms = 30000; ms < 45000; ms += 250) {
+    absl::Time timestamp = t0 + absl::Milliseconds(ms);
+    EXPECT_EQ(read_all(storage_, timestamp), read_all(keeps_all, timestamp))
+        << "at " << ms << " ms";
+    for (int key = 0; key < 5; ++key) {
+      std::vector<googlesql::Value> collected, kept;
+      absl::Status collected_status = storage_.Lookup(
+          timestamp, kTableId0, Key({Int64(key)}), {kColumnID, kColumnID1},
+          &collected);
+      absl::Status kept_status = keeps_all.Lookup(
+          timestamp, kTableId0, Key({Int64(key)}), {kColumnID, kColumnID1},
+          &kept);
+      EXPECT_EQ(collected_status.code(), kept_status.code());
+      EXPECT_EQ(collected, kept) << "key " << key << " at " << ms << " ms";
+    }
+  }
+}
+
+TEST_F(InMemoryStorageTest, RowWrittenAgainAfterDeleteReadsOnlyItsNewColumns) {
+  const ColumnID kColumnID1 = "test_column:1";
+  absl::Time t0 = absl::Now();
+  absl::Time t1 = t0 + absl::Seconds(1);
+  absl::Time t2 = t0 + absl::Seconds(2);
+  storage_.SetVersionRetentionPeriod(absl::Seconds(1));
+  GOOGLESQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}),
+                           {kColumnID, kColumnID1},
+                           {String("a-0"), String("b-0")}));
+  GOOGLESQL_EXPECT_OK(storage_.Delete(t1, kTableId0, KeyRange::Point(Key({Int64(1)}))));
+  GOOGLESQL_EXPECT_OK(storage_.Write(t2, kTableId0, Key({Int64(1)}), {kColumnID},
+                           {String("a-2")}));
+  storage_.CollectGarbage(t2 + absl::Seconds(5));
+
+  std::vector<googlesql::Value> values;
+  GOOGLESQL_EXPECT_OK(storage_.Lookup(t2, kTableId0, Key({Int64(1)}),
+                            {kColumnID, kColumnID1}, &values));
+  EXPECT_THAT(values, testing::ElementsAre(String("a-2"), googlesql::Value()));
+}
+
+TEST_F(InMemoryStorageTest, EarliestVersionTimeNeverMovesBack) {
+  absl::Time t0 = absl::Now();
+  EXPECT_EQ(storage_.EarliestVersionTime(), absl::InfinitePast());
+  storage_.SetVersionRetentionPeriod(absl::Seconds(1));
+  GOOGLESQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}), {kColumnID},
+                           {String("value-0")}));
+  // A first write supersedes nothing, so collects nothing.
+  storage_.CollectGarbage(t0 + absl::Seconds(10));
+  EXPECT_EQ(storage_.EarliestVersionTime(), absl::InfinitePast());
+
+  GOOGLESQL_EXPECT_OK(storage_.Write(t0 + absl::Seconds(1), kTableId0,
+                           Key({Int64(1)}), {kColumnID},
+                           {String("value-1")}));
+  storage_.CollectGarbage(t0 + absl::Seconds(10));
+  EXPECT_EQ(storage_.EarliestVersionTime(), t0 + absl::Seconds(9));
+
+  // A longer retention period does not bring back what was removed.
+  storage_.SetVersionRetentionPeriod(absl::Hours(1));
+  GOOGLESQL_EXPECT_OK(storage_.Write(t0 + absl::Seconds(11), kTableId0,
+                           Key({Int64(1)}), {kColumnID},
+                           {String("value-2")}));
+  storage_.CollectGarbage(t0 + absl::Hours(1) + absl::Seconds(5));
+  EXPECT_EQ(storage_.EarliestVersionTime(), t0 + absl::Seconds(9));
+}
+
+TEST_F(InMemoryStorageTest, EachWriteCollectsABoundedNumberOfDueRows) {
+  absl::Time t0 = absl::Now();
+  absl::Time t1 = t0 + absl::Seconds(1);
+  storage_.SetVersionRetentionPeriod(absl::Seconds(1));
+  for (int i = 0; i < 1000; ++i) {
+    GOOGLESQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(i)}), {kColumnID},
+                             {Int64(i)}));
+  }
+  GOOGLESQL_EXPECT_OK(storage_.Delete(t1, kTableId0, KeyRange::All()));
+  EXPECT_EQ(storage_.PendingGarbageRows(), 1000);
+
+  // Each write after the deletes are due collects 256 of them, then nothing
+  // is left.
+  GOOGLESQL_EXPECT_OK(storage_.Write(t1 + absl::Seconds(1), kTableId1,
+                           Key({Int64(0)}), {kColumnID}, {Int64(0)}));
+  EXPECT_EQ(storage_.PendingGarbageRows(), 1000 - 256);
+  for (int i = 1; i < 4; ++i) {
+    GOOGLESQL_EXPECT_OK(storage_.Write(t1 + absl::Seconds(1), kTableId1,
+                             Key({Int64(i)}), {kColumnID}, {Int64(i)}));
+  }
+  EXPECT_EQ(storage_.PendingGarbageRows(), 0);
+  GOOGLESQL_EXPECT_OK(storage_.Read(t1 + absl::Seconds(1), kTableId0,
+                          KeyRange::All(), {kColumnID}, &itr_));
+  EXPECT_FALSE(itr_->Next());
 }
 
 }  // namespace

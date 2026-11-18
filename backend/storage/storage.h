@@ -33,9 +33,9 @@ namespace backend {
 
 // Storage defines the interface for a multi-version data store.
 //
-// There will be a Storage instance for each database created. The current
-// interface is grow-only, i.e. once data is added, it will not be deleted.
-// Storage is thread-safe.
+// There will be a Storage instance for each database created. A version is
+// kept for at least the version retention period after it was superseded or
+// deleted; after that it may be removed. Storage is thread-safe.
 class Storage {
  public:
   virtual ~Storage() {}
@@ -78,6 +78,12 @@ class Storage {
   // This is used to determine when to delete expired data from storage.
   virtual void SetVersionRetentionPeriod(
       absl::Duration version_retention_period) = 0;
+
+  // The oldest timestamp a read is still served correctly at: a version that
+  // only a read before it could see may have been removed. A reader at an older
+  // timestamp must fail rather than trust what it read. Never moves back, even
+  // when the retention period grows.
+  virtual absl::Time EarliestVersionTime() const = 0;
 
   virtual void CleanUpDeletedTables(absl::Time timestamp) = 0;
   virtual void CleanUpDeletedColumns(absl::Time timestamp) = 0;
