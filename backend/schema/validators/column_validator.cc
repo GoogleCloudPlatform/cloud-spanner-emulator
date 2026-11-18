@@ -472,13 +472,16 @@ absl::Status ColumnValidator::ValidateUpdate(const Column* column,
   GOOGLESQL_RETURN_IF_ERROR(CheckAllowedColumnTypeChange(
       old_column, column, old_column->GetType(), column->type_, context));
 
+  // Only a column that grew can take its table over the limit. Asked in this
+  // order because every column of the schema is validated on every schema
+  // change, and the total walks all the columns of the table.
   if (column->table() != nullptr &&
+      column->GetScalarOrBlobColumnSizeBytes() >
+          old_column->GetScalarOrBlobColumnSizeBytes() &&
       column->table()->FindKeyColumn(column->Name()) == nullptr) {
     int64_t total_non_key_columns_size =
         column->table()->GetTotalNonKeyColumnSizeBytes();
-    if (total_non_key_columns_size > limits::kMaxTotalNonKeyColumnsSizeBytes &&
-        column->GetScalarOrBlobColumnSizeBytes() >
-            old_column->GetScalarOrBlobColumnSizeBytes()) {
+    if (total_non_key_columns_size > limits::kMaxTotalNonKeyColumnsSizeBytes) {
       return error::InvalidTotalColumnSize(
           column->Name(), column->table()->Name(), total_non_key_columns_size,
           limits::kMaxTotalNonKeyColumnsSizeBytes);
