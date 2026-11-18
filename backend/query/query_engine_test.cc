@@ -7611,6 +7611,122 @@ TEST_P(QueryEngineTest, TestMockGraphAlgoTotalNeighborsSimilarity) {
               IsOkAndHolds(ElementsAre()));
 }
 
+// Reads from a TestRowReader and counts the reads of each table: a table is
+// read once for each time a scan of it is evaluated.
+class ReadCountingRowReader : public RowReader {
+ public:
+  explicit ReadCountingRowReader(
+      CaseInsensitiveStringMap<test::TestRowReader::Table> tables)
+      : reader_(std::move(tables)) {}
+
+  absl::Status Read(const ReadArg& read_arg,
+                    std::unique_ptr<RowCursor>* cursor) override {
+    ++reads_[read_arg.table];
+    return reader_.Read(read_arg, cursor);
+  }
+
+  int reads(const std::string& table) const {
+    auto it = reads_.find(table);
+    return it == reads_.end() ? 0 : it->second;
+  }
+
+ private:
+  test::TestRowReader reader_;
+  CaseInsensitiveStringMap<int> reads_;
+};
+
+// Items 1 to 20, the odd ones tagged 'a', each linked to the next. The WITH
+// entry over `tags` is the only scan of that table, so its reads count how
+// often the entry is evaluated.
+class WithEntryEvaluationTest : public QueryEngineTestBase {
+ protected:
+  WithEntryEvaluationTest() {
+    std::vector<std::vector<googlesql::Value>> items, tags, links;
+    for (int64_t id = 1; id <= 20; ++id) {
+      items.push_back({Int64(id)});
+      if (id % 2 == 1) tags.push_back({Int64(id), String("a")});
+      if (id < 20) links.push_back({Int64(id), Int64(id + 1)});
+    }
+    reader_ = std::make_unique<ReadCountingRowReader>(
+        CaseInsensitiveStringMap<test::TestRowReader::Table>{
+            {"items", {{"id"}, {googlesql::types::Int64Type()}, items}},
+            {"tags",
+             {{"id", "tag"},
+              {googlesql::types::Int64Type(), googlesql::types::StringType()},
+              tags}},
+            {"links",
+             {{"src", "dst"},
+              {googlesql::types::Int64Type(), googlesql::types::Int64Type()},
+              links}}});
+  }
+
+  void SetUp() override {
+    query_engine_ =
+        std::make_unique<QueryEngine>(type_factory(), with_schema_.get());
+  }
+
+  absl::StatusOr<std::vector<std::vector<googlesql::Value>>> Run(
+      const std::string& sql) {
+    GOOGLESQL_ASSIGN_OR_RETURN(
+        QueryResult result,
+        query_engine().ExecuteSql(
+            Query{sql}, QueryContext{with_schema_.get(), reader_.get()}));
+    return GetAllColumnValues(std::move(result.rows));
+  }
+
+  int TagsReads() const { return reader_->reads("tags"); }
+
+  // The ids 2, 4, ..., 20, one per row.
+  static std::vector<std::vector<googlesql::Value>> EvenIds() {
+    std::vector<std::vector<googlesql::Value>> rows;
+    for (int64_t id = 2; id <= 20; id += 2) {
+      rows.push_back({Int64(id)});
+    }
+    return rows;
+  }
+
+ private:
+  std::unique_ptr<const Schema> with_schema_ =
+      test::CreateSchemaFromDDL(
+          {
+              "CREATE TABLE items (id INT64 NOT NULL) PRIMARY KEY (id)",
+              "CREATE TABLE tags (id INT64 NOT NULL, tag STRING(MAX)) "
+              "PRIMARY KEY (id)",
+              "CREATE TABLE links (src INT64 NOT NULL, dst INT64 NOT NULL) "
+              "PRIMARY KEY (src, dst)",
+          },
+          type_factory())
+          .value();
+  std::unique_ptr<ReadCountingRowReader> reader_;
+};
+
+// Each entry is referenced once, from inside the IN subquery of the next.
+// Inlined there, an entry is evaluated again for every row of the query around
+// it, and the innermost once for every row of every level above it.
+TEST_F(WithEntryEvaluationTest, AnEntryReferencedFromASubqueryIsEvaluatedOnce) {
+  EXPECT_THAT(Run(R"sql(
+      WITH a AS (SELECT id FROM tags WHERE tag = 'a'),
+           b AS (SELECT DISTINCT id FROM items WHERE id IN (SELECT id FROM a)),
+           c AS (SELECT DISTINCT l.dst AS id
+                 FROM links l JOIN items base ON l.src = base.id
+                 WHERE base.id IN (SELECT id FROM b)),
+           d AS (SELECT DISTINCT id FROM c)
+      SELECT x.id FROM items x WHERE x.id IN (SELECT id FROM d)
+      ORDER BY x.id)sql"),
+              IsOkAndHolds(EvenIds()));
+  EXPECT_EQ(TagsReads(), 1);
+}
+
+TEST_F(WithEntryEvaluationTest, AnEntryInACorrelatedSubqueryIsEvaluatedOnce) {
+  EXPECT_THAT(Run(R"sql(
+      WITH a AS (SELECT id FROM tags WHERE tag = 'a')
+      SELECT x.id FROM items x
+      WHERE EXISTS (SELECT 1 FROM a WHERE a.id = x.id - 1)
+      ORDER BY x.id)sql"),
+              IsOkAndHolds(EvenIds()));
+  EXPECT_EQ(TagsReads(), 1);
+}
+
 }  // namespace
 
 }  // namespace backend
