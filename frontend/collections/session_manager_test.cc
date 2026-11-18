@@ -279,6 +279,36 @@ TEST_F(SessionManagerTest, ListSessionsWithSimilarPrefix) {
   }
 }
 
+TEST_F(SessionManagerTest, DeleteSessionsOfDatabaseReleasesTheDatabase) {
+  const long references_before = database_.use_count();
+  {
+    GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+        std::shared_ptr<Session> idle,
+        session_manager_.CreateSession(test_labels_, /*multiplexed=*/false,
+                                       database_, /*mux_txn_manager=*/nullptr));
+    // A session idle past its expiry, which ListSessions does not return.
+    idle->set_approximate_last_use_time(absl::Now() - absl::Hours(2));
+    GOOGLESQL_ASSERT_OK(session_manager_
+                  .CreateSession(test_labels_, /*multiplexed=*/true, database_,
+                                 /*mux_txn_manager=*/nullptr)
+                  .status());
+    GOOGLESQL_ASSERT_OK(session_manager_
+                  .CreateSession(test_labels_, /*multiplexed=*/false,
+                                 database_, /*mux_txn_manager=*/nullptr)
+                  .status());
+  }
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      std::vector<std::shared_ptr<Session>> listed,
+      session_manager_.ListSessions(database_->database_uri(),
+                                    /*include_multiplex_sessions=*/true));
+  EXPECT_EQ(listed.size(), 2);
+  listed.clear();
+  EXPECT_EQ(database_.use_count(), references_before + 3);
+
+  session_manager_.DeleteSessionsOfDatabase(database_->database_uri());
+  EXPECT_EQ(database_.use_count(), references_before);
+}
+
 }  // namespace frontend
 }  // namespace emulator
 }  // namespace spanner

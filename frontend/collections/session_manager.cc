@@ -124,6 +124,22 @@ absl::Status SessionManager::DeleteSession(const std::string& session_uri,
   return absl::OkStatus();
 }
 
+void SessionManager::DeleteSessionsOfDatabase(const std::string& database_uri) {
+  std::string session_uri_prefix = absl::StrCat(database_uri, "/");
+  // The last session may hold the last reference to the database, so destroy
+  // the sessions after the lock is released.
+  std::vector<std::shared_ptr<Session>> deleted;
+  {
+    absl::MutexLock lock(mu_);
+    auto itr = session_map_.lower_bound(session_uri_prefix);
+    while (itr != session_map_.end() &&
+           absl::StartsWith(itr->first, session_uri_prefix)) {
+      deleted.push_back(std::move(itr->second));
+      itr = session_map_.erase(itr);
+    }
+  }
+}
+
 }  // namespace frontend
 }  // namespace emulator
 }  // namespace spanner

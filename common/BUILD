@@ -28,6 +28,27 @@ package(
 licenses(["notice"])
 
 cc_library(
+    name = "memory_release",
+    srcs = ["memory_release.cc"],
+    hdrs = ["memory_release.h"],
+    deps = [
+        "@com_google_absl//absl/log:absl_log",
+        "@com_google_absl//absl/time",
+        "@tcmalloc//tcmalloc:malloc_extension",
+    ],
+)
+
+cc_test(
+    name = "memory_release_test",
+    srcs = ["memory_release_test.cc"],
+    deps = [
+        ":memory_release",
+        "@com_google_googletest//:gtest_main",
+        "@tcmalloc//tcmalloc:malloc_extension",
+    ],
+)
+
+cc_library(
     name = "clock",
     srcs = ["clock.cc"],
     hdrs = ["clock.h"],
