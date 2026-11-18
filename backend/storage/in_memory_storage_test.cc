@@ -989,6 +989,80 @@ TEST_F(InMemoryStorageTest, EachWriteCollectsABoundedNumberOfDueRows) {
   EXPECT_FALSE(itr_->Next());
 }
 
+TEST_F(InMemoryStorageTest, DeleteAndWriteAgainInOneCommitClearsUnwrittenColumns) {
+  const ColumnID kColumnID1 = "test_column:1";
+  absl::Time t0 = absl::Now();
+  absl::Time t1 = t0 + absl::Seconds(1);
+  GOOGLESQL_EXPECT_OK(storage_.Write(t0, kTableId0, Key({Int64(1)}),
+                           {kColumnID, kColumnID1},
+                           {String("a-0"), String("b-0")}));
+  // One commit updates a column, deletes the row and inserts it again with the
+  // other column only, as a replace after an update does.
+  GOOGLESQL_EXPECT_OK(storage_.Write(t1, kTableId0, Key({Int64(1)}), {kColumnID1},
+                           {String("b-1")}));
+  GOOGLESQL_EXPECT_OK(storage_.Delete(t1, kTableId0, KeyRange::Point(Key({Int64(1)}))));
+  GOOGLESQL_EXPECT_OK(storage_.Write(t1, kTableId0, Key({Int64(1)}), {kColumnID},
+                           {String("a-1")}));
+
+  std::vector<googlesql::Value> values;
+  GOOGLESQL_EXPECT_OK(storage_.Lookup(t1, kTableId0, Key({Int64(1)}),
+                            {kColumnID, kColumnID1}, &values));
+  EXPECT_THAT(values, testing::ElementsAre(String("a-1"), googlesql::Value()));
+  GOOGLESQL_EXPECT_OK(storage_.Lookup(t0, kTableId0, Key({Int64(1)}),
+                            {kColumnID, kColumnID1}, &values));
+  EXPECT_THAT(values, testing::ElementsAre(String("a-0"), String("b-0")));
+}
+
+TEST_F(InMemoryStorageTest, ColumnsWrittenInAnyOrderReadBackByID) {
+  const std::vector<ColumnID> columns = {"c:0", "c:1", "c:2", "c:3", "c:4"};
+  absl::Time t0 = absl::Now();
+  // Each row writes the columns in another order, one or two at a time.
+  for (int key = 0; key < 5; ++key) {
+    for (int i = 0; i < columns.size(); ++i) {
+      int column = (key * 3 + i * (key + 1)) % columns.size();
+      GOOGLESQL_EXPECT_OK(storage_.Write(t0 + absl::Seconds(i), kTableId0,
+                               Key({Int64(key)}), {columns[column]},
+                               {Int64(key * 10 + column)}));
+    }
+  }
+  for (int key = 0; key < 5; ++key) {
+    std::vector<googlesql::Value> values;
+    GOOGLESQL_EXPECT_OK(storage_.Lookup(t0 + absl::Seconds(10), kTableId0,
+                              Key({Int64(key)}), columns, &values));
+    std::vector<googlesql::Value> expected;
+    for (int column = 0; column < columns.size(); ++column) {
+      bool written = false;
+      for (int i = 0; i < columns.size(); ++i) {
+        written |= (key * 3 + i * (key + 1)) % columns.size() == column;
+      }
+      expected.push_back(written ? Int64(key * 10 + column)
+                                 : googlesql::Value());
+    }
+    EXPECT_EQ(values, expected) << "key " << key;
+  }
+}
+
+TEST_F(InMemoryStorageTest, WriteAtAnEarlierTimestampKeepsVersionsInOrder) {
+  absl::Time t0 = absl::Now();
+  GOOGLESQL_EXPECT_OK(storage_.Write(t0 + absl::Seconds(2), kTableId0,
+                           Key({Int64(1)}), {kColumnID}, {String("v-2")}));
+  GOOGLESQL_EXPECT_OK(storage_.Write(t0 + absl::Seconds(1), kTableId0,
+                           Key({Int64(1)}), {kColumnID}, {String("v-1")}));
+  GOOGLESQL_EXPECT_OK(storage_.Write(t0 + absl::Seconds(3), kTableId0,
+                           Key({Int64(1)}), {kColumnID}, {String("v-3")}));
+  GOOGLESQL_EXPECT_OK(storage_.Write(t0 + absl::Seconds(2), kTableId0,
+                           Key({Int64(1)}), {kColumnID}, {String("v-2b")}));
+  std::vector<googlesql::Value> values;
+  for (auto [second, expected] :
+       std::vector<std::pair<int, std::string>>{
+           {1, "v-1"}, {2, "v-2b"}, {3, "v-3"}, {4, "v-3"}}) {
+    GOOGLESQL_EXPECT_OK(storage_.Lookup(t0 + absl::Seconds(second), kTableId0,
+                              Key({Int64(1)}), {kColumnID}, &values));
+    EXPECT_THAT(values, testing::ElementsAre(String(expected)))
+        << "second " << second;
+  }
+}
+
 }  // namespace
 
 }  // namespace backend
