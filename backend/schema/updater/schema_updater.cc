@@ -7724,6 +7724,22 @@ SchemaUpdater::CreateSchemaFromDDL(
   return std::move(schemas.back());
 }
 
+absl::StatusOr<std::unique_ptr<const Schema>> CloneSchema(
+    const Schema& schema, std::string_view database_id) {
+  // The editor needs a context for the nodes a statement adds. A clone adds
+  // none and validates nothing, so the context has no storage, names or type
+  // factory to offer.
+  SchemaValidationContext context(/*storage=*/nullptr,
+                                  /*global_names=*/nullptr,
+                                  /*type_factory=*/nullptr, absl::Time(),
+                                  schema.dialect());
+  SchemaGraphEditor editor(schema.GetSchemaGraph(), &context);
+  GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<SchemaGraph> graph,
+                             editor.CloneGraph());
+  return std::make_unique<const OwningSchema>(
+      std::move(graph), schema.proto_bundle(), schema.dialect(), database_id);
+}
+
 absl::StatusOr<std::unique_ptr<ddl::DDLStatement>> ParseDDLByDialect(
     absl::string_view statement, database_api::DatabaseDialect dialect) {
   if (dialect == database_api::DatabaseDialect::POSTGRESQL) {

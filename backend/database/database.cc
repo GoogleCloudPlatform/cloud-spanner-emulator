@@ -23,6 +23,7 @@
 #include "google/spanner/admin/database/v1/common.pb.h"
 #include "googlesql/public/types/type_factory.h"
 #include "absl/functional/bind_front.h"
+#include "absl/log/log.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -34,6 +35,7 @@
 #include "backend/common/ids.h"
 #include "backend/database/change_stream/change_stream_partition_churner.h"
 #include "backend/database/pg_oid_assigner/pg_oid_assigner.h"
+#include "backend/database/schema_cache.h"
 #include "backend/locking/manager.h"
 #include "backend/query/query_engine.h"
 #include "backend/schema/catalog/proto_bundle.h"
@@ -67,9 +69,11 @@ absl::StatusOr<std::unique_ptr<Database>> Database::Create(
   auto database = absl::WrapUnique(new Database());
   database->clock_ = clock;
   database->database_id_ = database_id;
-  database->storage_ = std::make_unique<InMemoryStorage>();
+  auto storage = std::make_unique<InMemoryStorage>();
+  const InMemoryStorage& new_storage = *storage;
+  database->storage_ = std::move(storage);
   database->lock_manager_ = std::make_unique<LockManager>(clock);
-  database->type_factory_ = std::make_unique<googlesql::TypeFactory>();
+  database->type_factory_ = std::make_shared<googlesql::TypeFactory>();
   database->action_manager_ = std::make_unique<ActionManager>();
   database->dialect_ = schema_change_operation.database_dialect;
   database->pg_oid_assigner_ = std::make_unique<PgOidAssigner>(
@@ -87,13 +91,8 @@ absl::StatusOr<std::unique_ptr<Database>> Database::Create(
       database->versioned_catalog_ = std::make_unique<VersionedCatalog>();
     }
   } else {
-    SchemaUpdater updater;
-    GOOGLESQL_ASSIGN_OR_RETURN(
-        std::unique_ptr<const Schema> schema,
-        updater.CreateSchemaFromDDL(schema_change_operation,
-                                    database->GetSchemaChangeContext()));
-    database->versioned_catalog_ =
-        std::make_unique<VersionedCatalog>(std::move(schema));
+    GOOGLESQL_RETURN_IF_ERROR(
+        database->CreateSchema(schema_change_operation, new_storage));
   }
 
   database->query_engine_ = std::make_unique<QueryEngine>(
@@ -124,6 +123,87 @@ absl::StatusOr<std::unique_ptr<Database>> Database::Create(
 
   return database;
 }
+
+namespace {
+
+// Whether a schema just built for a new database can be copied for another
+// one. It can when the build left nothing but the schema, and the schema has
+// nothing that lives outside its nodes:
+// - a sequence, which an identity column also makes, counts in a map of the
+//   process under its own ID;
+// - a change stream has partition rows, written to storage when it is made,
+//   and a churner thread that follows them;
+// - a queue keeps messages, and what of that lives outside its node has not
+//   been worked out, so it is left to build;
+// - a row in storage or a dropped table or column recorded there is the trace
+//   of a backfill or of a statement that dropped something.
+// These are read off the result, not guessed from the statements: a column
+// may be named `sequence`.
+bool IsShareable(const Schema& schema, const InMemoryStorage& storage) {
+  return schema.sequences().empty() && schema.change_streams().empty() &&
+         schema.queues().empty() && storage.Empty();
+}
+
+}  // namespace
+
+absl::Status Database::CreateSchema(
+    const SchemaChangeOperation& schema_change_operation,
+    const InMemoryStorage& storage) {
+  // PostgreSQL databases always build their own: their schema objects carry
+  // OIDs handed out by the database's own assigner.
+  std::unique_ptr<SchemaCache::Build> build;
+  if (SchemaCache::Enabled() &&
+      dialect_ == database_api::DatabaseDialect::GOOGLE_STANDARD_SQL) {
+    SchemaCache::Lookup lookup = SchemaCache::Instance().Acquire(
+        SchemaCache::KeyFor(schema_change_operation));
+    if (lookup.built != nullptr) {
+      auto schema = lookup.built->CloneFor(database_id_);
+      if (schema.ok()) {
+        adopted_schema_ = std::move(lookup.built);
+        table_id_generator_.set_next_seq(adopted_schema_->next_table_id());
+        column_id_generator_.set_next_seq(adopted_schema_->next_column_id());
+        queue_id_generator_.set_next_seq(adopted_schema_->next_queue_id());
+        versioned_catalog_ =
+            std::make_unique<VersionedCatalog>(std::move(schema).value());
+        return absl::OkStatus();
+      }
+      // A schema that was built can be copied, so this is a defect. The
+      // database is still owed its schema: build it.
+      ABSL_LOG(ERROR) << "Could not copy a cached schema, building it instead: "
+                      << schema.status();
+    }
+    build = std::move(lookup.build);
+  }
+
+  // If this returns early, `build` is destroyed unreported, which tells the
+  // creates waiting on it to build their own.
+  SchemaUpdater updater;
+  GOOGLESQL_ASSIGN_OR_RETURN(
+      std::unique_ptr<const Schema> schema,
+      updater.CreateSchemaFromDDL(schema_change_operation,
+                                  GetSchemaChangeContext()));
+
+  if (build != nullptr) {
+    // What is published is a copy, not the schema this database goes on to
+    // use: this database may be dropped, or change its schema, at any time.
+    absl::StatusOr<std::unique_ptr<const Schema>> copy =
+        schema != nullptr && IsShareable(*schema, storage)
+            ? CloneSchema(*schema, /*database_id=*/"")
+            : absl::StatusOr<std::unique_ptr<const Schema>>(nullptr);
+    if (copy.ok() && *copy != nullptr) {
+      build->Publish(std::make_shared<const BuiltSchema>(
+          type_factory_, std::move(copy).value(),
+          table_id_generator_.next_seq(), column_id_generator_.next_seq(),
+          queue_id_generator_.next_seq()));
+    } else {
+      build->MarkNotShareable();
+    }
+  }
+
+  versioned_catalog_ = std::make_unique<VersionedCatalog>(std::move(schema));
+  return absl::OkStatus();
+}
+
 absl::StatusOr<std::unique_ptr<ReadOnlyTransaction>>
 Database::CreateReadOnlyTransaction(const ReadOnlyOptions& options) {
   return std::make_unique<ReadOnlyTransaction>(

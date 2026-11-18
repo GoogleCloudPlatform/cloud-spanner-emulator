@@ -204,6 +204,14 @@ SchemaGraphEditor::CanonicalizeGraph() {
   return cloned_graph;
 }
 
+absl::StatusOr<std::unique_ptr<SchemaGraph>> SchemaGraphEditor::CloneGraph() {
+  GOOGLESQL_RET_CHECK(!HasModifications());
+  GOOGLESQL_RETURN_IF_ERROR(CanonicalizeEdits());
+  GOOGLESQL_RET_CHECK_EQ(new_nodes_.size(), num_original_nodes());
+  return std::make_unique<SchemaGraph>(std::move(new_nodes_),
+                                       std::move(cloned_pool_));
+}
+
 absl::Status SchemaGraphEditor::CanonicalizeEdits() {
   if (clone_map_.empty()) {
     GOOGLESQL_RETURN_IF_ERROR(InitCloneMap());

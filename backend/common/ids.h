@@ -50,6 +50,21 @@ class UniqueIdGenerator {
     return IdType{next_seq_++};
   }
 
+  // The number the next ID will carry.
+  int64_t next_seq() ABSL_LOCKS_EXCLUDED(mu_) {
+    absl::MutexLock lock(&mu_);
+    return next_seq_;
+  }
+
+  // Continues from where another generator stopped. For a database that
+  // adopts a schema built by another database: its next ID must be the one a
+  // build of its own would have reached, or it would hand out an ID the
+  // adopted schema already holds.
+  void set_next_seq(int64_t next_seq) ABSL_LOCKS_EXCLUDED(mu_) {
+    absl::MutexLock lock(&mu_);
+    next_seq_ = next_seq;
+  }
+
  private:
   absl::Mutex mu_;
   int64_t next_seq_ ABSL_GUARDED_BY(mu_);

@@ -97,6 +97,14 @@ struct SchemaChangeResult {
 absl::StatusOr<std::unique_ptr<ddl::DDLStatement>> ParseDDLByDialect(
     absl::string_view statement, database_api::DatabaseDialect dialect);
 
+// Returns a copy of `schema` for the database `database_id` that shares no
+// schema node with it: a DDL statement applied to either leaves the other as
+// it was. The copy's column types are the original's, so whatever owns those
+// (the type factory the original was built with, and its proto bundle) must
+// outlive the copy.
+absl::StatusOr<std::unique_ptr<const Schema>> CloneSchema(
+    const Schema& schema, std::string_view database_id);
+
 class SchemaUpdater {
  public:
   SchemaUpdater() = default;
