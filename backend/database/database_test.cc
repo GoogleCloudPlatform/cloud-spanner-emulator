@@ -227,6 +227,125 @@ TEST_F(DatabaseTest, UpdateSchemaPartialSuccess) {
   EXPECT_EQ(completed_statements, 1);
 }
 
+// A schema snapshot is released during the change once no backfill can read
+// it. The one a failed backfill falls back to is not among those.
+TEST_F(DatabaseTest, UpdateSchemaFallsBackToSnapshotBeforeFailedBackfill) {
+  std::vector<std::string> create_statements = {R"(
+    CREATE TABLE T(
+      k1 INT64,
+      k2 INT64,
+    ) PRIMARY KEY(k1)
+  )"};
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      auto db,
+      Database::Create(&clock_, kDatabaseId,
+                       SchemaChangeOperation{.statements = create_statements}));
+
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<ReadWriteTransaction> txn,
+      db->CreateReadWriteTransaction(ReadWriteOptions(), RetryState()));
+  Mutation m;
+  m.AddWriteOp(MutationOpType::kInsert, "T", {"k1", "k2"},
+               {{Int64(1), Int64(2)}});
+  m.AddWriteOp(MutationOpType::kInsert, "T", {"k1", "k2"},
+               {{Int64(2), Int64(2)}});
+  GOOGLESQL_ASSERT_OK(txn->Write(m));
+  GOOGLESQL_ASSERT_OK(txn->Commit());
+
+  // Four statements with nothing to verify or backfill, then an index whose
+  // backfill fails, then two more statements.
+  std::vector<std::string> update_statements = {
+      "CREATE TABLE A1(a INT64) PRIMARY KEY(a)",
+      "CREATE TABLE A2(a INT64) PRIMARY KEY(a)",
+      "CREATE TABLE A3(a INT64) PRIMARY KEY(a)",
+      "CREATE TABLE A4(a INT64) PRIMARY KEY(a)",
+      "CREATE UNIQUE INDEX Idx on T(k2)",
+      "CREATE TABLE A5(a INT64) PRIMARY KEY(a)",
+      "CREATE TABLE A6(a INT64) PRIMARY KEY(a)",
+  };
+
+  absl::Status backfill_status;
+  int completed_statements;
+  absl::Time commit_ts;
+  GOOGLESQL_EXPECT_OK(
+      db->UpdateSchema(SchemaChangeOperation{.statements = update_statements},
+                       &completed_statements, &commit_ts, &backfill_status));
+  EXPECT_EQ(backfill_status,
+            error::UniqueIndexViolationOnIndexCreation("Idx", "{Int64(2)}"));
+  EXPECT_EQ(completed_statements, 4);
+
+  const Schema* schema = db->GetLatestSchema();
+  EXPECT_NE(schema->FindTable("A1"), nullptr);
+  EXPECT_NE(schema->FindTable("A4"), nullptr);
+  EXPECT_EQ(schema->FindIndex("Idx"), nullptr);
+  EXPECT_EQ(schema->FindTable("A5"), nullptr);
+
+  // The schema it fell back to takes further changes and reads.
+  std::vector<std::string> more_statements = {
+      "CREATE INDEX Idx2 on T(k2)",
+      "CREATE TABLE A5(a INT64) PRIMARY KEY(a)",
+  };
+  GOOGLESQL_EXPECT_OK(
+      db->UpdateSchema(SchemaChangeOperation{.statements = more_statements},
+                       &completed_statements, &commit_ts, &backfill_status));
+  GOOGLESQL_EXPECT_OK(backfill_status);
+  EXPECT_EQ(completed_statements, 2);
+  EXPECT_NE(db->GetLatestSchema()->FindIndex("Idx2"), nullptr);
+}
+
+// A database is created by running each statement's backfills as soon as the
+// statement is applied. The schema it ends with is that of all the statements.
+TEST_F(DatabaseTest, CreateRunsEveryStatementWithItsBackfills) {
+  std::vector<std::string> create_statements = {
+      "CREATE TABLE P(k INT64, v STRING(MAX), d INT64 DEFAULT (7), "
+      "g INT64 AS (k + 1) STORED) PRIMARY KEY(k)",
+      "CREATE INDEX PByV ON P(v)",
+      "CREATE TABLE C(k INT64, c INT64, CONSTRAINT positive CHECK (c > 0)) "
+      "PRIMARY KEY(k, c), INTERLEAVE IN PARENT P ON DELETE CASCADE",
+      "ALTER TABLE C ADD CONSTRAINT fk FOREIGN KEY (k) REFERENCES P (k)",
+      "CREATE TABLE Unused(k INT64) PRIMARY KEY(k)",
+      "DROP TABLE Unused",
+      "CREATE UNIQUE NULL_FILTERED INDEX CByC ON C(c)",
+      "ALTER TABLE P ADD COLUMN w BOOL",
+  };
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      auto db,
+      Database::Create(&clock_, kDatabaseId,
+                       SchemaChangeOperation{.statements = create_statements}));
+
+  const Schema* schema = db->GetLatestSchema();
+  ASSERT_NE(schema->FindTable("P"), nullptr);
+  EXPECT_NE(schema->FindTable("P")->FindColumn("w"), nullptr);
+  EXPECT_NE(schema->FindTable("C"), nullptr);
+  EXPECT_EQ(schema->FindTable("Unused"), nullptr);
+  EXPECT_NE(schema->FindIndex("PByV"), nullptr);
+  EXPECT_NE(schema->FindIndex("CByC"), nullptr);
+
+  GOOGLESQL_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<ReadWriteTransaction> txn,
+      db->CreateReadWriteTransaction(ReadWriteOptions(), RetryState()));
+  Mutation m;
+  m.AddWriteOp(MutationOpType::kInsert, "P", {"k", "v"},
+               {{Int64(1), googlesql::values::String("a")}});
+  m.AddWriteOp(MutationOpType::kInsert, "C", {"k", "c"},
+               {{Int64(1), Int64(5)}});
+  GOOGLESQL_ASSERT_OK(txn->Write(m));
+  GOOGLESQL_ASSERT_OK(txn->Commit());
+}
+
+// An invalid statement fails the create whatever came before it.
+TEST_F(DatabaseTest, CreateFailsOnALaterInvalidStatement) {
+  std::vector<std::string> create_statements = {
+      "CREATE TABLE P(k INT64, v STRING(MAX)) PRIMARY KEY(k)",
+      "CREATE INDEX PByV ON P(v)",
+      "CREATE INDEX PByMissing ON P(missing)",
+  };
+  EXPECT_FALSE(Database::Create(&clock_, kDatabaseId,
+                                SchemaChangeOperation{
+                                    .statements = create_statements})
+                   .ok());
+}
+
 TEST_F(DatabaseTest, ConcurrentSchemaChangeIsAborted) {
   auto current_probability = config::abort_current_transaction_probability();
   config::set_abort_current_transaction_probability(0);

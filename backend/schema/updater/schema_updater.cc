@@ -237,8 +237,15 @@ class SchemaUpdaterImpl {
   // the schema change actions resulting from each statement. Please note that
   // it can return an empty vector when all statements are no-op and no changes
   // are made.
+  //
+  // With `run_actions_as_applied`, the actions of a statement run as soon as
+  // the statement is applied, the first failure is returned, and no context is
+  // returned. That is for a database being created: it has no rows a later
+  // statement could still make invalid, and nothing to keep if the change
+  // fails part-way.
   absl::StatusOr<std::vector<SchemaValidationContext>> ApplyDDLStatements(
-      const SchemaChangeOperation& schema_change_operation);
+      const SchemaChangeOperation& schema_change_operation,
+      bool run_actions_as_applied = false);
 
   std::vector<std::unique_ptr<const Schema>> GetIntermediateSchemas() {
     return std::move(intermediate_schemas_);
@@ -791,7 +798,8 @@ class SchemaUpdaterImpl {
   const Schema* latest_schema_;
 
   // The intermediate schema snapshots representing the schema state after
-  // applying each statement.
+  // applying each statement. An entry is null once no verifier or backfill
+  // can read its snapshot any more.
   std::vector<std::unique_ptr<const Schema>> intermediate_schemas_;
 
   // Validation context for the statement being currently processed.
@@ -1265,8 +1273,12 @@ SchemaUpdaterImpl::ApplyDDLStatement(
 
 absl::StatusOr<std::vector<SchemaValidationContext>>
 SchemaUpdaterImpl::ApplyDDLStatements(
-    const SchemaChangeOperation& schema_change_operation) {
+    const SchemaChangeOperation& schema_change_operation,
+    bool run_actions_as_applied) {
   std::vector<SchemaValidationContext> pending_work;
+  // Whether the statement applied before the current one left actions that
+  // have yet to run.
+  bool previous_has_pending_actions = false;
 
   for (const auto& statement : schema_change_operation.statements) {
     GOOGLESQL_VLOG(2) << "Applying statement " << statement;
@@ -1322,7 +1334,31 @@ SchemaUpdaterImpl::ApplyDDLStatements(
     // If everything was OK, make this the new schema snapshot for processing
     // the next statement and save the pending schema snapshot and backfill
     // work.
-    pending_work.emplace_back(std::move(statement_context));
+    const bool has_pending_actions =
+        !run_actions_as_applied && statement_context.num_actions() > 0;
+    if (run_actions_as_applied) {
+      GOOGLESQL_RETURN_IF_ERROR(statement_context.RunSchemaChangeActions());
+    } else {
+      pending_work.emplace_back(std::move(statement_context));
+    }
+
+    // From here on a snapshot is read only by the actions of the statement
+    // that produced it and of the statement after it, which see it as their
+    // new and their old schema and hold pointers into its nodes. When neither
+    // has any left to run, the snapshot before this one goes now rather than
+    // when the whole change ends: a snapshot is a copy of every node of the
+    // schema, and a change of several hundred statements otherwise holds
+    // several hundred of them at once. The slot stays, so that a snapshot
+    // keeps the index of its statement.
+    const size_t num_applied = intermediate_schemas_.size();
+    if (num_applied >= 2 && !previous_has_pending_actions &&
+        !has_pending_actions) {
+      // The editor of the statement just applied still names that snapshot's
+      // graph as its original.
+      editor_.reset();
+      intermediate_schemas_[num_applied - 2].reset();
+    }
+    previous_has_pending_actions = has_pending_actions;
 
     if (storage_ != nullptr) {
       for (auto& table_id : dropped_tables_) {
@@ -7638,6 +7674,9 @@ absl::StatusOr<SchemaChangeResult> SchemaUpdater::UpdateSchemaFromDDL(
   absl::Status backfill_status = RunPendingActions(&num_successful);
   if (num_successful > 0) {
     new_schema = std::move(intermediate_schemas_[num_successful - 1]);
+    // The snapshot of the last statement is never released early, nor is the
+    // one before a statement whose action can fail.
+    GOOGLESQL_RET_CHECK_NE(new_schema, nullptr);
     GOOGLESQL_RETURN_IF_ERROR(context.pg_oid_assigner->EndAssignmentAtIntermediateSchema(
         num_successful - 1));
   }
@@ -7654,12 +7693,35 @@ SchemaUpdater::CreateSchemaFromDDL(
     const SchemaChangeOperation& schema_change_operation,
     const SchemaChangeContext& context) {
   GOOGLESQL_ASSIGN_OR_RETURN(
-      SchemaChangeResult result,
-      UpdateSchemaFromDDL(EmptySchema(context.database_id,
-                                      schema_change_operation.database_dialect),
-                          schema_change_operation, context));
-  GOOGLESQL_RETURN_IF_ERROR(result.backfill_status);
-  return std::move(result.updated_schema);
+      SchemaUpdaterImpl updater,
+      SchemaUpdaterImpl::Build(
+          context.type_factory, context.table_id_generator,
+          context.queue_id_generator, context.column_id_generator,
+          context.storage, context.schema_change_timestamp,
+          context.pg_oid_assigner,
+          EmptySchema(context.database_id,
+                      schema_change_operation.database_dialect),
+          context.database_id));
+  context.pg_oid_assigner->BeginAssignment();
+  // An update applies every statement before it runs any action, so that an
+  // invalid statement leaves the rows of the database untouched, and so keeps
+  // the snapshots of most statements until the end. A database being created
+  // has no rows and is discarded when its creation fails, so each statement's
+  // actions run as soon as it is applied and at most two snapshots are alive.
+  GOOGLESQL_RETURN_IF_ERROR(
+      updater
+          .ApplyDDLStatements(schema_change_operation,
+                              /*run_actions_as_applied=*/true)
+          .status());
+  std::vector<std::unique_ptr<const Schema>> schemas =
+      updater.GetIntermediateSchemas();
+  if (schemas.empty()) {
+    return nullptr;
+  }
+  GOOGLESQL_RETURN_IF_ERROR(
+      context.pg_oid_assigner->EndAssignmentAtIntermediateSchema(
+          schemas.size() - 1));
+  return std::move(schemas.back());
 }
 
 absl::StatusOr<std::unique_ptr<ddl::DDLStatement>> ParseDDLByDialect(
