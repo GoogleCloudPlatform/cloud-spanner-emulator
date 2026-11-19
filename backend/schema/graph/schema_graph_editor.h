@@ -180,6 +180,12 @@ class SchemaGraphEditor {
     return absl::OkStatus();
   }
 
+  // Returns a copy of the original graph: a clone of every node, in the
+  // original order, with every reference between nodes pointing at a clone.
+  // Nothing is validated, since nothing changed. Only for an editor with no
+  // modifications, and the editor must not be used afterwards.
+  absl::StatusOr<std::unique_ptr<SchemaGraph>> CloneGraph();
+
   // Returns true if the graph has any modifications.
   bool HasModifications() const {
     return !deleted_nodes_.empty() || !edited_clones_.empty() ||

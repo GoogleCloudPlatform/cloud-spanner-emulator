@@ -78,6 +78,10 @@ class InMemoryStorage : public Storage {
                          ColumnID dropped_column_id) override
       ABSL_LOCKS_EXCLUDED(mu_);
 
+  // True when the storage holds no table and no record of a dropped table or
+  // column, as the storage of a new database does.
+  bool Empty() const ABSL_LOCKS_EXCLUDED(mu_);
+
  private:
   using Cell = std::map<absl::Time, googlesql::Value>;
   using Row = absl::flat_hash_map<ColumnID, Cell>;

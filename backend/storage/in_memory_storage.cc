@@ -300,6 +300,11 @@ void InMemoryStorage::CleanUpDeletedColumns(absl::Time timestamp) {
   }
 }
 
+bool InMemoryStorage::Empty() const {
+  absl::MutexLock lock(&mu_);
+  return tables_.empty() && dropped_tables_.empty() && dropped_columns_.empty();
+}
+
 void InMemoryStorage::MarkDroppedTable(absl::Time timestamp,
                                        TableID dropped_table_id) {
   absl::MutexLock lock(mu_);

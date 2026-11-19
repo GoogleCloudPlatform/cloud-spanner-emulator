@@ -32,11 +32,13 @@
 #include "backend/common/ids.h"
 #include "backend/database/change_stream/change_stream_partition_churner.h"
 #include "backend/database/pg_oid_assigner/pg_oid_assigner.h"
+#include "backend/database/schema_cache.h"
 #include "backend/locking/manager.h"
 #include "backend/query/query_engine.h"
 #include "backend/schema/catalog/schema.h"
 #include "backend/schema/catalog/versioned_catalog.h"
 #include "backend/schema/updater/schema_updater.h"
+#include "backend/storage/in_memory_storage.h"
 #include "backend/storage/storage.h"
 #include "backend/transaction/options.h"
 #include "backend/transaction/read_only_transaction.h"
@@ -130,6 +132,15 @@ class Database {
 
   SchemaChangeContext GetSchemaChangeContext();
 
+  // Gives a database being created the schema of `schema_change_operation`:
+  // a copy of the one an earlier database built from the same statements,
+  // when the schema cache has one, and otherwise one built here, which is
+  // offered to the cache if nothing in it belongs to this database alone.
+  // `storage` is this database's storage.
+  absl::Status CreateSchema(
+      const SchemaChangeOperation& schema_change_operation,
+      const InMemoryStorage& storage);
+
   // Clock to provide commit timestamps.
   Clock* clock_;
 
@@ -151,14 +162,22 @@ class Database {
   // Unique ID generator for storage ColumnIDs.
   ColumnIDGenerator column_id_generator_;
 
+  // The schema this database copied at creation, when it did not build its
+  // own. Held because the copy's column types belong to the type factory of
+  // the database that built it. Declared before everything that holds a
+  // schema, a type or a value, so that it is released after them.
+  std::shared_ptr<const BuiltSchema> adopted_schema_;
+
   // Underlying storage for the database.
   std::unique_ptr<Storage> storage_;
 
   // Lock management.
   std::unique_ptr<LockManager> lock_manager_;
 
-  // Type factory used for all GoogleSQL operations on this database.
-  std::unique_ptr<googlesql::TypeFactory> type_factory_;
+  // Type factory used for all GoogleSQL operations on this database. Shared
+  // with the schema cache once this database's schema is published there: the
+  // copies other databases take point at types this factory owns.
+  std::shared_ptr<googlesql::TypeFactory> type_factory_;
 
   // Versioned catalog of this database.
   std::unique_ptr<VersionedCatalog> versioned_catalog_;

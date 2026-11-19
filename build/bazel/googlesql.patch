@@ -532,3 +532,155 @@ index 6d59d274..cc8d1398 100644
  
    static std::vector<Value> ToValues(absl::Span<const ValueConstructor> slice) {
      std::vector<Value> values;
+diff --git a/googlesql/reference_impl/algebrizer.cc b/googlesql/reference_impl/algebrizer.cc
+--- a/googlesql/reference_impl/algebrizer.cc
++++ b/googlesql/reference_impl/algebrizer.cc
+@@ -1666,7 +1666,7 @@
+ 
+   // Algebrize the subquery.
+   GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<RelationalOp> group_rows_subquery,
+-                   AlgebrizeScan(subquery_expr->subquery()));
++                   AlgebrizeScanInSubqueryExpr(subquery_expr->subquery()));
+ 
+   // The evaluation strategy for subqueries is to:
+   // 1. Run the subquery as a relational scan (yielding multiple rows of output
+@@ -2869,7 +2869,8 @@
+       };
+   GOOGLESQL_RETURN_IF_ERROR(CheckHints(subquery_expr->hint_list()));
+   const ResolvedScan* scan = subquery_expr->subquery();
+-  GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<RelationalOp> relation, AlgebrizeScan(scan));
++  GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<RelationalOp> relation,
++                   AlgebrizeScanInSubqueryExpr(scan));
+ 
+   const ResolvedColumnList& output_columns = scan->column_list();
+   switch (subquery_expr->subquery_type()) {
+@@ -4038,10 +4039,18 @@
+ //
+ //  t1 and t4 would have one reference, while t2 and t3 would have zero
+ //  references.
++//
++// A reference inside a subquery expression counts twice, so that its entry is
++// evaluated once instead of being inlined: the subquery is evaluated again for
++// every row of the query around it, and an inlined entry with it. When the
++// WITH clause itself sits in a subquery expression (`query_is_repeated`), so
++// does every reference its main query makes. An entry's own definition is
++// counted as evaluated once: it is either bound at the root or inlined at a
++// reference counted once, which is not in a subquery.
+ class FindWithEntryReferenceCountVisitor : public ResolvedASTVisitor {
+  public:
+   static absl::StatusOr<absl::flat_hash_map<std::string, int>> Run(
+-      const ResolvedWithScan* scan) {
++      const ResolvedWithScan* scan, bool query_is_repeated) {
+     absl::flat_hash_map<std::string, int> result;
+     std::stack<const ResolvedNode*> stack;
+     absl::flat_hash_set<const ResolvedNode*> visited;
+@@ -4053,6 +4062,8 @@
+       }
+       visited.insert(stack.top());
+       FindWithEntryReferenceCountVisitor visitor;
++      visitor.subquery_expr_depth_ =
++          query_is_repeated && stack.top() == scan->query() ? 1 : 0;
+       for (const auto& with_entry : scan->with_entry_list()) {
+         visitor.reference_count_[with_entry->with_query_name()] = 0;
+       }
+@@ -4101,17 +4112,26 @@
+     return absl::OkStatus();
+   }
+ 
++  absl::Status VisitResolvedSubqueryExpr(
++      const ResolvedSubqueryExpr* expr) override {
++    ++subquery_expr_depth_;
++    absl::Status status = DefaultVisit(expr);
++    --subquery_expr_depth_;
++    return status;
++  }
++
+   absl::Status VisitResolvedWithRefScan(
+       const ResolvedWithRefScan* scan) override {
+     auto it = reference_count_.find(scan->with_query_name());
+     if (it != reference_count_.end()) {
+-      ++it->second;
++      it->second += subquery_expr_depth_ > 0 ? 2 : 1;
+     }
+     return absl::OkStatus();
+   }
+ 
+  private:
+   absl::flat_hash_map<std::string, int> reference_count_;
++  int subquery_expr_depth_ = 0;
+ };
+ 
+ absl::StatusOr<std::unique_ptr<RelationalOp>> Algebrizer::AlgebrizeWithScan(
+@@ -4128,8 +4148,10 @@
+   // skipped altogether.
+   std::optional<absl::flat_hash_map<std::string, int>> reference_count_by_name;
+   if (algebrizer_options_.inline_with_entries) {
+-    GOOGLESQL_ASSIGN_OR_RETURN(reference_count_by_name,
+-                     FindWithEntryReferenceCountVisitor::Run(scan));
++    GOOGLESQL_ASSIGN_OR_RETURN(
++        reference_count_by_name,
++        FindWithEntryReferenceCountVisitor::Run(
++            scan, /*query_is_repeated=*/subquery_expr_depth_ > 0));
+   }
+ 
+   for (const auto& with_entry : scan->with_entry_list()) {
+@@ -4151,8 +4173,14 @@
+         continue;
+       }
+     }
++    // Bound at the root and evaluated once, wherever the WITH clause sits.
++    const int enclosing_subquery_expr_depth = subquery_expr_depth_;
++    subquery_expr_depth_ = 0;
++    absl::StatusOr<std::unique_ptr<RelationalOp>> algebrized_subquery =
++        AlgebrizeScan(with_entry->with_subquery());
++    subquery_expr_depth_ = enclosing_subquery_expr_depth;
+     GOOGLESQL_ASSIGN_OR_RETURN(std::unique_ptr<RelationalOp> subquery,
+-                     AlgebrizeScan(with_entry->with_subquery()));
++                     std::move(algebrized_subquery));
+     GOOGLESQL_ASSIGN_OR_RETURN(
+         std::unique_ptr<ArrayNestExpr> nested_subquery,
+         NestRelationInStruct(with_entry->with_subquery()->column_list(),
+@@ -7265,6 +7293,13 @@
+   return relational_op;
+ }
+ 
++absl::StatusOr<std::unique_ptr<RelationalOp>>
++Algebrizer::AlgebrizeScanInSubqueryExpr(const ResolvedScan* scan) {
++  ++subquery_expr_depth_;
++  absl::Cleanup leave_subquery_expr = [this] { --subquery_expr_depth_; };
++  return AlgebrizeScan(scan);
++}
++
+ bool Algebrizer::FindColumnDefinition(
+     absl::Span<const std::unique_ptr<const ResolvedComputedColumn>> expr_list,
+     int column_id, const ResolvedExpr** definition) {
+diff --git a/googlesql/reference_impl/algebrizer.h b/googlesql/reference_impl/algebrizer.h
+--- a/googlesql/reference_impl/algebrizer.h
++++ b/googlesql/reference_impl/algebrizer.h
+@@ -937,6 +937,11 @@
+   absl::StatusOr<std::unique_ptr<RelationalOp>> AlgebrizeScan(
+       const ResolvedScan* scan);
+ 
++  // Algebrizes the scan of a subquery expression, counted in
++  // `subquery_expr_depth_` while it is algebrized.
++  absl::StatusOr<std::unique_ptr<RelationalOp>> AlgebrizeScanInSubqueryExpr(
++      const ResolvedScan* scan);
++
+   // 'output_columns' are needed to compensate for the extra implicit
+   // 'ProjectScan' in top-level queries.
+   absl::StatusOr<std::unique_ptr<ValueExpr>> AlgebrizeRootScanAsValueExpr(
+@@ -1475,6 +1480,14 @@
+   // Entries are removed from the map as AlgebrizeWithRefScan() consumes them.
+   absl::flat_hash_map<std::string, const ResolvedScan*> inlined_with_entries_;
+ 
++  // How many subquery expressions enclose the scan being algebrized. A
++  // subquery expression is evaluated again for every row of its enclosing
++  // query, so a WITH clause algebrized while this is above zero inlines none
++  // of its entries. A WITH entry that is not inlined is bound at the root of
++  // the statement and evaluated once, so its definition is algebrized with
++  // this reset to zero.
++  int subquery_expr_depth_ = 0;
++
+   // If 'algebrizer_options_.consolidate_proto_field_accesses' is true, contains
+   // every GetProtoFieldExpr::FieldRegistry whose proto-valued expression can be
+   // represented with a ProtoColumnAndFieldPath. The pointers are owned by
