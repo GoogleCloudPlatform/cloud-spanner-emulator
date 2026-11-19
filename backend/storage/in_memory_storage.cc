@@ -16,7 +16,11 @@
 
 #include "backend/storage/in_memory_storage.h"
 
+#include <algorithm>
+#include <cstdint>
+#include <iterator>
 #include <memory>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -34,48 +38,168 @@ namespace backend {
 
 namespace {
 
-static constexpr char kExistsColumn[] = "_exists";
+// The fewest due rows a write or delete collects. A call that queues more
+// collects twice what it queued, so the queue drains at least as fast as it
+// fills, while no call holds the lock for long on its account.
+constexpr size_t kMinRowsCollectedPerCall = 256;
+
+// The newest version at or before `timestamp`, or `cell.end()`.
+template <typename CellT>
+auto VersionAt(const CellT& cell, absl::Time timestamp) {
+  // Nearly every cell has one or two versions, and a read is nearly always of
+  // the newest, so look from the back.
+  for (auto itr = cell.end(); itr != cell.begin();) {
+    --itr;
+    if (itr->timestamp <= timestamp) return itr;
+  }
+  return cell.end();
+}
+
+// Sets the version of `cell` at `timestamp`, replacing one already there.
+// Returns true if the cell held a version before, which the new one may
+// supersede.
+template <typename CellT, typename V>
+bool SetVersion(CellT& cell, absl::Time timestamp, V&& value) {
+  const bool had_version = !cell.empty();
+  if (cell.empty() || cell.back().timestamp < timestamp) {
+    cell.push_back({timestamp, std::forward<V>(value)});
+    return had_version;
+  }
+  auto itr = std::lower_bound(
+      cell.begin(), cell.end(), timestamp,
+      [](const auto& version, absl::Time t) { return version.timestamp < t; });
+  if (itr != cell.end() && itr->timestamp == timestamp) {
+    itr->value = std::forward<V>(value);
+    return had_version;
+  }
+  cell.insert(itr, {timestamp, std::forward<V>(value)});
+  return true;
+}
+
+// Removes the versions of `cell` that no read at or after `horizon` sees: all
+// before the newest at or before it, and that one too if it is older than
+// `floor`. Returns true if it removed any.
+template <typename CellT>
+bool CollectCell(CellT& cell, absl::Time horizon, absl::Time floor) {
+  auto newest_due = VersionAt(cell, horizon);
+  if (newest_due == cell.end()) return false;
+  auto keep = newest_due->timestamp < floor ? std::next(newest_due) : newest_due;
+  if (keep == cell.begin()) return false;
+  cell.erase(cell.begin(), keep);
+  // An inlined vector that grew to the heap goes back inline only when told.
+  cell.shrink_to_fit();
+  return true;
+}
+
+template <typename ColumnsT>
+auto FindColumnIn(ColumnsT& columns, uint32_t ordinal) {
+  auto itr = std::lower_bound(
+      columns.begin(), columns.end(), ordinal,
+      [](const auto& column, uint32_t o) { return column.ordinal < o; });
+  return (itr != columns.end() && itr->ordinal == ordinal) ? itr
+                                                            : columns.end();
+}
 
 }  // namespace
 
-void InMemoryStorage::RemoveExpiredVersions(Cell& cell, absl::Time timestamp) {
-  absl::MutexLock lock(version_retention_period_mu_);
-  auto it = cell.begin();
-  auto upper_bound = cell.upper_bound(timestamp - version_retention_period_);
-  while (it != upper_bound) {
-    auto next = it;
-    if (++next == upper_bound) {
-      // The current value needs to be kept to cover the retention period.
-      break;
+std::optional<absl::Time> InMemoryStorage::CreatedAt(const Row& row,
+                                                     absl::Time timestamp) {
+  auto itr = VersionAt(row.exists, timestamp);
+  if (itr == row.exists.end() || !itr->value) return std::nullopt;
+  return itr->timestamp;
+}
+
+googlesql::Value InMemoryStorage::CellValueAt(const Row& row,
+                                              ColumnOrdinal ordinal,
+                                              absl::Time created,
+                                              absl::Time timestamp) {
+  auto column = FindColumnIn(row.columns, ordinal);
+  if (column == row.columns.end()) return googlesql::Value();
+  auto version = VersionAt(column->cell, timestamp);
+  // A version older than the row's creation belongs to a row since deleted.
+  if (version == column->cell.end() || version->timestamp < created) {
+    return googlesql::Value();
+  }
+  return version->value;
+}
+
+InMemoryStorage::ColumnOrdinal InMemoryStorage::OrdinalOf(
+    const ColumnID& column_id) const {
+  auto itr = column_ordinals_.find(column_id);
+  return itr == column_ordinals_.end() ? kUnknownColumn : itr->second;
+}
+
+InMemoryStorage::ColumnOrdinal InMemoryStorage::InternColumn(
+    const ColumnID& column_id) {
+  return column_ordinals_
+      .try_emplace(column_id,
+                   static_cast<ColumnOrdinal>(column_ordinals_.size()))
+      .first->second;
+}
+
+bool InMemoryStorage::CollectRow(Row& row, absl::Time horizon) {
+  // Every read at or after the horizon sees the row created no earlier than
+  // the newest version of its existence at or before the horizon, so no such
+  // read sees a cell's version older than that.
+  auto newest_due = VersionAt(row.exists, horizon);
+  const absl::Time floor = newest_due == row.exists.end()
+                               ? absl::InfinitePast()
+                               : newest_due->timestamp;
+  CollectCell(row.exists, horizon, absl::InfinitePast());
+  if (row.exists.size() == 1 && row.exists.front().timestamp <= horizon &&
+      !row.exists.front().value) {
+    return true;
+  }
+  bool removed_column = false;
+  for (auto itr = row.columns.begin(); itr != row.columns.end();) {
+    CollectCell(itr->cell, horizon, floor);
+    if (itr->cell.empty()) {
+      itr = row.columns.erase(itr);
+      removed_column = true;
+    } else {
+      ++itr;
     }
-    it = cell.erase(it);
+  }
+  if (removed_column) row.columns.shrink_to_fit();
+  return false;
+}
+
+void InMemoryStorage::CollectDueRows(absl::Time now, size_t budget) {
+  const absl::Time horizon = now - version_retention_period_;
+  bool collected = false;
+  while (budget > 0 && !garbage_rows_.empty() &&
+         garbage_rows_.front().timestamp <= horizon) {
+    const GarbageRow& due = garbage_rows_.front();
+    auto table_itr = tables_.find(due.table_id);
+    if (table_itr != tables_.end()) {
+      Table& table = table_itr->second;
+      auto row_itr = table.find(due.key);
+      if (row_itr != table.end() && CollectRow(row_itr->second, horizon)) {
+        table.erase(row_itr);
+      }
+    }
+    garbage_rows_.pop_front();
+    collected = true;
+    --budget;
+  }
+  if (collected && horizon > earliest_version_time_) {
+    earliest_version_time_ = horizon;
   }
 }
 
-googlesql::Value InMemoryStorage::GetCellValueAtTimestamp(
-    const Row& row, const ColumnID& column_id, absl::Time timestamp) const {
-  // Perform the lookup for given cell.
-  auto cell_itr = row.find(column_id);
-  if (cell_itr == row.end()) {
-    return googlesql::Value();
-  }
-  const Cell& cell = cell_itr->second;
-  auto val_itr = cell.upper_bound(timestamp);
-
-  // Timestamp is earlier than the time the cell was first written to.
-  if (val_itr == cell.begin()) {
-    return googlesql::Value();
-  }
-
-  // Fetch the value from the column.
-  --val_itr;
-  return val_itr->second;
+void InMemoryStorage::CollectGarbage(absl::Time now) {
+  absl::MutexLock lock(mu_);
+  CollectDueRows(now, garbage_rows_.size());
 }
 
-bool InMemoryStorage::Exists(const Row& row, absl::Time timestamp) const {
-  googlesql::Value value =
-      GetCellValueAtTimestamp(row, kExistsColumn, timestamp);
-  return value.is_valid() && value.bool_value();
+size_t InMemoryStorage::PendingGarbageRows() const {
+  absl::MutexLock lock(mu_);
+  return garbage_rows_.size();
+}
+
+absl::Time InMemoryStorage::EarliestVersionTime() const {
+  absl::MutexLock lock(mu_);
+  return earliest_version_time_;
 }
 
 absl::Status InMemoryStorage::Lookup(
@@ -115,7 +239,8 @@ absl::Status InMemoryStorage::Lookup(
   const Row& row = row_itr->second;
 
   // Verify if the row exists at the given timestamp.
-  if (!Exists(row, timestamp)) {
+  std::optional<absl::Time> created = CreatedAt(row, timestamp);
+  if (!created.has_value()) {
     return absl::Status(
         absl::StatusCode::kNotFound,
         absl::StrCat(
@@ -129,9 +254,10 @@ absl::Status InMemoryStorage::Lookup(
   }
 
   // Fetch the value from the cell at the given timestamp.
-  for (int i = 0; i < column_ids.size(); ++i) {
+  values->reserve(column_ids.size());
+  for (const ColumnID& column_id : column_ids) {
     values->emplace_back(
-        GetCellValueAtTimestamp(row, column_ids[i], timestamp));
+        CellValueAt(row, OrdinalOf(column_id), *created, timestamp));
   }
 
   return absl::OkStatus();
@@ -166,21 +292,29 @@ absl::Status InMemoryStorage::Read(
   }
   const Table& table = table_itr->second;
 
+  // Number the columns once for the whole range, not once per row.
+  std::vector<ColumnOrdinal> ordinals;
+  ordinals.reserve(column_ids.size());
+  for (const ColumnID& column_id : column_ids) {
+    ordinals.push_back(OrdinalOf(column_id));
+  }
+
   // Lookup keys from the given key range.
   auto row_start_itr = table.lower_bound(key_range.start_key());
   auto row_end_itr = table.lower_bound(key_range.limit_key());
   for (auto itr = row_start_itr; itr != row_end_itr; ++itr) {
     const InMemoryStorage::Row& row = itr->second;
-    if (!Exists(row, timestamp)) {
+    std::optional<absl::Time> created = CreatedAt(row, timestamp);
+    if (!created.has_value()) {
       continue;
     }
 
     std::vector<googlesql::Value> values;
-    values.reserve(column_ids.size());
-    for (const ColumnID& column_id : column_ids) {
-      values.emplace_back(GetCellValueAtTimestamp(row, column_id, timestamp));
+    values.reserve(ordinals.size());
+    for (ColumnOrdinal ordinal : ordinals) {
+      values.emplace_back(CellValueAt(row, ordinal, *created, timestamp));
     }
-    rows.emplace_back(std::make_pair(itr->first, values));
+    rows.emplace_back(itr->first, std::move(values));
   }
   *itr = std::make_unique<FixedRowStorageIterator>(std::move(rows));
   return absl::OkStatus();
@@ -195,21 +329,46 @@ absl::Status InMemoryStorage::Write(
   // Add the table if it does not exist.
   Table& table = tables_[table_id];
 
-  // Add the row with _exists system column if it does not exist.
+  // Add the row, and a version that says it exists if it does not.
   Row& row = table[key];
-  if (!Exists(row, timestamp)) {
-    Cell& cell = row[kExistsColumn];
-    cell[timestamp] = googlesql::values::Bool(true);
-    RemoveExpiredVersions(cell, timestamp);
+  // Whether this write gives a cell a second version, the first of which a
+  // later collection can remove.
+  bool supersedes = false;
+  if (!CreatedAt(row, timestamp).has_value()) {
+    supersedes |= SetVersion(row.exists, timestamp, true);
+    // Commits write in timestamp order, but a write before a version that
+    // already says the row exists makes that version's creation this one.
+    auto next = std::upper_bound(
+        row.exists.begin(), row.exists.end(), timestamp,
+        [](absl::Time t, const ExistsVersion& v) { return t < v.timestamp; });
+    if (next != row.exists.end() && next->value) {
+      row.exists.erase(next);
+    }
   }
 
-  // Add the values for the given columns.
+  // Add the values for the given columns. Columns are numbered in the order
+  // they are first written, so a row written column by column in the same
+  // order as the first appends each one.
+  if (row.columns.empty()) {
+    row.columns.reserve(column_ids.size());
+  }
   for (int i = 0; i < column_ids.size(); ++i) {
-    Cell& cell = row[column_ids[i]];
-    cell[timestamp] = values[i];
-    RemoveExpiredVersions(cell, timestamp);
+    const ColumnOrdinal ordinal = InternColumn(column_ids[i]);
+    auto column = std::lower_bound(
+        row.columns.begin(), row.columns.end(), ordinal,
+        [](const Column& c, ColumnOrdinal o) { return c.ordinal < o; });
+    if (column == row.columns.end() || column->ordinal != ordinal) {
+      column = row.columns.insert(column, Column{ordinal, Cell()});
+    }
+    supersedes |= SetVersion(column->cell, timestamp, values[i]);
   }
 
+  size_t queued = 0;
+  if (supersedes) {
+    garbage_rows_.push_back(GarbageRow{timestamp, table_id, key});
+    queued = 1;
+  }
+  CollectDueRows(timestamp, std::max(kMinRowsCollectedPerCall, 2 * queued));
   return absl::OkStatus();
 }
 
@@ -243,38 +402,47 @@ absl::Status InMemoryStorage::Delete(absl::Time timestamp,
   auto row_end_itr = table.lower_bound(key_range.limit_key());
 
   // Mark the keys as deleted.
+  size_t queued = 0;
   for (auto itr = row_start_itr; itr != row_end_itr; ++itr) {
-    if (!Exists(itr->second, timestamp)) {
+    Row& row = itr->second;
+    if (!CreatedAt(row, timestamp).has_value()) {
       continue;
     }
-
-    for (const auto& columns : itr->second) {
-      if (columns.first == kExistsColumn) {
-        Cell& cell = itr->second[kExistsColumn];
-        cell[timestamp] = googlesql::values::Bool(false);
-        RemoveExpiredVersions(cell, timestamp);
+    // A value written at this same timestamp, earlier in the same commit, is
+    // deleted with the row: a row created again at this timestamp must not
+    // read it.
+    for (auto column = row.columns.begin(); column != row.columns.end();) {
+      if (column->cell.back().timestamp == timestamp) {
+        column->cell.pop_back();
+      }
+      if (column->cell.empty()) {
+        column = row.columns.erase(column);
       } else {
-        // Column values are marked invalid googlesql::Value to avoid reading
-        // the value of the cell before the delete.
-        Cell& cell = itr->second[columns.first];
-        cell[timestamp] = googlesql::Value();
-        RemoveExpiredVersions(cell, timestamp);
+        ++column;
       }
     }
+    SetVersion(row.exists, timestamp, false);
+    // Once the delete is older than the retention period, the row is removed.
+    garbage_rows_.push_back(GarbageRow{timestamp, table_id, itr->first});
+    ++queued;
   }
+  CollectDueRows(timestamp, std::max(kMinRowsCollectedPerCall, 2 * queued));
   return absl::OkStatus();
 }
 
 void InMemoryStorage::SetVersionRetentionPeriod(
     const absl::Duration version_retention_period) {
-  absl::MutexLock lock(version_retention_period_mu_);
+  absl::MutexLock lock(mu_);
   version_retention_period_ = version_retention_period;
 }
 
 void InMemoryStorage::CleanUpDeletedTables(absl::Time timestamp) {
   absl::MutexLock lock(mu_);
-  absl::MutexLock version_retention_period_lock(version_retention_period_mu_);
   absl::Time expiration_time = timestamp - version_retention_period_;
+
+  // Every read-only read calls this, which keeps collecting versions while a
+  // database is only read.
+  CollectDueRows(timestamp, kMinRowsCollectedPerCall);
 
   // Remove expired dropped tables.
   for (auto it = dropped_tables_.begin();
@@ -286,15 +454,19 @@ void InMemoryStorage::CleanUpDeletedTables(absl::Time timestamp) {
 
 void InMemoryStorage::CleanUpDeletedColumns(absl::Time timestamp) {
   absl::MutexLock lock(mu_);
-  absl::MutexLock version_retention_period_lock(version_retention_period_mu_);
   absl::Time expiration_time = timestamp - version_retention_period_;
 
   // Remove expired dropped columns.
   for (auto it = dropped_columns_.begin();
        it != dropped_columns_.upper_bound(expiration_time);) {
     auto [table_id, column_id] = it->second;
-    for (auto& [_, row] : tables_[table_id]) {
-      row.erase(column_id);
+    const ColumnOrdinal ordinal = OrdinalOf(column_id);
+    auto table_itr = tables_.find(table_id);
+    if (ordinal != kUnknownColumn && table_itr != tables_.end()) {
+      for (auto& [_, row] : table_itr->second) {
+        auto column = FindColumnIn(row.columns, ordinal);
+        if (column != row.columns.end()) row.columns.erase(column);
+      }
     }
     it = dropped_columns_.erase(it);
   }

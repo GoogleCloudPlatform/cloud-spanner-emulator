@@ -19,6 +19,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 
 #include "absl/base/thread_annotations.h"
 #include "absl/status/status.h"
@@ -33,6 +34,12 @@ namespace backend {
 
 // VersionedCatalog owns schemas that belongs to a single database, and keep a
 // mapping between the schema creation time and the schema object.
+// The version retention period a SPANNER_EMULATOR_VERSION_RETENTION_S value
+// sets: a whole number of seconds, at least one. Anything else, or no value,
+// sets none, so that each database keeps the period its options give.
+std::optional<absl::Duration> VersionRetentionOverrideFromEnvValue(
+    const char* value);
+
 class VersionedCatalog {
  public:
   // The default constructor creates an empty schema in the catalog and assigns
@@ -65,10 +72,15 @@ class VersionedCatalog {
 
   void RemoveExpiredSchemas(absl::Time timestamp) ABSL_LOCKS_EXCLUDED(mu_);
 
-  absl::Duration version_retention_period() const {
-    absl::MutexLock lock(&mu_);
-    return version_retention_period_;
-  }
+  // Sets the override in place of SPANNER_EMULATOR_VERSION_RETENTION_S, for
+  // tests.
+  static void SetVersionRetentionOverrideForTesting(
+      std::optional<absl::Duration> retention);
+
+  // The database's version retention period, or the one
+  // SPANNER_EMULATOR_VERSION_RETENTION_S sets if that is shorter. Reads older
+  // than it fail, and versions older than it are removed from storage.
+  absl::Duration version_retention_period() const ABSL_LOCKS_EXCLUDED(mu_);
 
  private:
   // For guarding concurrent access to `schemas_`.

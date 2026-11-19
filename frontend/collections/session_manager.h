@@ -55,6 +55,12 @@ class SessionManager {
                              bool delete_multiplex_sessions = false)
       ABSL_LOCKS_EXCLUDED(mu_);
 
+  // Deletes every session attached to the given database URI, multiplexed or
+  // not and expired or not, as dropping the database must: a session holds its
+  // database, so one left behind keeps a dropped database's data alive.
+  void DeleteSessionsOfDatabase(const std::string& database_uri)
+      ABSL_LOCKS_EXCLUDED(mu_);
+
   // Lists sessions attached to the given database URI.
   absl::StatusOr<std::vector<std::shared_ptr<Session>>> ListSessions(
       const std::string& database_uri,

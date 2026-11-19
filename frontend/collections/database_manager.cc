@@ -123,8 +123,15 @@ absl::StatusOr<std::shared_ptr<Database>> DatabaseManager::GetDatabase(
 }
 
 absl::Status DatabaseManager::DeleteDatabase(const std::string& database_uri) {
+  // The map may hold the last reference to the database, whose destruction
+  // frees all its data: let that happen after the lock is released, not while
+  // every other request waits for it.
+  std::shared_ptr<Database> deleted;
   absl::MutexLock lock(mu_);
-  if (database_map_.erase(database_uri) > 0) {
+  auto itr = database_map_.find(database_uri);
+  if (itr != database_map_.end()) {
+    deleted = std::move(itr->second);
+    database_map_.erase(itr);
     absl::string_view project_id, instance_id, database_id;
     GOOGLESQL_RETURN_IF_ERROR(ParseDatabaseUri(database_uri, &project_id, &instance_id,
                                      &database_id));

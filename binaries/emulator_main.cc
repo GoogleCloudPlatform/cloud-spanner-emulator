@@ -23,6 +23,7 @@
 #include "absl/log/log.h"
 #include "absl/strings/str_cat.h"
 #include "common/config.h"
+#include "common/memory_release.h"
 #include "frontend/server/server.h"
 
 using Server = ::google::spanner::emulator::frontend::Server;
@@ -30,6 +31,7 @@ using Server = ::google::spanner::emulator::frontend::Server;
 int main(int argc, char** argv) {
   // Start the emulator gRPC server.
   absl::ParseCommandLine(argc, argv);
+  google::spanner::emulator::memory::StartBackgroundRelease();
 
   Server::Options options;
   options.server_address = google::spanner::emulator::config::grpc_host_port();

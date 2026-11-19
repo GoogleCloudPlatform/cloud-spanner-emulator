@@ -260,17 +260,13 @@ absl::Status DropDatabase(RequestContext* ctx,
                    GetInstance(ctx, MakeInstanceUri(project_id, instance_id)));
 
   // Clean up resources associated with the database.
+  // Every session goes, including those idle past their expiry, which
+  // ListSessions leaves out: each holds the database and with it all its data.
   auto maybe_database =
       ctx->env()->database_manager()->GetDatabase(request->database());
   if (maybe_database.ok()) {
-    GOOGLESQL_ASSIGN_OR_RETURN(
-        std::vector<std::shared_ptr<Session>> sessions,
-        ctx->env()->session_manager()->ListSessions(
-            request->database(), /*include_multiplex_sessions=*/true));
-    for (const auto& session : sessions) {
-      GOOGLESQL_RETURN_IF_ERROR(ctx->env()->session_manager()->DeleteSession(
-          session->session_uri(), /*delete_multiplex_sessions=*/true));
-    }
+    ctx->env()->session_manager()->DeleteSessionsOfDatabase(
+        request->database());
   }
 
   // Clean up the database.

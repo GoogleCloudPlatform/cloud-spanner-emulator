@@ -44,6 +44,10 @@ class Database {
         backend_(std::move(backend)),
         create_time_(create_time) {}
 
+  // Destroys the backend database, then returns the memory it held to the
+  // system: a dropped database is often the largest free the emulator makes.
+  ~Database();
+
   // Returns the URI for this database.
   const std::string& database_uri() const { return database_uri_; }
 

@@ -34,6 +34,7 @@ cc_binary(
     ],
     deps = [
         "//common:config",
+        "//common:memory_release",
         "//frontend/server",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/flags:parse",

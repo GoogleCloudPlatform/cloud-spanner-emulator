@@ -17,7 +17,9 @@
 #include "backend/schema/catalog/versioned_catalog.h"
 
 #include <cstdint>
+#include <cstdlib>
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include "absl/log/log.h"
@@ -59,7 +61,48 @@ absl::StatusOr<absl::Duration> ParseVersionRetentionPeriod(
   }
 }
 
+std::optional<absl::Duration>& VersionRetentionOverride() {
+  static std::optional<absl::Duration> retention = [] {
+    const char* value = std::getenv("SPANNER_EMULATOR_VERSION_RETENTION_S");
+    std::optional<absl::Duration> parsed =
+        VersionRetentionOverrideFromEnvValue(value);
+    if (parsed.has_value()) {
+      ABSL_LOG(INFO) << "Keeping versions for at most "
+                     << absl::FormatDuration(*parsed)
+                     << " (SPANNER_EMULATOR_VERSION_RETENTION_S)";
+    } else if (value != nullptr && *value != '\0') {
+      ABSL_LOG(ERROR) << "Ignoring SPANNER_EMULATOR_VERSION_RETENTION_S=" << value
+                      << ": not a whole number of seconds of at least 1";
+    }
+    return parsed;
+  }();
+  return retention;
+}
+
 }  // namespace
+
+std::optional<absl::Duration> VersionRetentionOverrideFromEnvValue(
+    const char* value) {
+  if (value == nullptr || *value == '\0') return std::nullopt;
+  char* end = nullptr;
+  const long long seconds = std::strtoll(value, &end, 10);
+  if (end == value || *end != '\0' || seconds < 1) return std::nullopt;
+  return absl::Seconds(seconds);
+}
+
+void VersionedCatalog::SetVersionRetentionOverrideForTesting(
+    std::optional<absl::Duration> retention) {
+  VersionRetentionOverride() = retention;
+}
+
+absl::Duration VersionedCatalog::version_retention_period() const {
+  absl::MutexLock lock(mu_);
+  const std::optional<absl::Duration>& retention = VersionRetentionOverride();
+  if (retention.has_value() && *retention < version_retention_period_) {
+    return *retention;
+  }
+  return version_retention_period_;
+}
 
 VersionedCatalog::VersionedCatalog() {
   schemas_[absl::InfinitePast()] = std::make_unique<const Schema>();
@@ -99,9 +142,9 @@ absl::Status VersionedCatalog::AddSchema(absl::Time creation_time,
 }
 
 void VersionedCatalog::RemoveExpiredSchemas(absl::Time timestamp) {
+  const absl::Duration retention = version_retention_period();
   absl::MutexLock lock(mu_);
-  auto upper_bound =
-      schemas_.upper_bound(timestamp - version_retention_period_);
+  auto upper_bound = schemas_.upper_bound(timestamp - retention);
   auto it = ++schemas_.begin();  // Skip the infinite past schema.
   while (it != upper_bound) {
     auto next = it;

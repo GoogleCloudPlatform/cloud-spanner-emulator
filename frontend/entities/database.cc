@@ -18,12 +18,18 @@
 
 #include "google/spanner/admin/database/v1/spanner_database_admin.pb.h"
 #include "absl/status/status.h"
+#include "common/memory_release.h"
 #include "googlesql/base/status_macros.h"
 
 namespace google {
 namespace spanner {
 namespace emulator {
 namespace frontend {
+
+Database::~Database() {
+  backend_.reset();
+  memory::ReleaseFreeMemory();
+}
 
 absl::Status Database::ToProto(admin::database::v1::Database* database) {
   database->set_name(database_uri_);

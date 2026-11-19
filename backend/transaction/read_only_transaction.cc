@@ -85,6 +85,15 @@ absl::Status ReadOnlyTransaction::Read(const ReadArg& read_arg,
         GetColumnIDs(resolved_read_arg.columns), &itr));
     iterators.push_back(std::move(itr));
   }
+  // The storage removes versions older than the retention period. The check
+  // above holds this read's timestamp within it, but a commit that ran since
+  // may have collected at a later horizon, and a retention period that grew
+  // again does not bring back what a shorter one removed. Each read copies its
+  // rows while it holds the storage's lock, so a read is complete if its
+  // timestamp is not older than the horizon of every collection before it.
+  if (read_timestamp_ < base_storage_->EarliestVersionTime()) {
+    return error::ReadTimestampPastVersionGCLimit(read_timestamp_);
+  }
   *cursor = std::make_unique<StorageIteratorRowCursor>(
       std::move(iterators), resolved_read_arg.columns);
   return absl::OkStatus();
